@@ -68,8 +68,8 @@ export default async function DashboardPage({
         <a
           href={`/api/export?start=${start.toISOString().slice(0, 10)}&end=${end.toISOString().slice(0, 10)}${branchId ? `&branchId=${branchId}` : ""}`}
         >
-          <Button variant="outline" size="sm">
-            <Download className="h-4 w-4 mr-2" />
+          <Button variant="outline" size="sm" className="shadow-sm hover:bg-primary hover:text-primary-foreground transition-all group">
+            <Download className="h-4 w-4 mr-2 transition-transform group-hover:-translate-y-0.5" />
             Excel eksport
           </Button>
         </a>
@@ -83,10 +83,18 @@ export default async function DashboardPage({
       />
 
       {!hasAnyData && (
-        <Card>
-          <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            Tanlangan davrda ma'lumot topilmadi. Period yoki filialni o'zgartiring, yoki
-            <a href="/admin/upload" className="text-primary underline ml-1">fayl yuklang</a>.
+        <Card className="border-dashed border-2 shadow-sm bg-muted/10">
+          <CardContent className="py-16 flex flex-col items-center justify-center text-center space-y-3">
+            <div className="p-4 bg-muted/50 rounded-full">
+              <ShoppingBag className="h-8 w-8 text-muted-foreground/50" />
+            </div>
+            <div>
+              <p className="text-lg font-medium">Ma'lumot topilmadi</p>
+              <p className="text-sm text-muted-foreground max-w-sm mt-1">
+                Tanlangan davrda ma'lumot topilmadi. Boshqa period tanlang yoki
+                <a href="/admin/upload" className="text-primary font-medium hover:underline ml-1">fayl yuklang</a>.
+              </p>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -97,24 +105,32 @@ export default async function DashboardPage({
           label="Umumiy Savdo"
           primary={formatUZS(kpi.totalSales, { compact: true })}
           secondary={`${formatUZS(kpi.totalSales)} so'm`}
+          iconColorClass="text-blue-600 dark:text-blue-400"
+          iconBgClass="bg-blue-100 dark:bg-blue-900/30"
         />
         <KpiCard
           icon={<Users className="h-5 w-5" />}
           label="Tashriflar Soni"
           primary={formatNumber(kpi.totalVisits)}
           secondary={`${formatNumber(kpi.totalReceipts)} chek`}
+          iconColorClass="text-orange-600 dark:text-orange-400"
+          iconBgClass="bg-orange-100 dark:bg-orange-900/30"
         />
         <KpiCard
           icon={<Receipt className="h-5 w-5" />}
           label="O'rtacha Chek"
           primary={formatUZS(kpi.avgReceipt)}
           secondary="so'm"
+          iconColorClass="text-emerald-600 dark:text-emerald-400"
+          iconBgClass="bg-emerald-100 dark:bg-emerald-900/30"
         />
         <KpiCard
           icon={<TrendingUp className="h-5 w-5" />}
           label="Konversiya"
           primary={formatPercent(kpi.conversion)}
           secondary="cheklar / tashriflar"
+          iconColorClass="text-purple-600 dark:text-purple-400"
+          iconBgClass="bg-purple-100 dark:bg-purple-900/30"
         />
       </div>
 
@@ -167,7 +183,7 @@ export default async function DashboardPage({
             </TableHeader>
             <TableBody>
               {perf.map((r) => (
-                <TableRow key={r.branchId} className="cursor-pointer hover:bg-muted/50">
+                <TableRow key={r.branchId} className="cursor-pointer hover:bg-muted/50 transition-colors">
                   <TableCell className="font-medium">
                     <Link
                       href={{
@@ -177,10 +193,10 @@ export default async function DashboardPage({
                           end: end.toISOString().slice(0, 10),
                         },
                       }}
-                      className="flex items-center gap-2 hover:text-primary"
+                      className="inline-flex items-center gap-2 font-medium hover:text-primary transition-colors group"
                     >
                       {r.branchName}
-                      <ArrowRight className="h-3 w-3 opacity-50" />
+                      <ArrowRight className="h-3.5 w-3.5 opacity-50 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
                     </Link>
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
@@ -219,24 +235,30 @@ function KpiCard({
   label,
   primary,
   secondary,
+  iconColorClass = "text-muted-foreground",
+  iconBgClass = "bg-transparent",
 }: {
   icon: React.ReactNode;
   label: string;
   primary: string;
   secondary?: string;
+  iconColorClass?: string;
+  iconBgClass?: string;
 }) {
   return (
-    <Card>
+    <Card className="transition-all duration-300 hover:shadow-md hover:-translate-y-1 overflow-hidden group border-muted/60">
       <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">
+        <CardTitle className="text-sm font-medium text-muted-foreground group-hover:text-foreground transition-colors">
           {label}
         </CardTitle>
-        <span className="text-muted-foreground">{icon}</span>
+        <div className={`p-2 rounded-full transition-colors ${iconBgClass}`}>
+          <span className={iconColorClass}>{icon}</span>
+        </div>
       </CardHeader>
       <CardContent>
-        <div className="text-2xl font-bold tracking-tight">{primary}</div>
+        <div className="text-2xl font-bold tracking-tight text-foreground">{primary}</div>
         {secondary && (
-          <p className="text-xs text-muted-foreground mt-1">{secondary}</p>
+          <p className="text-xs text-muted-foreground mt-1 font-medium">{secondary}</p>
         )}
       </CardContent>
     </Card>

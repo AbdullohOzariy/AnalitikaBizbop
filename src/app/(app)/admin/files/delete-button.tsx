@@ -32,7 +32,13 @@ export function DeleteFileButton({ id, label }: { id: number; label: string }) {
 
   return (
     <>
-      <Button variant="ghost" size="icon" title="O'chirish" onClick={() => setOpen(true)}>
+      <Button
+        variant="ghost"
+        size="icon"
+        title="O'chirish"
+        onClick={() => setOpen(true)}
+        className="hover:bg-destructive/10 hover:text-destructive transition-colors"
+      >
         <Trash2 className="h-4 w-4 text-destructive" />
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
