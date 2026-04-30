@@ -107,23 +107,47 @@ src/
 
 ## Deploy (production)
 
-VPS uchun tayyorlanish:
+### Railway + Neon
+
+Railway uchun `package.json` scriptlari tayyor:
+
+- `npm run build` — Prisma client generatsiya qiladi va Next.js production build yaratadi
+- `npm run start` — `prisma migrate deploy` ishlatadi, keyin `next start` bilan serverni ko'taradi
+- `npm run db:seed` — 4 filial, 18 kategoriya va birinchi admin userni yaratadi
+
+Railway env vars:
 
 ```bash
-# 1. Build
+DATABASE_URL="postgresql://..."
+AUTH_SECRET="openssl-rand-base64-32-output"
+AUTH_TRUST_HOST="true"
+NEXTAUTH_URL="https://your-production-url.up.railway.app"
+
+SEED_ADMIN_EMAIL="admin@example.com"
+SEED_ADMIN_PASSWORD="strong-password"
+SEED_ADMIN_NAME="Admin"
+```
+
+Neon database ulanganidan keyin birinchi marta:
+
+```bash
+# 1. Production build
 npm run build
 
-# 2. AUTH_SECRET ni almashtiring
+# 2. Strong AUTH_SECRET
 openssl rand -base64 32
 
-# 3. DATABASE_URL ni production DB ga yo'naltiring
-# 4. Migrations
-npx prisma migrate deploy
+# 3. Migrations
+npm run migrate-deploy
 
-# 5. Birinchi admin yaratish (alohida script bilan yoki seed orqali)
-# 6. Process manager: pm2/systemd + reverse proxy: nginx/caddy
-npm start
+# 4. Boshlang'ich ma'lumotlar
+npm run db:seed
+
+# 5. Production server
+npm run start
 ```
+
+Railway'da seedni doimiy Start Command ichiga qo'shmang. Seedni birinchi deploydan keyin bir marta `npm run db:seed` sifatida ishga tushiring.
 
 ## Litsenziya
 
