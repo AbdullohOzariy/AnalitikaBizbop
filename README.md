@@ -112,7 +112,8 @@ src/
 Railway uchun `package.json` scriptlari tayyor:
 
 - `npm run build` — Prisma client generatsiya qiladi va Next.js production build yaratadi
-- `npm run start` — `prisma migrate deploy` ishlatadi, keyin `next start` bilan serverni ko'taradi
+- `npm run migrate-deploy` — production migrations ishlatadi
+- `npm run start` — `next start` bilan serverni ko'taradi
 - `npm run db:seed` — 4 filial, 18 kategoriya va birinchi admin userni yaratadi
 
 Railway env vars:
@@ -127,6 +128,12 @@ SEED_ADMIN_EMAIL="admin@example.com"
 SEED_ADMIN_PASSWORD="strong-password"
 SEED_ADMIN_NAME="Admin"
 ```
+
+Railway service sozlamalari:
+
+- Build Command: `npm run build`
+- Pre-deploy Command: `npm run migrate-deploy`
+- Start Command: `npm run start`
 
 Neon database ulanganidan keyin birinchi marta:
 
