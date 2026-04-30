@@ -1,0 +1,44 @@
+/**
+ * UZS formatlash: katta sonni qisqartirilgan ko'rinishda (8.27 mlrd) yoki to'liq.
+ */
+export function formatUZS(n: number, opts: { compact?: boolean } = {}): string {
+  if (!Number.isFinite(n)) return "—";
+  if (opts.compact) {
+    if (Math.abs(n) >= 1_000_000_000) return (n / 1_000_000_000).toLocaleString("uz-UZ", { maximumFractionDigits: 2 }) + " mlrd";
+    if (Math.abs(n) >= 1_000_000) return (n / 1_000_000).toLocaleString("uz-UZ", { maximumFractionDigits: 1 }) + " mln";
+    if (Math.abs(n) >= 1_000) return (n / 1_000).toLocaleString("uz-UZ", { maximumFractionDigits: 1 }) + " ming";
+  }
+  return n.toLocaleString("uz-UZ", { maximumFractionDigits: 0 });
+}
+
+export function formatNumber(n: number): string {
+  if (!Number.isFinite(n)) return "—";
+  return n.toLocaleString("uz-UZ", { maximumFractionDigits: 0 });
+}
+
+export function formatPercent(n: number, decimals = 1): string {
+  if (!Number.isFinite(n)) return "—";
+  return n.toFixed(decimals) + "%";
+}
+
+export function formatDateUZ(d: Date | string): string {
+  const date = typeof d === "string" ? new Date(d) : d;
+  return date.toLocaleDateString("uz-UZ", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    timeZone: "UTC",
+  });
+}
+
+export function formatDateRangeUZ(start: Date | string, end: Date | string): string {
+  return `${formatDateUZ(start)} – ${formatDateUZ(end)}`;
+}
+
+export function formatMonthName(month: number): string {
+  const names = [
+    "Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun",
+    "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr",
+  ];
+  return names[month - 1] ?? "?";
+}

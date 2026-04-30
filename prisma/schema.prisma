@@ -1,0 +1,179 @@
+// Analitika BizBop — supermarket savdo analitika platformasi
+// Prisma schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  VIEWER
+}
+
+enum FileType {
+  SALES
+  METRICS
+  VISITS
+}
+
+enum AliasSource {
+  SALES
+  VISITS
+  SR
+}
+
+enum UploadStatus {
+  SUCCESS
+  FAILED
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         Role     @default(VIEWER)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  uploads UploadedFile[]
+}
+
+model Branch {
+  id        Int    @id @default(autoincrement())
+  name      String @unique
+  sortOrder Int    @default(0)
+  createdAt DateTime @default(now())
+
+  aliases       BranchAlias[]
+  sales         CategorySales[]
+  metrics       DailyMetrics[]
+  visits        DailyVisits[]
+  plans         MonthlyPlan[]
+  uploads       UploadedFile[]
+}
+
+model BranchAlias {
+  id       Int         @id @default(autoincrement())
+  branchId Int
+  alias    String
+  source   AliasSource
+
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([alias, source])
+  @@index([branchId])
+}
+
+model Category {
+  id        Int    @id @default(autoincrement())
+  name      String @unique
+  sortOrder Int    @default(0)
+
+  sales CategorySales[]
+  plans MonthlyPlan[]
+}
+
+// Sotuv fayllaridan keladigan kategoriya bo'yicha summalar.
+// Period 1 kun yoki bir necha kun bo'lishi mumkin (29.04 — bir kun, 1(2).xlsx — 29 kun).
+model CategorySales {
+  id             Int      @id @default(autoincrement())
+  uploadedFileId Int
+  branchId       Int
+  categoryId     Int
+  periodStart    DateTime @db.Date
+  periodEnd      DateTime @db.Date
+  amount         Decimal  @db.Decimal(20, 2)
+
+  uploadedFile UploadedFile @relation(fields: [uploadedFileId], references: [id], onDelete: Cascade)
+  branch       Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  category     Category     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([branchId, categoryId, periodStart, periodEnd])
+  @@index([periodStart, periodEnd])
+}
+
+// sr.xlsx fayllaridan — kunlik chek metrikalari (filial majburiy).
+model DailyMetrics {
+  id                   Int      @id @default(autoincrement())
+  uploadedFileId       Int
+  branchId             Int
+  date                 DateTime @db.Date
+  receiptCount         Int
+  receiptTotal         Decimal  @db.Decimal(20, 2)
+  avgItemsPerReceipt   Decimal  @db.Decimal(10, 4)
+  avgReceipt           Decimal  @db.Decimal(20, 2)
+  bigPurchaseLevel     Decimal  @db.Decimal(20, 2)
+  smallPurchaseLevel   Decimal  @db.Decimal(20, 2)
+
+  uploadedFile UploadedFile @relation(fields: [uploadedFileId], references: [id], onDelete: Cascade)
+  branch       Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([branchId, date])
+  @@index([date])
+}
+
+// export (1).xlsx — kunlik tashriflar (4 filialdan biri har qatorga).
+model DailyVisits {
+  id             Int      @id @default(autoincrement())
+  uploadedFileId Int
+  branchId       Int
+  date           DateTime @db.Date
+  visitCount     Int
+
+  uploadedFile UploadedFile @relation(fields: [uploadedFileId], references: [id], onDelete: Cascade)
+  branch       Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([branchId, date])
+  @@index([date])
+}
+
+// Admin qo'lda kiritadigan oylik "Normal Reja" — filial × oy × kategoriya × summa.
+model MonthlyPlan {
+  id         Int     @id @default(autoincrement())
+  branchId   Int
+  year       Int
+  month      Int     // 1..12
+  categoryId Int
+  planAmount Decimal @db.Decimal(20, 2)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  branch   Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([branchId, year, month, categoryId])
+}
+
+// Yuklangan har bir fayl audit + dublikat oldini olish uchun saqlanadi.
+model UploadedFile {
+  id           Int          @id @default(autoincrement())
+  label        String       // admin tomonidan qo'yilgan nom (chalg'imaslik uchun)
+  originalName String
+  fileHash     String       @unique // sha256 — bir xil fayl 2 marta yuklanmaydi
+  fileType     FileType
+  branchId     Int?         // METRICS uchun majburiy, SALES bir filialli bo'lsa shunchaki
+  periodStart  DateTime?    @db.Date
+  periodEnd    DateTime?    @db.Date
+  yearOverride Int?         // VISITS faylda yil bo'lmaganda admin tanlaydi
+  rowCount     Int          @default(0)
+  status       UploadStatus @default(SUCCESS)
+  errorMessage String?
+  uploadedById Int
+  createdAt    DateTime     @default(now())
+
+  uploadedBy User    @relation(fields: [uploadedById], references: [id])
+  branch     Branch? @relation(fields: [branchId], references: [id])
+
+  sales   CategorySales[]
+  metrics DailyMetrics[]
+  visits  DailyVisits[]
+
+  @@index([fileType, periodStart, periodEnd])
+  @@index([uploadedById])
+}
