@@ -13,6 +13,7 @@ import {
   Users,
   LayoutDashboard,
   Menu,
+  Table2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,7 @@ const NAV: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/branches", label: "Filiallar", icon: Building2 },
   { href: "/categories", label: "Kategoriyalar", icon: Tag },
+  { href: "/report", label: "Hisobot", icon: Table2 },
   { href: "/admin/upload", label: "Fayl yuklash", icon: Upload, adminOnly: true },
   { href: "/admin/files", label: "Yuklangan fayllar", icon: Files, adminOnly: true },
   { href: "/admin/plans", label: "Normal Reja", icon: Target, adminOnly: true },

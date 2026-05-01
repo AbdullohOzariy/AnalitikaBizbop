@@ -507,6 +507,84 @@ export const branchPerformance = (range: DateRange) =>
     { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
   )();
 
+/** Filial bo'yicha pro-rated tannarx — bitta query. */
+async function _costByBranch(range: DateRange): Promise<Map<number, number>> {
+  const rows = await prisma.$queryRaw<{ branchId: number; total: number | null }[]>`
+    SELECT "branchId", COALESCE(SUM(
+      "costAmount"::numeric * (
+        (LEAST("periodEnd", ${range.end}::date) - GREATEST("periodStart", ${range.start}::date) + 1)::numeric
+        / NULLIF(("periodEnd" - "periodStart" + 1), 0)::numeric
+      )
+    ), 0)::float8 AS total
+    FROM "CategorySales"
+    WHERE "periodStart" <= ${range.end}::date
+      AND "periodEnd"   >= ${range.start}::date
+      AND "costAmount"  IS NOT NULL
+    GROUP BY "branchId"
+  `;
+  const map = new Map<number, number>();
+  for (const r of rows) map.set(r.branchId, Number(r.total ?? 0));
+  return map;
+}
+
+export type BranchReportRow = {
+  branchId: number;
+  branchName: string;
+  sales: number;
+  cost: number;
+  hasCost: boolean;
+  marja: number | null;
+  receipts: number;
+  receiptTotal: number;
+  avgReceipt: number;
+  visits: number;
+  conversion: number;
+  plan: number;
+  planPct: number;
+};
+
+async function _branchReport(range: DateRange): Promise<BranchReportRow[]> {
+  const [branches, salesMap, costMap, metricsMap, visitsMap, planMap] = await Promise.all([
+    prisma.branch.findMany({ orderBy: { sortOrder: "asc" } }),
+    _salesByBranch(range),
+    _costByBranch(range),
+    _metricsByBranch(range),
+    _visitsByBranch(range),
+    _planByBranch(range),
+  ]);
+  return branches.map((b) => {
+    const sales = salesMap.get(b.id) ?? 0;
+    const cost = costMap.get(b.id) ?? 0;
+    const hasCost = costMap.has(b.id) && cost > 0;
+    const marja = hasCost ? ((sales - cost) / cost) * 100 : null;
+    const m = metricsMap.get(b.id) ?? { receipts: 0, receiptTotal: 0 };
+    const visits = visitsMap.get(b.id) ?? 0;
+    const plan = planMap.get(b.id) ?? 0;
+    return {
+      branchId: b.id,
+      branchName: b.name,
+      sales,
+      cost,
+      hasCost,
+      marja,
+      receipts: m.receipts,
+      receiptTotal: m.receiptTotal,
+      avgReceipt: m.receipts > 0 ? m.receiptTotal / m.receipts : 0,
+      visits,
+      conversion: visits > 0 ? (m.receipts / visits) * 100 : 0,
+      plan,
+      planPct: plan > 0 ? (sales / plan) * 100 : 0,
+    };
+  });
+}
+
+export const branchReport = (range: DateRange) =>
+  unstable_cache(
+    () => _branchReport(range),
+    ["branchReport", ...makeKey(range)],
+    { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
+  )();
+
 /** Mavjud ma'lumot davri (default range hisoblash uchun). */
 async function _getDefaultRange(): Promise<DateRange> {
   const [lastSale, lastMetric, lastVisit] = await Promise.all([
