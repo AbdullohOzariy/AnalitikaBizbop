@@ -49,7 +49,7 @@ export default async function DashboardPage({
     dailySalesSeries(range, branchId),
     dailyReceiptsSeries(range, branchId),
     branchShare(range),
-    topCategories(range, branchId, 10),
+    topCategories(range, branchId, 18),
     branchPerformance(range),
   ]);
 

@@ -156,25 +156,30 @@ export function TopCategoriesChart({
     fact: number;
     plan: number;
     achievement: number;
+    marja: number | null;
   }[];
 }) {
   const filtered = data.filter((d) => d.fact > 0);
   if (filtered.length === 0) {
     return (
-      <div className="h-72 flex items-center justify-center text-sm text-muted-foreground">
+      <div className="h-[520px] flex items-center justify-center text-sm text-muted-foreground">
         Kategoriya ma'lumoti yo'q.
       </div>
     );
   }
+
+  // Marja uchun ikkinchi o'q (agar kamida bitta marja ma'lumoti bo'lsa)
+  const hasMarja = filtered.some((d) => d.marja != null);
+
   return (
-    <div className="h-72">
+    <div className="h-[520px]">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart
+        <ComposedChart
           data={filtered}
           layout="vertical"
-          margin={{ top: 5, right: 10, left: 80, bottom: 5 }}
+          margin={{ top: 5, right: hasMarja ? 60 : 10, left: 10, bottom: 5 }}
         >
-          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" horizontal={false} />
           <XAxis
             type="number"
             tickFormatter={(v) => formatUZS(v as number, { compact: true })}
@@ -183,18 +188,44 @@ export function TopCategoriesChart({
           <YAxis
             type="category"
             dataKey="categoryName"
-            fontSize={11}
-            width={110}
-            tick={{ fontSize: 11 }}
+            fontSize={10}
+            width={130}
+            tick={{ fontSize: 10 }}
           />
+          {hasMarja && (
+            <YAxis
+              yAxisId="marja"
+              orientation="right"
+              type="number"
+              tickFormatter={(v) => `${(v as number).toFixed(0)}%`}
+              fontSize={10}
+              width={50}
+              domain={[0, "auto"]}
+            />
+          )}
           <Tooltip
             contentStyle={tooltipStyle}
-            formatter={(value, name) => [formatUZS(Number(value)) + " so'm", name]}
+            formatter={(value, name) => {
+              if (name === "Marja") return [`${Number(value).toFixed(1)}%`, name];
+              return [formatUZS(Number(value)) + " so'm", name];
+            }}
           />
           <Legend />
-          <Bar dataKey="plan" name="Reja" fill="#E2F5C8" radius={[0, 6, 6, 0]} />
-          <Bar dataKey="fact" name="Fakt" fill={GREEN} radius={[0, 6, 6, 0]} />
-        </BarChart>
+          <Bar dataKey="plan" name="Reja" fill="#E2F5C8" radius={[0, 4, 4, 0]} />
+          <Bar dataKey="fact" name="Fakt" fill={GREEN} radius={[0, 4, 4, 0]} />
+          {hasMarja && (
+            <Line
+              yAxisId="marja"
+              type="monotone"
+              dataKey="marja"
+              name="Marja"
+              stroke="#FF8730"
+              strokeWidth={2}
+              dot={{ r: 3, fill: "#FF8730" }}
+              connectNulls={false}
+            />
+          )}
+        </ComposedChart>
       </ResponsiveContainer>
     </div>
   );

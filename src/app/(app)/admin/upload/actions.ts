@@ -174,15 +174,17 @@ export async function uploadSalesAction(formData: FormData): Promise<UploadResul
       const values = result.rows.map((row) => {
         const branchId = aliasToBranchId.get(row.branchAlias)!;
         const categoryId = cats.get(row.categoryName)!;
-        return Prisma.sql`(${fileRecord.id}, ${branchId}, ${categoryId}, ${result.periodStart}::date, ${result.periodEnd}::date, ${new Prisma.Decimal(row.amount)})`;
+        const cost = row.costAmount != null ? new Prisma.Decimal(row.costAmount) : null;
+        return Prisma.sql`(${fileRecord.id}, ${branchId}, ${categoryId}, ${result.periodStart}::date, ${result.periodEnd}::date, ${new Prisma.Decimal(row.amount)}, ${cost})`;
       });
       await prisma.$executeRaw`
-        INSERT INTO "CategorySales" ("uploadedFileId", "branchId", "categoryId", "periodStart", "periodEnd", "amount")
+        INSERT INTO "CategorySales" ("uploadedFileId", "branchId", "categoryId", "periodStart", "periodEnd", "amount", "costAmount")
         VALUES ${Prisma.join(values)}
         ON CONFLICT ("branchId", "categoryId", "periodStart", "periodEnd")
         DO UPDATE SET
           "uploadedFileId" = EXCLUDED."uploadedFileId",
-          "amount"         = EXCLUDED."amount"
+          "amount"         = EXCLUDED."amount",
+          "costAmount"     = EXCLUDED."costAmount"
       `;
     } catch (err) {
       await prisma.uploadedFile.delete({ where: { id: fileRecord.id } }).catch(() => null);

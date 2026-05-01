@@ -134,6 +134,30 @@ async function _salesByCategory(
   return map;
 }
 
+/** Tannarx: kategoriya bo'yicha (costAmount mavjud qatorlar uchun). */
+async function _costByCategory(
+  range: DateRange,
+  branchId?: number
+): Promise<Map<number, number>> {
+  const rows = await prisma.$queryRaw<{ categoryId: number; total: number | null }[]>`
+    SELECT "categoryId", COALESCE(SUM(
+      "costAmount"::numeric * (
+        (LEAST("periodEnd", ${range.end}::date) - GREATEST("periodStart", ${range.start}::date) + 1)::numeric
+        / NULLIF(("periodEnd" - "periodStart" + 1), 0)::numeric
+      )
+    ), 0)::float8 AS total
+    FROM "CategorySales"
+    WHERE "periodStart" <= ${range.end}::date
+      AND "periodEnd"   >= ${range.start}::date
+      AND "costAmount"  IS NOT NULL
+      ${branchId ? Prisma.sql`AND "branchId" = ${branchId}` : Prisma.empty}
+    GROUP BY "categoryId"
+  `;
+  const map = new Map<number, number>();
+  for (const r of rows) map.set(r.categoryId, Number(r.total ?? 0));
+  return map;
+}
+
 /** Davrdagi har oy uchun {year, month, daysInMonth, overlapDays}. */
 function monthsInRange(range: DateRange) {
   const months: { year: number; month: number; daysInMonth: number; overlapDays: number }[] = [];
@@ -394,27 +418,34 @@ export type CategoryRow = {
   fact: number;
   plan: number;
   achievement: number;
+  /** (sotuv - tannarx) / tannarx * 100. Tannarx ma'lumoti yo'q bo'lsa null. */
+  marja: number | null;
 };
 
 async function _topCategories(
   range: DateRange,
   branchId?: number,
-  limit = 10
+  limit = 18
 ): Promise<CategoryRow[]> {
-  const [cats, factMap, planMap] = await Promise.all([
+  const [cats, factMap, planMap, costMap] = await Promise.all([
     prisma.category.findMany({ orderBy: { sortOrder: "asc" } }),
     _salesByCategory(range, branchId),
     _planByCategory(range, branchId),
+    _costByCategory(range, branchId),
   ]);
   const rows: CategoryRow[] = cats.map((c) => {
     const fact = factMap.get(c.id) ?? 0;
     const plan = planMap.get(c.id) ?? 0;
+    const cost = costMap.get(c.id);
+    const marja =
+      cost != null && cost > 0 ? ((fact - cost) / cost) * 100 : null;
     return {
       categoryId: c.id,
       categoryName: c.name,
       fact,
       plan,
       achievement: plan > 0 ? (fact / plan) * 100 : 0,
+      marja,
     };
   });
   return rows.sort((a, b) => b.fact - a.fact).slice(0, limit);

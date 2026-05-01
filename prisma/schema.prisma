@@ -89,6 +89,7 @@ model CategorySales {
   periodStart    DateTime @db.Date
   periodEnd      DateTime @db.Date
   amount         Decimal  @db.Decimal(20, 2)
+  costAmount     Decimal? @db.Decimal(20, 2)
 
   uploadedFile UploadedFile @relation(fields: [uploadedFileId], references: [id], onDelete: Cascade)
   branch       Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
