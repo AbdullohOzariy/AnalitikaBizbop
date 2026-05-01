@@ -32,7 +32,9 @@ export type ParsedSalesResult = {
  */
 export function parseSalesWorkbook(
   buffer: Buffer,
-  allowedCategoryNames: string[]
+  allowedCategoryNames: string[],
+  /** AI tomonidan taklif qilingan moslik: normalizedExcelName → normalizedDbName */
+  categoryMapping?: Map<string, string>
 ): ParsedSalesResult {
   const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
   const sheetName = wb.SheetNames[0];
@@ -125,9 +127,9 @@ export function parseSalesWorkbook(
     if (typeof name !== "string") continue;
 
     const norm = normalizeName(name);
-    if (!allowed.has(norm)) {
-      // Sub-kategoriya/tovar — o'tkazib yuboramiz, lekin top-level nom emas bo'lsa audit qilamiz.
-      // Faqat folder qatorlarni audit qilamiz: kod number bo'lsa folder.
+    // AI tomonidan taklif qilingan moslikni tekshir
+    const effective = categoryMapping?.get(norm) ?? norm;
+    if (!allowed.has(effective)) {
       if (typeof r[0] === "number") skipped.add(norm);
       continue;
     }
@@ -137,7 +139,7 @@ export function parseSalesWorkbook(
       if (amt == null || amt === 0) continue;
       out.push({
         branchAlias: alias,
-        categoryName: norm,
+        categoryName: effective,  // DB nomi (AI o'zgartirganda ham to'g'ri)
         amount: amt,
       });
     }

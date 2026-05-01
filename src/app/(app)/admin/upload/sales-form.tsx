@@ -20,6 +20,11 @@ export function SalesUploadForm() {
       const res = await uploadSalesAction(fd);
       if (res.ok) {
         toast.success(res.summary);
+        if (res.aiCorrections?.length) {
+          toast.info(`AI tuzatishlar (${res.aiCorrections.length}):\n${res.aiCorrections.join("\n")}`, {
+            duration: 8000,
+          });
+        }
         formRef.current?.reset();
         setFile(null);
       } else {

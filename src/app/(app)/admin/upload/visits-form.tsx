@@ -32,6 +32,11 @@ export function VisitsUploadForm() {
       const res = await uploadVisitsAction(fd);
       if (res.ok) {
         toast.success(res.summary);
+        if (res.aiCorrections?.length) {
+          toast.info(`AI tuzatishlar (${res.aiCorrections.length}):\n${res.aiCorrections.join("\n")}`, {
+            duration: 8000,
+          });
+        }
         formRef.current?.reset();
         setFile(null);
         setYear(String(CURRENT_YEAR));
