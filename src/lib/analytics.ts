@@ -502,8 +502,6 @@ async function _getDefaultRange(): Promise<DateRange> {
   return { start: startOfMonth(ref), end: endOfMonth(ref) };
 }
 
-export const getDefaultRange = unstable_cache(
-  _getDefaultRange,
-  ["getDefaultRange"],
-  { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
-);
+// Date objects do not survive JSON serialization inside unstable_cache,
+// so this runs uncached. The 3 findFirst queries are negligible.
+export const getDefaultRange = _getDefaultRange;
