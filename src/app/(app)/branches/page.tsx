@@ -1,5 +1,6 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { unstable_cache } from "next/cache";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -17,16 +18,20 @@ const SOURCE_LABEL: Record<string, string> = {
   SR: "Cheklar (sr)",
 };
 
+const getBranches = unstable_cache(
+  () =>
+    prisma.branch.findMany({
+      orderBy: { sortOrder: "asc" },
+      include: { aliases: { orderBy: [{ source: "asc" }, { alias: "asc" }] } },
+    }),
+  ["branches-list"],
+  { tags: ["branches"], revalidate: 300 }
+);
+
 export default async function BranchesPage() {
   const session = await auth();
   const isAdmin = session?.user.role === "ADMIN";
-
-  const branches = await prisma.branch.findMany({
-    orderBy: { sortOrder: "asc" },
-    include: {
-      aliases: { orderBy: [{ source: "asc" }, { alias: "asc" }] },
-    },
-  });
+  const branches = await getBranches();
 
   return (
     <div className="space-y-6">

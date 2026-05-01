@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { unstable_cache } from "next/cache";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -9,13 +10,18 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
+const getCategories = unstable_cache(
+  () =>
+    prisma.category.findMany({
+      orderBy: { sortOrder: "asc" },
+      include: { _count: { select: { sales: true, plans: true } } },
+    }),
+  ["categories-list"],
+  { tags: ["categories"], revalidate: 300 }
+);
+
 export default async function CategoriesPage() {
-  const categories = await prisma.category.findMany({
-    orderBy: { sortOrder: "asc" },
-    include: {
-      _count: { select: { sales: true, plans: true } },
-    },
-  });
+  const categories = await getCategories();
 
   return (
     <div className="space-y-6">

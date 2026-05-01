@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
+import { useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,13 +34,39 @@ export function PeriodFilter({
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const update = (changes: Record<string, string | undefined>) => {
+  // Local state tracks typing; only pushes to URL on blur or after debounce
+  const [localStart, setLocalStart] = useState(start);
+  const [localEnd, setLocalEnd] = useState(end);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  const navigate = (changes: Record<string, string | undefined>) => {
     const params = new URLSearchParams(searchParams.toString());
     for (const [k, v] of Object.entries(changes)) {
       if (v == null || v === "") params.delete(k);
       else params.set(k, v);
     }
-    router.replace(`/dashboard?${params.toString()}`);
+    router.replace(`/dashboard?${params.toString()}`, { scroll: false });
+  };
+
+  const handleDateChange = (key: "start" | "end", value: string) => {
+    if (key === "start") setLocalStart(value);
+    else setLocalEnd(value);
+
+    // Debounce: wait until user stops typing (500ms)
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      // Validate date format before navigating
+      if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        navigate({ [key]: value });
+      }
+    }, 500);
+  };
+
+  const handleDateBlur = (key: "start" | "end", value: string) => {
+    clearTimeout(debounceRef.current);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      navigate({ [key]: value });
+    }
   };
 
   const setPreset = (preset: string) => {
@@ -65,7 +92,11 @@ export function PeriodFilter({
     } else {
       return;
     }
-    update({ start: fmtInput(s), end: fmtInput(e) });
+    const ns = fmtInput(s);
+    const ne = fmtInput(e);
+    setLocalStart(ns);
+    setLocalEnd(ne);
+    navigate({ start: ns, end: ne });
   };
 
   return (
@@ -77,8 +108,9 @@ export function PeriodFilter({
             <Input
               id="d-start"
               type="date"
-              value={start}
-              onChange={(e) => update({ start: e.target.value })}
+              value={localStart}
+              onChange={(e) => handleDateChange("start", e.target.value)}
+              onBlur={(e) => handleDateBlur("start", e.target.value)}
             />
           </div>
           <div className="space-y-2">
@@ -86,8 +118,9 @@ export function PeriodFilter({
             <Input
               id="d-end"
               type="date"
-              value={end}
-              onChange={(e) => update({ end: e.target.value })}
+              value={localEnd}
+              onChange={(e) => handleDateChange("end", e.target.value)}
+              onBlur={(e) => handleDateBlur("end", e.target.value)}
             />
           </div>
           <div className="space-y-2">
@@ -95,7 +128,7 @@ export function PeriodFilter({
             <Select
               value={branchId ? String(branchId) : "all"}
               onValueChange={(v) =>
-                update({ branchId: !v || v === "all" ? undefined : v })
+                navigate({ branchId: !v || v === "all" ? undefined : v })
               }
             >
               <SelectTrigger>
@@ -112,21 +145,19 @@ export function PeriodFilter({
             </Select>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" onClick={() => setPreset("today")} className="rounded-full hover:bg-primary/10 hover:text-primary transition-colors border-dashed hover:border-solid">
-              Bugun
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setPreset("last7")} className="rounded-full hover:bg-primary/10 hover:text-primary transition-colors border-dashed hover:border-solid">
-              7 kun
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setPreset("last30")} className="rounded-full hover:bg-primary/10 hover:text-primary transition-colors border-dashed hover:border-solid">
-              30 kun
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setPreset("thisMonth")} className="rounded-full hover:bg-primary/10 hover:text-primary transition-colors border-dashed hover:border-solid">
-              Joriy oy
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setPreset("lastMonth")} className="rounded-full hover:bg-primary/10 hover:text-primary transition-colors border-dashed hover:border-solid">
-              O'tgan oy
-            </Button>
+            {(["today", "last7", "last30", "thisMonth", "lastMonth"] as const).map(
+              (p) => (
+                <Button
+                  key={p}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPreset(p)}
+                  className="rounded-full hover:bg-primary/15 hover:text-primary-foreground transition-colors border-dashed hover:border-solid"
+                >
+                  {p === "today" ? "Bugun" : p === "last7" ? "7 kun" : p === "last30" ? "30 kun" : p === "thisMonth" ? "Joriy oy" : "O'tgan oy"}
+                </Button>
+              )
+            )}
           </div>
         </div>
       </CardContent>
