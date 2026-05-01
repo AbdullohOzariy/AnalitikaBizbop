@@ -507,10 +507,40 @@ export const branchPerformance = (range: DateRange) =>
     { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
   )();
 
-/** Filial bo'yicha pro-rated tannarx — bitta query. */
-async function _costByBranch(range: DateRange): Promise<Map<number, number>> {
-  const rows = await prisma.$queryRaw<{ branchId: number; total: number | null }[]>`
-    SELECT "branchId", COALESCE(SUM(
+/** Filial × kategoriya bo'yicha pro-rated sotuv (2D map). */
+async function _salesByBranchCategory(
+  range: DateRange
+): Promise<Map<number, Map<number, number>>> {
+  const rows = await prisma.$queryRaw<
+    { branchId: number; categoryId: number; total: number | null }[]
+  >`
+    SELECT "branchId", "categoryId", COALESCE(SUM(
+      "amount"::numeric * (
+        (LEAST("periodEnd", ${range.end}::date) - GREATEST("periodStart", ${range.start}::date) + 1)::numeric
+        / NULLIF(("periodEnd" - "periodStart" + 1), 0)::numeric
+      )
+    ), 0)::float8 AS total
+    FROM "CategorySales"
+    WHERE "periodStart" <= ${range.end}::date
+      AND "periodEnd"   >= ${range.start}::date
+    GROUP BY "branchId", "categoryId"
+  `;
+  const map = new Map<number, Map<number, number>>();
+  for (const r of rows) {
+    if (!map.has(r.branchId)) map.set(r.branchId, new Map());
+    map.get(r.branchId)!.set(r.categoryId, Number(r.total ?? 0));
+  }
+  return map;
+}
+
+/** Filial × kategoriya bo'yicha pro-rated tannarx (2D map). */
+async function _costByBranchCategory(
+  range: DateRange
+): Promise<Map<number, Map<number, number>>> {
+  const rows = await prisma.$queryRaw<
+    { branchId: number; categoryId: number; total: number | null }[]
+  >`
+    SELECT "branchId", "categoryId", COALESCE(SUM(
       "costAmount"::numeric * (
         (LEAST("periodEnd", ${range.end}::date) - GREATEST("periodStart", ${range.start}::date) + 1)::numeric
         / NULLIF(("periodEnd" - "periodStart" + 1), 0)::numeric
@@ -520,12 +550,55 @@ async function _costByBranch(range: DateRange): Promise<Map<number, number>> {
     WHERE "periodStart" <= ${range.end}::date
       AND "periodEnd"   >= ${range.start}::date
       AND "costAmount"  IS NOT NULL
-    GROUP BY "branchId"
+    GROUP BY "branchId", "categoryId"
   `;
-  const map = new Map<number, number>();
-  for (const r of rows) map.set(r.branchId, Number(r.total ?? 0));
+  const map = new Map<number, Map<number, number>>();
+  for (const r of rows) {
+    if (!map.has(r.branchId)) map.set(r.branchId, new Map());
+    map.get(r.branchId)!.set(r.categoryId, Number(r.total ?? 0));
+  }
   return map;
 }
+
+/** Filial × kategoriya bo'yicha pro-rated reja (2D map). */
+async function _planByBranchCategory(
+  range: DateRange
+): Promise<Map<number, Map<number, number>>> {
+  const months = monthsInRange(range);
+  if (months.length === 0) return new Map();
+  const ymPairs = Prisma.join(months.map((m) => Prisma.sql`(${m.year}, ${m.month})`));
+  const rows = await prisma.$queryRaw<
+    { branchId: number; categoryId: number; year: number; month: number; total: number | null }[]
+  >`
+    SELECT "branchId", "categoryId", "year", "month",
+           COALESCE(SUM("planAmount"::numeric), 0)::float8 AS total
+    FROM "MonthlyPlan"
+    WHERE ("year", "month") IN (${ymPairs})
+    GROUP BY "branchId", "categoryId", "year", "month"
+  `;
+  const monthMeta = new Map(months.map((m) => [`${m.year}-${m.month}`, m]));
+  const map = new Map<number, Map<number, number>>();
+  for (const r of rows) {
+    const meta = monthMeta.get(`${r.year}-${r.month}`);
+    if (!meta || meta.daysInMonth === 0) continue;
+    const prorated = Number(r.total ?? 0) * (meta.overlapDays / meta.daysInMonth);
+    if (!map.has(r.branchId)) map.set(r.branchId, new Map());
+    const catMap = map.get(r.branchId)!;
+    catMap.set(r.categoryId, (catMap.get(r.categoryId) ?? 0) + prorated);
+  }
+  return map;
+}
+
+export type CategoryBreakdown = {
+  categoryId: number;
+  categoryName: string;
+  sales: number;
+  cost: number;
+  hasCost: boolean;
+  marja: number | null;
+  plan: number;
+  planPct: number;
+};
 
 export type BranchReportRow = {
   branchId: number;
@@ -541,39 +614,70 @@ export type BranchReportRow = {
   conversion: number;
   plan: number;
   planPct: number;
+  categories: CategoryBreakdown[];
 };
 
 async function _branchReport(range: DateRange): Promise<BranchReportRow[]> {
-  const [branches, salesMap, costMap, metricsMap, visitsMap, planMap] = await Promise.all([
-    prisma.branch.findMany({ orderBy: { sortOrder: "asc" } }),
-    _salesByBranch(range),
-    _costByBranch(range),
-    _metricsByBranch(range),
-    _visitsByBranch(range),
-    _planByBranch(range),
-  ]);
+  const [branches, allCategories, salesBCMap, costBCMap, planBCMap, metricsMap, visitsMap] =
+    await Promise.all([
+      prisma.branch.findMany({ orderBy: { sortOrder: "asc" } }),
+      prisma.category.findMany({ orderBy: { sortOrder: "asc" } }),
+      _salesByBranchCategory(range),
+      _costByBranchCategory(range),
+      _planByBranchCategory(range),
+      _metricsByBranch(range),
+      _visitsByBranch(range),
+    ]);
+
   return branches.map((b) => {
-    const sales = salesMap.get(b.id) ?? 0;
-    const cost = costMap.get(b.id) ?? 0;
-    const hasCost = costMap.has(b.id) && cost > 0;
-    const marja = hasCost ? ((sales - cost) / cost) * 100 : null;
-    const m = metricsMap.get(b.id) ?? { receipts: 0, receiptTotal: 0 };
-    const visits = visitsMap.get(b.id) ?? 0;
-    const plan = planMap.get(b.id) ?? 0;
+    const catSales = salesBCMap.get(b.id) ?? new Map<number, number>();
+    const catCost  = costBCMap.get(b.id)  ?? new Map<number, number>();
+    const catPlan  = planBCMap.get(b.id)  ?? new Map<number, number>();
+
+    // Branch-level aggregates from category maps
+    let sales = 0, cost = 0;
+    for (const v of catSales.values()) sales += v;
+    for (const v of catCost.values())  cost  += v;
+    const hasCost = cost > 0;
+    const marja   = hasCost ? ((sales - cost) / cost) * 100 : null;
+
+    const m       = metricsMap.get(b.id) ?? { receipts: 0, receiptTotal: 0 };
+    const visits  = visitsMap.get(b.id) ?? 0;
+
+    let plan = 0;
+    for (const v of catPlan.values()) plan += v;
+
+    const categories: CategoryBreakdown[] = allCategories
+      .map((c) => {
+        const cSales  = catSales.get(c.id) ?? 0;
+        const cCost   = catCost.get(c.id)  ?? 0;
+        const cHasCost = cCost > 0;
+        const cPlan   = catPlan.get(c.id)  ?? 0;
+        return {
+          categoryId:   c.id,
+          categoryName: c.name,
+          sales:   cSales,
+          cost:    cCost,
+          hasCost: cHasCost,
+          marja:   cHasCost ? ((cSales - cCost) / cCost) * 100 : null,
+          plan:    cPlan,
+          planPct: cPlan > 0 ? (cSales / cPlan) * 100 : 0,
+        };
+      })
+      .filter((c) => c.sales > 0 || c.plan > 0);
+
     return {
-      branchId: b.id,
-      branchName: b.name,
-      sales,
-      cost,
-      hasCost,
-      marja,
-      receipts: m.receipts,
+      branchId:    b.id,
+      branchName:  b.name,
+      sales, cost, hasCost, marja,
+      receipts:    m.receipts,
       receiptTotal: m.receiptTotal,
-      avgReceipt: m.receipts > 0 ? m.receiptTotal / m.receipts : 0,
+      avgReceipt:  m.receipts > 0 ? m.receiptTotal / m.receipts : 0,
       visits,
-      conversion: visits > 0 ? (m.receipts / visits) * 100 : 0,
+      conversion:  visits > 0 ? (m.receipts / visits) * 100 : 0,
       plan,
-      planPct: plan > 0 ? (sales / plan) * 100 : 0,
+      planPct:     plan > 0 ? (sales / plan) * 100 : 0,
+      categories,
     };
   });
 }
