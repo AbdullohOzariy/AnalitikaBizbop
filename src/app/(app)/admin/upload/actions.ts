@@ -1,11 +1,12 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
 import { FileType, AliasSource, UploadStatus } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth-helpers";
+import { ANALYTICS_CACHE_TAG } from "@/lib/analytics";
 import { sha256 } from "@/lib/parsers/utils";
 import { parseSalesWorkbook } from "@/lib/parsers/sales";
 import { parseMetricsWorkbook } from "@/lib/parsers/metrics";
@@ -130,6 +131,7 @@ export async function uploadSalesAction(formData: FormData): Promise<UploadResul
 
     revalidatePath("/admin/files");
     revalidatePath("/dashboard");
+    revalidateTag(ANALYTICS_CACHE_TAG, "max");
 
     const branchCount = uniqueAliases.length;
     return {
@@ -217,6 +219,7 @@ export async function uploadMetricsAction(formData: FormData): Promise<UploadRes
 
     revalidatePath("/admin/files");
     revalidatePath("/dashboard");
+    revalidateTag(ANALYTICS_CACHE_TAG, "max");
 
     return {
       ok: true,
@@ -301,6 +304,7 @@ export async function uploadVisitsAction(formData: FormData): Promise<UploadResu
 
     revalidatePath("/admin/files");
     revalidatePath("/dashboard");
+    revalidateTag(ANALYTICS_CACHE_TAG, "max");
 
     return {
       ok: true,

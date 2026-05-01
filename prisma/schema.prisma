@@ -96,6 +96,8 @@ model CategorySales {
 
   @@unique([branchId, categoryId, periodStart, periodEnd])
   @@index([periodStart, periodEnd])
+  @@index([branchId, periodStart, periodEnd])
+  @@index([categoryId, periodStart, periodEnd])
 }
 
 // sr.xlsx fayllaridan — kunlik chek metrikalari (filial majburiy).
@@ -148,6 +150,7 @@ model MonthlyPlan {
   category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
   @@unique([branchId, year, month, categoryId])
+  @@index([year, month])
 }
 
 // Yuklangan har bir fayl audit + dublikat oldini olish uchun saqlanadi.

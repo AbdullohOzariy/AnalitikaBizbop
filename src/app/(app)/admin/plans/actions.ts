@@ -1,10 +1,11 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth-helpers";
+import { ANALYTICS_CACHE_TAG } from "@/lib/analytics";
 
 const schema = z.object({
   branchId: z.coerce.number().int().positive(),
@@ -70,6 +71,7 @@ export async function savePlansAction(
 
     revalidatePath("/admin/plans");
     revalidatePath("/dashboard");
+    revalidateTag(ANALYTICS_CACHE_TAG, "max");
     return { ok: true, saved };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Xato." };
