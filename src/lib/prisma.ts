@@ -6,18 +6,11 @@ import { PrismaPg } from "@prisma/adapter-pg";
 const rawUrl = process.env.DATABASE_URL ?? "";
 const isLocal = rawUrl.includes("localhost") || rawUrl.includes("127.0.0.1");
 
-// Strip sslmode from the URL so pg-connection-string doesn't emit a deprecation
-// warning. SSL is handled explicitly below (equivalent to sslmode=verify-full).
-let connectionString = rawUrl;
-if (!isLocal) {
-  try {
-    const u = new URL(rawUrl);
-    u.searchParams.delete("sslmode");
-    connectionString = u.toString();
-  } catch {
-    // not a valid URL — use as-is
-  }
-}
+// pg-connection-string warns about sslmode=require/prefer/verify-ca in v9.
+// Replace them with verify-full (same behavior, no warning).
+const connectionString = isLocal
+  ? rawUrl
+  : rawUrl.replace(/sslmode=(prefer|require|verify-ca)/g, "sslmode=verify-full");
 
 const pool = new Pool({
   connectionString,

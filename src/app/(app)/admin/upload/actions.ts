@@ -199,7 +199,7 @@ export async function uploadSalesAction(formData: FormData): Promise<UploadResul
       }
 
       return created;
-    });
+    }, { timeout: 30_000 });
 
     revalidatePath("/admin/files");
     revalidatePath("/dashboard");
@@ -288,7 +288,7 @@ export async function uploadMetricsAction(formData: FormData): Promise<UploadRes
       }
 
       return created;
-    });
+    }, { timeout: 30_000 });
 
     revalidatePath("/admin/files");
     revalidatePath("/dashboard");
@@ -378,7 +378,7 @@ export async function uploadVisitsAction(formData: FormData): Promise<UploadResu
       }
 
       return created;
-    });
+    }, { timeout: 30_000 });
 
     revalidatePath("/admin/files");
     revalidatePath("/dashboard");
