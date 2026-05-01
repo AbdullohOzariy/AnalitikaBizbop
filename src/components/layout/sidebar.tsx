@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
-  BarChart3,
   Upload,
   Building2,
   Tag,
@@ -55,11 +55,17 @@ function SidebarNav({
       <div className="h-16 flex items-center px-6 border-b">
         <Link
           href="/dashboard"
-          className="flex items-center gap-2"
+          className="flex items-center"
           onClick={onNavigate}
         >
-          <BarChart3 className="h-6 w-6 text-primary" />
-          <span className="font-semibold tracking-tight">Analitika</span>
+          <Image
+            src="/logo.png"
+            alt="BizBop Supermarket"
+            width={140}
+            height={46}
+            priority
+            className="h-9 w-auto"
+          />
         </Link>
       </div>
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
