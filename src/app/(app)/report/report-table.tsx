@@ -50,25 +50,36 @@ export function ReportTable({
   // Jami
   const total = rows.reduce(
     (a, r) => ({
-      sales: a.sales + r.sales,
-      cost:  a.cost  + r.cost,
+      sales:    a.sales    + r.sales,
+      cost:     a.cost     + r.cost,
       receipts: a.receipts + r.receipts,
-      receiptTotal: a.receiptTotal + r.receiptTotal,
-      visits: a.visits + r.visits,
-      plan:   a.plan   + r.plan,
+      visits:   a.visits   + r.visits,
+      plan:     a.plan     + r.plan,
+      // weighted avgItems
+      itemsSum: a.itemsSum + r.avgItemsPerReceipt * r.receipts,
     }),
-    { sales: 0, cost: 0, receipts: 0, receiptTotal: 0, visits: 0, plan: 0 }
+    { sales: 0, cost: 0, receipts: 0, visits: 0, plan: 0, itemsSum: 0 }
   );
-  const totalMarja    = hasCostAny && total.cost > 0 ? ((total.sales - total.cost) / total.cost) * 100 : null;
-  const totalAvg      = total.receipts > 0 ? total.receiptTotal / total.receipts : 0;
-  const totalConv     = total.visits   > 0 ? (total.receipts / total.visits) * 100 : 0;
-  const totalPlanPct  = total.plan     > 0 ? (total.sales / total.plan) * 100 : 0;
 
-  const colSpan = 8 + (hasCostAny ? 2 : 0);
+  // category-level totals for marja/planPct
+  const catTotal = rows.reduce(
+    (a, r) => ({
+      sales: a.sales + r.categories.reduce((s, c) => s + c.sales, 0),
+    }),
+    { sales: 0 }
+  );
+
+  const totalMarja   = hasCostAny && total.cost > 0
+    ? ((catTotal.sales - total.cost) / total.cost) * 100
+    : null;
+  const totalAvg     = total.receipts > 0 ? total.sales / total.receipts : 0;
+  const totalAvgItems = total.receipts > 0 ? total.itemsSum / total.receipts : 0;
+  const totalConv    = total.visits > 0 ? (total.receipts / total.visits) * 100 : 0;
+  const totalPlanPct = total.plan > 0 ? (catTotal.sales / total.plan) * 100 : 0;
 
   return (
     <div className="overflow-x-auto">
-      <Table className="min-w-[860px]">
+      <Table className="min-w-[820px]">
         <TableHeader>
           <TableRow className="bg-muted/40 hover:bg-muted/40">
             <TableHead className="pl-4 sticky left-0 bg-muted/40 z-10 min-w-[160px]">
@@ -82,8 +93,8 @@ export function ReportTable({
               </>
             )}
             <TableHead className="text-right">Cheklar</TableHead>
-            <TableHead className="text-right">Chek summasi</TableHead>
             <TableHead className="text-right">O'rt. chek</TableHead>
+            <TableHead className="text-right">O'rt. tovar</TableHead>
             <TableHead className="text-right">Tashriflar</TableHead>
             <TableHead className="text-right">Konv. %</TableHead>
             <TableHead className="text-right">Reja</TableHead>
@@ -104,7 +115,9 @@ export function ReportTable({
                   <TableCell className="pl-4 sticky left-0 bg-card z-10">
                     <div className="flex items-center gap-2 font-semibold">
                       <ChevronRight
-                        className={`h-4 w-4 text-muted-foreground shrink-0 transition-transform duration-150 ${open ? "rotate-90" : ""}`}
+                        className={`h-4 w-4 text-muted-foreground shrink-0 transition-transform duration-150 ${
+                          open ? "rotate-90" : ""
+                        }`}
                       />
                       {r.branchName}
                     </div>
@@ -128,10 +141,10 @@ export function ReportTable({
                     {r.receipts > 0 ? formatNumber(r.receipts) : "—"}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {r.receiptTotal > 0 ? formatUZS(r.receiptTotal) : "—"}
+                    {r.avgReceipt > 0 ? formatUZS(r.avgReceipt) : "—"}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {r.avgReceipt > 0 ? formatUZS(r.avgReceipt) : "—"}
+                    {r.avgItemsPerReceipt > 0 ? r.avgItemsPerReceipt.toFixed(1) : "—"}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {r.visits > 0 ? formatNumber(r.visits) : "—"}
@@ -147,14 +160,14 @@ export function ReportTable({
                   </TableCell>
                 </TableRow>
 
-                {/* Kategoriya qatorlari (ochilganda) */}
+                {/* Kategoriya qatorlari */}
                 {open &&
                   r.categories.map((c) => (
                     <TableRow
                       key={`c-${r.branchId}-${c.categoryId}`}
                       className="bg-muted/20 hover:bg-muted/30"
                     >
-                      <TableCell className="pl-10 sticky left-0 bg-[oklch(0.972_0.016_145/0.5)] z-10">
+                      <TableCell className="pl-10 sticky left-0 bg-[oklch(0.972_0.016_145/0.6)] z-10">
                         <span className="text-sm text-muted-foreground">{c.categoryName}</span>
                       </TableCell>
                       <TableCell className="text-right tabular-nums text-sm">
@@ -172,10 +185,8 @@ export function ReportTable({
                           </TableCell>
                         </>
                       )}
-                      {/* Cheklar, Chek summasi, O'rt. chek, Tashriflar, Konv — kategoriya bo'yicha yo'q */}
-                      <TableCell colSpan={5} className="text-center text-xs text-muted-foreground/40">
-                        —
-                      </TableCell>
+                      {/* Cheklar, O'rt. chek, O'rt. tovar, Tashriflar, Konv — kategoriya darajasida yo'q */}
+                      <TableCell colSpan={5} />
                       <TableCell className="text-right tabular-nums text-sm text-muted-foreground">
                         {c.plan > 0 ? formatUZS(c.plan) : "—"}
                       </TableCell>
@@ -188,7 +199,7 @@ export function ReportTable({
             );
           })}
 
-          {/* Jami qatori */}
+          {/* Jami */}
           <TableRow className="border-t-2 bg-muted/30 hover:bg-muted/30 font-semibold">
             <TableCell className="pl-4 sticky left-0 bg-muted/30 z-10">Jami</TableCell>
             <TableCell className="text-right tabular-nums">
@@ -208,10 +219,10 @@ export function ReportTable({
               {total.receipts > 0 ? formatNumber(total.receipts) : "—"}
             </TableCell>
             <TableCell className="text-right tabular-nums">
-              {total.receiptTotal > 0 ? formatUZS(total.receiptTotal) : "—"}
+              {totalAvg > 0 ? formatUZS(totalAvg) : "—"}
             </TableCell>
             <TableCell className="text-right tabular-nums">
-              {totalAvg > 0 ? formatUZS(totalAvg) : "—"}
+              {totalAvgItems > 0 ? totalAvgItems.toFixed(1) : "—"}
             </TableCell>
             <TableCell className="text-right tabular-nums">
               {total.visits > 0 ? formatNumber(total.visits) : "—"}

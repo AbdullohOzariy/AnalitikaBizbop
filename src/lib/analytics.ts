@@ -236,19 +236,29 @@ async function _planByBranch(range: DateRange): Promise<Map<number, number>> {
 }
 
 /** Filial bo'yicha kunlik metrika summalari (1 query). */
-async function _metricsByBranch(
-  range: DateRange
-): Promise<Map<number, { receipts: number; receiptTotal: number }>> {
-  const rows = await prisma.dailyMetrics.groupBy({
-    by: ["branchId"],
-    where: { date: { gte: range.start, lte: range.end } },
-    _sum: { receiptCount: true, receiptTotal: true },
-  });
-  const map = new Map<number, { receipts: number; receiptTotal: number }>();
+async function _metricsByBranch(range: DateRange): Promise<
+  Map<number, { receipts: number; receiptTotal: number; avgItemsPerReceipt: number }>
+> {
+  const rows = await prisma.$queryRaw<
+    { branchId: number; receipts: number; receiptTotal: number; avgItems: number }[]
+  >`
+    SELECT "branchId",
+      SUM("receiptCount")::int                                                     AS receipts,
+      SUM("receiptTotal"::numeric)::float8                                         AS "receiptTotal",
+      CASE WHEN SUM("receiptCount") > 0
+        THEN SUM("avgItemsPerReceipt"::numeric * "receiptCount") / SUM("receiptCount")
+        ELSE 0
+      END::float8                                                                  AS "avgItems"
+    FROM "DailyMetrics"
+    WHERE "date" >= ${range.start}::date AND "date" <= ${range.end}::date
+    GROUP BY "branchId"
+  `;
+  const map = new Map<number, { receipts: number; receiptTotal: number; avgItemsPerReceipt: number }>();
   for (const r of rows) {
     map.set(r.branchId, {
-      receipts: r._sum.receiptCount ?? 0,
-      receiptTotal: Number(r._sum.receiptTotal ?? 0),
+      receipts:           Number(r.receipts ?? 0),
+      receiptTotal:       Number(r.receiptTotal ?? 0),
+      avgItemsPerReceipt: Number(r.avgItems ?? 0),
     });
   }
   return map;
@@ -603,16 +613,20 @@ export type CategoryBreakdown = {
 export type BranchReportRow = {
   branchId: number;
   branchName: string;
+  /** Sotuv = SUM(receiptTotal) DailyMetrics dan (POS kassa). */
   sales: number;
+  /** Tannarx — CategorySales.costAmount dan. */
   cost: number;
   hasCost: boolean;
+  /** Marja = (categorySales - cost) / cost * 100 (CategorySales asosida). */
   marja: number | null;
   receipts: number;
-  receiptTotal: number;
   avgReceipt: number;
+  avgItemsPerReceipt: number;
   visits: number;
   conversion: number;
   plan: number;
+  /** planPct = categorySales / plan * 100. */
   planPct: number;
   categories: CategoryBreakdown[];
 };
@@ -630,53 +644,54 @@ async function _branchReport(range: DateRange): Promise<BranchReportRow[]> {
     ]);
 
   return branches.map((b) => {
-    const catSales = salesBCMap.get(b.id) ?? new Map<number, number>();
-    const catCost  = costBCMap.get(b.id)  ?? new Map<number, number>();
-    const catPlan  = planBCMap.get(b.id)  ?? new Map<number, number>();
+    const catSalesMap = salesBCMap.get(b.id) ?? new Map<number, number>();
+    const catCostMap  = costBCMap.get(b.id)  ?? new Map<number, number>();
+    const catPlanMap  = planBCMap.get(b.id)  ?? new Map<number, number>();
 
-    // Branch-level aggregates from category maps
-    let sales = 0, cost = 0;
-    for (const v of catSales.values()) sales += v;
-    for (const v of catCost.values())  cost  += v;
+    // CategorySales aggregates (for marja and planPct)
+    let categorySales = 0, cost = 0, plan = 0;
+    for (const v of catSalesMap.values()) categorySales += v;
+    for (const v of catCostMap.values())  cost          += v;
+    for (const v of catPlanMap.values())  plan          += v;
+
     const hasCost = cost > 0;
-    const marja   = hasCost ? ((sales - cost) / cost) * 100 : null;
+    const marja   = hasCost ? ((categorySales - cost) / cost) * 100 : null;
 
-    const m       = metricsMap.get(b.id) ?? { receipts: 0, receiptTotal: 0 };
-    const visits  = visitsMap.get(b.id) ?? 0;
+    const m      = metricsMap.get(b.id) ?? { receipts: 0, receiptTotal: 0, avgItemsPerReceipt: 0 };
+    const visits = visitsMap.get(b.id) ?? 0;
 
-    let plan = 0;
-    for (const v of catPlan.values()) plan += v;
-
-    const categories: CategoryBreakdown[] = allCategories
-      .map((c) => {
-        const cSales  = catSales.get(c.id) ?? 0;
-        const cCost   = catCost.get(c.id)  ?? 0;
-        const cHasCost = cCost > 0;
-        const cPlan   = catPlan.get(c.id)  ?? 0;
-        return {
-          categoryId:   c.id,
-          categoryName: c.name,
-          sales:   cSales,
-          cost:    cCost,
-          hasCost: cHasCost,
-          marja:   cHasCost ? ((cSales - cCost) / cCost) * 100 : null,
-          plan:    cPlan,
-          planPct: cPlan > 0 ? (cSales / cPlan) * 100 : 0,
-        };
-      })
-      .filter((c) => c.sales > 0 || c.plan > 0);
+    // Barcha kategoriyalar — filtersiz (sales=0 bo'lsa ham ko'rsatiladi)
+    const categories: CategoryBreakdown[] = allCategories.map((c) => {
+      const cSales   = catSalesMap.get(c.id) ?? 0;
+      const cCost    = catCostMap.get(c.id)  ?? 0;
+      const cHasCost = cCost > 0;
+      const cPlan    = catPlanMap.get(c.id)  ?? 0;
+      return {
+        categoryId:   c.id,
+        categoryName: c.name,
+        sales:   cSales,
+        cost:    cCost,
+        hasCost: cHasCost,
+        marja:   cHasCost ? ((cSales - cCost) / cCost) * 100 : null,
+        plan:    cPlan,
+        planPct: cPlan > 0 ? (cSales / cPlan) * 100 : 0,
+      };
+    });
 
     return {
-      branchId:    b.id,
-      branchName:  b.name,
-      sales, cost, hasCost, marja,
-      receipts:    m.receipts,
-      receiptTotal: m.receiptTotal,
-      avgReceipt:  m.receipts > 0 ? m.receiptTotal / m.receipts : 0,
+      branchId:           b.id,
+      branchName:         b.name,
+      sales:              m.receiptTotal,       // POS kassa summasi
+      cost,
+      hasCost,
+      marja,
+      receipts:           m.receipts,
+      avgReceipt:         m.receipts > 0 ? m.receiptTotal / m.receipts : 0,
+      avgItemsPerReceipt: m.avgItemsPerReceipt,
       visits,
-      conversion:  visits > 0 ? (m.receipts / visits) * 100 : 0,
+      conversion:         visits > 0 ? (m.receipts / visits) * 100 : 0,
       plan,
-      planPct:     plan > 0 ? (sales / plan) * 100 : 0,
+      planPct:            plan > 0 ? (categorySales / plan) * 100 : 0,
       categories,
     };
   });
