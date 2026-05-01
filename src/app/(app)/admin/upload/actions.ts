@@ -156,50 +156,38 @@ export async function uploadSalesAction(formData: FormData): Promise<UploadResul
       }
     }
 
-    const fileRecord = await prisma.$transaction(async (tx) => {
-      const created = await tx.uploadedFile.create({
-        data: {
-          label: parsed.label,
-          originalName: file.name,
-          fileHash: hash,
-          fileType: FileType.SALES,
-          periodStart: result.periodStart,
-          periodEnd: result.periodEnd,
-          rowCount: result.rows.length,
-          status: UploadStatus.SUCCESS,
-          uploadedById: Number(user.id),
-        },
-      });
+    const fileRecord = await prisma.uploadedFile.create({
+      data: {
+        label: parsed.label,
+        originalName: file.name,
+        fileHash: hash,
+        fileType: FileType.SALES,
+        periodStart: result.periodStart,
+        periodEnd: result.periodEnd,
+        rowCount: result.rows.length,
+        status: UploadStatus.SUCCESS,
+        uploadedById: Number(user.id),
+      },
+    });
 
-      for (const row of result.rows) {
+    try {
+      const values = result.rows.map((row) => {
         const branchId = aliasToBranchId.get(row.branchAlias)!;
         const categoryId = cats.get(row.categoryName)!;
-        await tx.categorySales.upsert({
-          where: {
-            branchId_categoryId_periodStart_periodEnd: {
-              branchId,
-              categoryId,
-              periodStart: result.periodStart,
-              periodEnd: result.periodEnd,
-            },
-          },
-          create: {
-            uploadedFileId: created.id,
-            branchId,
-            categoryId,
-            periodStart: result.periodStart,
-            periodEnd: result.periodEnd,
-            amount: new Prisma.Decimal(row.amount),
-          },
-          update: {
-            uploadedFileId: created.id,
-            amount: new Prisma.Decimal(row.amount),
-          },
-        });
-      }
-
-      return created;
-    }, { timeout: 30_000 });
+        return Prisma.sql`(${fileRecord.id}, ${branchId}, ${categoryId}, ${result.periodStart}::date, ${result.periodEnd}::date, ${new Prisma.Decimal(row.amount)})`;
+      });
+      await prisma.$executeRaw`
+        INSERT INTO "CategorySales" ("uploadedFileId", "branchId", "categoryId", "periodStart", "periodEnd", "amount")
+        VALUES ${Prisma.join(values)}
+        ON CONFLICT ("branchId", "categoryId", "periodStart", "periodEnd")
+        DO UPDATE SET
+          "uploadedFileId" = EXCLUDED."uploadedFileId",
+          "amount"         = EXCLUDED."amount"
+      `;
+    } catch (err) {
+      await prisma.uploadedFile.delete({ where: { id: fileRecord.id } }).catch(() => null);
+      throw err;
+    }
 
     revalidatePath("/admin/files");
     revalidatePath("/dashboard");
@@ -245,50 +233,42 @@ export async function uploadMetricsAction(formData: FormData): Promise<UploadRes
 
     const result = parseMetricsWorkbook(buf);
 
-    const fileRecord = await prisma.$transaction(async (tx) => {
-      const created = await tx.uploadedFile.create({
-        data: {
-          label: parsed.label,
-          originalName: file.name,
-          fileHash: hash,
-          fileType: FileType.METRICS,
-          branchId: parsed.branchId,
-          periodStart: result.periodStart,
-          periodEnd: result.periodEnd,
-          rowCount: result.metrics.length,
-          status: UploadStatus.SUCCESS,
-          uploadedById: Number(user.id),
-        },
-      });
+    const fileRecord = await prisma.uploadedFile.create({
+      data: {
+        label: parsed.label,
+        originalName: file.name,
+        fileHash: hash,
+        fileType: FileType.METRICS,
+        branchId: parsed.branchId,
+        periodStart: result.periodStart,
+        periodEnd: result.periodEnd,
+        rowCount: result.metrics.length,
+        status: UploadStatus.SUCCESS,
+        uploadedById: Number(user.id),
+      },
+    });
 
-      for (const m of result.metrics) {
-        await tx.dailyMetrics.upsert({
-          where: { branchId_date: { branchId: parsed.branchId, date: m.date } },
-          create: {
-            uploadedFileId: created.id,
-            branchId: parsed.branchId,
-            date: m.date,
-            receiptCount: m.receiptCount,
-            receiptTotal: new Prisma.Decimal(m.receiptTotal),
-            avgItemsPerReceipt: new Prisma.Decimal(m.avgItemsPerReceipt),
-            avgReceipt: new Prisma.Decimal(m.avgReceipt),
-            bigPurchaseLevel: new Prisma.Decimal(m.bigPurchaseLevel),
-            smallPurchaseLevel: new Prisma.Decimal(m.smallPurchaseLevel),
-          },
-          update: {
-            uploadedFileId: created.id,
-            receiptCount: m.receiptCount,
-            receiptTotal: new Prisma.Decimal(m.receiptTotal),
-            avgItemsPerReceipt: new Prisma.Decimal(m.avgItemsPerReceipt),
-            avgReceipt: new Prisma.Decimal(m.avgReceipt),
-            bigPurchaseLevel: new Prisma.Decimal(m.bigPurchaseLevel),
-            smallPurchaseLevel: new Prisma.Decimal(m.smallPurchaseLevel),
-          },
-        });
-      }
-
-      return created;
-    }, { timeout: 30_000 });
+    try {
+      const values = result.metrics.map((m) =>
+        Prisma.sql`(${fileRecord.id}, ${parsed.branchId}, ${m.date}::date, ${m.receiptCount}, ${new Prisma.Decimal(m.receiptTotal)}, ${new Prisma.Decimal(m.avgItemsPerReceipt)}, ${new Prisma.Decimal(m.avgReceipt)}, ${new Prisma.Decimal(m.bigPurchaseLevel)}, ${new Prisma.Decimal(m.smallPurchaseLevel)})`
+      );
+      await prisma.$executeRaw`
+        INSERT INTO "DailyMetrics" ("uploadedFileId", "branchId", "date", "receiptCount", "receiptTotal", "avgItemsPerReceipt", "avgReceipt", "bigPurchaseLevel", "smallPurchaseLevel")
+        VALUES ${Prisma.join(values)}
+        ON CONFLICT ("branchId", "date")
+        DO UPDATE SET
+          "uploadedFileId"       = EXCLUDED."uploadedFileId",
+          "receiptCount"         = EXCLUDED."receiptCount",
+          "receiptTotal"         = EXCLUDED."receiptTotal",
+          "avgItemsPerReceipt"   = EXCLUDED."avgItemsPerReceipt",
+          "avgReceipt"           = EXCLUDED."avgReceipt",
+          "bigPurchaseLevel"     = EXCLUDED."bigPurchaseLevel",
+          "smallPurchaseLevel"   = EXCLUDED."smallPurchaseLevel"
+      `;
+    } catch (err) {
+      await prisma.uploadedFile.delete({ where: { id: fileRecord.id } }).catch(() => null);
+      throw err;
+    }
 
     revalidatePath("/admin/files");
     revalidatePath("/dashboard");
@@ -344,41 +324,38 @@ export async function uploadVisitsAction(formData: FormData): Promise<UploadResu
     const periodStart = new Date(Math.min(...dates));
     const periodEnd = new Date(Math.max(...dates));
 
-    const fileRecord = await prisma.$transaction(async (tx) => {
-      const created = await tx.uploadedFile.create({
-        data: {
-          label: parsed.label,
-          originalName: file.name,
-          fileHash: hash,
-          fileType: FileType.VISITS,
-          periodStart,
-          periodEnd,
-          yearOverride: parsed.year,
-          rowCount: result.rows.length,
-          status: UploadStatus.SUCCESS,
-          uploadedById: Number(user.id),
-        },
-      });
+    const fileRecord = await prisma.uploadedFile.create({
+      data: {
+        label: parsed.label,
+        originalName: file.name,
+        fileHash: hash,
+        fileType: FileType.VISITS,
+        periodStart,
+        periodEnd,
+        yearOverride: parsed.year,
+        rowCount: result.rows.length,
+        status: UploadStatus.SUCCESS,
+        uploadedById: Number(user.id),
+      },
+    });
 
-      for (const row of result.rows) {
+    try {
+      const values = result.rows.map((row) => {
         const branchId = aliasToBranchId.get(row.branchAlias)!;
-        await tx.dailyVisits.upsert({
-          where: { branchId_date: { branchId, date: row.date } },
-          create: {
-            uploadedFileId: created.id,
-            branchId,
-            date: row.date,
-            visitCount: row.count,
-          },
-          update: {
-            uploadedFileId: created.id,
-            visitCount: row.count,
-          },
-        });
-      }
-
-      return created;
-    }, { timeout: 30_000 });
+        return Prisma.sql`(${fileRecord.id}, ${branchId}, ${row.date}::date, ${row.count})`;
+      });
+      await prisma.$executeRaw`
+        INSERT INTO "DailyVisits" ("uploadedFileId", "branchId", "date", "visitCount")
+        VALUES ${Prisma.join(values)}
+        ON CONFLICT ("branchId", "date")
+        DO UPDATE SET
+          "uploadedFileId" = EXCLUDED."uploadedFileId",
+          "visitCount"     = EXCLUDED."visitCount"
+      `;
+    } catch (err) {
+      await prisma.uploadedFile.delete({ where: { id: fileRecord.id } }).catch(() => null);
+      throw err;
+    }
 
     revalidatePath("/admin/files");
     revalidatePath("/dashboard");
