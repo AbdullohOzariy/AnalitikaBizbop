@@ -112,19 +112,19 @@ export function PeriodFilter({
             </Select>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" onClick={() => setPreset("today")}>
+            <Button variant="outline" size="sm" onClick={() => setPreset("today")} className="rounded-full hover:bg-primary/10 hover:text-primary transition-colors border-dashed hover:border-solid">
               Bugun
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setPreset("last7")}>
+            <Button variant="outline" size="sm" onClick={() => setPreset("last7")} className="rounded-full hover:bg-primary/10 hover:text-primary transition-colors border-dashed hover:border-solid">
               7 kun
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setPreset("last30")}>
+            <Button variant="outline" size="sm" onClick={() => setPreset("last30")} className="rounded-full hover:bg-primary/10 hover:text-primary transition-colors border-dashed hover:border-solid">
               30 kun
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setPreset("thisMonth")}>
+            <Button variant="outline" size="sm" onClick={() => setPreset("thisMonth")} className="rounded-full hover:bg-primary/10 hover:text-primary transition-colors border-dashed hover:border-solid">
               Joriy oy
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setPreset("lastMonth")}>
+            <Button variant="outline" size="sm" onClick={() => setPreset("lastMonth")} className="rounded-full hover:bg-primary/10 hover:text-primary transition-colors border-dashed hover:border-solid">
               O'tgan oy
             </Button>
           </div>

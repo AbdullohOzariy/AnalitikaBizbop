@@ -25,6 +25,15 @@ function shortDate(iso: string): string {
   return `${m[3]}.${m[2]}`;
 }
 
+// Chiroyli va barcha grafiklarga mos tushuvchi Tooltip stili
+const tooltipStyle = {
+  backgroundColor: "hsl(var(--background))",
+  borderRadius: "8px",
+  border: "1px solid hsl(var(--border))",
+  boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+  color: "hsl(var(--foreground))",
+};
+
 export function DailyDynamicsChart({
   sales,
   receipts,
@@ -65,6 +74,7 @@ export function DailyDynamicsChart({
           />
           <YAxis yAxisId="right" orientation="right" fontSize={11} />
           <Tooltip
+            contentStyle={tooltipStyle}
             formatter={(value, name) => {
               const v = Number(value);
               if (name === "Savdo") return [formatUZS(v) + " so'm", name];
@@ -82,6 +92,7 @@ export function DailyDynamicsChart({
             stroke="#dc2626"
             strokeWidth={2}
             dot={false}
+            activeDot={{ r: 6, fill: "#dc2626", strokeWidth: 2, stroke: "hsl(var(--background))" }}
           />
         </ComposedChart>
       </ResponsiveContainer>
@@ -123,6 +134,7 @@ export function BranchShareChart({
             ))}
           </Pie>
           <Tooltip
+            contentStyle={tooltipStyle}
             formatter={(value) => [formatUZS(Number(value)) + " so'm", "Savdo"]}
           />
         </PieChart>
@@ -172,11 +184,12 @@ export function TopCategoriesChart({
             tick={{ fontSize: 11 }}
           />
           <Tooltip
+            contentStyle={tooltipStyle}
             formatter={(value, name) => [formatUZS(Number(value)) + " so'm", name]}
           />
           <Legend />
-          <Bar dataKey="plan" name="Reja" fill="#cbd5e1" />
-          <Bar dataKey="fact" name="Fakt" fill="#2563eb" />
+          <Bar dataKey="plan" name="Reja" fill="#cbd5e1" radius={[0, 4, 4, 0]} />
+          <Bar dataKey="fact" name="Fakt" fill="#2563eb" radius={[0, 4, 4, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>

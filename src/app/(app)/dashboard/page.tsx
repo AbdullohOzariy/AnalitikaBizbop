@@ -59,7 +59,7 @@ export default async function DashboardPage({
     <div className="space-y-6">
       <div className="flex items-end justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+          <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">Dashboard</h1>
           <p className="text-sm text-muted-foreground">
             {start.toISOString().slice(0, 10)} – {end.toISOString().slice(0, 10)}
             {branchId && ` · ${branches.find((b) => b.id === branchId)?.name ?? ""}`}
@@ -169,7 +169,7 @@ export default async function DashboardPage({
         </CardHeader>
         <CardContent>
           <Table>
-            <TableHeader>
+            <TableHeader className="bg-muted/50">
               <TableRow>
                 <TableHead>Filial</TableHead>
                 <TableHead className="text-right">Savdo (Fakt)</TableHead>
