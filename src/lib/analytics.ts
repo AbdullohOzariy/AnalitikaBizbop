@@ -289,8 +289,9 @@ async function _computeKPI(range: DateRange, branchId?: number): Promise<KPI> {
   ]);
 
   const totalReceipts = metricsAgg._sum.receiptCount ?? 0;
+  const totalReceiptSum = Number(metricsAgg._sum.receiptTotal ?? 0);
   const totalVisits = visitsAgg._sum.visitCount ?? 0;
-  const avgReceipt = totalReceipts > 0 ? totalSales / totalReceipts : 0;
+  const avgReceipt = totalReceipts > 0 ? totalReceiptSum / totalReceipts : 0;
   const conversion = totalVisits > 0 ? (totalReceipts / totalVisits) * 100 : 0;
 
   return { totalSales, totalReceipts, totalVisits, avgReceipt, conversion };
