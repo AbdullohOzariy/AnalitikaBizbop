@@ -14,8 +14,8 @@ export default function AppTemplate({ children }: { children: React.ReactNode })
 
   return (
     <div
-      className={`transition-all duration-500 ease-out transform ${
-        mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3"
+      className={`transition-all duration-200 ease-out transform ${
+        mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"
       }`}
     >
       {children}
