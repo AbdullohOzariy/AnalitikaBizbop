@@ -17,7 +17,9 @@ import {
 } from "recharts";
 import { formatUZS, formatNumber } from "@/lib/format";
 
-const COLORS = ["#2563eb", "#16a34a", "#f59e0b", "#dc2626", "#9333ea", "#0891b2"];
+const COLORS = ["#B7EB76", "#FF8730", "#7B69EE", "#4EC8E4", "#F87171", "#34D399"];
+const GREEN = "#B7EB76";
+const ORANGE = "#FF8730";
 
 function shortDate(iso: string): string {
   const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -27,11 +29,13 @@ function shortDate(iso: string): string {
 
 // Chiroyli va barcha grafiklarga mos tushuvchi Tooltip stili
 const tooltipStyle = {
-  backgroundColor: "hsl(var(--background))",
-  borderRadius: "8px",
-  border: "1px solid hsl(var(--border))",
-  boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-  color: "hsl(var(--foreground))",
+  backgroundColor: "#ffffff",
+  borderRadius: "12px",
+  border: "1px solid #e8f5e0",
+  boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
+  color: "#1a2332",
+  fontSize: "13px",
+  fontFamily: "Inter, sans-serif",
 };
 
 export function DailyDynamicsChart({
@@ -83,16 +87,16 @@ export function DailyDynamicsChart({
             labelFormatter={(v) => `Sana: ${v}`}
           />
           <Legend />
-          <Bar yAxisId="left" dataKey="sales" name="Savdo" fill="#2563eb" radius={[4, 4, 0, 0]} />
+          <Bar yAxisId="left" dataKey="sales" name="Savdo" fill={GREEN} radius={[6, 6, 0, 0]} />
           <Line
             yAxisId="right"
             type="monotone"
             dataKey="receipts"
             name="Cheklar"
-            stroke="#dc2626"
-            strokeWidth={2}
+            stroke={ORANGE}
+            strokeWidth={2.5}
             dot={false}
-            activeDot={{ r: 6, fill: "#dc2626", strokeWidth: 2, stroke: "hsl(var(--background))" }}
+            activeDot={{ r: 6, fill: ORANGE, strokeWidth: 2, stroke: "#fff" }}
           />
         </ComposedChart>
       </ResponsiveContainer>
@@ -188,8 +192,8 @@ export function TopCategoriesChart({
             formatter={(value, name) => [formatUZS(Number(value)) + " so'm", name]}
           />
           <Legend />
-          <Bar dataKey="plan" name="Reja" fill="#cbd5e1" radius={[0, 4, 4, 0]} />
-          <Bar dataKey="fact" name="Fakt" fill="#2563eb" radius={[0, 4, 4, 0]} />
+          <Bar dataKey="plan" name="Reja" fill="#E2F5C8" radius={[0, 6, 6, 0]} />
+          <Bar dataKey="fact" name="Fakt" fill={GREEN} radius={[0, 6, 6, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>

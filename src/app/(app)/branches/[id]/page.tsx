@@ -97,22 +97,26 @@ export default async function BranchDetailPage({
           label="Savdo"
           primary={formatUZS(kpi.totalSales, { compact: true })}
           secondary={`${formatUZS(kpi.totalSales)} so'm`}
+          accent="green"
         />
         <KpiCard
           icon={<Users className="h-5 w-5" />}
           label="Tashriflar"
           primary={formatNumber(kpi.totalVisits)}
+          accent="orange"
         />
         <KpiCard
           icon={<Receipt className="h-5 w-5" />}
           label="Cheklar / O'rt.chek"
           primary={formatNumber(kpi.totalReceipts)}
           secondary={`O'rt: ${formatUZS(kpi.avgReceipt)} so'm`}
+          accent="purple"
         />
         <KpiCard
           icon={<TrendingUp className="h-5 w-5" />}
           label="Konversiya"
           primary={formatPercent(kpi.conversion)}
+          accent="cyan"
         />
       </div>
 
@@ -175,24 +179,37 @@ export default async function BranchDetailPage({
   );
 }
 
+const ACCENT_STYLES = {
+  green:  { iconBg: "bg-[#B7EB76]/20", iconColor: "text-[#3a7d1e]",  bar: "bg-[#B7EB76]" },
+  orange: { iconBg: "bg-[#FF8730]/15", iconColor: "text-[#b85a10]",  bar: "bg-[#FF8730]" },
+  purple: { iconBg: "bg-[#7B69EE]/15", iconColor: "text-[#4b38b3]",  bar: "bg-[#7B69EE]" },
+  cyan:   { iconBg: "bg-[#4EC8E4]/15", iconColor: "text-[#1a7d96]",  bar: "bg-[#4EC8E4]" },
+} as const;
+
 function KpiCard({
   icon,
   label,
   primary,
   secondary,
+  accent = "green",
 }: {
   icon: React.ReactNode;
   label: string;
   primary: string;
   secondary?: string;
+  accent?: keyof typeof ACCENT_STYLES;
 }) {
+  const s = ACCENT_STYLES[accent];
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between pb-2">
+    <Card className="overflow-hidden hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 border-border/60">
+      <div className={`h-1 w-full ${s.bar}`} />
+      <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4">
         <CardTitle className="text-sm font-medium text-muted-foreground">
           {label}
         </CardTitle>
-        <span className="text-muted-foreground">{icon}</span>
+        <div className={`p-2.5 rounded-xl ${s.iconBg}`}>
+          <span className={s.iconColor}>{icon}</span>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold tracking-tight">{primary}</div>

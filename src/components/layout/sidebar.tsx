@@ -52,7 +52,8 @@ function SidebarNav({
   const items = NAV.filter((i) => !i.adminOnly || role === "ADMIN");
   return (
     <>
-      <div className="h-16 flex items-center px-6 border-b">
+      {/* Logo */}
+      <div className="h-16 flex items-center px-5 border-b border-border">
         <Link
           href="/dashboard"
           className="flex items-center"
@@ -68,7 +69,9 @@ function SidebarNav({
           />
         </Link>
       </div>
-      <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+
+      {/* Nav items */}
+      <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
         {items.map((item) => {
           const Icon = item.icon;
           const active =
@@ -79,20 +82,35 @@ function SidebarNav({
               href={item.href}
               onClick={onNavigate}
               className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-150",
                 active
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-secondary hover:text-foreground"
               )}
             >
-              <Icon className="h-4 w-4" />
+              <Icon
+                className={cn(
+                  "h-4 w-4 shrink-0",
+                  active ? "opacity-100" : "opacity-70"
+                )}
+              />
               {item.label}
             </Link>
           );
         })}
       </nav>
-      <div className="p-3 border-t text-xs text-muted-foreground">
-        v0.1 · {role === "ADMIN" ? "Admin" : "Ko'ruvchi"}
+
+      {/* Footer */}
+      <div className="p-4 border-t border-border">
+        <div className="flex items-center gap-2 px-1">
+          <div
+            className="h-2 w-2 rounded-full"
+            style={{ backgroundColor: "oklch(0.877 0.165 134)" }}
+          />
+          <span className="text-xs text-muted-foreground font-medium">
+            {role === "ADMIN" ? "Administrator" : "Ko'ruvchi"} · v0.1
+          </span>
+        </div>
       </div>
     </>
   );
@@ -100,7 +118,7 @@ function SidebarNav({
 
 export function Sidebar({ role }: { role: Role }) {
   return (
-    <aside className="hidden md:flex w-64 shrink-0 border-r bg-card flex-col">
+    <aside className="hidden md:flex w-64 shrink-0 border-r border-border bg-card flex-col shadow-sm">
       <SidebarNav role={role} />
     </aside>
   );
@@ -120,7 +138,7 @@ export function MobileSidebarTrigger({ role }: { role: Role }) {
         <Menu className="h-5 w-5" />
       </Button>
       <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent side="left" className="p-0 w-64 flex flex-col">
+        <SheetContent side="left" className="p-0 w-64 flex flex-col bg-card">
           <SheetHeader className="sr-only">
             <SheetTitle>Menyu</SheetTitle>
           </SheetHeader>

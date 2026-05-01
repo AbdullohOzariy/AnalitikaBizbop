@@ -105,32 +105,28 @@ export default async function DashboardPage({
           label="Umumiy Savdo"
           primary={formatUZS(kpi.totalSales, { compact: true })}
           secondary={`${formatUZS(kpi.totalSales)} so'm`}
-          iconColorClass="text-blue-600 dark:text-blue-400"
-          iconBgClass="bg-blue-100 dark:bg-blue-900/30"
+          accent="green"
         />
         <KpiCard
           icon={<Users className="h-5 w-5" />}
           label="Tashriflar Soni"
           primary={formatNumber(kpi.totalVisits)}
           secondary={`${formatNumber(kpi.totalReceipts)} chek`}
-          iconColorClass="text-orange-600 dark:text-orange-400"
-          iconBgClass="bg-orange-100 dark:bg-orange-900/30"
+          accent="orange"
         />
         <KpiCard
           icon={<Receipt className="h-5 w-5" />}
           label="O'rtacha Chek"
           primary={formatUZS(kpi.avgReceipt)}
           secondary="so'm"
-          iconColorClass="text-emerald-600 dark:text-emerald-400"
-          iconBgClass="bg-emerald-100 dark:bg-emerald-900/30"
+          accent="purple"
         />
         <KpiCard
           icon={<TrendingUp className="h-5 w-5" />}
           label="Konversiya"
           primary={formatPercent(kpi.conversion)}
           secondary="cheklar / tashriflar"
-          iconColorClass="text-purple-600 dark:text-purple-400"
-          iconBgClass="bg-purple-100 dark:bg-purple-900/30"
+          accent="cyan"
         />
       </div>
 
@@ -230,35 +226,59 @@ export default async function DashboardPage({
   );
 }
 
+const ACCENT_STYLES = {
+  green: {
+    iconBg: "bg-[oklch(0.877_0.165_134/0.18)]",
+    iconColor: "text-[oklch(0.50_0.16_145)]",
+    bar: "bg-[oklch(0.877_0.165_134)]",
+  },
+  orange: {
+    iconBg: "bg-[oklch(0.73_0.17_48/0.15)]",
+    iconColor: "text-[oklch(0.52_0.15_48)]",
+    bar: "bg-[oklch(0.73_0.17_48)]",
+  },
+  purple: {
+    iconBg: "bg-[oklch(0.60_0.18_278/0.15)]",
+    iconColor: "text-[oklch(0.48_0.18_278)]",
+    bar: "bg-[oklch(0.60_0.18_278)]",
+  },
+  cyan: {
+    iconBg: "bg-[oklch(0.78_0.10_214/0.18)]",
+    iconColor: "text-[oklch(0.50_0.10_214)]",
+    bar: "bg-[oklch(0.78_0.10_214)]",
+  },
+} as const;
+
 function KpiCard({
   icon,
   label,
   primary,
   secondary,
-  iconColorClass = "text-muted-foreground",
-  iconBgClass = "bg-transparent",
+  accent = "green",
 }: {
   icon: React.ReactNode;
   label: string;
   primary: string;
   secondary?: string;
-  iconColorClass?: string;
-  iconBgClass?: string;
+  accent?: keyof typeof ACCENT_STYLES;
 }) {
+  const s = ACCENT_STYLES[accent];
   return (
-    <Card className="transition-all duration-300 hover:shadow-md hover:-translate-y-1 overflow-hidden group border-muted/60">
-      <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground group-hover:text-foreground transition-colors">
+    <Card className="overflow-hidden hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 border-border/60">
+      {/* Colored top bar */}
+      <div className={`h-1 w-full ${s.bar}`} />
+      <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4">
+        <CardTitle className="text-sm font-medium text-muted-foreground">
           {label}
         </CardTitle>
-        <div className={`p-2 rounded-full transition-colors ${iconBgClass}`}>
-          <span className={iconColorClass}>{icon}</span>
+        <div className={`p-2.5 rounded-xl ${s.iconBg}`}>
+          <span className={s.iconColor}>{icon}</span>
         </div>
       </CardHeader>
       <CardContent>
-        <div className="text-2xl font-bold tracking-tight text-foreground">{primary}</div>
+        <div className="text-2xl font-bold tracking-tight">{primary}</div>
         {secondary && (
-          <p className="text-xs text-muted-foreground mt-1 font-medium">{secondary}</p>
+          <p className="text-xs text-muted-foreground mt-1">{secondary}</p>
         )}
       </CardContent>
     </Card>
