@@ -238,84 +238,126 @@ export function TopCategoriesChart({
     marja: number | null;
   }[];
 }) {
-  const filtered = data.filter((d) => d.fact > 0);
+  const filtered = data.filter((d) => d.fact > 0 || d.plan > 0);
   if (filtered.length === 0) {
     return (
-      <div className="h-[520px] flex items-center justify-center text-sm text-muted-foreground">
-        Kategoriya ma'lumoti yo'q.
+      <div className="py-16 flex items-center justify-center text-sm text-muted-foreground">
+        Kategoriya ma&apos;lumoti yo&apos;q.
       </div>
     );
   }
 
-  // Marja uchun ikkinchi o'q (agar kamida bitta marja ma'lumoti bo'lsa)
-  const hasMarja = filtered.some((d) => d.marja != null);
+  const maxFact = Math.max(...filtered.map((d) => d.fact));
 
   return (
-    <div className="h-[520px]">
-      <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart
-          data={filtered}
-          layout="vertical"
-          margin={{ top: 5, right: hasMarja ? 60 : 10, left: 10, bottom: 5 }}
-        >
-          <ChartGradients />
-          <CartesianGrid strokeDasharray="4 4" stroke="#f3f4f6" horizontal={false} />
-          <XAxis
-            type="number"
-            tickFormatter={(v) => formatUZS(v as number, { compact: true })}
-            fontSize={12}
-            fill={GRAY}
-            tickLine={false}
-            axisLine={false}
-            tickMargin={12}
-            fontFamily="Sora"
-          />
-          <YAxis
-            type="category"
-            dataKey="categoryName"
-            fontSize={12}
-            width={140}
-            tick={{ fontSize: 12, fill: GRAY, fontFamily: "Sora" }}
-            tickLine={false}
-            axisLine={false}
-          />
-          {hasMarja && (
-            <YAxis
-              yAxisId="marja"
-              orientation="right"
-              type="number"
-              tickFormatter={(v) => `${(v as number).toFixed(0)}%`}
-              fontSize={10}
-              width={50}
-              domain={[0, "auto"]}
-              tickLine={false}
-              axisLine={false}
-            />
-          )}
-          <Tooltip
-            contentStyle={tooltipStyle}
-            formatter={(value, name) => {
-              if (name === "Marja") return [`${Number(value).toFixed(1)}%`, name];
-              return [formatUZS(Number(value)) + " so'm", name];
-            }}
-          />
-          <Legend iconType="circle" wrapperStyle={{ fontSize: '13px', fontFamily: 'Sora' }} />
-          <Bar dataKey="plan" name="Reja" fill="url(#colorPlan)" radius={[12, 12, 12, 12]} barSize={10} />
-          <Bar dataKey="fact" name="Fakt" fill="url(#colorFact)" radius={[12, 12, 12, 12]} barSize={10} />
-          {hasMarja && (
-            <Line
-              yAxisId="marja"
-              type="monotone"
-              dataKey="marja"
-              name="Marja"
-              stroke={ORANGE}
-              strokeWidth={2.5}
-              dot={{ r: 4, fill: ORANGE, strokeWidth: 2, stroke: "#fff" }}
-              connectNulls={false}
-            />
-          )}
-        </ComposedChart>
-      </ResponsiveContainer>
+    <div>
+      {/* Legend */}
+      <div className="flex items-center gap-4 mb-4 text-[11px] font-medium text-muted-foreground">
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-1.5 rounded-full bg-emerald-500 inline-block" /> Fakt
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-1.5 rounded-full bg-slate-200 dark:bg-zinc-700 inline-block" /> Reja
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-1.5 rounded-full bg-orange-400 inline-block" /> Marja
+        </span>
+      </div>
+
+      <div className="divide-y divide-border/30">
+        {filtered.map((d, i) => {
+          const hasPlan = d.plan > 0;
+          const ach = hasPlan ? d.fact / d.plan : null;
+
+          /* bar color based on achievement */
+          const barColor =
+            ach == null
+              ? BRAND_GREEN
+              : ach >= 1
+              ? BRAND_GREEN
+              : ach >= 0.8
+              ? "#f59e0b"
+              : RED;
+
+          /* fact bar width: relative to max fact (not plan) so bars fill nicely */
+          const factW = maxFact > 0 ? (d.fact / maxFact) * 100 : 0;
+          /* plan bar width: relative to max fact so scales match */
+          const planW = maxFact > 0 ? Math.min((d.plan / maxFact) * 100, 100) : 0;
+
+          const achieved = ach != null && ach >= 1;
+          const nearMiss = ach != null && ach >= 0.8 && ach < 1;
+          const behind = ach != null && ach < 0.8;
+
+          return (
+            <div key={d.categoryId} className="py-3 first:pt-1 last:pb-1">
+              {/* Row header */}
+              <div className="flex items-center justify-between gap-3 mb-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-[13px] font-semibold text-muted-foreground w-5 shrink-0 text-right">
+                    {i + 1}.
+                  </span>
+                  <span className="text-[13px] font-medium truncate">{d.categoryName}</span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {d.marja != null && (
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-600 font-medium">
+                      M {d.marja.toFixed(1)}%
+                    </span>
+                  )}
+                  {ach != null ? (
+                    <span
+                      className={`text-[12px] font-bold tabular-nums px-2 py-0.5 rounded-full ${
+                        achieved
+                          ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                          : nearMiss
+                          ? "bg-amber-400/10 text-amber-600"
+                          : behind
+                          ? "bg-red-500/10 text-red-600"
+                          : ""
+                      }`}
+                    >
+                      {achieved && "✓ "}{(ach * 100).toFixed(0)}%
+                    </span>
+                  ) : (
+                    <span className="text-[12px] font-semibold tabular-nums text-muted-foreground">
+                      {formatUZS(d.fact, { compact: true })}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Stacked progress bars */}
+              <div className="relative h-3 rounded-full bg-muted overflow-hidden">
+                {/* Plan track */}
+                {hasPlan && (
+                  <div
+                    className="absolute inset-y-0 left-0 rounded-full bg-slate-200 dark:bg-zinc-700"
+                    style={{ width: `${planW}%` }}
+                  />
+                )}
+                {/* Fact bar */}
+                <div
+                  className="absolute inset-y-0 left-0 rounded-full transition-all duration-500"
+                  style={{ width: `${factW}%`, backgroundColor: barColor }}
+                />
+              </div>
+
+              {/* Amounts row */}
+              <div className="flex items-center justify-between mt-1.5 text-[11px] text-muted-foreground">
+                <span>
+                  Fakt:{" "}
+                  <span className="font-semibold text-foreground">
+                    {formatUZS(d.fact, { compact: true })}
+                  </span>
+                </span>
+                {hasPlan && (
+                  <span>Reja: {formatUZS(d.plan, { compact: true })}</span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
