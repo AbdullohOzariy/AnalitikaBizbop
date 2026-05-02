@@ -42,6 +42,7 @@ export type KPI = {
   totalVisits: number;
   avgReceipt: number;
   conversion: number; // %
+  marja: number | null;
 };
 
 function isoDay(d: Date): string {
@@ -280,7 +281,7 @@ async function _visitsByBranch(range: DateRange): Promise<Map<number, number>> {
  * KPI (umumiy yoki bitta filial uchun). Hamma so'rovlar parallel.
  */
 async function _computeKPI(range: DateRange, branchId?: number): Promise<KPI> {
-  const [totalSales, metricsAgg, visitsAgg] = await Promise.all([
+  const [totalSales, metricsAgg, visitsAgg, costMap] = await Promise.all([
     _sumCategorySalesProRated(range, branchId),
     prisma.dailyMetrics.aggregate({
       where: {
@@ -296,6 +297,7 @@ async function _computeKPI(range: DateRange, branchId?: number): Promise<KPI> {
       },
       _sum: { visitCount: true },
     }),
+    _costByCategory(range, branchId),
   ]);
 
   const totalReceipts = metricsAgg._sum.receiptCount ?? 0;
@@ -303,8 +305,10 @@ async function _computeKPI(range: DateRange, branchId?: number): Promise<KPI> {
   const totalVisits = visitsAgg._sum.visitCount ?? 0;
   const avgReceipt = totalReceipts > 0 ? totalReceiptSum / totalReceipts : 0;
   const conversion = totalVisits > 0 ? (totalReceipts / totalVisits) * 100 : 0;
+  const totalCost = [...costMap.values()].reduce((a, b) => a + b, 0);
+  const marja = totalCost > 0 ? ((totalSales - totalCost) / totalCost) * 100 : null;
 
-  return { totalSales, totalReceipts, totalVisits, avgReceipt, conversion };
+  return { totalSales, totalReceipts, totalVisits, avgReceipt, conversion, marja };
 }
 
 export const computeKPI = (range: DateRange, branchId?: number) =>

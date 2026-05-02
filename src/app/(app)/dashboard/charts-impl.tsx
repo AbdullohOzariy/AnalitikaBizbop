@@ -182,6 +182,42 @@ export function BranchShareChart({
   );
 }
 
+export function DailySalesChart({ sales }: { sales: { date: string; value: number }[] }) {
+  if (sales.length === 0) return <div className="h-72 flex items-center justify-center text-sm text-muted-foreground">Kunlik savdo ma'lumoti yo'q.</div>;
+  return (
+    <div className="h-72">
+      <ResponsiveContainer width="100%" height="100%">
+        <ComposedChart data={sales.map(r => ({ date: r.date, sales: r.value }))} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+          <ChartGradients />
+          <CartesianGrid strokeDasharray="4 4" stroke="#f1f5f9" vertical={false} />
+          <XAxis dataKey="date" tickFormatter={shortDate} fontSize={12} fill={GRAY} tickLine={false} axisLine={false} tickMargin={12} fontFamily="Sora" />
+          <YAxis tickFormatter={(v) => formatUZS(v as number, { compact: true })} fontSize={12} fill={GRAY} tickLine={false} axisLine={false} tickMargin={12} fontFamily="Sora" />
+          <Tooltip contentStyle={tooltipStyle} formatter={(v) => [formatUZS(Number(v)) + " so'm", "Savdo"]} labelFormatter={(v) => `Sana: ${v}`} />
+          <Bar dataKey="sales" name="Savdo" fill="url(#colorSales)" radius={[12, 12, 12, 12]} barSize={16} />
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+export function DailyReceiptsChart({ receipts }: { receipts: { date: string; value: number }[] }) {
+  if (receipts.length === 0) return <div className="h-64 flex items-center justify-center text-sm text-muted-foreground">Chek soni ma'lumoti yo'q.</div>;
+  return (
+    <div className="h-64">
+      <ResponsiveContainer width="100%" height="100%">
+        <ComposedChart data={receipts.map(r => ({ date: r.date, receipts: r.value }))} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+          <ChartGradients />
+          <CartesianGrid strokeDasharray="4 4" stroke="#f1f5f9" vertical={false} />
+          <XAxis dataKey="date" tickFormatter={shortDate} fontSize={12} fill={GRAY} tickLine={false} axisLine={false} tickMargin={12} fontFamily="Sora" />
+          <YAxis tickFormatter={(v) => formatNumber(v as number)} fontSize={12} fill={GRAY} tickLine={false} axisLine={false} tickMargin={12} fontFamily="Sora" />
+          <Tooltip contentStyle={tooltipStyle} formatter={(v) => [formatNumber(Number(v)), "Cheklar"]} labelFormatter={(v) => `Sana: ${v}`} />
+          <Line type="monotone" dataKey="receipts" name="Cheklar" stroke={YELLOW} strokeWidth={4} dot={false} activeDot={{ r: 6, fill: YELLOW, strokeWidth: 4, stroke: "#fff" }} style={{ filter: "drop-shadow(0px 8px 16px rgba(250, 204, 21, 0.3))" }} />
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 export function TopCategoriesChart({
   data,
 }: {

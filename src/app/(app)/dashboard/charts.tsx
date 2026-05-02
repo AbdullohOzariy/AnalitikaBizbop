@@ -22,3 +22,13 @@ export const TopCategoriesChart = dynamic(
   () => import("./charts-impl").then((m) => m.TopCategoriesChart),
   { ssr: false, loading: () => fallback("h-72") }
 );
+
+export const DailySalesChart = dynamic(
+  () => import("./charts-impl").then((m) => m.DailySalesChart),
+  { ssr: false, loading: () => fallback("h-72") }
+);
+
+export const DailyReceiptsChart = dynamic(
+  () => import("./charts-impl").then((m) => m.DailyReceiptsChart),
+  { ssr: false, loading: () => fallback("h-64") }
+);
