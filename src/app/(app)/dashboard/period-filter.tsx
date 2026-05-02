@@ -101,13 +101,13 @@ export function PeriodFilter({
   };
 
   return (
-    <Card>
-      <CardContent className="pt-6">
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_1fr_auto] gap-4 items-end">
+    <Card className="rounded-[24px] border-none shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden font-['Sora',sans-serif]">
+      <CardContent className="pt-6 pb-6 px-8">
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_1fr_auto] gap-6 items-end">
           <div className="space-y-2">
-            <Label htmlFor="d-start">Boshlanish</Label>
+            <Label htmlFor="d-start" className="text-[14px] text-gray-500 font-medium ml-1">Boshlanish</Label>
             <div className="relative group">
-              <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-muted-foreground group-hover:text-primary transition-colors">
+              <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none text-gray-400 group-hover:text-gray-900 transition-colors">
                 <Calendar className="h-4 w-4" />
               </div>
               <Input
@@ -116,14 +116,14 @@ export function PeriodFilter({
                 value={localStart}
                 onChange={(e) => handleDateChange("start", e.target.value)}
                 onBlur={(e) => handleDateBlur("start", e.target.value)}
-                className="pl-9 cursor-pointer hover:border-primary/50 transition-colors [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+                className="pl-12 rounded-full bg-gray-50 dark:bg-zinc-800 border-none shadow-none h-12 text-[14px] text-gray-900 dark:text-gray-100 cursor-pointer focus-visible:ring-1 focus-visible:ring-gray-300 transition-all [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
               />
             </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="d-end">Tugash</Label>
+            <Label htmlFor="d-end" className="text-[14px] text-gray-500 font-medium ml-1">Tugash</Label>
             <div className="relative group">
-              <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-muted-foreground group-hover:text-primary transition-colors">
+              <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none text-gray-400 group-hover:text-gray-900 transition-colors">
                 <Calendar className="h-4 w-4" />
               </div>
               <Input
@@ -132,22 +132,22 @@ export function PeriodFilter({
                 value={localEnd}
                 onChange={(e) => handleDateChange("end", e.target.value)}
                 onBlur={(e) => handleDateBlur("end", e.target.value)}
-                className="pl-9 cursor-pointer hover:border-primary/50 transition-colors [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+                className="pl-12 rounded-full bg-gray-50 dark:bg-zinc-800 border-none shadow-none h-12 text-[14px] text-gray-900 dark:text-gray-100 cursor-pointer focus-visible:ring-1 focus-visible:ring-gray-300 transition-all [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
               />
             </div>
           </div>
           <div className="space-y-2">
-            <Label>Filial</Label>
+            <Label className="text-[14px] text-gray-500 font-medium ml-1">Filial</Label>
             <Select
               value={branchId ? String(branchId) : "all"}
               onValueChange={(v) =>
                 navigate({ branchId: !v || v === "all" ? undefined : v })
               }
             >
-              <SelectTrigger>
+              <SelectTrigger className="rounded-full bg-gray-50 dark:bg-zinc-800 border-none shadow-none h-12 text-[14px] text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-gray-300">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="rounded-2xl border-none shadow-[0_10px_40px_-10px_rgba(0,0,0,0.1)]">
                 <SelectItem value="all">Barcha filiallar</SelectItem>
                 {branches.map((b) => (
                   <SelectItem key={b.id} value={String(b.id)}>
@@ -157,15 +157,14 @@ export function PeriodFilter({
               </SelectContent>
             </Select>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 pb-1">
             {(["today", "last7", "last30", "thisMonth", "lastMonth"] as const).map(
               (p) => (
                 <Button
                   key={p}
-                  variant="outline"
-                  size="sm"
+                  variant="ghost"
                   onClick={() => setPreset(p)}
-                  className="rounded-full hover:bg-primary/15 hover:text-primary-foreground transition-colors border-dashed hover:border-solid"
+                  className="rounded-full bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-zinc-700 hover:text-gray-900 dark:hover:text-white transition-all border-none shadow-none text-[13px] font-medium h-10 px-5"
                 >
                   {p === "today" ? "Bugun" : p === "last7" ? "7 kun" : p === "last30" ? "30 kun" : p === "thisMonth" ? "Joriy oy" : "O'tgan oy"}
                 </Button>

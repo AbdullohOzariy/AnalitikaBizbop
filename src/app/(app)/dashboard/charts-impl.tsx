@@ -17,9 +17,10 @@ import {
 } from "recharts";
 import { formatUZS, formatNumber } from "@/lib/format";
 
-const COLORS = ["#10b981", "#f59e0b", "#6366f1", "#0ea5e9", "#f43f5e", "#8b5cf6"];
-const GREEN = "#10b981";
-const ORANGE = "#f59e0b";
+// Apple-style Grayscale Soft Colors
+const COLORS = ["#111827", "#374151", "#6b7280", "#9ca3af", "#d1d5db", "#f3f4f6"];
+const DARK_GRAY = "#111827";
+const LIGHT_GRAY = "#9ca3af";
 
 function shortDate(iso: string): string {
   const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -30,29 +31,29 @@ function shortDate(iso: string): string {
 // Chiroyli va barcha grafiklarga mos tushuvchi Tooltip stili (Glassmorphism)
 const tooltipStyle = {
   backgroundColor: "rgba(255, 255, 255, 0.75)",
-  backdropFilter: "blur(12px)",
-  WebkitBackdropFilter: "blur(12px)",
-  borderRadius: "12px",
-  border: "1px solid rgba(255, 255, 255, 0.5)",
-  boxShadow: "0 8px 32px rgba(0,0,0,0.1)",
-  color: "#1a2332",
-  fontSize: "13px",
-  fontFamily: "Inter, sans-serif",
+  backdropFilter: "blur(16px)",
+  WebkitBackdropFilter: "blur(16px)",
+  borderRadius: "16px",
+  border: "none",
+  boxShadow: "0 10px 40px -10px rgba(0,0,0,0.08)",
+  color: "#111827",
+  fontSize: "14px",
+  fontFamily: "Sora, sans-serif",
 };
 
 const ChartGradients = () => (
   <defs>
     <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="5%" stopColor={GREEN} stopOpacity={0.9} />
-      <stop offset="95%" stopColor={GREEN} stopOpacity={0.2} />
+      <stop offset="0%" stopColor={DARK_GRAY} stopOpacity={0.9} />
+      <stop offset="100%" stopColor={DARK_GRAY} stopOpacity={0.4} />
     </linearGradient>
     <linearGradient id="colorFact" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.7} />
-      <stop offset="100%" stopColor="#2563eb" stopOpacity={1} />
+      <stop offset="0%" stopColor="#374151" stopOpacity={0.9} />
+      <stop offset="100%" stopColor="#111827" stopOpacity={1} />
     </linearGradient>
     <linearGradient id="colorPlan" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stopColor="#e2e8f0" stopOpacity={0.8} />
-      <stop offset="100%" stopColor="#cbd5e1" stopOpacity={0.3} />
+      <stop offset="0%" stopColor="#f3f4f6" stopOpacity={1} />
+      <stop offset="100%" stopColor="#e5e7eb" stopOpacity={0.6} />
     </linearGradient>
   </defs>
 );
@@ -89,17 +90,19 @@ export function DailyDynamicsChart({
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
           <ChartGradients />
-          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-          <XAxis dataKey="date" tickFormatter={shortDate} fontSize={11} tickLine={false} axisLine={false} tickMargin={8} />
+          <CartesianGrid strokeDasharray="4 4" stroke="#f3f4f6" vertical={false} />
+          <XAxis dataKey="date" tickFormatter={shortDate} fontSize={12} fill="#6b7280" tickLine={false} axisLine={false} tickMargin={12} fontFamily="Sora" />
           <YAxis
             yAxisId="left"
             tickFormatter={(v) => formatUZS(v as number, { compact: true })}
-            fontSize={11}
+            fontSize={12}
+            fill="#9ca3af"
             tickLine={false}
             axisLine={false}
-            tickMargin={8}
+            tickMargin={12}
+            fontFamily="Sora"
           />
-          <YAxis yAxisId="right" orientation="right" fontSize={11} tickLine={false} axisLine={false} />
+          <YAxis yAxisId="right" orientation="right" fontSize={12} fill="#9ca3af" tickLine={false} axisLine={false} fontFamily="Sora" />
           <Tooltip
             contentStyle={tooltipStyle}
             formatter={(value, name) => {
@@ -109,18 +112,18 @@ export function DailyDynamicsChart({
             }}
             labelFormatter={(v) => `Sana: ${v}`}
           />
-          <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
-          <Bar yAxisId="left" dataKey="sales" name="Savdo" fill="url(#colorSales)" radius={[4, 4, 0, 0]} barSize={24} />
+          <Legend iconType="circle" wrapperStyle={{ fontSize: '13px', fontFamily: 'Sora', paddingTop: '15px' }} />
+          <Bar yAxisId="left" dataKey="sales" name="Savdo" fill="url(#colorSales)" radius={[12, 12, 12, 12]} barSize={16} />
           <Line
             yAxisId="right"
             type="monotone"
             dataKey="receipts"
             name="Cheklar"
-            stroke={ORANGE}
-            strokeWidth={3}
+            stroke={LIGHT_GRAY}
+            strokeWidth={4}
             dot={false}
-            activeDot={{ r: 6, fill: ORANGE, strokeWidth: 3, stroke: "#fff" }}
-            style={{ filter: "drop-shadow(0px 4px 6px rgba(245, 158, 11, 0.3))" }}
+            activeDot={{ r: 6, fill: DARK_GRAY, strokeWidth: 4, stroke: "#fff" }}
+            style={{ filter: "drop-shadow(0px 8px 16px rgba(17, 24, 39, 0.15))" }}
           />
         </ComposedChart>
       </ResponsiveContainer>
@@ -151,10 +154,10 @@ export function BranchShareChart({
             nameKey="branchName"
             cx="50%"
             cy="50%"
-            innerRadius={55}
-            outerRadius={80}
-            paddingAngle={4}
-            cornerRadius={6}
+            innerRadius={60}
+            outerRadius={85}
+            paddingAngle={8}
+            cornerRadius={12}
             stroke="none"
             label={(p: unknown) => {
               const x = p as { branchName: string; share: number };
@@ -208,21 +211,23 @@ export function TopCategoriesChart({
           margin={{ top: 5, right: hasMarja ? 60 : 10, left: 10, bottom: 5 }}
         >
           <ChartGradients />
-          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
+          <CartesianGrid strokeDasharray="4 4" stroke="#f3f4f6" horizontal={false} />
           <XAxis
             type="number"
             tickFormatter={(v) => formatUZS(v as number, { compact: true })}
-            fontSize={11}
+            fontSize={12}
+            fill="#9ca3af"
             tickLine={false}
             axisLine={false}
-            tickMargin={8}
+            tickMargin={12}
+            fontFamily="Sora"
           />
           <YAxis
             type="category"
             dataKey="categoryName"
-            fontSize={10}
-            width={130}
-            tick={{ fontSize: 10, fill: "#64748b" }}
+            fontSize={12}
+            width={140}
+            tick={{ fontSize: 12, fill: "#6b7280", fontFamily: "Sora" }}
             tickLine={false}
             axisLine={false}
           />
@@ -246,18 +251,18 @@ export function TopCategoriesChart({
               return [formatUZS(Number(value)) + " so'm", name];
             }}
           />
-          <Legend iconType="circle" wrapperStyle={{ fontSize: '12px' }} />
-          <Bar dataKey="plan" name="Reja" fill="url(#colorPlan)" radius={[0, 4, 4, 0]} barSize={12} />
-          <Bar dataKey="fact" name="Fakt" fill="url(#colorFact)" radius={[0, 4, 4, 0]} barSize={12} />
+          <Legend iconType="circle" wrapperStyle={{ fontSize: '13px', fontFamily: 'Sora' }} />
+          <Bar dataKey="plan" name="Reja" fill="url(#colorPlan)" radius={[12, 12, 12, 12]} barSize={10} />
+          <Bar dataKey="fact" name="Fakt" fill="url(#colorFact)" radius={[12, 12, 12, 12]} barSize={10} />
           {hasMarja && (
             <Line
               yAxisId="marja"
               type="monotone"
               dataKey="marja"
               name="Marja"
-              stroke="#FF8730"
+              stroke={DARK_GRAY}
               strokeWidth={2.5}
-              dot={{ r: 3, fill: "#FF8730" }}
+              dot={{ r: 4, fill: DARK_GRAY, strokeWidth: 2, stroke: "#fff" }}
               connectNulls={false}
             />
           )}

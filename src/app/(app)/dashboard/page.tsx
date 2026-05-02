@@ -56,11 +56,11 @@ export default async function DashboardPage({
   const hasAnyData = kpi.totalSales > 0 || kpi.totalReceipts > 0 || kpi.totalVisits > 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 font-['Sora',sans-serif]">
       <div className="flex items-end justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">Dashboard</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="text-[32px] font-semibold tracking-tight text-gray-900 dark:text-white">Dashboard Overview</h1>
+          <p className="text-[14px] text-gray-500 font-normal mt-1">
             {start.toISOString().slice(0, 10)} – {end.toISOString().slice(0, 10)}
             {branchId && ` · ${branches.find((b) => b.id === branchId)?.name ?? ""}`}
           </p>
@@ -68,7 +68,7 @@ export default async function DashboardPage({
         <a
           href={`/api/export?start=${start.toISOString().slice(0, 10)}&end=${end.toISOString().slice(0, 10)}${branchId ? `&branchId=${branchId}` : ""}`}
         >
-          <Button variant="outline" size="sm" className="shadow-sm hover:bg-primary hover:text-primary-foreground transition-all group">
+          <Button variant="outline" size="sm" className="rounded-full bg-white dark:bg-zinc-900 border-none shadow-[0_4px_20px_rgb(0,0,0,0.05)] hover:bg-gray-50 text-gray-700 hover:text-gray-900 transition-all group px-5 h-10 font-medium">
             <Download className="h-4 w-4 mr-2 transition-transform group-hover:-translate-y-0.5" />
             Excel eksport
           </Button>
@@ -83,16 +83,16 @@ export default async function DashboardPage({
       />
 
       {!hasAnyData && (
-        <Card className="border-dashed border-2 shadow-sm bg-muted/10">
-          <CardContent className="py-16 flex flex-col items-center justify-center text-center space-y-3">
-            <div className="p-4 bg-muted/50 rounded-full">
+        <Card className="rounded-[24px] border-none shadow-[0_8px_30px_rgb(0,0,0,0.04)] bg-gray-50/50 dark:bg-zinc-900/50">
+          <CardContent className="py-20 flex flex-col items-center justify-center text-center space-y-4">
+            <div className="p-5 bg-white dark:bg-zinc-800 shadow-sm rounded-full">
               <ShoppingBag className="h-8 w-8 text-muted-foreground/50" />
             </div>
             <div>
-              <p className="text-lg font-medium">Ma'lumot topilmadi</p>
-              <p className="text-sm text-muted-foreground max-w-sm mt-1">
+              <p className="text-[18px] font-medium text-gray-900 dark:text-white">Ma'lumot topilmadi</p>
+              <p className="text-[14px] text-gray-500 max-w-sm mt-2 leading-relaxed">
                 Tanlangan davrda ma'lumot topilmadi. Boshqa period tanlang yoki
-                <a href="/admin/upload" className="text-primary font-medium hover:underline ml-1">fayl yuklang</a>.
+                <a href="/admin/upload" className="text-gray-900 dark:text-gray-200 font-medium hover:underline ml-1">fayl yuklang</a>.
               </p>
             </div>
           </CardContent>
@@ -105,81 +105,77 @@ export default async function DashboardPage({
           label="Umumiy Savdo"
           primary={formatUZS(kpi.totalSales, { compact: true })}
           secondary={`${formatUZS(kpi.totalSales)} so'm`}
-          accent="green"
         />
         <KpiCard
           icon={<Users className="h-5 w-5" />}
           label="Tashriflar Soni"
           primary={formatNumber(kpi.totalVisits)}
           secondary={`${formatNumber(kpi.totalReceipts)} chek`}
-          accent="orange"
         />
         <KpiCard
           icon={<Receipt className="h-5 w-5" />}
           label="O'rtacha Chek"
           primary={formatUZS(kpi.avgReceipt)}
           secondary="so'm"
-          accent="purple"
         />
         <KpiCard
           icon={<TrendingUp className="h-5 w-5" />}
           label="Konversiya"
           primary={formatPercent(kpi.conversion)}
           secondary="cheklar / tashriflar"
-          accent="cyan"
         />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Kunlik Savdo va Chek Dinamikasi</CardTitle>
+        <Card className="lg:col-span-2 rounded-[24px] border-none shadow-[0_8px_30px_rgb(0,0,0,0.04)] bg-white dark:bg-zinc-900 overflow-hidden">
+          <CardHeader className="pt-8 px-8 pb-4">
+            <CardTitle className="text-[18px] font-medium text-gray-900 dark:text-white">Kunlik Savdo va Chek Dinamikasi</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-8 pb-8">
             <DailyDynamicsChart sales={dailySales} receipts={dailyReceipts} />
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Filiallar Ulushi</CardTitle>
+        <Card className="rounded-[24px] border-none shadow-[0_8px_30px_rgb(0,0,0,0.04)] bg-white dark:bg-zinc-900 overflow-hidden">
+          <CardHeader className="pt-8 px-8 pb-4">
+            <CardTitle className="text-[18px] font-medium text-gray-900 dark:text-white">Filiallar Ulushi</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-8 pb-8">
             <BranchShareChart data={share} />
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Top Kategoriyalar (Fakt vs Reja)</CardTitle>
+        <Card className="rounded-[24px] border-none shadow-[0_8px_30px_rgb(0,0,0,0.04)] bg-white dark:bg-zinc-900 overflow-hidden">
+          <CardHeader className="pt-8 px-8 pb-4">
+            <CardTitle className="text-[18px] font-medium text-gray-900 dark:text-white">Top Kategoriyalar</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-8 pb-8">
             <TopCategoriesChart data={top} />
           </CardContent>
         </Card>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Filiallar Faoliyati</CardTitle>
+      <Card className="rounded-[24px] border-none shadow-[0_8px_30px_rgb(0,0,0,0.04)] bg-white dark:bg-zinc-900 overflow-hidden">
+        <CardHeader className="pt-8 px-8 pb-4">
+          <CardTitle className="text-[18px] font-medium text-gray-900 dark:text-white">Filiallar Faoliyati</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-8 pb-8">
           <Table>
-            <TableHeader className="bg-muted/50">
-              <TableRow>
-                <TableHead>Filial</TableHead>
-                <TableHead className="text-right">Savdo (Fakt)</TableHead>
-                <TableHead className="text-right">Tashriflar</TableHead>
-                <TableHead className="text-right">Cheklar</TableHead>
-                <TableHead className="text-right">O'rt. chek</TableHead>
-                <TableHead className="text-right">Reja</TableHead>
-                <TableHead className="text-right">Reja %</TableHead>
-                <TableHead className="text-right">Konversiya</TableHead>
+            <TableHeader className="bg-transparent border-b border-gray-100 dark:border-zinc-800">
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="text-[14px] font-medium text-gray-400">Filial</TableHead>
+                <TableHead className="text-[14px] font-medium text-gray-400 text-right">Savdo (Fakt)</TableHead>
+                <TableHead className="text-[14px] font-medium text-gray-400 text-right">Tashriflar</TableHead>
+                <TableHead className="text-[14px] font-medium text-gray-400 text-right">Cheklar</TableHead>
+                <TableHead className="text-[14px] font-medium text-gray-400 text-right">O'rt. chek</TableHead>
+                <TableHead className="text-[14px] font-medium text-gray-400 text-right">Reja</TableHead>
+                <TableHead className="text-[14px] font-medium text-gray-400 text-right">Reja %</TableHead>
+                <TableHead className="text-[14px] font-medium text-gray-400 text-right">Konversiya</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {perf.map((r) => (
-                <TableRow key={r.branchId} className="cursor-pointer hover:bg-muted/50 transition-colors">
+                <TableRow key={r.branchId} className="cursor-pointer hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors border-b border-gray-50 dark:border-zinc-800/50">
                   <TableCell className="font-medium">
                     <Link
                       href={{
@@ -189,44 +185,44 @@ export default async function DashboardPage({
                           end: end.toISOString().slice(0, 10),
                         },
                       }}
-                      className="inline-flex items-center gap-2 font-medium hover:text-primary transition-colors group"
+                      className="inline-flex items-center gap-2 text-[14px] font-medium text-gray-900 dark:text-gray-200 hover:text-gray-500 transition-colors group"
                     >
                       {r.branchName}
                       <ArrowRight className="h-3.5 w-3.5 opacity-50 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
                     </Link>
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">
+                  <TableCell className="text-right tabular-nums text-[14px] text-gray-700 dark:text-gray-300">
                     {formatUZS(r.sales)}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">
+                  <TableCell className="text-right tabular-nums text-[14px] text-gray-700 dark:text-gray-300">
                     {formatNumber(r.visits)}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">
+                  <TableCell className="text-right tabular-nums text-[14px] text-gray-700 dark:text-gray-300">
                     {formatNumber(r.receipts)}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">
+                  <TableCell className="text-right tabular-nums text-[14px] text-gray-700 dark:text-gray-300">
                     {formatUZS(r.avgReceipt)}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">
+                  <TableCell className="text-right tabular-nums text-[14px] text-gray-700 dark:text-gray-300">
                     {r.plan > 0 ? formatUZS(r.plan) : "—"}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {r.plan > 0 ? (
                       <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${
+                        className={`inline-flex items-center px-3 py-1 rounded-full text-[12px] font-medium ${
                           r.planPercent >= 1
-                            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
-                            : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                            ? "bg-gray-100 text-gray-700 dark:bg-zinc-800 dark:text-gray-300"
+                            : "bg-gray-50 text-gray-500 dark:bg-zinc-900 dark:text-gray-500 border border-gray-200 dark:border-zinc-800"
                         }`}
                       >
                         {formatPercent(r.planPercent)}
                       </span>
                     ) : (
-                      "—"
+                      <span className="text-gray-400">—</span>
                     )}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    <span className="font-medium text-muted-foreground">{formatPercent(r.conversion)}</span>
+                  <TableCell className="text-right tabular-nums text-[14px]">
+                    <span className="font-medium text-gray-500">{formatPercent(r.conversion)}</span>
                   </TableCell>
                 </TableRow>
               ))}
@@ -238,63 +234,31 @@ export default async function DashboardPage({
   );
 }
 
-const ACCENT_STYLES = {
-  green: {
-    iconBg: "bg-emerald-100 dark:bg-emerald-900/30",
-    iconColor: "text-emerald-600 dark:text-emerald-400",
-    bar: "bg-emerald-500",
-    cardBg: "from-background to-emerald-50/40 dark:to-emerald-950/20",
-  },
-  orange: {
-    iconBg: "bg-orange-100 dark:bg-orange-900/30",
-    iconColor: "text-orange-600 dark:text-orange-400",
-    bar: "bg-orange-500",
-    cardBg: "from-background to-orange-50/40 dark:to-orange-950/20",
-  },
-  purple: {
-    iconBg: "bg-indigo-100 dark:bg-indigo-900/30",
-    iconColor: "text-indigo-600 dark:text-indigo-400",
-    bar: "bg-indigo-500",
-    cardBg: "from-background to-indigo-50/40 dark:to-indigo-950/20",
-  },
-  cyan: {
-    iconBg: "bg-sky-100 dark:bg-sky-900/30",
-    iconColor: "text-sky-600 dark:text-sky-400",
-    bar: "bg-sky-500",
-    cardBg: "from-background to-sky-50/40 dark:to-sky-950/20",
-  },
-} as const;
-
 function KpiCard({
   icon,
   label,
   primary,
   secondary,
-  accent = "green",
 }: {
   icon: React.ReactNode;
   label: string;
   primary: string;
   secondary?: string;
-  accent?: keyof typeof ACCENT_STYLES;
 }) {
-  const s = ACCENT_STYLES[accent];
   return (
-    <Card className={`overflow-hidden hover:shadow-lg hover:-translate-y-1 transition-all duration-300 border-border/40 bg-gradient-to-br ${s.cardBg}`}>
-      {/* Colored top bar */}
-      <div className={`h-1 w-full ${s.bar}`} />
-      <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4">
-        <CardTitle className="text-sm font-medium text-muted-foreground">
+    <Card className="rounded-[24px] border-none shadow-[0_8px_30px_rgb(0,0,0,0.04)] bg-white dark:bg-zinc-900 overflow-hidden hover:shadow-[0_15px_40px_rgb(0,0,0,0.08)] hover:-translate-y-1 transition-all duration-400">
+      <CardHeader className="flex flex-row items-center justify-between pb-2 pt-6 px-6">
+        <CardTitle className="text-[16px] font-medium text-gray-500 dark:text-gray-400">
           {label}
         </CardTitle>
-        <div className={`p-2.5 rounded-xl ${s.iconBg}`}>
-          <span className={s.iconColor}>{icon}</span>
+        <div className="p-3 rounded-full bg-gray-50 dark:bg-zinc-800 text-gray-700 dark:text-gray-300">
+          <span className="w-5 h-5 flex items-center justify-center">{icon}</span>
         </div>
       </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold tracking-tight">{primary}</div>
+      <CardContent className="px-6 pb-6">
+        <div className="text-[28px] lg:text-[32px] font-semibold text-gray-900 dark:text-gray-50 tracking-tight">{primary}</div>
         {secondary && (
-          <p className="text-xs text-muted-foreground mt-1">{secondary}</p>
+          <p className="text-[14px] text-gray-400 dark:text-gray-500 mt-1 font-normal">{secondary}</p>
         )}
       </CardContent>
     </Card>
