@@ -105,24 +105,28 @@ export default async function DashboardPage({
           label="Umumiy Savdo"
           primary={formatUZS(kpi.totalSales, { compact: true })}
           secondary={`${formatUZS(kpi.totalSales)} so'm`}
+          iconColorClass="bg-[#10b981]/15 text-[#10b981] dark:bg-[#10b981]/20"
         />
         <KpiCard
           icon={<Users className="h-5 w-5" />}
           label="Tashriflar Soni"
           primary={formatNumber(kpi.totalVisits)}
           secondary={`${formatNumber(kpi.totalReceipts)} chek`}
+          iconColorClass="bg-[#facc15]/20 text-[#ca8a04] dark:bg-[#facc15]/20 dark:text-[#facc15]"
         />
         <KpiCard
           icon={<Receipt className="h-5 w-5" />}
           label="O'rtacha Chek"
           primary={formatUZS(kpi.avgReceipt)}
           secondary="so'm"
+          iconColorClass="bg-[#fb923c]/15 text-[#ea580c] dark:bg-[#fb923c]/20 dark:text-[#fb923c]"
         />
         <KpiCard
           icon={<TrendingUp className="h-5 w-5" />}
           label="Konversiya"
           primary={formatPercent(kpi.conversion)}
           secondary="cheklar / tashriflar"
+          iconColorClass="bg-[#10b981]/15 text-[#10b981] dark:bg-[#10b981]/20"
         />
       </div>
 
@@ -211,8 +215,8 @@ export default async function DashboardPage({
                       <span
                         className={`inline-flex items-center px-3 py-1 rounded-full text-[12px] font-medium ${
                           r.planPercent >= 1
-                            ? "bg-gray-100 text-gray-700 dark:bg-zinc-800 dark:text-gray-300"
-                            : "bg-gray-50 text-gray-500 dark:bg-zinc-900 dark:text-gray-500 border border-gray-200 dark:border-zinc-800"
+                            ? "bg-[#10b981]/10 text-[#10b981] dark:bg-[#10b981]/20 font-semibold"
+                            : "bg-[#f87171]/10 text-[#f87171] dark:bg-[#f87171]/20 font-semibold"
                         }`}
                       >
                         {formatPercent(r.planPercent)}
@@ -239,11 +243,13 @@ function KpiCard({
   label,
   primary,
   secondary,
+  iconColorClass = "bg-gray-50 dark:bg-zinc-800 text-gray-700 dark:text-gray-300",
 }: {
   icon: React.ReactNode;
   label: string;
   primary: string;
   secondary?: string;
+  iconColorClass?: string;
 }) {
   return (
     <Card className="rounded-[24px] border-none shadow-[0_8px_30px_rgb(0,0,0,0.04)] bg-white dark:bg-zinc-900 overflow-hidden hover:shadow-[0_15px_40px_rgb(0,0,0,0.08)] hover:-translate-y-1 transition-all duration-400">
@@ -251,7 +257,7 @@ function KpiCard({
         <CardTitle className="text-[16px] font-medium text-gray-500 dark:text-gray-400">
           {label}
         </CardTitle>
-        <div className="p-3 rounded-full bg-gray-50 dark:bg-zinc-800 text-gray-700 dark:text-gray-300">
+        <div className={`p-3 rounded-full ${iconColorClass}`}>
           <span className="w-5 h-5 flex items-center justify-center">{icon}</span>
         </div>
       </CardHeader>

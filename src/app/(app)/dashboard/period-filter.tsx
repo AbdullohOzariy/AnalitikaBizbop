@@ -164,7 +164,7 @@ export function PeriodFilter({
                   key={p}
                   variant="ghost"
                   onClick={() => setPreset(p)}
-                  className="rounded-full bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-zinc-700 hover:text-gray-900 dark:hover:text-white transition-all border-none shadow-none text-[13px] font-medium h-10 px-5"
+                  className="rounded-full bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-300 hover:bg-[#10b981]/10 hover:text-[#10b981] dark:hover:bg-[#10b981]/20 dark:hover:text-[#10b981] transition-all border-none shadow-none text-[13px] font-medium h-10 px-5"
                 >
                   {p === "today" ? "Bugun" : p === "last7" ? "7 kun" : p === "last30" ? "30 kun" : p === "thisMonth" ? "Joriy oy" : "O'tgan oy"}
                 </Button>

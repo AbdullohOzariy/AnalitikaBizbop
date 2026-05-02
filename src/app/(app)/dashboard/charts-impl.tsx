@@ -17,10 +17,14 @@ import {
 } from "recharts";
 import { formatUZS, formatNumber } from "@/lib/format";
 
-// Apple-style Grayscale Soft Colors
-const COLORS = ["#111827", "#374151", "#6b7280", "#9ca3af", "#d1d5db", "#f3f4f6"];
-const DARK_GRAY = "#111827";
-const LIGHT_GRAY = "#9ca3af";
+// Yangi Ranglar Palitrasi
+const BRAND_GREEN = "#10b981"; // Primary Accent (Sizning logotipingiz yashiliga moslash uchun o'zgartirishingiz mumkin)
+const YELLOW = "#facc15";      // Secondary 1 (Xantal sariq)
+const ORANGE = "#fb923c";      // Secondary 2 (Yumshoq to'q sariq)
+const RED = "#f87171";         // Alert / Negative
+const GRAY = "#94a3b8";        // Neutral / Compare
+
+const COLORS = [BRAND_GREEN, YELLOW, ORANGE, RED, "#6366f1", "#0ea5e9"];
 
 function shortDate(iso: string): string {
   const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -44,16 +48,16 @@ const tooltipStyle = {
 const ChartGradients = () => (
   <defs>
     <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stopColor={DARK_GRAY} stopOpacity={0.9} />
-      <stop offset="100%" stopColor={DARK_GRAY} stopOpacity={0.4} />
+      <stop offset="0%" stopColor={BRAND_GREEN} stopOpacity={0.9} />
+      <stop offset="100%" stopColor={BRAND_GREEN} stopOpacity={0.4} />
     </linearGradient>
     <linearGradient id="colorFact" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stopColor="#374151" stopOpacity={0.9} />
-      <stop offset="100%" stopColor="#111827" stopOpacity={1} />
+      <stop offset="0%" stopColor={BRAND_GREEN} stopOpacity={0.8} />
+      <stop offset="100%" stopColor={BRAND_GREEN} stopOpacity={1} />
     </linearGradient>
     <linearGradient id="colorPlan" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stopColor="#f3f4f6" stopOpacity={1} />
-      <stop offset="100%" stopColor="#e5e7eb" stopOpacity={0.6} />
+      <stop offset="0%" stopColor={GRAY} stopOpacity={0.4} />
+      <stop offset="100%" stopColor={GRAY} stopOpacity={0.1} />
     </linearGradient>
   </defs>
 );
@@ -90,19 +94,19 @@ export function DailyDynamicsChart({
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
           <ChartGradients />
-          <CartesianGrid strokeDasharray="4 4" stroke="#f3f4f6" vertical={false} />
-          <XAxis dataKey="date" tickFormatter={shortDate} fontSize={12} fill="#6b7280" tickLine={false} axisLine={false} tickMargin={12} fontFamily="Sora" />
+          <CartesianGrid strokeDasharray="4 4" stroke="#f1f5f9" vertical={false} />
+          <XAxis dataKey="date" tickFormatter={shortDate} fontSize={12} fill={GRAY} tickLine={false} axisLine={false} tickMargin={12} fontFamily="Sora" />
           <YAxis
             yAxisId="left"
             tickFormatter={(v) => formatUZS(v as number, { compact: true })}
             fontSize={12}
-            fill="#9ca3af"
+            fill={GRAY}
             tickLine={false}
             axisLine={false}
             tickMargin={12}
             fontFamily="Sora"
           />
-          <YAxis yAxisId="right" orientation="right" fontSize={12} fill="#9ca3af" tickLine={false} axisLine={false} fontFamily="Sora" />
+          <YAxis yAxisId="right" orientation="right" fontSize={12} fill={GRAY} tickLine={false} axisLine={false} fontFamily="Sora" />
           <Tooltip
             contentStyle={tooltipStyle}
             formatter={(value, name) => {
@@ -119,11 +123,11 @@ export function DailyDynamicsChart({
             type="monotone"
             dataKey="receipts"
             name="Cheklar"
-            stroke={LIGHT_GRAY}
+            stroke={YELLOW}
             strokeWidth={4}
             dot={false}
-            activeDot={{ r: 6, fill: DARK_GRAY, strokeWidth: 4, stroke: "#fff" }}
-            style={{ filter: "drop-shadow(0px 8px 16px rgba(17, 24, 39, 0.15))" }}
+            activeDot={{ r: 6, fill: YELLOW, strokeWidth: 4, stroke: "#fff" }}
+            style={{ filter: "drop-shadow(0px 8px 16px rgba(250, 204, 21, 0.3))" }}
           />
         </ComposedChart>
       </ResponsiveContainer>
@@ -216,7 +220,7 @@ export function TopCategoriesChart({
             type="number"
             tickFormatter={(v) => formatUZS(v as number, { compact: true })}
             fontSize={12}
-            fill="#9ca3af"
+            fill={GRAY}
             tickLine={false}
             axisLine={false}
             tickMargin={12}
@@ -227,7 +231,7 @@ export function TopCategoriesChart({
             dataKey="categoryName"
             fontSize={12}
             width={140}
-            tick={{ fontSize: 12, fill: "#6b7280", fontFamily: "Sora" }}
+            tick={{ fontSize: 12, fill: GRAY, fontFamily: "Sora" }}
             tickLine={false}
             axisLine={false}
           />
@@ -260,9 +264,9 @@ export function TopCategoriesChart({
               type="monotone"
               dataKey="marja"
               name="Marja"
-              stroke={DARK_GRAY}
+              stroke={ORANGE}
               strokeWidth={2.5}
-              dot={{ r: 4, fill: DARK_GRAY, strokeWidth: 2, stroke: "#fff" }}
+              dot={{ r: 4, fill: ORANGE, strokeWidth: 2, stroke: "#fff" }}
               connectNulls={false}
             />
           )}
