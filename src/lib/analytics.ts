@@ -706,7 +706,7 @@ async function _branchReport(range: DateRange): Promise<BranchReportRow[]> {
     return {
       branchId:           b.id,
       branchName:         b.name,
-      sales:              m.receiptTotal,       // POS kassa summasi
+      sales:              categorySales,         // CategorySales jami (barcha kategoriyalar)
       cost,
       hasCost,
       marja,
