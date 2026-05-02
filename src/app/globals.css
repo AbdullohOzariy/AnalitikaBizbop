@@ -150,11 +150,21 @@
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-font-smoothing: antialiased;
+    font-smooth: always;
   }
   html {
     @apply font-sans;
+    scroll-behavior: smooth;
   }
 }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: oklch(0.85 0.03 145); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: oklch(0.75 0.05 145); }
+
+::selection { background: oklch(0.877 0.165 134 / 0.3); color: oklch(0.18 0.04 145); }
 
 /* Smooth card hover lift */
 @layer utilities {

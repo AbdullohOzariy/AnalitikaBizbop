@@ -23,6 +23,7 @@ import { PeriodFilter } from "./period-filter";
 import {
   DailySalesChart, DailyReceiptsChart, BranchShareChart, TopCategoriesChart,
 } from "./charts";
+import { FadeIn, StaggerList, StaggerItem } from "@/components/motion";
 
 function parseDate(s: string | undefined, fallback: Date): Date {
   if (!s) return fallback;
@@ -216,26 +217,28 @@ export default async function DashboardPage({
       )}
 
       {/* 5 KPI cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+      <StaggerList className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         {KPIS.map((k) => {
           const d = k.prev != null ? delta(k.curr, k.prev) : null;
           return (
-            <KpiCard
-              key={k.label}
-              icon={k.icon}
-              label={k.label}
-              primary={k.primary}
-              secondary={k.secondary}
-              iconColorClass={k.iconColor}
-              delta={d}
-              deltaLabel={cLabel}
-              higherIsBetter={k.higherIsBetter}
-            />
+            <StaggerItem key={k.label}>
+              <KpiCard
+                icon={k.icon}
+                label={k.label}
+                primary={k.primary}
+                secondary={k.secondary}
+                iconColorClass={k.iconColor}
+                delta={d}
+                deltaLabel={cLabel}
+                higherIsBetter={k.higherIsBetter}
+              />
+            </StaggerItem>
           );
         })}
-      </div>
+      </StaggerList>
 
       {/* Kunlik savdo (3/4) + Filiallar ulushi (1/4) */}
+      <FadeIn>
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         <Card className="lg:col-span-3 rounded-[24px] border-none shadow-[0_8px_30px_rgb(0,0,0,0.04)] bg-white dark:bg-zinc-900 overflow-hidden">
           <CardHeader className="pt-8 px-8 pb-4">
@@ -338,6 +341,7 @@ export default async function DashboardPage({
           </Table>
         </CardContent>
       </Card>
+      </FadeIn>
     </div>
   );
 }

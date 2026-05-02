@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ChevronRight } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   Table,
   TableBody,
@@ -161,40 +162,46 @@ export function ReportTable({
                 </TableRow>
 
                 {/* Kategoriya qatorlari */}
-                {open &&
-                  r.categories.map((c) => (
-                    <TableRow
-                      key={`c-${r.branchId}-${c.categoryId}`}
-                      className="bg-muted/20 hover:bg-muted/30"
-                    >
-                      <TableCell className="pl-10 sticky left-0 bg-[oklch(0.972_0.016_145/0.6)] z-10">
-                        <span className="text-sm text-muted-foreground">{c.categoryName}</span>
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums text-sm">
-                        {c.sales > 0 ? formatUZS(c.sales) : "—"}
-                      </TableCell>
-                      {hasCostAny && (
-                        <>
-                          <TableCell className="text-right tabular-nums text-sm text-muted-foreground">
-                            {c.hasCost ? formatUZS(c.cost) : "—"}
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums text-sm">
-                            {c.marja != null ? (
-                              <span className={marjaColor(c.marja)}>{pct(c.marja)}</span>
-                            ) : "—"}
-                          </TableCell>
-                        </>
-                      )}
-                      {/* Cheklar, O'rt. chek, O'rt. tovar, Tashriflar, Konv — kategoriya darajasida yo'q */}
-                      <TableCell colSpan={5} />
-                      <TableCell className="text-right tabular-nums text-sm text-muted-foreground">
-                        {c.plan > 0 ? formatUZS(c.plan) : "—"}
-                      </TableCell>
-                      <TableCell className={`text-right tabular-nums text-sm pr-5 ${planColor(c.planPct)}`}>
-                        {c.plan > 0 ? pct(c.planPct) : "—"}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                <AnimatePresence initial={false}>
+                  {open &&
+                    r.categories.map((c) => (
+                      <motion.tr
+                        key={`c-${r.branchId}-${c.categoryId}`}
+                        initial={{ opacity: 0, y: -4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -4 }}
+                        transition={{ duration: 0.2, ease: "easeOut" }}
+                        className="bg-muted/20 hover:bg-muted/30"
+                      >
+                        <TableCell className="pl-10 sticky left-0 bg-[oklch(0.972_0.016_145/0.6)] z-10">
+                          <span className="text-sm text-muted-foreground">{c.categoryName}</span>
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums text-sm">
+                          {c.sales > 0 ? formatUZS(c.sales) : "—"}
+                        </TableCell>
+                        {hasCostAny && (
+                          <>
+                            <TableCell className="text-right tabular-nums text-sm text-muted-foreground">
+                              {c.hasCost ? formatUZS(c.cost) : "—"}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums text-sm">
+                              {c.marja != null ? (
+                                <span className={marjaColor(c.marja)}>{pct(c.marja)}</span>
+                              ) : "—"}
+                            </TableCell>
+                          </>
+                        )}
+                        {/* Cheklar, O'rt. chek, O'rt. tovar, Tashriflar, Konv — kategoriya darajasida yo'q */}
+                        <TableCell colSpan={5} />
+                        <TableCell className="text-right tabular-nums text-sm text-muted-foreground">
+                          {c.plan > 0 ? formatUZS(c.plan) : "—"}
+                        </TableCell>
+                        <TableCell className={`text-right tabular-nums text-sm pr-5 ${planColor(c.planPct)}`}>
+                          {c.plan > 0 ? pct(c.planPct) : "—"}
+                        </TableCell>
+                      </motion.tr>
+                    ))}
+                </AnimatePresence>
               </>
             );
           })}

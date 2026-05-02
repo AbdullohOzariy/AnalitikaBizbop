@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
+import { PageMotionWrapper } from "./page-motion-wrapper";
 
 export default async function AppLayout({
   children,
@@ -16,7 +17,9 @@ export default async function AppLayout({
       <Sidebar role={session.user.role} />
       <div className="flex-1 flex flex-col min-w-0">
         <Header user={session.user} />
-        <main className="flex-1 px-6 py-6 bg-muted/30">{children}</main>
+        <main className="flex-1 px-6 py-6 bg-muted/30">
+          <PageMotionWrapper>{children}</PageMotionWrapper>
+        </main>
       </div>
     </div>
   );

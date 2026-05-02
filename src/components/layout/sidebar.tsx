@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
+import { motion } from "framer-motion";
 import {
   Upload,
   Building2,
@@ -79,25 +80,38 @@ function SidebarNav({
           const active =
             pathname === item.href || pathname.startsWith(item.href + "/");
           return (
-            <Link
+            <motion.div
               key={item.href}
-              href={item.href}
-              onClick={onNavigate}
-              className={cn(
-                "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-150",
-                active
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-              )}
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.98 }}
             >
-              <Icon
+              <Link
+                href={item.href}
+                onClick={onNavigate}
                 className={cn(
-                  "h-4 w-4 shrink-0",
-                  active ? "opacity-100" : "opacity-70"
+                  "relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors duration-150 overflow-hidden",
+                  active
+                    ? "text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:bg-secondary hover:text-foreground"
                 )}
-              />
-              {item.label}
-            </Link>
+              >
+                {active && (
+                  <motion.span
+                    layoutId="nav-active"
+                    className="absolute inset-0 bg-primary rounded-xl"
+                    style={{ zIndex: -1 }}
+                    transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                  />
+                )}
+                <Icon
+                  className={cn(
+                    "h-4 w-4 shrink-0",
+                    active ? "opacity-100" : "opacity-70"
+                  )}
+                />
+                {item.label}
+              </Link>
+            </motion.div>
           );
         })}
       </nav>
