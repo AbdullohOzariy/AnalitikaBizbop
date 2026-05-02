@@ -635,7 +635,7 @@ async function _branchReport(range: DateRange): Promise<BranchReportRow[]> {
   const [branches, allCategories, salesBCMap, costBCMap, planBCMap, metricsMap, visitsMap] =
     await Promise.all([
       prisma.branch.findMany({ orderBy: { sortOrder: "asc" } }),
-      prisma.category.findMany({ orderBy: { sortOrder: "asc" } }),
+      prisma.category.findMany({ where: { sortOrder: { gt: 0 } }, orderBy: { sortOrder: "asc" } }),
       _salesByBranchCategory(range),
       _costByBranchCategory(range),
       _planByBranchCategory(range),
