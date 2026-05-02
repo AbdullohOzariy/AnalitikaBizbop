@@ -123,15 +123,7 @@ async function resolveBranchWithAI(
   return { branchId: match.branchId, aiUsed: true, branchName: match.branchName };
 }
 
-const OTHERS_CATEGORY = "BOSHQALAR";
-
 async function getCategoryMap(): Promise<Map<string, number>> {
-  // "BOSHQALAR" kategoriyasi yo'q bo'lsa avtomatik yaratamiz (sortOrder=0)
-  await prisma.category.upsert({
-    where:  { name: OTHERS_CATEGORY },
-    update: {},
-    create: { name: OTHERS_CATEGORY, sortOrder: 0 },
-  });
   const cats = await prisma.category.findMany({ select: { id: true, name: true } });
   return new Map(cats.map((c) => [c.name, c.id]));
 }

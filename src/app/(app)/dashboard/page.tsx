@@ -211,10 +211,22 @@ export default async function DashboardPage({
                     {r.plan > 0 ? formatUZS(r.plan) : "—"}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {r.plan > 0 ? formatPercent(r.planPercent) : "—"}
+                    {r.plan > 0 ? (
+                      <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium ${
+                          r.planPercent >= 1
+                            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+                            : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                        }`}
+                      >
+                        {formatPercent(r.planPercent)}
+                      </span>
+                    ) : (
+                      "—"
+                    )}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {formatPercent(r.conversion)}
+                    <span className="font-medium text-muted-foreground">{formatPercent(r.conversion)}</span>
                   </TableCell>
                 </TableRow>
               ))}
@@ -228,24 +240,28 @@ export default async function DashboardPage({
 
 const ACCENT_STYLES = {
   green: {
-    iconBg: "bg-[oklch(0.877_0.165_134/0.18)]",
-    iconColor: "text-[oklch(0.50_0.16_145)]",
-    bar: "bg-[oklch(0.877_0.165_134)]",
+    iconBg: "bg-emerald-100 dark:bg-emerald-900/30",
+    iconColor: "text-emerald-600 dark:text-emerald-400",
+    bar: "bg-emerald-500",
+    cardBg: "from-background to-emerald-50/40 dark:to-emerald-950/20",
   },
   orange: {
-    iconBg: "bg-[oklch(0.73_0.17_48/0.15)]",
-    iconColor: "text-[oklch(0.52_0.15_48)]",
-    bar: "bg-[oklch(0.73_0.17_48)]",
+    iconBg: "bg-orange-100 dark:bg-orange-900/30",
+    iconColor: "text-orange-600 dark:text-orange-400",
+    bar: "bg-orange-500",
+    cardBg: "from-background to-orange-50/40 dark:to-orange-950/20",
   },
   purple: {
-    iconBg: "bg-[oklch(0.60_0.18_278/0.15)]",
-    iconColor: "text-[oklch(0.48_0.18_278)]",
-    bar: "bg-[oklch(0.60_0.18_278)]",
+    iconBg: "bg-indigo-100 dark:bg-indigo-900/30",
+    iconColor: "text-indigo-600 dark:text-indigo-400",
+    bar: "bg-indigo-500",
+    cardBg: "from-background to-indigo-50/40 dark:to-indigo-950/20",
   },
   cyan: {
-    iconBg: "bg-[oklch(0.78_0.10_214/0.18)]",
-    iconColor: "text-[oklch(0.50_0.10_214)]",
-    bar: "bg-[oklch(0.78_0.10_214)]",
+    iconBg: "bg-sky-100 dark:bg-sky-900/30",
+    iconColor: "text-sky-600 dark:text-sky-400",
+    bar: "bg-sky-500",
+    cardBg: "from-background to-sky-50/40 dark:to-sky-950/20",
   },
 } as const;
 
@@ -264,7 +280,7 @@ function KpiCard({
 }) {
   const s = ACCENT_STYLES[accent];
   return (
-    <Card className="overflow-hidden hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 border-border/60">
+    <Card className={`overflow-hidden hover:shadow-lg hover:-translate-y-1 transition-all duration-300 border-border/40 bg-gradient-to-br ${s.cardBg}`}>
       {/* Colored top bar */}
       <div className={`h-1 w-full ${s.bar}`} />
       <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4">

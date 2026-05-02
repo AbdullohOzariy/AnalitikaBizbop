@@ -138,15 +138,9 @@ export function parseSalesWorkbook(
   }
 
   // 6) Data qatorlarini yig'ish
-  // "BOSHQALAR" ni allowed dan chiqaramiz — u faqat yig'ma sifatida qo'shiladi
-  const OTHERS = "BOSHQALAR";
-  const allowed = new Set(
-    allowedCategoryNames.map(normalizeName).filter(n => n !== normalizeName(OTHERS))
-  );
+  const allowed = new Set(allowedCategoryNames.map(normalizeName));
   const out: ParsedSalesBranchRow[] = [];
   const skipped = new Set<string>();
-  // Tanilmagan kategoriyalar summasi: branchAlias → { amount, cost }
-  const othersMap = new Map<string, { amount: number; cost: number | null }>();
 
   for (let i = dataStartIdx; i < rows.length; i++) {
     const r = rows[i];
@@ -157,22 +151,7 @@ export function parseSalesWorkbook(
     const norm = normalizeName(name);
     const effective = categoryMapping?.get(norm) ?? norm;
     if (!allowed.has(effective)) {
-      if (typeof r[0] === "number") {
-        skipped.add(norm);
-        // Tanilmagan kategoriya → summalaymiz
-        for (const { salesIndex, costIndex, alias } of branchCols) {
-          const amt = parseAmount(r[salesIndex]);
-          if (amt == null || amt === 0) continue;
-          const costAmt = costIndex != null ? (parseAmount(r[costIndex]) ?? null) : null;
-          const prev = othersMap.get(alias);
-          othersMap.set(alias, {
-            amount: (prev?.amount ?? 0) + amt,
-            cost: costAmt != null || prev?.cost != null
-              ? ((prev?.cost ?? 0) + (costAmt ?? 0))
-              : null,
-          });
-        }
-      }
+      if (typeof r[0] === "number") skipped.add(norm);
       continue;
     }
 
@@ -185,19 +164,6 @@ export function parseSalesWorkbook(
         categoryName: effective,
         amount: amt,
         costAmount: cost,
-      });
-    }
-  }
-
-  // "BOSHQALAR" qatorlarini qo'shamiz (faqat "BOSHQALAR" DB'da bo'lsa)
-  const othersAllowed = allowedCategoryNames.map(normalizeName).includes(normalizeName(OTHERS));
-  if (othersAllowed) {
-    for (const [alias, { amount, cost }] of othersMap) {
-      out.push({
-        branchAlias: alias,
-        categoryName: OTHERS,
-        amount,
-        costAmount: cost && cost > 0 ? cost : null,
       });
     }
   }
