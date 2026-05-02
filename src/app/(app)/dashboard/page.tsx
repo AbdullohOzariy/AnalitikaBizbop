@@ -33,14 +33,10 @@ function parseDate(s: string | undefined, fallback: Date): Date {
 }
 
 function shiftMonths(d: Date, n: number): Date {
-  const r = new Date(d);
-  r.setUTCMonth(r.getUTCMonth() + n);
-  return r;
+  const r = new Date(d); r.setUTCMonth(r.getUTCMonth() + n); return r;
 }
 function shiftYears(d: Date, n: number): Date {
-  const r = new Date(d);
-  r.setUTCFullYear(r.getUTCFullYear() + n);
-  return r;
+  const r = new Date(d); r.setUTCFullYear(r.getUTCFullYear() + n); return r;
 }
 function shiftDays(d: Date, n: number): Date {
   return new Date(d.getTime() + n * 86400000);
@@ -63,10 +59,14 @@ function getCompareRange(
   return null;
 }
 
-function delta(curr: number, prev: number): number | null {
+function calcDelta(curr: number, prev: number): number | null {
   if (prev === 0) return null;
   return ((curr - prev) / Math.abs(prev)) * 100;
 }
+
+const CARD_PAD = "px-4 sm:px-6 lg:px-8";
+const CARD_PT  = "pt-5 sm:pt-6 lg:pt-8";
+const CARD_PB  = "pb-4 sm:pb-6 lg:pb-8";
 
 export default async function DashboardPage({
   searchParams,
@@ -100,95 +100,73 @@ export default async function DashboardPage({
   ]);
 
   const hasAnyData = kpi.totalSales > 0 || kpi.totalReceipts > 0 || kpi.totalVisits > 0;
-
-  const compareLabel: Record<string, string> = {
-    wow: "WOW", mom: "MOM", yoy: "YOY", custom: "Maxsus",
-  };
-  const cLabel = sp.compare ? (compareLabel[sp.compare] ?? "") : "";
+  const cLabel = sp.compare ? ({ wow: "WOW", mom: "MOM", yoy: "YOY", custom: "Maxsus" }[sp.compare] ?? "") : "";
 
   const KPIS: {
-    icon: React.ReactNode;
-    label: string;
-    primary: string;
-    secondary: string;
-    curr: number;
-    prev: number | null;
-    iconColor: string;
-    higherIsBetter: boolean;
+    icon: React.ReactNode; label: string; primary: string; secondary: string;
+    curr: number; prev: number | null; iconColor: string; higherIsBetter: boolean;
   }[] = [
     {
-      icon: <ShoppingBag className="h-5 w-5" />,
-      label: "Umumiy Savdo",
+      icon: <ShoppingBag className="h-5 w-5" />, label: "Umumiy Savdo",
       primary: formatUZS(kpi.totalSales, { compact: true }),
-      secondary: formatUZS(kpi.totalSales) + " so'm",
-      curr: kpi.totalSales,
-      prev: kpiPrev?.totalSales ?? null,
-      iconColor: "bg-[#10b981]/15 text-[#10b981]",
-      higherIsBetter: true,
+      secondary: formatUZS(kpi.totalSales),
+      curr: kpi.totalSales, prev: kpiPrev?.totalSales ?? null,
+      iconColor: "bg-emerald-500/10 text-emerald-600", higherIsBetter: true,
     },
     {
-      icon: <BarChart3 className="h-5 w-5" />,
-      label: "Marja",
+      icon: <BarChart3 className="h-5 w-5" />, label: "Marja",
       primary: kpi.marja != null ? `${kpi.marja.toFixed(1)}%` : "—",
       secondary: "sotuv / tannarx",
-      curr: kpi.marja ?? 0,
-      prev: kpiPrev?.marja ?? null,
-      iconColor: "bg-[#6366f1]/15 text-[#6366f1]",
-      higherIsBetter: true,
+      curr: kpi.marja ?? 0, prev: kpiPrev?.marja ?? null,
+      iconColor: "bg-violet-500/10 text-violet-600", higherIsBetter: true,
     },
     {
-      icon: <Users className="h-5 w-5" />,
-      label: "Tashriflar Soni",
+      icon: <Users className="h-5 w-5" />, label: "Tashriflar Soni",
       primary: formatNumber(kpi.totalVisits),
       secondary: `${formatNumber(kpi.totalReceipts)} chek`,
-      curr: kpi.totalVisits,
-      prev: kpiPrev?.totalVisits ?? null,
-      iconColor: "bg-[#facc15]/20 text-[#ca8a04]",
-      higherIsBetter: true,
+      curr: kpi.totalVisits, prev: kpiPrev?.totalVisits ?? null,
+      iconColor: "bg-amber-400/15 text-amber-600", higherIsBetter: true,
     },
     {
-      icon: <Receipt className="h-5 w-5" />,
-      label: "O'rtacha Chek",
-      primary: formatUZS(kpi.avgReceipt),
-      secondary: "so'm",
-      curr: kpi.avgReceipt,
-      prev: kpiPrev?.avgReceipt ?? null,
-      iconColor: "bg-[#fb923c]/15 text-[#ea580c]",
-      higherIsBetter: true,
+      icon: <Receipt className="h-5 w-5" />, label: "O'rtacha Chek",
+      primary: formatUZS(kpi.avgReceipt, { compact: true }),
+      secondary: formatUZS(kpi.avgReceipt),
+      curr: kpi.avgReceipt, prev: kpiPrev?.avgReceipt ?? null,
+      iconColor: "bg-orange-500/10 text-orange-600", higherIsBetter: true,
     },
     {
-      icon: <TrendingUp className="h-5 w-5" />,
-      label: "Konversiya",
+      icon: <TrendingUp className="h-5 w-5" />, label: "Konversiya",
       primary: formatPercent(kpi.conversion),
       secondary: "cheklar / tashriflar",
-      curr: kpi.conversion,
-      prev: kpiPrev?.conversion ?? null,
-      iconColor: "bg-[#10b981]/15 text-[#10b981]",
-      higherIsBetter: true,
+      curr: kpi.conversion, prev: kpiPrev?.conversion ?? null,
+      iconColor: "bg-emerald-500/10 text-emerald-600", higherIsBetter: true,
     },
   ];
 
   return (
-    <div className="space-y-6 font-['Sora',sans-serif]">
-      {/* Header */}
-      <div className="flex items-end justify-between flex-wrap gap-4">
+    <div className="space-y-4 sm:space-y-6">
+      {/* ── Header ── */}
+      <div className="flex items-start sm:items-end justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-[32px] font-semibold tracking-tight text-gray-900 dark:text-white">
-            Dashboard Overview
+          <h1 className="text-2xl sm:text-3xl lg:text-[32px] font-semibold tracking-tight">
+            Dashboard
           </h1>
-          <p className="text-[14px] text-gray-500 font-normal mt-1">
+          <p className="text-sm text-muted-foreground mt-0.5">
             {start.toISOString().slice(0, 10)} – {end.toISOString().slice(0, 10)}
             {branchId && ` · ${branches.find((b) => b.id === branchId)?.name ?? ""}`}
           </p>
         </div>
         <a href={`/api/export?start=${start.toISOString().slice(0, 10)}&end=${end.toISOString().slice(0, 10)}${branchId ? `&branchId=${branchId}` : ""}`}>
-          <Button variant="outline" size="sm" className="rounded-full bg-white dark:bg-zinc-900 border-none shadow-[0_4px_20px_rgb(0,0,0,0.05)] hover:bg-gray-50 text-gray-700 hover:text-gray-900 transition-all group px-5 h-10 font-medium">
-            <Download className="h-4 w-4 mr-2 transition-transform group-hover:-translate-y-0.5" />
-            Excel eksport
+          <Button variant="outline" size="sm"
+            className="rounded-full bg-card border-border/60 hover:bg-secondary gap-2 h-9 px-4 text-sm font-medium shadow-sm">
+            <Download className="h-4 w-4" />
+            <span className="hidden sm:inline">Excel eksport</span>
+            <span className="sm:hidden">Eksport</span>
           </Button>
         </a>
       </div>
 
+      {/* ── Period filter ── */}
       <PeriodFilter
         start={start.toISOString().slice(0, 10)}
         end={end.toISOString().slice(0, 10)}
@@ -199,29 +177,30 @@ export default async function DashboardPage({
         cend={sp.cend}
       />
 
+      {/* ── Empty state ── */}
       {!hasAnyData && (
-        <Card className="rounded-[24px] border-none shadow-[0_8px_30px_rgb(0,0,0,0.04)] bg-gray-50/50">
-          <CardContent className="py-20 flex flex-col items-center justify-center text-center space-y-4">
-            <div className="p-5 bg-white dark:bg-zinc-800 shadow-sm rounded-full">
-              <ShoppingBag className="h-8 w-8 text-muted-foreground/50" />
+        <Card className="rounded-2xl border-none shadow-sm bg-card">
+          <CardContent className="py-16 flex flex-col items-center justify-center text-center gap-4">
+            <div className="p-4 bg-muted rounded-full">
+              <ShoppingBag className="h-7 w-7 text-muted-foreground/50" />
             </div>
             <div>
-              <p className="text-[18px] font-medium text-gray-900 dark:text-white">Ma&apos;lumot topilmadi</p>
-              <p className="text-[14px] text-gray-500 max-w-sm mt-2 leading-relaxed">
-                Tanlangan davrda ma&apos;lumot topilmadi. Boshqa period tanlang yoki{" "}
-                <a href="/admin/upload" className="text-gray-900 dark:text-gray-200 font-medium hover:underline">fayl yuklang</a>.
+              <p className="text-base font-medium">Ma&apos;lumot topilmadi</p>
+              <p className="text-sm text-muted-foreground max-w-xs mt-1 leading-relaxed">
+                Tanlangan davrda ma&apos;lumot yo&apos;q. Boshqa period tanlang yoki{" "}
+                <a href="/admin/upload" className="font-medium underline underline-offset-2">fayl yuklang</a>.
               </p>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* 5 KPI cards */}
-      <StaggerList className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+      {/* ── 5 KPI cards ── */}
+      <StaggerList className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
         {KPIS.map((k) => {
-          const d = k.prev != null ? delta(k.curr, k.prev) : null;
+          const d = k.prev != null ? calcDelta(k.curr, k.prev) : null;
           return (
-            <StaggerItem key={k.label}>
+            <StaggerItem key={k.label} className="h-full">
               <KpiCard
                 icon={k.icon}
                 label={k.label}
@@ -237,117 +216,115 @@ export default async function DashboardPage({
         })}
       </StaggerList>
 
-      {/* Kunlik savdo (3/4) + Filiallar ulushi (1/4) */}
-      <FadeIn>
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-        <Card className="lg:col-span-3 rounded-[24px] border-none shadow-[0_8px_30px_rgb(0,0,0,0.04)] bg-white dark:bg-zinc-900 overflow-hidden">
-          <CardHeader className="pt-8 px-8 pb-4">
-            <CardTitle className="text-[18px] font-medium text-gray-900 dark:text-white">
-              Kunlik Savdo Dinamikasi
-            </CardTitle>
+      <FadeIn className="space-y-4 sm:space-y-6">
+        {/* ── Kunlik savdo (3/4) + Filiallar ulushi (1/4) ── */}
+        <div className="grid grid-cols-1 xl:grid-cols-4 gap-4">
+          <Card className="xl:col-span-3 rounded-2xl border-none shadow-sm bg-card overflow-hidden">
+            <CardHeader className={`${CARD_PT} ${CARD_PAD} pb-3`}>
+              <CardTitle className="text-base font-semibold">Kunlik Savdo Dinamikasi</CardTitle>
+            </CardHeader>
+            <CardContent className={`${CARD_PAD} ${CARD_PB}`}>
+              <DailySalesChart sales={dailySales} />
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-2xl border-none shadow-sm bg-card overflow-hidden">
+            <CardHeader className={`${CARD_PT} ${CARD_PAD} pb-3`}>
+              <CardTitle className="text-base font-semibold">Filiallar Ulushi</CardTitle>
+            </CardHeader>
+            <CardContent className={`${CARD_PAD} ${CARD_PB}`}>
+              <BranchShareChart data={share} />
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* ── Kunlik chek soni ── */}
+        <Card className="rounded-2xl border-none shadow-sm bg-card overflow-hidden">
+          <CardHeader className={`${CARD_PT} ${CARD_PAD} pb-3`}>
+            <CardTitle className="text-base font-semibold">Kunlik Chek Soni Dinamikasi</CardTitle>
           </CardHeader>
-          <CardContent className="px-8 pb-8">
-            <DailySalesChart sales={dailySales} />
+          <CardContent className={`${CARD_PAD} ${CARD_PB}`}>
+            <DailyReceiptsChart receipts={dailyReceipts} />
           </CardContent>
         </Card>
 
-        <Card className="rounded-[24px] border-none shadow-[0_8px_30px_rgb(0,0,0,0.04)] bg-white dark:bg-zinc-900 overflow-hidden">
-          <CardHeader className="pt-8 px-8 pb-4">
-            <CardTitle className="text-[18px] font-medium text-gray-900 dark:text-white">
-              Filiallar Ulushi
-            </CardTitle>
+        {/* ── Top kategoriyalar ── */}
+        <Card className="rounded-2xl border-none shadow-sm bg-card overflow-hidden">
+          <CardHeader className={`${CARD_PT} ${CARD_PAD} pb-3`}>
+            <CardTitle className="text-base font-semibold">Top Kategoriyalar — Fakt vs Reja</CardTitle>
           </CardHeader>
-          <CardContent className="px-8 pb-8">
-            <BranchShareChart data={share} />
+          <CardContent className={`${CARD_PAD} ${CARD_PB}`}>
+            <TopCategoriesChart data={top} />
           </CardContent>
         </Card>
-      </div>
 
-      {/* Kunlik chek soni */}
-      <Card className="rounded-[24px] border-none shadow-[0_8px_30px_rgb(0,0,0,0.04)] bg-white dark:bg-zinc-900 overflow-hidden">
-        <CardHeader className="pt-8 px-8 pb-4">
-          <CardTitle className="text-[18px] font-medium text-gray-900 dark:text-white">
-            Kunlik Chek Soni Dinamikasi
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="px-8 pb-8">
-          <DailyReceiptsChart receipts={dailyReceipts} />
-        </CardContent>
-      </Card>
-
-      {/* Top kategoriyalar */}
-      <Card className="rounded-[24px] border-none shadow-[0_8px_30px_rgb(0,0,0,0.04)] bg-white dark:bg-zinc-900 overflow-hidden">
-        <CardHeader className="pt-8 px-8 pb-4">
-          <CardTitle className="text-[18px] font-medium text-gray-900 dark:text-white">
-            Top Kategoriyalar (Fakt vs Normal Reja)
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="px-8 pb-8">
-          <TopCategoriesChart data={top} />
-        </CardContent>
-      </Card>
-
-      {/* Filiallar faoliyati */}
-      <Card className="rounded-[24px] border-none shadow-[0_8px_30px_rgb(0,0,0,0.04)] bg-white dark:bg-zinc-900 overflow-hidden">
-        <CardHeader className="pt-8 px-8 pb-4">
-          <CardTitle className="text-[18px] font-medium text-gray-900 dark:text-white">
-            Filiallar Faoliyati
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="px-8 pb-8">
-          <Table>
-            <TableHeader className="bg-transparent border-b border-gray-100 dark:border-zinc-800">
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="text-[14px] font-medium text-gray-400">Filial</TableHead>
-                <TableHead className="text-[14px] font-medium text-gray-400 text-right">Savdo (Fakt)</TableHead>
-                <TableHead className="text-[14px] font-medium text-gray-400 text-right">Tashriflar</TableHead>
-                <TableHead className="text-[14px] font-medium text-gray-400 text-right">Cheklar</TableHead>
-                <TableHead className="text-[14px] font-medium text-gray-400 text-right">O&apos;rt. chek</TableHead>
-                <TableHead className="text-[14px] font-medium text-gray-400 text-right">Reja</TableHead>
-                <TableHead className="text-[14px] font-medium text-gray-400 text-right">Reja %</TableHead>
-                <TableHead className="text-[14px] font-medium text-gray-400 text-right">Konversiya</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {perf.map((r) => (
-                <TableRow key={r.branchId} className="cursor-pointer hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors border-b border-gray-50 dark:border-zinc-800/50">
-                  <TableCell className="font-medium">
-                    <Link
-                      href={{ pathname: `/branches/${r.branchId}`, query: { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) } }}
-                      className="inline-flex items-center gap-2 text-[14px] font-medium text-gray-900 dark:text-gray-200 hover:text-gray-500 transition-colors group"
-                    >
-                      {r.branchName}
-                      <ArrowRight className="h-3.5 w-3.5 opacity-50 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums text-[14px] text-gray-700 dark:text-gray-300">{formatUZS(r.sales)}</TableCell>
-                  <TableCell className="text-right tabular-nums text-[14px] text-gray-700 dark:text-gray-300">{formatNumber(r.visits)}</TableCell>
-                  <TableCell className="text-right tabular-nums text-[14px] text-gray-700 dark:text-gray-300">{formatNumber(r.receipts)}</TableCell>
-                  <TableCell className="text-right tabular-nums text-[14px] text-gray-700 dark:text-gray-300">{formatUZS(r.avgReceipt)}</TableCell>
-                  <TableCell className="text-right tabular-nums text-[14px] text-gray-700 dark:text-gray-300">{r.plan > 0 ? formatUZS(r.plan) : "—"}</TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {r.plan > 0 ? (
-                      <span className={`inline-flex items-center px-3 py-1 rounded-full text-[12px] font-semibold ${r.planPercent >= 1 ? "bg-[#10b981]/10 text-[#10b981]" : "bg-[#f87171]/10 text-[#f87171]"}`}>
-                        {formatPercent(r.planPercent)}
-                      </span>
-                    ) : <span className="text-gray-400">—</span>}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums text-[14px]">
-                    <span className="font-medium text-gray-500">{formatPercent(r.conversion)}</span>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+        {/* ── Filiallar faoliyati ── */}
+        <Card className="rounded-2xl border-none shadow-sm bg-card overflow-hidden">
+          <CardHeader className={`${CARD_PT} ${CARD_PAD} pb-3`}>
+            <CardTitle className="text-base font-semibold">Filiallar Faoliyati</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table className="min-w-[700px]">
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent border-b border-border/60">
+                    <TableHead className={`${CARD_PAD} text-xs font-medium text-muted-foreground`}>Filial</TableHead>
+                    <TableHead className="text-xs font-medium text-muted-foreground text-right">Savdo</TableHead>
+                    <TableHead className="text-xs font-medium text-muted-foreground text-right">Tashriflar</TableHead>
+                    <TableHead className="text-xs font-medium text-muted-foreground text-right">Cheklar</TableHead>
+                    <TableHead className="text-xs font-medium text-muted-foreground text-right">O&apos;rt. chek</TableHead>
+                    <TableHead className="text-xs font-medium text-muted-foreground text-right">Reja</TableHead>
+                    <TableHead className="text-xs font-medium text-muted-foreground text-right">Reja %</TableHead>
+                    <TableHead className={`${CARD_PAD} text-xs font-medium text-muted-foreground text-right`}>Konversiya</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {perf.map((r) => (
+                    <TableRow key={r.branchId}
+                      className="hover:bg-muted/40 transition-colors border-b border-border/30 last:border-0">
+                      <TableCell className={`${CARD_PAD} py-3`}>
+                        <Link
+                          href={{ pathname: `/branches/${r.branchId}`, query: { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) } }}
+                          className="inline-flex items-center gap-1.5 text-sm font-medium hover:text-primary transition-colors group"
+                        >
+                          {r.branchName}
+                          <ArrowRight className="h-3 w-3 opacity-0 group-hover:opacity-60 group-hover:translate-x-0.5 transition-all" />
+                        </Link>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums text-sm">{formatUZS(r.sales, { compact: true })}</TableCell>
+                      <TableCell className="text-right tabular-nums text-sm">{formatNumber(r.visits)}</TableCell>
+                      <TableCell className="text-right tabular-nums text-sm">{formatNumber(r.receipts)}</TableCell>
+                      <TableCell className="text-right tabular-nums text-sm">{formatUZS(r.avgReceipt, { compact: true })}</TableCell>
+                      <TableCell className="text-right tabular-nums text-sm text-muted-foreground">{r.plan > 0 ? formatUZS(r.plan, { compact: true }) : "—"}</TableCell>
+                      <TableCell className="text-right">
+                        {r.plan > 0 ? (
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
+                            r.planPercent >= 1
+                              ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                              : "bg-red-500/10 text-red-600 dark:text-red-400"
+                          }`}>
+                            {formatPercent(r.planPercent)}
+                          </span>
+                        ) : <span className="text-muted-foreground text-sm">—</span>}
+                      </TableCell>
+                      <TableCell className={`${CARD_PAD} text-right tabular-nums text-sm text-muted-foreground`}>
+                        {formatPercent(r.conversion)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
       </FadeIn>
     </div>
   );
 }
 
 function KpiCard({
-  icon, label, primary, secondary, iconColorClass = "bg-gray-50 text-gray-700",
+  icon, label, primary, secondary,
+  iconColorClass = "bg-muted text-muted-foreground",
   delta: d, deltaLabel, higherIsBetter,
 }: {
   icon: React.ReactNode;
@@ -359,28 +336,31 @@ function KpiCard({
   deltaLabel?: string;
   higherIsBetter?: boolean;
 }) {
-  const isPositive = d != null && d > 0;
-  const isNegative = d != null && d < 0;
-  const good = higherIsBetter ? isPositive : isNegative;
-  const bad  = higherIsBetter ? isNegative : isPositive;
+  const good = d != null && (higherIsBetter ? d > 0 : d < 0);
+  const bad  = d != null && (higherIsBetter ? d < 0 : d > 0);
 
   return (
-    <Card className="rounded-[24px] border-none shadow-[0_8px_30px_rgb(0,0,0,0.04)] bg-white dark:bg-zinc-900 overflow-hidden hover:shadow-[0_15px_40px_rgb(0,0,0,0.08)] hover:-translate-y-1 transition-all duration-300">
-      <CardHeader className="flex flex-row items-center justify-between pb-2 pt-6 px-6">
-        <CardTitle className="text-[14px] font-medium text-gray-500 dark:text-gray-400">{label}</CardTitle>
-        <div className={`p-3 rounded-full ${iconColorClass}`}>
-          <span className="w-5 h-5 flex items-center justify-center">{icon}</span>
+    <Card className="h-full rounded-2xl border-none shadow-sm bg-card hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 overflow-hidden">
+      <CardHeader className="flex flex-row items-start justify-between gap-2 pb-2 pt-4 sm:pt-5 px-4 sm:px-5">
+        <CardTitle className="text-xs sm:text-[13px] font-medium text-muted-foreground leading-snug">{label}</CardTitle>
+        <div className={`p-2 sm:p-2.5 rounded-xl shrink-0 ${iconColorClass}`}>
+          {icon}
         </div>
       </CardHeader>
-      <CardContent className="px-6 pb-5">
-        <div className="text-[26px] lg:text-[30px] font-semibold text-gray-900 dark:text-gray-50 tracking-tight">{primary}</div>
-        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-          {d != null && (
-            <span className={`text-[12px] font-semibold px-2 py-0.5 rounded-full ${good ? "bg-[#10b981]/10 text-[#10b981]" : bad ? "bg-[#f87171]/10 text-[#f87171]" : "bg-gray-100 text-gray-500"}`}>
-              {d > 0 ? "+" : ""}{d.toFixed(1)}% {deltaLabel}
+      <CardContent className="px-4 sm:px-5 pb-4 sm:pb-5 pt-0">
+        <div className="text-xl sm:text-2xl font-semibold tracking-tight truncate">{primary}</div>
+        <div className="flex items-center gap-1.5 mt-1.5 flex-wrap min-h-[20px]">
+          {d != null ? (
+            <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
+              good ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+              : bad ? "bg-red-500/10 text-red-600 dark:text-red-400"
+              : "bg-muted text-muted-foreground"
+            }`}>
+              {d > 0 ? "↑" : d < 0 ? "↓" : "→"} {Math.abs(d).toFixed(1)}% {deltaLabel}
             </span>
-          )}
-          {secondary && <p className="text-[12px] text-gray-400 dark:text-gray-500">{secondary}</p>}
+          ) : secondary ? (
+            <p className="text-[11px] sm:text-xs text-muted-foreground truncate">{secondary}</p>
+          ) : null}
         </div>
       </CardContent>
     </Card>

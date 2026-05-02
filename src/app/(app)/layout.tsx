@@ -17,7 +17,7 @@ export default async function AppLayout({
       <Sidebar role={session.user.role} />
       <div className="flex-1 flex flex-col min-w-0">
         <Header user={session.user} />
-        <main className="flex-1 px-6 py-6 bg-muted/30">
+        <main className="flex-1 px-4 sm:px-6 py-4 sm:py-6 bg-muted/30 min-w-0">
           <PageMotionWrapper>{children}</PageMotionWrapper>
         </main>
       </div>
