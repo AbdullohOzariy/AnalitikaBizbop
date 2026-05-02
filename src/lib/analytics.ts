@@ -660,8 +660,11 @@ async function _branchReport(range: DateRange): Promise<BranchReportRow[]> {
     const m      = metricsMap.get(b.id) ?? { receipts: 0, receiptTotal: 0, avgItemsPerReceipt: 0 };
     const visits = visitsMap.get(b.id) ?? 0;
 
-    // Barcha kategoriyalar — filtersiz (sales=0 bo'lsa ham ko'rsatiladi)
-    const categories: CategoryBreakdown[] = allCategories.map((c) => {
+    // sortOrder>0 = asosiy 18 ta; sortOrder=0 = qo'shimcha (Boshqalar ga jamlanadi)
+    const mainCats  = allCategories.filter(c => c.sortOrder > 0);
+    const extraCats = allCategories.filter(c => c.sortOrder === 0);
+
+    const categories: CategoryBreakdown[] = mainCats.map((c) => {
       const cSales   = catSalesMap.get(c.id) ?? 0;
       const cCost    = catCostMap.get(c.id)  ?? 0;
       const cHasCost = cCost > 0;
@@ -677,6 +680,28 @@ async function _branchReport(range: DateRange): Promise<BranchReportRow[]> {
         planPct: cPlan > 0 ? (cSales / cPlan) * 100 : 0,
       };
     });
+
+    // Qo'shimcha kategoriyalarni "Boshqalar" ga jamlaymiz
+    if (extraCats.length > 0) {
+      let eSales = 0, eCost = 0, ePlan = 0;
+      for (const c of extraCats) {
+        eSales += catSalesMap.get(c.id) ?? 0;
+        eCost  += catCostMap.get(c.id)  ?? 0;
+        ePlan  += catPlanMap.get(c.id)  ?? 0;
+      }
+      if (eSales > 0 || ePlan > 0) {
+        categories.push({
+          categoryId:   0,   // sentinel — real ID emas
+          categoryName: "Boshqalar",
+          sales:   eSales,
+          cost:    eCost,
+          hasCost: eCost > 0,
+          marja:   eCost > 0 ? ((eSales - eCost) / eCost) * 100 : null,
+          plan:    ePlan,
+          planPct: ePlan > 0 ? (eSales / ePlan) * 100 : 0,
+        });
+      }
+    }
 
     return {
       branchId:           b.id,
