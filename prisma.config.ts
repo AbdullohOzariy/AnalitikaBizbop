@@ -10,8 +10,9 @@ export default defineConfig({
     seed: "tsx prisma/seed.ts",
   },
   datasource: {
-    // Migration uchun direct URL kerak (pooler pg_advisory_lock ni bloklab qo'yadi).
-    // Railway'da DIRECT_URL = pooler URL'dan "-pooler" olib tashlangan variant.
-    url: process.env["DIRECT_URL"] ?? process.env["DATABASE_URL"],
+    // Migration uchun Neon direct URL kerak — pooler pg_advisory_lock ni bloklab qo'yadi.
+    // DIRECT_URL o'rnatilmagan bo'lsa, DATABASE_URL'dan "-pooler" olib tashlab yasaymiz.
+    url: process.env["DIRECT_URL"] ??
+      (process.env["DATABASE_URL"] ?? "").replace(/-pooler(\.\S)/, "$1"),
   },
 });
