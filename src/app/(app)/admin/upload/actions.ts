@@ -36,17 +36,41 @@ async function ensureNotDuplicate(hash: string) {
   }
 }
 
+/**
+ * Kirill/Lotin aralash harflardagi farqlarni yo'qotib normalizatsiya qiladi.
+ * Masalan, Kirill 'О' (U+041E) == Lotin 'O' (U+004F) ko'rinishi bir xil lekin boshqa.
+ */
+function normalizeAlias(s: string): string {
+  const cyToLat: Record<string, string> = {
+    'А':'A','В':'B','С':'C','Е':'E','Н':'H','К':'K','М':'M',
+    'О':'O','Р':'P','Т':'T','Х':'X','І':'I','Ї':'I',
+    'а':'a','е':'e','о':'o','р':'p','с':'c','х':'x','у':'y','і':'i','ї':'i',
+  };
+  return [...s.trim()]
+    .map(c => cyToLat[c] ?? c)
+    .join('')
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+}
+
 async function resolveBranch(alias: string, source: AliasSource): Promise<number> {
-  // Case-insensitive, trimmed lookup — avoids issues with caps/whitespace mismatches
+  // 1. Case-insensitive DB lookup
   const a = await prisma.branchAlias.findFirst({
-    where: {
-      alias: { equals: alias.trim(), mode: "insensitive" },
-      source,
-    },
+    where: { alias: { equals: alias.trim(), mode: "insensitive" }, source },
     select: { branchId: true },
   });
-  if (!a) throw new Error(`not_found:${alias}`);
-  return a.branchId;
+  if (a) return a.branchId;
+
+  // 2. Homoglyph-normalized in-memory lookup (Kirill/Lotin aralash harflar uchun)
+  const all = await prisma.branchAlias.findMany({
+    where: { source },
+    select: { branchId: true, alias: true },
+  });
+  const normIncoming = normalizeAlias(alias);
+  const match = all.find(r => normalizeAlias(r.alias) === normIncoming);
+  if (match) return match.branchId;
+
+  throw new Error(`not_found:${alias}`);
 }
 
 /**
@@ -85,8 +109,9 @@ async function resolveBranchWithAI(
 
   const match = await matchBranchAlias(alias, branchesForAI).catch(() => null);
   if (!match) {
+    const charCodes = [...alias].map(c => `${c}(${c.codePointAt(0)?.toString(16)})`).join('');
     throw new Error(
-      `Filial nomi tanilmadi: "${alias}" (${source}). AI ham aniqlay olmadi — alias qo'shing.`
+      `Filial nomi tanilmadi: "${alias}" (${source}). AI ham aniqlay olmadi — alias qo'shing.\nDebug: ${charCodes}`
     );
   }
 
