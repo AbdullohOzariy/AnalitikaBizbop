@@ -10,10 +10,6 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  BarChart,
 } from "recharts";
 import { formatUZS, formatNumber } from "@/lib/format";
 
@@ -140,44 +136,56 @@ export function BranchShareChart({
 }: {
   data: { branchId: number; branchName: string; sales: number; share: number }[];
 }) {
-  const filtered = data.filter((d) => d.sales > 0);
+  const filtered = data.filter((d) => d.sales > 0).sort((a, b) => b.sales - a.sales);
   if (filtered.length === 0) {
     return (
-      <div className="h-64 flex items-center justify-center text-sm text-muted-foreground">
-        Filiallar bo'yicha savdo yo'q.
+      <div className="min-h-[280px] flex items-center justify-center text-sm text-muted-foreground">
+        Filiallar bo&apos;yicha savdo yo&apos;q.
       </div>
     );
   }
+  const maxSales = filtered[0].sales;
+  const total = filtered.reduce((s, d) => s + d.sales, 0);
+
   return (
-    <div className="h-64">
-      <ResponsiveContainer width="100%" height="100%">
-        <PieChart>
-          <Pie
-            data={filtered}
-            dataKey="sales"
-            nameKey="branchName"
-            cx="50%"
-            cy="50%"
-            innerRadius={60}
-            outerRadius={85}
-            paddingAngle={8}
-            cornerRadius={12}
-            stroke="none"
-            label={(p: unknown) => {
-              const x = p as { branchName: string; share: number };
-              return `${x.branchName} ${x.share.toFixed(1)}%`;
-            }}
-          >
-            {filtered.map((_, i) => (
-              <Cell key={i} fill={COLORS[i % COLORS.length]} />
-            ))}
-          </Pie>
-          <Tooltip
-            contentStyle={tooltipStyle}
-            formatter={(value) => [formatUZS(Number(value)) + " so'm", "Savdo"]}
-          />
-        </PieChart>
-      </ResponsiveContainer>
+    <div className="space-y-1">
+      <p className="text-[11px] text-muted-foreground mb-3">
+        Jami: <span className="font-semibold text-foreground">{formatUZS(total, { compact: true })}</span>
+      </p>
+      <div className="space-y-3.5 overflow-y-auto max-h-[300px] pr-0.5">
+        {filtered.map((d, i) => {
+          const color = COLORS[i % COLORS.length];
+          const pct = (d.sales / maxSales) * 100;
+          return (
+            <div key={d.branchId}>
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span
+                    className="w-2 h-2 rounded-full shrink-0"
+                    style={{ backgroundColor: color }}
+                  />
+                  <span className="text-[13px] font-medium truncate leading-none">{d.branchName}</span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-[11px] text-muted-foreground">{formatUZS(d.sales, { compact: true })}</span>
+                  <span
+                    className="text-[12px] font-bold tabular-nums w-[42px] text-right"
+                    style={{ color }}
+                  >
+                    {d.share.toFixed(1)}%
+                  </span>
+                </div>
+              </div>
+              <div className="relative h-2 rounded-full bg-muted overflow-hidden">
+                <div
+                  className="absolute inset-y-0 left-0 rounded-full transition-all duration-700"
+                  style={{ width: `${pct}%`, backgroundColor: color }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

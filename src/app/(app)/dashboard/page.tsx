@@ -217,9 +217,9 @@ export default async function DashboardPage({
       </StaggerList>
 
       <FadeIn className="space-y-4 sm:space-y-6">
-        {/* ── Kunlik savdo (3/4) + Filiallar ulushi (1/4) ── */}
-        <div className="grid grid-cols-1 xl:grid-cols-4 gap-4">
-          <Card className="xl:col-span-3 rounded-2xl border-none shadow-sm bg-card overflow-hidden">
+        {/* ── Kunlik savdo (2/3) + Filiallar ulushi (1/3) ── */}
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+          <Card className="xl:col-span-2 rounded-2xl border-none shadow-sm bg-card overflow-hidden">
             <CardHeader className={`${CARD_PT} ${CARD_PAD} pb-3`}>
               <CardTitle className="text-base font-semibold">Kunlik Savdo Dinamikasi</CardTitle>
             </CardHeader>
