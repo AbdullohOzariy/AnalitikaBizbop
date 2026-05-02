@@ -37,8 +37,12 @@ async function ensureNotDuplicate(hash: string) {
 }
 
 async function resolveBranch(alias: string, source: AliasSource): Promise<number> {
-  const a = await prisma.branchAlias.findUnique({
-    where: { alias_source: { alias, source } },
+  // Case-insensitive, trimmed lookup — avoids issues with caps/whitespace mismatches
+  const a = await prisma.branchAlias.findFirst({
+    where: {
+      alias: { equals: alias.trim(), mode: "insensitive" },
+      source,
+    },
     select: { branchId: true },
   });
   if (!a) throw new Error(`not_found:${alias}`);
@@ -88,7 +92,7 @@ async function resolveBranchWithAI(
 
   // 3. AI topgan aliasni DB'ga saqlash (keyingi safar AI kerak bo'lmaydi)
   await prisma.branchAlias.create({
-    data: { branchId: match.branchId, alias, source },
+    data: { branchId: match.branchId, alias: alias.trim(), source },
   }).catch(() => null); // unique constraint xatosini e'tiborsiz qoldirish
 
   return { branchId: match.branchId, aiUsed: true, branchName: match.branchName };
