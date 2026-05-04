@@ -714,11 +714,11 @@ export type MissingDays = {
 
 async function _findMissingDays(range: DateRange): Promise<MissingDays> {
   const [salesRows, visitsRows] = await Promise.all([
-    prisma.$queryRaw<{ d: Date }[]>`
-      SELECT DISTINCT date AS d
-      FROM "DailyMetrics"
-      WHERE date BETWEEN ${range.start} AND ${range.end}
-        AND "receiptCount" > 0
+    prisma.$queryRaw<{ "periodStart": Date; "periodEnd": Date }[]>`
+      SELECT DISTINCT "periodStart", "periodEnd"
+      FROM "CategorySales"
+      WHERE "periodEnd" >= ${range.start} AND "periodStart" <= ${range.end}
+        AND amount > 0
     `,
     prisma.$queryRaw<{ d: Date }[]>`
       SELECT DISTINCT date AS d
@@ -728,12 +728,17 @@ async function _findMissingDays(range: DateRange): Promise<MissingDays> {
     `,
   ]);
 
-  const haveSales  = new Set(salesRows.map((r) => isoDay(r.d)));
+  const haveSales = new Set<string>();
+  const dayMs = 86_400_000;
+  for (const r of salesRows) {
+    const s = Math.max(r.periodStart.getTime(), range.start.getTime());
+    const e = Math.min(r.periodEnd.getTime(),   range.end.getTime());
+    for (let t = s; t <= e; t += dayMs) haveSales.add(isoDay(new Date(t)));
+  }
   const haveVisits = new Set(visitsRows.map((r) => isoDay(r.d)));
 
   const missingSales: string[] = [];
   const missingVisits: string[] = [];
-  const dayMs = 86_400_000;
   for (let t = range.start.getTime(); t <= range.end.getTime(); t += dayMs) {
     const iso = isoDay(new Date(t));
     if (!haveSales.has(iso))  missingSales.push(iso);
