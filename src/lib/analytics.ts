@@ -707,6 +707,48 @@ export const branchReport = (range: DateRange) =>
     { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
   )();
 
+export type MissingDays = {
+  sales: string[];   // ISO YYYY-MM-DD — DailyMetrics yo'q yoki barchasi 0
+  visits: string[];  // ISO YYYY-MM-DD — DailyVisits yo'q yoki barchasi 0
+};
+
+async function _findMissingDays(range: DateRange): Promise<MissingDays> {
+  const [salesRows, visitsRows] = await Promise.all([
+    prisma.$queryRaw<{ d: Date }[]>`
+      SELECT DISTINCT date AS d
+      FROM "DailyMetrics"
+      WHERE date BETWEEN ${range.start} AND ${range.end}
+        AND "receiptCount" > 0
+    `,
+    prisma.$queryRaw<{ d: Date }[]>`
+      SELECT DISTINCT date AS d
+      FROM "DailyVisits"
+      WHERE date BETWEEN ${range.start} AND ${range.end}
+        AND "visitCount" > 0
+    `,
+  ]);
+
+  const haveSales  = new Set(salesRows.map((r) => isoDay(r.d)));
+  const haveVisits = new Set(visitsRows.map((r) => isoDay(r.d)));
+
+  const missingSales: string[] = [];
+  const missingVisits: string[] = [];
+  const dayMs = 86_400_000;
+  for (let t = range.start.getTime(); t <= range.end.getTime(); t += dayMs) {
+    const iso = isoDay(new Date(t));
+    if (!haveSales.has(iso))  missingSales.push(iso);
+    if (!haveVisits.has(iso)) missingVisits.push(iso);
+  }
+  return { sales: missingSales, visits: missingVisits };
+}
+
+export const findMissingDays = (range: DateRange) =>
+  unstable_cache(
+    () => _findMissingDays(range),
+    ["missingDays", ...makeKey(range)],
+    { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
+  )();
+
 /** Mavjud ma'lumot davri (default range hisoblash uchun). */
 async function _getDefaultRange(): Promise<DateRange> {
   const [lastSale, lastMetric, lastVisit] = await Promise.all([

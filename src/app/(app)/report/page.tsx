@@ -1,9 +1,10 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { branchReport, getDefaultRange } from "@/lib/analytics";
+import { branchReport, findMissingDays, getDefaultRange, diffDaysInclusive } from "@/lib/analytics";
 import { Card, CardContent } from "@/components/ui/card";
 import { PeriodFilter } from "./period-filter";
 import { ReportTable } from "./report-table";
+import { MissingDaysAlert } from "./missing-days-alert";
 
 function parseDate(s: string | undefined, fallback: Date): Date {
   if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return fallback;
@@ -29,8 +30,12 @@ export default async function ReportPage({
   const startStr = range.start.toISOString().slice(0, 10);
   const endStr   = range.end.toISOString().slice(0, 10);
 
-  const rows = await branchReport(range);
+  const [rows, missing] = await Promise.all([
+    branchReport(range),
+    findMissingDays(range),
+  ]);
   const hasCostAny = rows.some((r) => r.hasCost);
+  const totalDays = diffDaysInclusive(range.start, range.end);
 
   return (
     <div className="space-y-5">
@@ -43,6 +48,12 @@ export default async function ReportPage({
         </div>
         <PeriodFilter defaultStart={startStr} defaultEnd={endStr} />
       </div>
+
+      <MissingDaysAlert
+        salesDays={missing.sales}
+        visitsDays={missing.visits}
+        totalDays={totalDays}
+      />
 
       <Card className="overflow-hidden">
         <CardContent className="p-0">
