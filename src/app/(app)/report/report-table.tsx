@@ -71,7 +71,7 @@ export function ReportTable({
   );
 
   const totalMarja   = hasCostAny && total.cost > 0
-    ? ((catTotal.sales - total.cost) / total.cost) * 100
+    ? ((total.sales - total.cost) / total.cost) * 100
     : null;
   const totalAvg     = total.receipts > 0 ? total.sales / total.receipts : 0;
   const totalAvgItems = total.receipts > 0 ? total.itemsSum / total.receipts : 0;

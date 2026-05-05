@@ -30,13 +30,6 @@ function pctColor(p: number | null): string {
   if (p >= 80) return "text-amber-600";
   return "text-red-500";
 }
-function pctBgColor(p: number | null): string {
-  if (p == null) return "bg-muted";
-  if (p >= 100) return "bg-emerald-500";
-  if (p >= 80) return "bg-amber-500";
-  return "bg-red-400";
-}
-
 function shortDate(iso: string): string {
   const m = iso.match(/^\d{4}-(\d{2})-(\d{2})$/);
   return m ? `${m[2]}.${m[1]}` : iso;
@@ -57,62 +50,73 @@ const tooltipStyle = {
 
 // ============ 1. Plan Completion ============
 
+function MiniChip({ name, pct }: { name: string; pct: number | null }) {
+  const dotBg =
+    pct == null ? "bg-slate-300" :
+    pct >= 100 ? "bg-emerald-500" :
+    pct >= 80  ? "bg-amber-500" :
+    "bg-red-400";
+  return (
+    <div
+      title={`${name}: ${fmtPct(pct)}`}
+      className="flex items-center justify-between gap-2 rounded-lg bg-muted/40 px-2.5 py-1.5 hover:bg-muted/70 transition-colors"
+    >
+      <div className="flex items-center gap-1.5 min-w-0">
+        <span className={`h-2 w-2 rounded-full shrink-0 ${dotBg}`} />
+        <span className="text-xs font-medium truncate">{name}</span>
+      </div>
+      <span className={`text-xs font-semibold tabular-nums shrink-0 ${pctColor(pct)}`}>
+        {fmtPct(pct)}
+      </span>
+    </div>
+  );
+}
+
 export function PlanCompletionWidget({ data }: { data: PlanCompletionStats }) {
   const { overall, byCategory, byBranch } = data;
-
-  const renderRow = (name: string, pct: number | null) => {
-    const clamped = pct == null ? 0 : Math.min(Math.max(pct, 0), 150);
-    const widthPct = (clamped / 150) * 100;
-    return (
-      <div key={name} className="space-y-1">
-        <div className="flex justify-between items-baseline text-xs">
-          <span className="font-medium truncate pr-2">{name}</span>
-          <span className={`tabular-nums font-semibold ${pctColor(pct)}`}>{fmtPct(pct)}</span>
-        </div>
-        <div className="h-2 bg-muted rounded-full overflow-hidden relative">
-          <div className={`h-full ${pctBgColor(pct)} transition-all`} style={{ width: `${widthPct}%` }} />
-          <div className="absolute top-0 bottom-0 w-px bg-foreground/30" style={{ left: `${(100 / 150) * 100}%` }} />
-        </div>
-      </div>
-    );
-  };
+  const sortedCats = [...byCategory].sort((a, b) => (b.pct ?? -1) - (a.pct ?? -1));
+  const sortedBranches = [...byBranch].sort((a, b) => (b.pct ?? -1) - (a.pct ?? -1));
 
   return (
     <Card className="rounded-2xl">
-      <CardHeader>
+      <CardHeader className="pb-3">
         <CardTitle className="text-base">1. Reja bajarilishi</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-5">
-        <div>
-          <div className="text-xs text-muted-foreground mb-1">Umumiy</div>
+      <CardContent className="space-y-4">
+        <div className="flex items-baseline gap-3">
           <div className={`text-4xl font-bold tabular-nums ${pctColor(overall.pct)}`}>
             {fmtPct(overall.pct)}
           </div>
+          <div className="text-xs text-muted-foreground">umumiy</div>
         </div>
 
-        {byCategory.length > 0 && (
-          <div className="space-y-2">
-            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-              Kategoriyalar
-            </div>
-            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-              {byCategory.map((c) => renderRow(c.categoryName, c.pct))}
-            </div>
-          </div>
-        )}
-
-        {byBranch.length > 0 && (
-          <div className="space-y-2">
-            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+        {sortedBranches.length > 0 && (
+          <div className="space-y-1.5">
+            <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
               Filiallar
             </div>
-            <div className="space-y-2">
-              {byBranch.map((b) => renderRow(b.branchName, b.pct))}
+            <div className="grid grid-cols-2 gap-1.5">
+              {sortedBranches.map((b) => (
+                <MiniChip key={b.branchId} name={b.branchName} pct={b.pct} />
+              ))}
             </div>
           </div>
         )}
 
-        {byCategory.length === 0 && byBranch.length === 0 && (
+        {sortedCats.length > 0 && (
+          <div className="space-y-1.5">
+            <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+              Kategoriyalar ({sortedCats.length})
+            </div>
+            <div className="grid grid-cols-2 gap-1.5 max-h-56 overflow-y-auto pr-1">
+              {sortedCats.map((c) => (
+                <MiniChip key={c.categoryId} name={c.categoryName} pct={c.pct} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {sortedCats.length === 0 && sortedBranches.length === 0 && (
           <p className="text-sm text-muted-foreground italic text-center py-4">
             Reja yoki sotuv ma'lumoti yo'q
           </p>
