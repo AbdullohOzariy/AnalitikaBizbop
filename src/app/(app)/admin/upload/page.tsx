@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { SalesUploadForm } from "./sales-form";
 import { MetricsUploadForm } from "./metrics-form";
 import { VisitsUploadForm } from "./visits-form";
+import { DailyPlansUploadForm } from "./daily-plans-form";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default async function UploadPage() {
@@ -29,6 +30,7 @@ export default async function UploadPage() {
           <TabsTrigger value="sales">Sotuv (kategoriyalar)</TabsTrigger>
           <TabsTrigger value="metrics">Cheklar (sr.xlsx)</TabsTrigger>
           <TabsTrigger value="visits">Tashriflar</TabsTrigger>
+          <TabsTrigger value="plans">Kunlik reja</TabsTrigger>
         </TabsList>
         <TabsContent value="sales">
           <SalesUploadForm />
@@ -38,6 +40,9 @@ export default async function UploadPage() {
         </TabsContent>
         <TabsContent value="visits">
           <VisitsUploadForm />
+        </TabsContent>
+        <TabsContent value="plans">
+          <DailyPlansUploadForm />
         </TabsContent>
       </Tabs>
     </div>

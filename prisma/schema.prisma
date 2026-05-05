@@ -19,12 +19,14 @@ enum FileType {
   SALES
   METRICS
   VISITS
+  DAILY_PLANS
 }
 
 enum AliasSource {
   SALES
   VISITS
   SR
+  PLANS
 }
 
 enum UploadStatus {
@@ -55,6 +57,7 @@ model Branch {
   metrics       DailyMetrics[]
   visits        DailyVisits[]
   plans         MonthlyPlan[]
+  dailyPlans    DailyPlan[]
   uploads       UploadedFile[]
 }
 
@@ -75,8 +78,21 @@ model Category {
   name      String @unique
   sortOrder Int    @default(0)
 
-  sales CategorySales[]
-  plans MonthlyPlan[]
+  aliases    CategoryAlias[]
+  sales      CategorySales[]
+  plans      MonthlyPlan[]
+  dailyPlans DailyPlan[]
+}
+
+model CategoryAlias {
+  id         Int    @id @default(autoincrement())
+  categoryId Int
+  alias      String
+
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([alias])
+  @@index([categoryId])
 }
 
 // Sotuv fayllaridan keladigan kategoriya bo'yicha summalar.
@@ -154,6 +170,25 @@ model MonthlyPlan {
   @@index([year, month])
 }
 
+// Kunlik reja — filial × sana × kategoriya × planAmount.
+// "aprel 2026 kunlik planlar.xlsx" formatidagi fayllardan keladi.
+model DailyPlan {
+  id             Int      @id @default(autoincrement())
+  uploadedFileId Int
+  branchId       Int
+  categoryId     Int
+  date           DateTime @db.Date
+  planAmount     Decimal  @db.Decimal(20, 2)
+
+  uploadedFile UploadedFile @relation(fields: [uploadedFileId], references: [id], onDelete: Cascade)
+  branch       Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  category     Category     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([branchId, categoryId, date])
+  @@index([date])
+  @@index([branchId, date])
+}
+
 // Yuklangan har bir fayl audit + dublikat oldini olish uchun saqlanadi.
 model UploadedFile {
   id           Int          @id @default(autoincrement())
@@ -174,9 +209,10 @@ model UploadedFile {
   uploadedBy User    @relation(fields: [uploadedById], references: [id])
   branch     Branch? @relation(fields: [branchId], references: [id])
 
-  sales   CategorySales[]
-  metrics DailyMetrics[]
-  visits  DailyVisits[]
+  sales      CategorySales[]
+  metrics    DailyMetrics[]
+  visits     DailyVisits[]
+  dailyPlans DailyPlan[]
 
   @@index([fileType, periodStart, periodEnd])
   @@index([uploadedById])
