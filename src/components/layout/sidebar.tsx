@@ -14,6 +14,7 @@ import {
   LayoutDashboard,
   Menu,
   Table2,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,7 @@ type NavItem = {
 
 const NAV: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/dashboard-v2", label: "Dashboard v2", icon: Sparkles },
   { href: "/branches", label: "Filiallar", icon: Building2 },
   { href: "/categories", label: "Kategoriyalar", icon: Tag },
   { href: "/report", label: "Hisobot", icon: Table2 },
