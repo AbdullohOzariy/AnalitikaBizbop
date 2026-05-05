@@ -5,6 +5,17 @@ import { unstable_cache } from "next/cache";
 export const ANALYTICS_CACHE_TAG = "analytics";
 
 /**
+ * Faqat ko'rinadigan kategoriyalar (sortOrder > 0) hisoblanadi.
+ * "Jami sotuv = ko'rinadigan kategoriyalar yig'indisi" qoidasi.
+ */
+const VISIBLE_CAT_FILTER = Prisma.sql`
+  AND EXISTS (
+    SELECT 1 FROM "Category" "_c"
+    WHERE "_c"."id" = "CategorySales"."categoryId" AND "_c"."sortOrder" > 0
+  )
+`;
+
+/**
  * UTC kun boshi sifatida Date qaytaradi.
  */
 export function utcDate(year: number, month: number, day: number): Date {
@@ -78,6 +89,7 @@ async function _sumCategorySalesProRated(
       AND "periodEnd"   >= ${range.start}::date
       ${branchId ? Prisma.sql`AND "branchId" = ${branchId}` : Prisma.empty}
       ${categoryId ? Prisma.sql`AND "categoryId" = ${categoryId}` : Prisma.empty}
+      ${VISIBLE_CAT_FILTER}
   `;
   return Number(rows[0]?.total ?? 0);
 }
@@ -105,6 +117,7 @@ async function _salesByBranch(range: DateRange): Promise<Map<number, number>> {
     FROM "CategorySales"
     WHERE "periodStart" <= ${range.end}::date
       AND "periodEnd"   >= ${range.start}::date
+      ${VISIBLE_CAT_FILTER}
     GROUP BY "branchId"
   `;
   const map = new Map<number, number>();
@@ -128,6 +141,7 @@ async function _salesByCategory(
     WHERE "periodStart" <= ${range.end}::date
       AND "periodEnd"   >= ${range.start}::date
       ${branchId ? Prisma.sql`AND "branchId" = ${branchId}` : Prisma.empty}
+      ${VISIBLE_CAT_FILTER}
     GROUP BY "categoryId"
   `;
   const map = new Map<number, number>();
@@ -152,6 +166,7 @@ async function _costByCategory(
       AND "periodEnd"   >= ${range.start}::date
       AND "costAmount"  IS NOT NULL
       ${branchId ? Prisma.sql`AND "branchId" = ${branchId}` : Prisma.empty}
+      ${VISIBLE_CAT_FILTER}
     GROUP BY "categoryId"
   `;
   const map = new Map<number, number>();
@@ -537,6 +552,7 @@ async function _salesByBranchCategory(
     FROM "CategorySales"
     WHERE "periodStart" <= ${range.end}::date
       AND "periodEnd"   >= ${range.start}::date
+      ${VISIBLE_CAT_FILTER}
     GROUP BY "branchId", "categoryId"
   `;
   const map = new Map<number, Map<number, number>>();
@@ -564,6 +580,7 @@ async function _costByBranchCategory(
     WHERE "periodStart" <= ${range.end}::date
       AND "periodEnd"   >= ${range.start}::date
       AND "costAmount"  IS NOT NULL
+      ${VISIBLE_CAT_FILTER}
     GROUP BY "branchId", "categoryId"
   `;
   const map = new Map<number, Map<number, number>>();

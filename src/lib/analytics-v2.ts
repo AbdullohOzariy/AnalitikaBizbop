@@ -3,6 +3,14 @@ import { Prisma } from "@/generated/prisma/client";
 import { unstable_cache } from "next/cache";
 import { ANALYTICS_CACHE_TAG, type DateRange } from "@/lib/analytics";
 
+/** Faqat ko'rinadigan kategoriyalar (sortOrder > 0). */
+const VISIBLE_CAT_FILTER = Prisma.sql`
+  AND EXISTS (
+    SELECT 1 FROM "Category" "_c"
+    WHERE "_c"."id" = "CategorySales"."categoryId" AND "_c"."sortOrder" > 0
+  )
+`;
+
 const dayMs = 86_400_000;
 
 function isoDay(d: Date): string {
@@ -106,6 +114,7 @@ async function _planCompletion(range: DateRange, branchId?: number): Promise<Pla
     FROM "CategorySales"
     WHERE "periodEnd" >= ${range.start} AND "periodStart" <= ${range.end}
     ${branchSql}
+    ${VISIBLE_CAT_FILTER}
     GROUP BY "branchId", "categoryId"
   `;
   const actualMap = new Map<string, number>();
@@ -280,6 +289,7 @@ async function _marjaBreakdown(range: DateRange, branchId?: number): Promise<{
     FROM "CategorySales" cs
     JOIN "Category" c ON c.id = cs."categoryId"
     WHERE cs."periodEnd" >= ${range.start} AND cs."periodStart" <= ${range.end}
+      AND c."sortOrder" > 0
     ${branchSql}
     GROUP BY c.id, c.name, c."sortOrder"
     ORDER BY c."sortOrder" ASC
@@ -290,7 +300,9 @@ async function _marjaBreakdown(range: DateRange, branchId?: number): Promise<{
            COALESCE(SUM(${proRatedCost}), 0)::float8 AS cost
     FROM "CategorySales" cs
     JOIN "Branch" b ON b.id = cs."branchId"
+    JOIN "Category" cat ON cat.id = cs."categoryId"
     WHERE cs."periodEnd" >= ${range.start} AND cs."periodStart" <= ${range.end}
+      AND cat."sortOrder" > 0
     ${branchSql}
     GROUP BY b.id, b.name, b."sortOrder"
     ORDER BY b."sortOrder" ASC
