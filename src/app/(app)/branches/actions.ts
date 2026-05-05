@@ -9,7 +9,7 @@ import { requireAdmin } from "@/lib/auth-helpers";
 const addSchema = z.object({
   branchId: z.coerce.number().int().positive(),
   alias: z.string().trim().min(1),
-  source: z.enum(["SALES", "VISITS", "SR"]),
+  source: z.enum(["SALES", "VISITS", "SR", "PLANS"]),
 });
 
 export async function addAliasAction(

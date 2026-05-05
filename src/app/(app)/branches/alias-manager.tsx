@@ -59,6 +59,7 @@ export function AliasAddForm({ branchId }: { branchId: number }) {
             <SelectItem value="SALES">Sotuv</SelectItem>
             <SelectItem value="VISITS">Tashriflar</SelectItem>
             <SelectItem value="SR">Cheklar</SelectItem>
+            <SelectItem value="PLANS">Reja</SelectItem>
           </SelectContent>
         </Select>
       </div>
