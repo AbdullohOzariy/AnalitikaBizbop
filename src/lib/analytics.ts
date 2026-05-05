@@ -754,6 +754,71 @@ export const findMissingDays = (range: DateRange) =>
     { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
   )();
 
+export type DailyPlanVsActualRow = {
+  date: string;        // ISO YYYY-MM-DD
+  plan: number;        // Jami DailyPlan (filial × kategoriya jami) shu kun uchun
+  actual: number | null; // Jami CategorySales pro-rated; agar ma'lumot yo'q bo'lsa null
+};
+
+async function _dailyPlanVsActual(
+  range: DateRange,
+  branchId: number
+): Promise<DailyPlanVsActualRow[]> {
+  // 1. DailyPlan — har kun uchun jami (kategoriyalar yig'indisi)
+  const planRows = await prisma.$queryRaw<{ d: Date; total: number | null }[]>`
+    SELECT date AS d, COALESCE(SUM("planAmount"),0)::float AS total
+    FROM "DailyPlan"
+    WHERE "branchId" = ${branchId}
+      AND date BETWEEN ${range.start} AND ${range.end}
+    GROUP BY date
+  `;
+  const planMap = new Map(planRows.map((r) => [isoDay(r.d), Number(r.total) ?? 0]));
+
+  // 2. CategorySales — pro-rated kunlarga bo'linadi
+  const salesRanges = await prisma.$queryRaw<{ ps: Date; pe: Date; total: number | null }[]>`
+    SELECT "periodStart" AS ps, "periodEnd" AS pe,
+           COALESCE(SUM(amount),0)::float AS total
+    FROM "CategorySales"
+    WHERE "branchId" = ${branchId}
+      AND "periodEnd"   >= ${range.start}
+      AND "periodStart" <= ${range.end}
+    GROUP BY "periodStart", "periodEnd"
+  `;
+  const dayMs = 86_400_000;
+  const actualMap = new Map<string, number>();
+  for (const r of salesRanges) {
+    const total = Number(r.total) || 0;
+    if (total === 0) continue;
+    const ps = r.ps.getTime();
+    const pe = r.pe.getTime();
+    const lenDays = Math.round((pe - ps) / dayMs) + 1;
+    const perDay = total / lenDays;
+    const s = Math.max(ps, range.start.getTime());
+    const e = Math.min(pe, range.end.getTime());
+    for (let t = s; t <= e; t += dayMs) {
+      const iso = isoDay(new Date(t));
+      actualMap.set(iso, (actualMap.get(iso) ?? 0) + perDay);
+    }
+  }
+
+  // 3. Davrning har bir kuni uchun qator yasash
+  const out: DailyPlanVsActualRow[] = [];
+  for (let t = range.start.getTime(); t <= range.end.getTime(); t += dayMs) {
+    const iso = isoDay(new Date(t));
+    const plan = planMap.get(iso) ?? 0;
+    const actual = actualMap.has(iso) ? Math.round(actualMap.get(iso)! * 100) / 100 : null;
+    out.push({ date: iso, plan, actual });
+  }
+  return out;
+}
+
+export const dailyPlanVsActual = (range: DateRange, branchId: number) =>
+  unstable_cache(
+    () => _dailyPlanVsActual(range, branchId),
+    ["dailyPlanVsActual", ...makeKey(range, branchId)],
+    { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
+  )();
+
 /** Mavjud ma'lumot davri (default range hisoblash uchun). */
 async function _getDefaultRange(): Promise<DateRange> {
   const [lastSale, lastMetric, lastVisit] = await Promise.all([
