@@ -16,6 +16,7 @@ const SOURCE_LABEL: Record<string, string> = {
   SALES: "Sotuv (Склад)",
   VISITS: "Tashriflar (Filial)",
   SR: "Cheklar (sr)",
+  PLANS: "Reja (sheet nomi)",
 };
 
 const getBranches = unstable_cache(
