@@ -108,7 +108,7 @@ export function PlanCompletionWidget({ data }: { data: PlanCompletionStats }) {
             <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
               Kategoriyalar ({sortedCats.length})
             </div>
-            <div className="grid grid-cols-2 gap-1.5 max-h-56 overflow-y-auto pr-1">
+            <div className="grid grid-cols-2 gap-1.5">
               {sortedCats.map((c) => (
                 <MiniChip key={c.categoryId} name={c.categoryName} pct={c.pct} />
               ))}
