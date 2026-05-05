@@ -48,26 +48,22 @@ export function ReportTable({
       return next;
     });
 
-  // Jami
+  // Jami — sales va cost kategoriyalardan jamlanadi (ko'rinadigan kategoriyalar bilan kelishilgan)
   const total = rows.reduce(
-    (a, r) => ({
-      sales:    a.sales    + r.sales,
-      cost:     a.cost     + r.cost,
-      receipts: a.receipts + r.receipts,
-      visits:   a.visits   + r.visits,
-      plan:     a.plan     + r.plan,
-      // weighted avgItems
-      itemsSum: a.itemsSum + r.avgItemsPerReceipt * r.receipts,
-    }),
+    (a, r) => {
+      const catSales = r.categories.reduce((s, c) => s + c.sales, 0);
+      const catCost  = r.categories.reduce((s, c) => s + c.cost, 0);
+      return {
+        sales:    a.sales    + catSales,
+        cost:     a.cost     + catCost,
+        receipts: a.receipts + r.receipts,
+        visits:   a.visits   + r.visits,
+        plan:     a.plan     + r.plan,
+        // weighted avgItems
+        itemsSum: a.itemsSum + r.avgItemsPerReceipt * r.receipts,
+      };
+    },
     { sales: 0, cost: 0, receipts: 0, visits: 0, plan: 0, itemsSum: 0 }
-  );
-
-  // category-level totals for marja/planPct
-  const catTotal = rows.reduce(
-    (a, r) => ({
-      sales: a.sales + r.categories.reduce((s, c) => s + c.sales, 0),
-    }),
-    { sales: 0 }
   );
 
   const totalMarja   = hasCostAny && total.cost > 0
@@ -76,7 +72,7 @@ export function ReportTable({
   const totalAvg     = total.receipts > 0 ? total.sales / total.receipts : 0;
   const totalAvgItems = total.receipts > 0 ? total.itemsSum / total.receipts : 0;
   const totalConv    = total.visits > 0 ? (total.receipts / total.visits) * 100 : 0;
-  const totalPlanPct = total.plan > 0 ? (catTotal.sales / total.plan) * 100 : 0;
+  const totalPlanPct = total.plan > 0 ? (total.sales / total.plan) * 100 : 0;
 
   return (
     <div className="overflow-x-auto">
