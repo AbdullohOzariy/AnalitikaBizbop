@@ -10,7 +10,6 @@ import {
   Building2,
   Tag,
   Target,
-  Files,
   Users,
   LayoutDashboard,
   Menu,
@@ -38,8 +37,7 @@ const NAV: NavItem[] = [
   { href: "/branches", label: "Filiallar", icon: Building2 },
   { href: "/categories", label: "Kategoriyalar", icon: Tag },
   { href: "/report", label: "Hisobot", icon: Table2 },
-  { href: "/admin/upload", label: "Fayl yuklash", icon: Upload, adminOnly: true },
-  { href: "/admin/files", label: "Yuklangan fayllar", icon: Files, adminOnly: true },
+  { href: "/admin/upload", label: "Fayllar", icon: Upload, adminOnly: true },
   { href: "/admin/plans", label: "Normal Reja", icon: Target, adminOnly: true },
   { href: "/admin/users", label: "Foydalanuvchilar", icon: Users, adminOnly: true },
 ];

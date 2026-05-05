@@ -69,7 +69,6 @@ export function DailyComparisonView({
 
   const navigate = (changes: Record<string, string | undefined>) => {
     const p = new URLSearchParams(searchParams.toString());
-    p.set("tab", "daily");
     for (const [k, v] of Object.entries(changes)) {
       if (v == null || v === "") p.delete(k);
       else p.set(k, v);
