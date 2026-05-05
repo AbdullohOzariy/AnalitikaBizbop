@@ -24,14 +24,15 @@ export default async function PlansPage({
 
   const sp = await searchParams;
   const branches = await prisma.branch.findMany({ orderBy: { sortOrder: "asc" } });
-  const branchId = Number(sp.branchId) || branches[0]?.id;
+  const branchId =
+    sp.branchId === "all" || !sp.branchId ? undefined : Number(sp.branchId) || undefined;
 
   const defaultRange = await getDefaultRange();
   const range = {
     start: parseISO(sp.start, defaultRange.start),
     end: parseISO(sp.end, defaultRange.end),
   };
-  const rows = branchId ? await dailyPlanVsActual(range, branchId) : [];
+  const rows = await dailyPlanVsActual(range, branchId);
 
   return (
     <div className="space-y-6">
@@ -45,7 +46,7 @@ export default async function PlansPage({
 
       <DailyComparisonView
         branches={branches}
-        branchId={branchId}
+        branchId={branchId ?? null}
         start={range.start.toISOString().slice(0, 10)}
         end={range.end.toISOString().slice(0, 10)}
         rows={rows}

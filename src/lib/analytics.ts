@@ -762,14 +762,18 @@ export type DailyPlanVsActualRow = {
 
 async function _dailyPlanVsActual(
   range: DateRange,
-  branchId: number
+  branchId?: number
 ): Promise<DailyPlanVsActualRow[]> {
-  // 1. DailyPlan — har kun uchun jami (kategoriyalar yig'indisi)
+  const branchFilter = branchId
+    ? Prisma.sql`AND "branchId" = ${branchId}`
+    : Prisma.sql``;
+
+  // 1. DailyPlan — har kun uchun jami (filiallar va kategoriyalar yig'indisi)
   const planRows = await prisma.$queryRaw<{ d: Date; total: number | null }[]>`
     SELECT date AS d, COALESCE(SUM("planAmount"),0)::float AS total
     FROM "DailyPlan"
-    WHERE "branchId" = ${branchId}
-      AND date BETWEEN ${range.start} AND ${range.end}
+    WHERE date BETWEEN ${range.start} AND ${range.end}
+    ${branchFilter}
     GROUP BY date
   `;
   const planMap = new Map(planRows.map((r) => [isoDay(r.d), Number(r.total) ?? 0]));
@@ -779,9 +783,9 @@ async function _dailyPlanVsActual(
     SELECT "periodStart" AS ps, "periodEnd" AS pe,
            COALESCE(SUM(amount),0)::float AS total
     FROM "CategorySales"
-    WHERE "branchId" = ${branchId}
-      AND "periodEnd"   >= ${range.start}
+    WHERE "periodEnd"   >= ${range.start}
       AND "periodStart" <= ${range.end}
+    ${branchFilter}
     GROUP BY "periodStart", "periodEnd"
   `;
   const dayMs = 86_400_000;
@@ -812,7 +816,7 @@ async function _dailyPlanVsActual(
   return out;
 }
 
-export const dailyPlanVsActual = (range: DateRange, branchId: number) =>
+export const dailyPlanVsActual = (range: DateRange, branchId?: number) =>
   unstable_cache(
     () => _dailyPlanVsActual(range, branchId),
     ["dailyPlanVsActual", ...makeKey(range, branchId)],

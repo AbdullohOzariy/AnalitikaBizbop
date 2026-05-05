@@ -6,13 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Table,
   TableBody,
   TableCell,
@@ -20,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Building2 } from "lucide-react";
 import { formatUZS } from "@/lib/format";
 import type { DailyPlanVsActualRow } from "@/lib/analytics";
 
@@ -59,7 +52,7 @@ export function DailyComparisonView({
   rows,
 }: {
   branches: Branch[];
-  branchId: number;
+  branchId: number | null;
   start: string;
   end: string;
   rows: DailyPlanVsActualRow[];
@@ -97,27 +90,39 @@ export function DailyComparisonView({
   return (
     <div className="space-y-4">
       <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Filial</Label>
-              <Select
-                value={String(branchId)}
-                onValueChange={(v) => v && navigate({ branchId: v })}
+        <CardContent className="pt-6 space-y-4">
+          {/* Filial chiplari */}
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+              <Building2 className="h-3.5 w-3.5" /> Filial
+            </Label>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={branchId == null ? "default" : "outline"}
+                onClick={() => navigate({ branchId: undefined })}
+                className="h-8 rounded-full text-xs"
               >
-                <SelectTrigger className="h-9 w-48">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {branches.map((b) => (
-                    <SelectItem key={b.id} value={String(b.id)}>
-                      {b.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                Barcha filiallar
+              </Button>
+              {branches.map((b) => (
+                <Button
+                  key={b.id}
+                  type="button"
+                  size="sm"
+                  variant={branchId === b.id ? "default" : "outline"}
+                  onClick={() => navigate({ branchId: String(b.id) })}
+                  className="h-8 rounded-full text-xs"
+                >
+                  {b.name}
+                </Button>
+              ))}
             </div>
+          </div>
 
+          {/* Period */}
+          <div className="flex flex-wrap items-end gap-3 pt-2 border-t">
             <Button
               size="sm"
               variant="outline"
