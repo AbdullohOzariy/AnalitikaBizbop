@@ -294,7 +294,7 @@ function MarjaBaseWidget({ title, rows }: { title: React.ReactNode; rows: MarjaR
               <LabelList
                 dataKey="marja"
                 position="right"
-                formatter={(v: string | number | undefined) => v != null ? `${Number(v).toFixed(1)}%` : ""}
+                formatter={(v: string | number | null | undefined) => v != null ? `${Number(v).toFixed(1)}%` : ""}
                 style={{ fontSize: 11, fill: '#64748b', fontWeight: 500 }}
               />
             </Bar>
