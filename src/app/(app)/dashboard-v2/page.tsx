@@ -11,7 +11,6 @@ import {
   kpiByBranch,
 } from "@/lib/analytics-v2";
 import { FiltersBar } from "./filters";
-import { formatUZS } from "@/lib/format";
 import {
   PlanCompletionWidget,
   DailyByBranchWidget,
@@ -82,7 +81,7 @@ export default async function DashboardV2Page({
         <DailyByBranchWidget
           title="7. O'rtacha chek (kunlik)"
           data={filterByBranch(avgReceipt)}
-          valueFormatter={(v) => v === 0 ? "—" : formatUZS(v, { compact: true })}
+          format="uzs-compact"
         />
         <ConversionWidget rows={branchId ? kpi.filter((r) => r.branchId === branchId) : kpi} />
         <AvgItemsWidget rows={branchId ? kpi.filter((r) => r.branchId === branchId) : kpi} />
