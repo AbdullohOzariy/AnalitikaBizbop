@@ -13,8 +13,8 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatNumber } from "@/lib/format";
+import { ExpandableCard } from "@/components/ui/expandable-card";
 import type {
   PlanCompletionStats,
   DailyByBranchSeries,
