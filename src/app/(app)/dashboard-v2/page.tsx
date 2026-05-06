@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
@@ -25,6 +26,70 @@ function parseISO(s: string | undefined, fallback: Date): Date {
   return isNaN(d.getTime()) ? fallback : d;
 }
 
+function WidgetsSkeleton() {
+  return (
+    <div className="grid gap-4 md:grid-cols-2">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div
+          key={i}
+          className="rounded-2xl border border-border bg-card p-5 animate-pulse"
+          style={{ minHeight: i < 2 ? 320 : 280 }}
+        >
+          <div className="h-4 w-40 rounded bg-muted mb-4" />
+          <div className="space-y-2">
+            <div className="h-3 w-full rounded bg-muted" />
+            <div className="h-3 w-5/6 rounded bg-muted" />
+            <div className="h-3 w-4/6 rounded bg-muted" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+async function WidgetsSection({
+  startStr,
+  endStr,
+  branchId,
+}: {
+  startStr: string;
+  endStr: string;
+  branchId: number | undefined;
+}) {
+  const range = {
+    start: new Date(startStr + "T00:00:00.000Z"),
+    end: new Date(endStr + "T00:00:00.000Z"),
+  };
+
+  const [planStats, visits, receipts, avgReceipt, marja, kpi] = await Promise.all([
+    planCompletion(range, branchId),
+    dailyVisitsByBranch(range),
+    dailyReceiptsByBranch(range),
+    dailyAvgReceiptByBranch(range),
+    marjaBreakdown(range, branchId),
+    kpiByBranch(range),
+  ]);
+
+  const filterByBranch = (s: typeof visits) =>
+    branchId == null ? s : { ...s, branches: s.branches.filter((b) => b.id === branchId) };
+
+  return (
+    <div className="grid gap-4 md:grid-cols-2">
+      <PlanCompletionWidget data={planStats} />
+      <MarjaWidget byCategory={marja.byCategory} byBranch={marja.byBranch} />
+      <DailyByBranchWidget title="2. Tashriflar (kunlik)" data={filterByBranch(visits)} />
+      <DailyByBranchWidget title="3. Chek soni (kunlik)" data={filterByBranch(receipts)} />
+      <DailyByBranchWidget
+        title="7. O'rtacha chek (kunlik)"
+        data={filterByBranch(avgReceipt)}
+        format="uzs-compact"
+      />
+      <ConversionWidget rows={branchId ? kpi.filter((r) => r.branchId === branchId) : kpi} />
+      <AvgItemsWidget rows={branchId ? kpi.filter((r) => r.branchId === branchId) : kpi} />
+    </div>
+  );
+}
+
 export default async function DashboardV2Page({
   searchParams,
 }: {
@@ -39,23 +104,8 @@ export default async function DashboardV2Page({
     sp.branchId === "all" || !sp.branchId ? undefined : Number(sp.branchId) || undefined;
 
   const defaultRange = await getDefaultRange();
-  const range = {
-    start: parseISO(sp.start, defaultRange.start),
-    end: parseISO(sp.end, defaultRange.end),
-  };
-
-  const [planStats, visits, receipts, avgReceipt, marja, kpi] = await Promise.all([
-    planCompletion(range, branchId),
-    dailyVisitsByBranch(range),
-    dailyReceiptsByBranch(range),
-    dailyAvgReceiptByBranch(range),
-    marjaBreakdown(range, branchId),
-    kpiByBranch(range),
-  ]);
-
-  // Filial filtri "Barcha" bo'lmaganda 2/3-widget'lar uchun ham filtr — faqat shu filial chiziqlarini ko'rsatish
-  const filterByBranch = (s: typeof visits) =>
-    branchId == null ? s : { ...s, branches: s.branches.filter((b) => b.id === branchId) };
+  const startStr = parseISO(sp.start, defaultRange.start).toISOString().slice(0, 10);
+  const endStr = parseISO(sp.end, defaultRange.end).toISOString().slice(0, 10);
 
   return (
     <div className="space-y-5">
@@ -69,23 +119,13 @@ export default async function DashboardV2Page({
       <FiltersBar
         branches={branches}
         branchId={branchId ?? null}
-        start={range.start.toISOString().slice(0, 10)}
-        end={range.end.toISOString().slice(0, 10)}
+        start={startStr}
+        end={endStr}
       />
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <PlanCompletionWidget data={planStats} />
-        <MarjaWidget byCategory={marja.byCategory} byBranch={marja.byBranch} />
-        <DailyByBranchWidget title="2. Tashriflar (kunlik)" data={filterByBranch(visits)} />
-        <DailyByBranchWidget title="3. Chek soni (kunlik)" data={filterByBranch(receipts)} />
-        <DailyByBranchWidget
-          title="7. O'rtacha chek (kunlik)"
-          data={filterByBranch(avgReceipt)}
-          format="uzs-compact"
-        />
-        <ConversionWidget rows={branchId ? kpi.filter((r) => r.branchId === branchId) : kpi} />
-        <AvgItemsWidget rows={branchId ? kpi.filter((r) => r.branchId === branchId) : kpi} />
-      </div>
+      <Suspense fallback={<WidgetsSkeleton />}>
+        <WidgetsSection startStr={startStr} endStr={endStr} branchId={branchId} />
+      </Suspense>
     </div>
   );
 }
