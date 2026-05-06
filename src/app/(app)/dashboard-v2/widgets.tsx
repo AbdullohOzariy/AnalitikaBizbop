@@ -207,7 +207,7 @@ function MarjaInfoTooltip() {
         >
           <p className="font-semibold text-foreground mb-1">Marja hisoblash formulasi</p>
           <p className="font-mono text-[11px] text-muted-foreground">
-            (Sotuv − Tannarx) ÷ Tannarx × 100
+            (Sotuv − Tannarx) ÷ Sotuv × 100
           </p>
           <div className="mt-2 pt-2 border-t border-border/60 space-y-0.5 text-[11px] text-muted-foreground">
             <div className="flex justify-between">
