@@ -66,8 +66,8 @@ export function ReportTable({
     { sales: 0, cost: 0, receipts: 0, visits: 0, plan: 0, itemsSum: 0 }
   );
 
-  const totalMarja   = hasCostAny && total.cost > 0
-    ? ((total.sales - total.cost) / total.cost) * 100
+  const totalMarja   = hasCostAny && total.sales > 0
+    ? ((total.sales - total.cost) / total.sales) * 100
     : null;
   const totalAvg     = total.receipts > 0 ? total.sales / total.receipts : 0;
   const totalAvgItems = total.receipts > 0 ? total.itemsSum / total.receipts : 0;

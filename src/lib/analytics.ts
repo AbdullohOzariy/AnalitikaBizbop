@@ -321,7 +321,7 @@ async function _computeKPI(range: DateRange, branchId?: number): Promise<KPI> {
   const avgReceipt = totalReceipts > 0 ? totalReceiptSum / totalReceipts : 0;
   const conversion = totalVisits > 0 ? (totalReceipts / totalVisits) * 100 : 0;
   const totalCost = [...costMap.values()].reduce((a, b) => a + b, 0);
-  const marja = totalCost > 0 ? ((totalSales - totalCost) / totalCost) * 100 : null;
+  const marja = totalSales > 0 ? ((totalSales - totalCost) / totalSales) * 100 : null;
 
   return { totalSales, totalReceipts, totalVisits, avgReceipt, conversion, marja };
 }
@@ -468,7 +468,7 @@ async function _topCategories(
     const plan = planMap.get(c.id) ?? 0;
     const cost = costMap.get(c.id);
     const marja =
-      cost != null && cost > 0 ? ((fact - cost) / cost) * 100 : null;
+      cost != null && fact > 0 ? ((fact - cost) / fact) * 100 : null;
     return {
       categoryId: c.id,
       categoryName: c.name,
@@ -676,7 +676,7 @@ async function _branchReport(range: DateRange): Promise<BranchReportRow[]> {
     for (const v of catPlanMap.values())  plan          += v;
 
     const hasCost = cost > 0;
-    const marja   = hasCost ? ((categorySales - cost) / cost) * 100 : null;
+    const marja   = hasCost && categorySales > 0 ? ((categorySales - cost) / categorySales) * 100 : null;
 
     const m      = metricsMap.get(b.id) ?? { receipts: 0, receiptTotal: 0, avgItemsPerReceipt: 0 };
     const visits = visitsMap.get(b.id) ?? 0;
@@ -692,7 +692,7 @@ async function _branchReport(range: DateRange): Promise<BranchReportRow[]> {
         sales:   cSales,
         cost:    cCost,
         hasCost: cHasCost,
-        marja:   cHasCost ? ((cSales - cCost) / cCost) * 100 : null,
+        marja:   cHasCost && cSales > 0 ? ((cSales - cCost) / cSales) * 100 : null,
         plan:    cPlan,
         planPct: cPlan > 0 ? (cSales / cPlan) * 100 : 0,
       };

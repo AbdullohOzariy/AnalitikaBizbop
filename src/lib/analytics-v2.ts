@@ -335,7 +335,7 @@ async function _marjaBreakdown(range: DateRange, branchId?: number): Promise<{
       name: r.name,
       sales,
       cost,
-      marja: cost > 0 ? ((sales - cost) / cost) * 100 : null,
+      marja: sales > 0 ? ((sales - cost) / sales) * 100 : null,
     };
   };
   return {
