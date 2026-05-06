@@ -69,6 +69,39 @@ export function TrendIndicator({ value }: { value?: number | null }) {
   );
 }
 
+function CompareBadge({ value }: { value?: number | null }) {
+  if (value == null) {
+    return (
+      <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+        O'tgan period: baza yo'q
+      </span>
+    );
+  }
+  const isPositive = value > 0;
+  const isNegative = value < 0;
+  const color = isPositive
+    ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+    : isNegative
+    ? "bg-red-500/10 text-red-600 dark:text-red-400"
+    : "bg-muted text-muted-foreground";
+  const text = isPositive ? "o'sish" : isNegative ? "pasayish" : "o'zgarishsiz";
+
+  return (
+    <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${color}`}>
+      O'tgan periodga nisbatan {Math.abs(value).toFixed(1)}% {text}
+    </span>
+  );
+}
+
+function WidgetTitle({ title, trend }: { title: React.ReactNode; trend?: number | null }) {
+  return (
+    <span className="flex flex-wrap items-center gap-2">
+      <span>{title}</span>
+      <CompareBadge value={trend} />
+    </span>
+  );
+}
+
 // ============ 1. Plan Completion ============
 
 function MiniChip({ name, pct }: { name: string; pct: number | null }) {
@@ -149,11 +182,13 @@ export function DailyByBranchWidget({
   data,
   unit = "",
   format = "number",
+  trend,
 }: {
   title: string;
   data: DailyByBranchSeries;
   unit?: string;
   format?: "number" | "uzs-compact";
+  trend?: number | null;
 }) {
   const fmt =
     format === "uzs-compact"
@@ -164,7 +199,7 @@ export function DailyByBranchWidget({
     _label: shortDate(v.date as string),
   }));
   return (
-    <ExpandableCard title={title} className="rounded-2xl">
+    <ExpandableCard title={<WidgetTitle title={title} trend={trend} />} className="rounded-2xl">
       <ResponsiveContainer width="100%" height={300}>
         <LineChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -335,9 +370,20 @@ export function MarjaByCategoryWidget({ data }: { data: MarjaRow[] }) {
 
 // ============ 5 & 6. KPI by branch (cards) ============
 
-export function ConversionWidget({ rows }: { rows: KpiByBranchRow[] }) {
+type KpiByBranchTrendRow = KpiByBranchRow & {
+  conversionTrend?: number | null;
+  avgItemsTrend?: number | null;
+};
+
+export function ConversionWidget({
+  rows,
+  trend,
+}: {
+  rows: KpiByBranchTrendRow[];
+  trend?: number | null;
+}) {
   return (
-    <ExpandableCard title="5. Konversiya" className="rounded-2xl">
+    <ExpandableCard title={<WidgetTitle title="5. Konversiya" trend={trend} />} className="rounded-2xl">
       <div className="grid grid-cols-2 gap-3">
         {rows.map((r) => (
           <div key={r.branchId} className="rounded-xl bg-muted/40 p-3">
@@ -348,7 +394,7 @@ export function ConversionWidget({ rows }: { rows: KpiByBranchRow[] }) {
             <div className="text-xs text-muted-foreground mt-1">
               {formatNumber(r.receipts)} chek / {formatNumber(r.visits)} tashrif
             </div>
-            <TrendIndicator value={(r as any).trend} />
+            <TrendIndicator value={r.conversionTrend} />
           </div>
         ))}
       </div>
@@ -356,9 +402,15 @@ export function ConversionWidget({ rows }: { rows: KpiByBranchRow[] }) {
   );
 }
 
-export function AvgItemsWidget({ rows }: { rows: KpiByBranchRow[] }) {
+export function AvgItemsWidget({
+  rows,
+  trend,
+}: {
+  rows: KpiByBranchTrendRow[];
+  trend?: number | null;
+}) {
   return (
-    <ExpandableCard title="6. Chekdagi o'rt. tovar soni" className="rounded-2xl">
+    <ExpandableCard title={<WidgetTitle title="6. Chekdagi o'rt. tovar soni" trend={trend} />} className="rounded-2xl">
       <div className="grid grid-cols-2 gap-3">
         {rows.map((r) => (
           <div key={r.branchId} className="rounded-xl bg-muted/40 p-3">
@@ -369,7 +421,7 @@ export function AvgItemsWidget({ rows }: { rows: KpiByBranchRow[] }) {
             <div className="text-xs text-muted-foreground mt-1">
               {formatNumber(r.receipts)} chekdan
             </div>
-            <TrendIndicator value={(r as any).trend} />
+            <TrendIndicator value={r.avgItemsTrend} />
           </div>
         ))}
       </div>
