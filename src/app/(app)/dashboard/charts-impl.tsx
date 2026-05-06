@@ -41,7 +41,7 @@ const tooltipStyle = {
   fontFamily: "Sora, sans-serif",
 };
 
-const ChartGradients = () => (
+const CHART_GRADIENTS = (
   <defs>
     <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%" stopColor={BRAND_GREEN} stopOpacity={0.9} />
@@ -89,7 +89,7 @@ export function DailyDynamicsChart({
     <div className="h-72">
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-          <ChartGradients />
+          {CHART_GRADIENTS}
           <CartesianGrid strokeDasharray="4 4" stroke="#f1f5f9" vertical={false} />
           <XAxis dataKey="date" tickFormatter={shortDate} fontSize={12} fill={GRAY} tickLine={false} axisLine={false} tickMargin={12} fontFamily="Sora" />
           <YAxis
@@ -196,7 +196,7 @@ export function DailySalesChart({ sales }: { sales: { date: string; value: numbe
     <div className="h-72">
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={sales.map(r => ({ date: r.date, sales: r.value }))} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-          <ChartGradients />
+          {CHART_GRADIENTS}
           <CartesianGrid strokeDasharray="4 4" stroke="#f1f5f9" vertical={false} />
           <XAxis dataKey="date" tickFormatter={shortDate} fontSize={12} fill={GRAY} tickLine={false} axisLine={false} tickMargin={12} fontFamily="Sora" />
           <YAxis tickFormatter={(v) => formatUZS(v as number, { compact: true })} fontSize={12} fill={GRAY} tickLine={false} axisLine={false} tickMargin={12} fontFamily="Sora" />
@@ -214,7 +214,7 @@ export function DailyReceiptsChart({ receipts }: { receipts: { date: string; val
     <div className="h-64">
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={receipts.map(r => ({ date: r.date, receipts: r.value }))} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-          <ChartGradients />
+          {CHART_GRADIENTS}
           <CartesianGrid strokeDasharray="4 4" stroke="#f1f5f9" vertical={false} />
           <XAxis dataKey="date" tickFormatter={shortDate} fontSize={12} fill={GRAY} tickLine={false} axisLine={false} tickMargin={12} fontFamily="Sora" />
           <YAxis tickFormatter={(v) => formatNumber(v as number)} fontSize={12} fill={GRAY} tickLine={false} axisLine={false} tickMargin={12} fontFamily="Sora" />

@@ -134,7 +134,7 @@ function SidebarNav({
                     layoutId="nav-active"
                     className="absolute inset-0 bg-primary rounded-xl"
                     style={{ zIndex: -1 }}
-                    transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                    transition={{ duration: 0.2, ease: "easeOut" }}
                   />
                 )}
                 <Icon className={cn("h-4 w-4 shrink-0", active ? "opacity-100" : "opacity-70")} />

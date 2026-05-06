@@ -135,6 +135,7 @@ model DailyMetrics {
 
   @@unique([branchId, date])
   @@index([date])
+  @@index([branchId, date])
 }
 
 // export (1).xlsx — kunlik tashriflar (4 filialdan biri har qatorga).
@@ -150,6 +151,7 @@ model DailyVisits {
 
   @@unique([branchId, date])
   @@index([date])
+  @@index([branchId, date])
 }
 
 // Admin qo'lda kiritadigan oylik "Normal Reja" — filial × oy × kategoriya × summa.
@@ -168,6 +170,8 @@ model MonthlyPlan {
 
   @@unique([branchId, year, month, categoryId])
   @@index([year, month])
+  @@index([branchId, year, month])
+  @@index([categoryId, year, month])
 }
 
 // Kunlik reja — filial × sana × kategoriya × planAmount.
@@ -187,6 +191,7 @@ model DailyPlan {
   @@unique([branchId, categoryId, date])
   @@index([date])
   @@index([branchId, date])
+  @@index([branchId, categoryId, date])
 }
 
 // Yuklangan har bir fayl audit + dublikat oldini olish uchun saqlanadi.

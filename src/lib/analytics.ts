@@ -841,32 +841,30 @@ export const dailyPlanVsActual = (range: DateRange, branchId?: number) =>
   )();
 
 /** Mavjud ma'lumot davri (default range hisoblash uchun). */
-async function _getDefaultRange(): Promise<DateRange> {
-  const [lastSale, lastMetric, lastVisit] = await Promise.all([
-    prisma.categorySales.findFirst({
-      orderBy: { periodEnd: "desc" },
-      select: { periodEnd: true },
-    }),
-    prisma.dailyMetrics.findFirst({
-      orderBy: { date: "desc" },
-      select: { date: true },
-    }),
-    prisma.dailyVisits.findFirst({
-      orderBy: { date: "desc" },
-      select: { date: true },
-    }),
-  ]);
+// unstable_cache Date serialize qila olmaydi — ISO string sifatida cache qilamiz.
+const _cachedDefaultRange = unstable_cache(
+  async (): Promise<{ start: string; end: string }> => {
+    const [lastSale, lastMetric, lastVisit] = await Promise.all([
+      prisma.categorySales.findFirst({ orderBy: { periodEnd: "desc" }, select: { periodEnd: true } }),
+      prisma.dailyMetrics.findFirst({ orderBy: { date: "desc" }, select: { date: true } }),
+      prisma.dailyVisits.findFirst({ orderBy: { date: "desc" }, select: { date: true } }),
+    ]);
+    const candidates = [lastSale?.periodEnd, lastMetric?.date, lastVisit?.date].filter(Boolean) as Date[];
+    if (candidates.length === 0) {
+      const now = new Date();
+      return { start: isoDay(startOfMonth(now)), end: isoDay(endOfMonth(now)) };
+    }
+    const ref = new Date(Math.max(...candidates.map((d) => d.getTime())));
+    return { start: isoDay(startOfMonth(ref)), end: isoDay(endOfMonth(ref)) };
+  },
+  ["defaultRange"],
+  { tags: [ANALYTICS_CACHE_TAG], revalidate: 3600 }
+);
 
-  const candidates = [lastSale?.periodEnd, lastMetric?.date, lastVisit?.date]
-    .filter(Boolean) as Date[];
-  if (candidates.length === 0) {
-    const now = new Date();
-    return { start: startOfMonth(now), end: endOfMonth(now) };
-  }
-  const ref = new Date(Math.max(...candidates.map((d) => d.getTime())));
-  return { start: startOfMonth(ref), end: endOfMonth(ref) };
+export async function getDefaultRange(): Promise<DateRange> {
+  const { start, end } = await _cachedDefaultRange();
+  return {
+    start: new Date(start + "T00:00:00.000Z"),
+    end:   new Date(end   + "T00:00:00.000Z"),
+  };
 }
-
-// Date objects do not survive JSON serialization inside unstable_cache,
-// so this runs uncached. The 3 findFirst queries are negligible.
-export const getDefaultRange = _getDefaultRange;
