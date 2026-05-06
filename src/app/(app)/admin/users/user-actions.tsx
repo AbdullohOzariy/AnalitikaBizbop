@@ -27,7 +27,7 @@ export function UserActions({
   name,
   isSelf,
 }: {
-  id: string;
+  id: number;
   name: string;
   role: string;
   isSelf: boolean;

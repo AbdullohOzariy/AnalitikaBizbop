@@ -66,7 +66,7 @@ export default async function UsersPage() {
                         id={u.id}
                         name={u.name}
                         role={u.role}
-                        isSelf={u.id === session.user.id}
+                        isSelf={String(u.id) === session.user.id}
                       />
                     </TableCell>
                   </TableRow>
