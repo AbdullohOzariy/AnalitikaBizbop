@@ -78,51 +78,46 @@ export function PlanCompletionWidget({ data }: { data: PlanCompletionStats }) {
   const sortedBranches = [...byBranch].sort((a, b) => (b.pct ?? -1) - (a.pct ?? -1));
 
   return (
-    <Card className="rounded-2xl">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base">1. Reja bajarilishi</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex items-baseline gap-3">
-          <div className={`text-4xl font-bold tabular-nums ${pctColor(overall.pct)}`}>
-            {fmtPct(overall.pct)}
-          </div>
-          <div className="text-xs text-muted-foreground">umumiy</div>
+    <ExpandableCard title="1. Reja bajarilishi" className="rounded-2xl" headerClassName="pb-3" contentClassName="space-y-4">
+      <div className="flex items-baseline gap-3">
+        <div className={`text-4xl font-bold tabular-nums ${pctColor(overall.pct)}`}>
+          {fmtPct(overall.pct)}
         </div>
+        <div className="text-xs text-muted-foreground">umumiy</div>
+      </div>
 
-        {sortedBranches.length > 0 && (
-          <div className="space-y-1.5">
-            <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-              Filiallar
-            </div>
-            <div className="grid grid-cols-2 gap-1.5">
-              {sortedBranches.map((b) => (
-                <MiniChip key={b.branchId} name={b.branchName} pct={b.pct} />
-              ))}
-            </div>
+      {sortedBranches.length > 0 && (
+        <div className="space-y-1.5">
+          <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+            Filiallar
           </div>
-        )}
-
-        {sortedCats.length > 0 && (
-          <div className="space-y-1.5">
-            <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-              Kategoriyalar ({sortedCats.length})
-            </div>
-            <div className="grid grid-cols-2 gap-1.5">
-              {sortedCats.map((c) => (
-                <MiniChip key={c.categoryId} name={c.categoryName} pct={c.pct} />
-              ))}
-            </div>
+          <div className="grid grid-cols-2 gap-1.5">
+            {sortedBranches.map((b) => (
+              <MiniChip key={b.branchId} name={b.branchName} pct={b.pct} />
+            ))}
           </div>
-        )}
+        </div>
+      )}
 
-        {sortedCats.length === 0 && sortedBranches.length === 0 && (
-          <p className="text-sm text-muted-foreground italic text-center py-4">
-            Reja yoki sotuv ma'lumoti yo'q
-          </p>
-        )}
-      </CardContent>
-    </Card>
+      {sortedCats.length > 0 && (
+        <div className="space-y-1.5">
+          <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+            Kategoriyalar ({sortedCats.length})
+          </div>
+          <div className="grid grid-cols-2 gap-1.5">
+            {sortedCats.map((c) => (
+              <MiniChip key={c.categoryId} name={c.categoryName} pct={c.pct} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {sortedCats.length === 0 && sortedBranches.length === 0 && (
+        <p className="text-sm text-muted-foreground italic text-center py-4">
+          Reja yoki sotuv ma&apos;lumoti yo&apos;q
+        </p>
+      )}
+    </ExpandableCard>
   );
 }
 
