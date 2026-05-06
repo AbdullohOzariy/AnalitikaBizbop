@@ -202,26 +202,63 @@ async function KpiSection({
 
 async function ChartsSection({
   startStr, endStr, branchId,
+  compare, cstart, cend,
 }: {
   startStr: string; endStr: string; branchId?: number;
+  compare?: string; cstart?: string; cend?: string;
 }) {
   const start = new Date(startStr + "T00:00:00.000Z");
   const end   = new Date(endStr   + "T00:00:00.000Z");
   const range = { start, end };
+  const compareMode = compare === "none" ? undefined : compare ?? "mom";
+  const compareRange = compareMode ? getCompareRange(range, compareMode, cstart, cend) : null;
+  const compareLabel = compareMode ? getCompareLabel(compareMode) : "";
 
-  const [dailySales, dailyReceipts, share, top, perf] = await Promise.all([
+  const [
+    dailySales,
+    dailyReceipts,
+    share,
+    top,
+    perf,
+    prevDailySales,
+    prevDailyReceipts,
+    prevShare,
+    prevTop,
+    prevPerf,
+  ] = await Promise.all([
     dailySalesSeries(range, branchId),
     dailyReceiptsSeries(range, branchId),
     branchShare(range),
     topCategories(range, branchId, 18),
     branchPerformance(range),
+    compareRange ? dailySalesSeries(compareRange, branchId) : Promise.resolve(null),
+    compareRange ? dailyReceiptsSeries(compareRange, branchId) : Promise.resolve(null),
+    compareRange ? branchShare(compareRange) : Promise.resolve(null),
+    compareRange ? topCategories(compareRange, branchId, 18) : Promise.resolve(null),
+    compareRange ? branchPerformance(compareRange) : Promise.resolve(null),
   ]);
+
+  const sumValues = (rows: { value: number }[] | null) =>
+    rows?.reduce((sum, r) => sum + r.value, 0) ?? null;
+  const sumSales = (rows: { sales: number }[] | null) =>
+    rows?.reduce((sum, r) => sum + r.sales, 0) ?? null;
+  const sumFacts = (rows: { fact: number }[] | null) =>
+    rows?.reduce((sum, r) => sum + r.fact, 0) ?? null;
 
   return (
     <div className="space-y-4 sm:space-y-6">
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         <ExpandableCard
-          title="Kunlik Savdo Dinamikasi"
+          title={
+            <ChartTitle
+              title="Kunlik Savdo Dinamikasi"
+              delta={calcDelta(
+                dailySales.reduce((sum, r) => sum + r.value, 0),
+                sumValues(prevDailySales) ?? 0
+              )}
+              compareLabel={compareLabel}
+            />
+          }
           className="xl:col-span-2 rounded-2xl border-none shadow-sm bg-card overflow-hidden"
           headerClassName={`${CARD_PT} ${CARD_PAD} pb-3`}
           contentClassName={`${CARD_PAD} ${CARD_PB}`}
@@ -230,7 +267,16 @@ async function ChartsSection({
         </ExpandableCard>
 
         <ExpandableCard
-          title="Filiallar Ulushi"
+          title={
+            <ChartTitle
+              title="Filiallar Ulushi"
+              delta={calcDelta(
+                share.reduce((sum, r) => sum + r.sales, 0),
+                sumSales(prevShare) ?? 0
+              )}
+              compareLabel={compareLabel}
+            />
+          }
           className="rounded-2xl border-none shadow-sm bg-card overflow-hidden"
           headerClassName={`${CARD_PT} ${CARD_PAD} pb-3`}
           contentClassName={`${CARD_PAD} ${CARD_PB}`}
@@ -240,7 +286,16 @@ async function ChartsSection({
       </div>
 
       <ExpandableCard
-        title="Kunlik Chek Soni Dinamikasi"
+        title={
+          <ChartTitle
+            title="Kunlik Chek Soni Dinamikasi"
+            delta={calcDelta(
+              dailyReceipts.reduce((sum, r) => sum + r.value, 0),
+              sumValues(prevDailyReceipts) ?? 0
+            )}
+            compareLabel={compareLabel}
+          />
+        }
         className="rounded-2xl border-none shadow-sm bg-card overflow-hidden"
         headerClassName={`${CARD_PT} ${CARD_PAD} pb-3`}
         contentClassName={`${CARD_PAD} ${CARD_PB}`}
@@ -249,7 +304,16 @@ async function ChartsSection({
       </ExpandableCard>
 
       <ExpandableCard
-        title="Top Kategoriyalar — Fakt vs Reja"
+        title={
+          <ChartTitle
+            title="Top Kategoriyalar — Fakt vs Reja"
+            delta={calcDelta(
+              top.reduce((sum, r) => sum + r.fact, 0),
+              sumFacts(prevTop) ?? 0
+            )}
+            compareLabel={compareLabel}
+          />
+        }
         className="rounded-2xl border-none shadow-sm bg-card overflow-hidden"
         headerClassName={`${CARD_PT} ${CARD_PAD} pb-3`}
         contentClassName={`${CARD_PAD} ${CARD_PB}`}
@@ -258,7 +322,16 @@ async function ChartsSection({
       </ExpandableCard>
 
       <ExpandableCard
-        title="Filiallar Faoliyati"
+        title={
+          <ChartTitle
+            title="Filiallar Faoliyati"
+            delta={calcDelta(
+              perf.reduce((sum, r) => sum + r.sales, 0),
+              sumSales(prevPerf) ?? 0
+            )}
+            compareLabel={compareLabel}
+          />
+        }
         className="rounded-2xl border-none shadow-sm bg-card overflow-hidden"
         headerClassName={`${CARD_PT} ${CARD_PAD} pb-3`}
         contentClassName="p-0"
@@ -377,9 +450,68 @@ export default async function DashboardPage({
 
       {/* Grafiklar + jadval — sekin, alohida stream */}
       <Suspense fallback={<ChartsSkeleton />}>
-        <ChartsSection startStr={startStr} endStr={endStr} branchId={branchId} />
+        <ChartsSection
+          startStr={startStr}
+          endStr={endStr}
+          branchId={branchId}
+          compare={sp.compare}
+          cstart={sp.cstart}
+          cend={sp.cend}
+        />
       </Suspense>
     </div>
+  );
+}
+
+function ChartTitle({
+  title,
+  delta,
+  compareLabel,
+}: {
+  title: string;
+  delta: number | null;
+  compareLabel: string;
+}) {
+  return (
+    <span className="flex flex-wrap items-center gap-2">
+      <span>{title}</span>
+      {compareLabel && (
+        <CompareBadge delta={delta} compareLabel={compareLabel} />
+      )}
+    </span>
+  );
+}
+
+function CompareBadge({
+  delta,
+  compareLabel,
+}: {
+  delta: number | null;
+  compareLabel: string;
+}) {
+  if (delta == null) {
+    return (
+      <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+        {compareLabel}: baza yo'q
+      </span>
+    );
+  }
+
+  const growth = delta > 0;
+  const decline = delta < 0;
+  return (
+    <span
+      className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+        growth
+          ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+          : decline
+          ? "bg-red-500/10 text-red-600 dark:text-red-400"
+          : "bg-muted text-muted-foreground"
+      }`}
+    >
+      {compareLabel}ga nisbatan {Math.abs(delta).toFixed(1)}%{" "}
+      {growth ? "o'sish" : decline ? "pasayish" : "o'zgarishsiz"}
+    </span>
   );
 }
 
