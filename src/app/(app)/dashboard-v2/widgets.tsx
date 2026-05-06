@@ -13,8 +13,9 @@ import {
   Legend,
   ResponsiveContainer,
   Cell,
+  LabelList,
 } from "recharts";
-import { Info } from "lucide-react";
+import { Info, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { formatNumber, formatUZS } from "@/lib/format";
 import { ExpandableCard } from "@/components/ui/expandable-card";
 import type {
@@ -49,6 +50,24 @@ const tooltipStyle = {
   boxShadow: "0 8px 24px -8px rgba(0,0,0,0.08)",
   fontSize: "13px",
 };
+
+export function TrendIndicator({ value }: { value?: number | null }) {
+  if (value == null) return null;
+  const isPositive = value > 0;
+  const isNegative = value < 0;
+  const Icon = isPositive ? TrendingUp : isNegative ? TrendingDown : Minus;
+  const color = isPositive ? "text-emerald-500" : isNegative ? "text-red-500" : "text-muted-foreground";
+  const absValue = Math.abs(value);
+  const formatted = absValue % 1 === 0 ? absValue.toString() : absValue.toFixed(1);
+  const text = isPositive ? `${formatted}% oshdi` : isNegative ? `${formatted}% tushdi` : "O'zgarmadi";
+
+  return (
+    <div className={`flex items-center gap-1 text-[11px] font-medium mt-1.5 ${color}`} title="O'tgan davrga nisbatan">
+      <Icon className="h-3.5 w-3.5" />
+      <span>{text}</span>
+    </div>
+  );
+}
 
 // ============ 1. Plan Completion ============
 
@@ -212,19 +231,19 @@ function MarjaInfoTooltip() {
           <div className="mt-2 pt-2 border-t border-border/60 space-y-0.5 text-[11px] text-muted-foreground">
             <div className="flex justify-between">
               <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />≥ 30%
+                <span className="w-2 h-2 rounded-full bg-[#81b29a] inline-block" />≥ 30%
               </span>
               <span>Yaxshi</span>
             </div>
             <div className="flex justify-between">
               <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />15–30%
+                <span className="w-2 h-2 rounded-full bg-[#e4e4e7] inline-block" />15–30%
               </span>
               <span>O&apos;rtacha</span>
             </div>
             <div className="flex justify-between">
               <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-red-400 inline-block" />&lt; 15%
+                <span className="w-2 h-2 rounded-full bg-[#e07a5f] inline-block" />&lt; 15%
               </span>
               <span>Past</span>
             </div>
@@ -235,68 +254,82 @@ function MarjaInfoTooltip() {
   );
 }
 
-export function MarjaWidget({
-  byCategory,
-  byBranch,
-}: {
-  byCategory: MarjaRow[];
-  byBranch: MarjaRow[];
-}) {
-  const renderBars = (rows: MarjaRow[]) => {
-    if (rows.length === 0) {
-      return <p className="text-xs text-muted-foreground italic text-center py-2">Ma'lumot yo'q</p>;
-    }
-    const data = rows.map((r) => ({ name: r.name, marja: r.marja ?? 0, hasCost: r.cost > 0 }));
-    return (
-      <ResponsiveContainer width="100%" height={Math.max(180, rows.length * 28)}>
-        <BarChart data={data} layout="vertical" margin={{ top: 0, right: 30, left: 0, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" horizontal={false} />
-          <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(v) => `${v.toFixed(0)}%`} />
-          <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 11 }} />
-          <Tooltip
-            contentStyle={tooltipStyle}
-            formatter={(value) => [`${Number(value).toFixed(1)}%`, "Marja"]}
-          />
-          <Bar dataKey="marja" radius={[0, 4, 4, 0]}>
-            {data.map((d, i) => (
-              <Cell
-                key={i}
-                fill={
-                  !d.hasCost ? "#cbd5e1" :
-                  d.marja >= 30 ? "#10b981" :
-                  d.marja >= 15 ? "#facc15" :
-                  "#f87171"
-                }
-              />
-            ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
-    );
-  };
+function MarjaBaseWidget({ title, rows }: { title: React.ReactNode; rows: MarjaRow[] }) {
+  const sortedData = [...rows]
+    .sort((a, b) => (b.marja ?? -100) - (a.marja ?? -100))
+    .map((r) => ({ name: r.name, marja: r.marja ?? 0, hasCost: r.cost > 0 }));
 
-  const marjaTitle = (
-    <div className="flex items-center gap-2">
-      <span>4. Marja foizi</span>
-      <MarjaInfoTooltip />
-    </div>
-  );
+  if (sortedData.length === 0) {
+    return (
+      <ExpandableCard title={title} className="rounded-2xl shadow-[0_2px_12px_rgb(0,0,0,0.03)] border-border/50">
+        <p className="text-xs text-muted-foreground italic text-center py-6">Ma'lumot yo'q</p>
+      </ExpandableCard>
+    );
+  }
 
   return (
-    <ExpandableCard title={marjaTitle} className="rounded-2xl" contentClassName="space-y-4">
-      <div>
-        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-          Filiallar
-        </div>
-        {renderBars(byBranch)}
-      </div>
-      <div>
-        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-          Kategoriyalar
-        </div>
-        {renderBars(byCategory)}
+    <ExpandableCard title={title} className="rounded-2xl shadow-[0_2px_12px_rgb(0,0,0,0.03)] border-border/50">
+      <div className="pt-2">
+        <ResponsiveContainer width="100%" height={Math.max(160, sortedData.length * 36)}>
+          <BarChart data={sortedData} layout="vertical" margin={{ top: 0, right: 40, left: 0, bottom: 0 }} barSize={10}>
+            <XAxis type="number" hide />
+            <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+            <Tooltip
+              contentStyle={tooltipStyle}
+              cursor={{ fill: 'transparent' }}
+              formatter={(value) => [`${Number(value).toFixed(1)}%`, "Marja"]}
+            />
+            <Bar dataKey="marja" radius={4}>
+              {sortedData.map((d, i) => (
+                <Cell
+                  key={i}
+                  fill={
+                    !d.hasCost ? "#f1f5f9" :
+                    d.marja >= 30 ? "#81b29a" :
+                    d.marja >= 15 ? "#e4e4e7" :
+                    "#e07a5f"
+                  }
+                />
+              ))}
+              <LabelList
+                dataKey="marja"
+                position="right"
+                formatter={(v: number) => `${v.toFixed(1)}%`}
+                style={{ fontSize: 11, fill: '#64748b', fontWeight: 500 }}
+              />
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
       </div>
     </ExpandableCard>
+  );
+}
+
+export function MarjaByBranchWidget({ data }: { data: MarjaRow[] }) {
+  return (
+    <MarjaBaseWidget
+      title={
+        <div className="flex items-center gap-2">
+          <span>Marja foizi: Filiallar</span>
+          <MarjaInfoTooltip />
+        </div>
+      }
+      rows={data}
+    />
+  );
+}
+
+export function MarjaByCategoryWidget({ data }: { data: MarjaRow[] }) {
+  return (
+    <MarjaBaseWidget
+      title={
+        <div className="flex items-center gap-2">
+          <span>Marja foizi: Kategoriyalar</span>
+          <MarjaInfoTooltip />
+        </div>
+      }
+      rows={data}
+    />
   );
 }
 
@@ -315,6 +348,7 @@ export function ConversionWidget({ rows }: { rows: KpiByBranchRow[] }) {
             <div className="text-xs text-muted-foreground mt-1">
               {formatNumber(r.receipts)} chek / {formatNumber(r.visits)} tashrif
             </div>
+            <TrendIndicator value={(r as any).trend} />
           </div>
         ))}
       </div>
@@ -335,6 +369,7 @@ export function AvgItemsWidget({ rows }: { rows: KpiByBranchRow[] }) {
             <div className="text-xs text-muted-foreground mt-1">
               {formatNumber(r.receipts)} chekdan
             </div>
+            <TrendIndicator value={(r as any).trend} />
           </div>
         ))}
       </div>

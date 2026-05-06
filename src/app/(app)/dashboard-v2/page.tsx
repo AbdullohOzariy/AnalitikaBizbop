@@ -15,7 +15,8 @@ import { FiltersBar } from "./filters";
 import {
   PlanCompletionWidget,
   DailyByBranchWidget,
-  MarjaWidget,
+  MarjaByBranchWidget,
+  MarjaByCategoryWidget,
   ConversionWidget,
   AvgItemsWidget,
 } from "./widgets";
@@ -76,7 +77,8 @@ async function WidgetsSection({
   return (
     <div className="grid gap-4 md:grid-cols-2">
       <PlanCompletionWidget data={planStats} />
-      <MarjaWidget byCategory={marja.byCategory} byBranch={marja.byBranch} />
+      <MarjaByBranchWidget data={marja.byBranch} />
+      <MarjaByCategoryWidget data={marja.byCategory} />
       <DailyByBranchWidget title="2. Tashriflar (kunlik)" data={filterByBranch(visits)} />
       <DailyByBranchWidget title="3. Chek soni (kunlik)" data={filterByBranch(receipts)} />
       <DailyByBranchWidget
