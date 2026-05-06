@@ -11,6 +11,7 @@ import {
 } from "@/lib/analytics";
 import { formatUZS, formatNumber, formatPercent } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ExpandableCard } from "@/components/ui/expandable-card";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -219,104 +220,104 @@ export default async function DashboardPage({
       <FadeIn className="space-y-4 sm:space-y-6">
         {/* ── Kunlik savdo (2/3) + Filiallar ulushi (1/3) ── */}
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-          <Card className="xl:col-span-2 rounded-2xl border-none shadow-sm bg-card overflow-hidden">
-            <CardHeader className={`${CARD_PT} ${CARD_PAD} pb-3`}>
-              <CardTitle className="text-base font-semibold">Kunlik Savdo Dinamikasi</CardTitle>
-            </CardHeader>
-            <CardContent className={`${CARD_PAD} ${CARD_PB}`}>
-              <DailySalesChart sales={dailySales} />
-            </CardContent>
-          </Card>
+          <ExpandableCard
+            title="Kunlik Savdo Dinamikasi"
+            className="xl:col-span-2 rounded-2xl border-none shadow-sm bg-card overflow-hidden"
+            headerClassName={`${CARD_PT} ${CARD_PAD} pb-3`}
+            contentClassName={`${CARD_PAD} ${CARD_PB}`}
+          >
+            <DailySalesChart sales={dailySales} />
+          </ExpandableCard>
 
-          <Card className="rounded-2xl border-none shadow-sm bg-card overflow-hidden">
-            <CardHeader className={`${CARD_PT} ${CARD_PAD} pb-3`}>
-              <CardTitle className="text-base font-semibold">Filiallar Ulushi</CardTitle>
-            </CardHeader>
-            <CardContent className={`${CARD_PAD} ${CARD_PB}`}>
-              <BranchShareChart data={share} />
-            </CardContent>
-          </Card>
+          <ExpandableCard
+            title="Filiallar Ulushi"
+            className="rounded-2xl border-none shadow-sm bg-card overflow-hidden"
+            headerClassName={`${CARD_PT} ${CARD_PAD} pb-3`}
+            contentClassName={`${CARD_PAD} ${CARD_PB}`}
+          >
+            <BranchShareChart data={share} />
+          </ExpandableCard>
         </div>
 
         {/* ── Kunlik chek soni ── */}
-        <Card className="rounded-2xl border-none shadow-sm bg-card overflow-hidden">
-          <CardHeader className={`${CARD_PT} ${CARD_PAD} pb-3`}>
-            <CardTitle className="text-base font-semibold">Kunlik Chek Soni Dinamikasi</CardTitle>
-          </CardHeader>
-          <CardContent className={`${CARD_PAD} ${CARD_PB}`}>
-            <DailyReceiptsChart receipts={dailyReceipts} />
-          </CardContent>
-        </Card>
+        <ExpandableCard
+          title="Kunlik Chek Soni Dinamikasi"
+          className="rounded-2xl border-none shadow-sm bg-card overflow-hidden"
+          headerClassName={`${CARD_PT} ${CARD_PAD} pb-3`}
+          contentClassName={`${CARD_PAD} ${CARD_PB}`}
+        >
+          <DailyReceiptsChart receipts={dailyReceipts} />
+        </ExpandableCard>
 
         {/* ── Top kategoriyalar ── */}
-        <Card className="rounded-2xl border-none shadow-sm bg-card overflow-hidden">
-          <CardHeader className={`${CARD_PT} ${CARD_PAD} pb-3`}>
-            <CardTitle className="text-base font-semibold">Top Kategoriyalar — Fakt vs Reja</CardTitle>
-          </CardHeader>
-          <CardContent className={`${CARD_PAD} ${CARD_PB}`}>
-            <TopCategoriesChart data={top} />
-          </CardContent>
-        </Card>
+        <ExpandableCard
+          title="Top Kategoriyalar — Fakt vs Reja"
+          className="rounded-2xl border-none shadow-sm bg-card overflow-hidden"
+          headerClassName={`${CARD_PT} ${CARD_PAD} pb-3`}
+          contentClassName={`${CARD_PAD} ${CARD_PB}`}
+        >
+          <TopCategoriesChart data={top} />
+        </ExpandableCard>
 
         {/* ── Filiallar faoliyati ── */}
-        <Card className="rounded-2xl border-none shadow-sm bg-card overflow-hidden">
-          <CardHeader className={`${CARD_PT} ${CARD_PAD} pb-3`}>
-            <CardTitle className="text-base font-semibold">Filiallar Faoliyati</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <Table className="min-w-[700px]">
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent border-b border-border/60">
-                    <TableHead className={`${CARD_PAD} text-xs font-medium text-muted-foreground`}>Filial</TableHead>
-                    <TableHead className="text-xs font-medium text-muted-foreground text-right">Savdo</TableHead>
-                    <TableHead className="text-xs font-medium text-muted-foreground text-right">Tashriflar</TableHead>
-                    <TableHead className="text-xs font-medium text-muted-foreground text-right">Cheklar</TableHead>
-                    <TableHead className="text-xs font-medium text-muted-foreground text-right">O&apos;rt. chek</TableHead>
-                    <TableHead className="text-xs font-medium text-muted-foreground text-right">Reja</TableHead>
-                    <TableHead className="text-xs font-medium text-muted-foreground text-right">Reja %</TableHead>
-                    <TableHead className={`${CARD_PAD} text-xs font-medium text-muted-foreground text-right`}>Konversiya</TableHead>
+        <ExpandableCard
+          title="Filiallar Faoliyati"
+          className="rounded-2xl border-none shadow-sm bg-card overflow-hidden"
+          headerClassName={`${CARD_PT} ${CARD_PAD} pb-3`}
+          contentClassName="p-0"
+        >
+          <div className="overflow-x-auto">
+            <Table className="min-w-[700px]">
+              <TableHeader>
+                <TableRow className="hover:bg-transparent border-b border-border/60">
+                  <TableHead className={`${CARD_PAD} text-xs font-medium text-muted-foreground`}>Filial</TableHead>
+                  <TableHead className="text-xs font-medium text-muted-foreground text-right">Savdo</TableHead>
+                  <TableHead className="text-xs font-medium text-muted-foreground text-right">Tashriflar</TableHead>
+                  <TableHead className="text-xs font-medium text-muted-foreground text-right">Cheklar</TableHead>
+                  <TableHead className="text-xs font-medium text-muted-foreground text-right">O&apos;rt. chek</TableHead>
+                  <TableHead className="text-xs font-medium text-muted-foreground text-right">Reja</TableHead>
+                  <TableHead className="text-xs font-medium text-muted-foreground text-right">Reja %</TableHead>
+                  <TableHead className={`${CARD_PAD} text-xs font-medium text-muted-foreground text-right`}>Konversiya</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {perf.map((r) => (
+                  <TableRow key={r.branchId}
+                    className="hover:bg-muted/40 transition-colors border-b border-border/30 last:border-0">
+                    <TableCell className={`${CARD_PAD} py-3`}>
+                      <Link
+                        href={{ pathname: `/branches/${r.branchId}`, query: { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) } }}
+                        className="inline-flex items-center gap-1.5 text-sm font-medium hover:text-primary transition-colors group"
+                      >
+                        {r.branchName}
+                        <ArrowRight className="h-3 w-3 opacity-0 group-hover:opacity-60 group-hover:translate-x-0.5 transition-all" />
+                      </Link>
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums text-sm">{formatUZS(r.sales, { compact: true })}</TableCell>
+                    <TableCell className="text-right tabular-nums text-sm">{formatNumber(r.visits)}</TableCell>
+                    <TableCell className="text-right tabular-nums text-sm">{formatNumber(r.receipts)}</TableCell>
+                    <TableCell className="text-right tabular-nums text-sm">{formatUZS(r.avgReceipt, { compact: true })}</TableCell>
+                    <TableCell className="text-right tabular-nums text-sm text-muted-foreground">{r.plan > 0 ? formatUZS(r.plan, { compact: true }) : "—"}</TableCell>
+                    <TableCell className="text-right">
+                      {r.plan > 0 ? (
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
+                          r.planPercent >= 1
+                            ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                            : "bg-red-500/10 text-red-600 dark:text-red-400"
+                        }`}>
+                          {formatPercent(r.planPercent)}
+                        </span>
+                      ) : <span className="text-muted-foreground text-sm">—</span>}
+                    </TableCell>
+                    <TableCell className={`${CARD_PAD} text-right tabular-nums text-sm text-muted-foreground`}>
+                      {formatPercent(r.conversion)}
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {perf.map((r) => (
-                    <TableRow key={r.branchId}
-                      className="hover:bg-muted/40 transition-colors border-b border-border/30 last:border-0">
-                      <TableCell className={`${CARD_PAD} py-3`}>
-                        <Link
-                          href={{ pathname: `/branches/${r.branchId}`, query: { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) } }}
-                          className="inline-flex items-center gap-1.5 text-sm font-medium hover:text-primary transition-colors group"
-                        >
-                          {r.branchName}
-                          <ArrowRight className="h-3 w-3 opacity-0 group-hover:opacity-60 group-hover:translate-x-0.5 transition-all" />
-                        </Link>
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums text-sm">{formatUZS(r.sales, { compact: true })}</TableCell>
-                      <TableCell className="text-right tabular-nums text-sm">{formatNumber(r.visits)}</TableCell>
-                      <TableCell className="text-right tabular-nums text-sm">{formatNumber(r.receipts)}</TableCell>
-                      <TableCell className="text-right tabular-nums text-sm">{formatUZS(r.avgReceipt, { compact: true })}</TableCell>
-                      <TableCell className="text-right tabular-nums text-sm text-muted-foreground">{r.plan > 0 ? formatUZS(r.plan, { compact: true }) : "—"}</TableCell>
-                      <TableCell className="text-right">
-                        {r.plan > 0 ? (
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
-                            r.planPercent >= 1
-                              ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-                              : "bg-red-500/10 text-red-600 dark:text-red-400"
-                          }`}>
-                            {formatPercent(r.planPercent)}
-                          </span>
-                        ) : <span className="text-muted-foreground text-sm">—</span>}
-                      </TableCell>
-                      <TableCell className={`${CARD_PAD} text-right tabular-nums text-sm text-muted-foreground`}>
-                        {formatPercent(r.conversion)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </ExpandableCard>
       </FadeIn>
     </div>
   );

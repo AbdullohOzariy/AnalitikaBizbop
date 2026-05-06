@@ -209,25 +209,20 @@ export function MarjaWidget({
   };
 
   return (
-    <Card className="rounded-2xl">
-      <CardHeader>
-        <CardTitle className="text-base">4. Marja foizi</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div>
-          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-            Filiallar
-          </div>
-          {renderBars(byBranch)}
+    <ExpandableCard title="4. Marja foizi" className="rounded-2xl" contentClassName="space-y-4">
+      <div>
+        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+          Filiallar
         </div>
-        <div>
-          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-            Kategoriyalar
-          </div>
-          {renderBars(byCategory)}
+        {renderBars(byBranch)}
+      </div>
+      <div>
+        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+          Kategoriyalar
         </div>
-      </CardContent>
-    </Card>
+        {renderBars(byCategory)}
+      </div>
+    </ExpandableCard>
   );
 }
 
@@ -235,50 +230,40 @@ export function MarjaWidget({
 
 export function ConversionWidget({ rows }: { rows: KpiByBranchRow[] }) {
   return (
-    <Card className="rounded-2xl">
-      <CardHeader>
-        <CardTitle className="text-base">5. Konversiya</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-2 gap-3">
-          {rows.map((r) => (
-            <div key={r.branchId} className="rounded-xl bg-muted/40 p-3">
-              <div className="text-xs text-muted-foreground truncate">{r.branchName}</div>
-              <div className="text-2xl font-bold tabular-nums mt-1">
-                {r.conversion != null ? `${r.conversion.toFixed(1)}%` : "—"}
-              </div>
-              <div className="text-xs text-muted-foreground mt-1">
-                {formatNumber(r.receipts)} chek / {formatNumber(r.visits)} tashrif
-              </div>
+    <ExpandableCard title="5. Konversiya" className="rounded-2xl">
+      <div className="grid grid-cols-2 gap-3">
+        {rows.map((r) => (
+          <div key={r.branchId} className="rounded-xl bg-muted/40 p-3">
+            <div className="text-xs text-muted-foreground truncate">{r.branchName}</div>
+            <div className="text-2xl font-bold tabular-nums mt-1">
+              {r.conversion != null ? `${r.conversion.toFixed(1)}%` : "—"}
             </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
+            <div className="text-xs text-muted-foreground mt-1">
+              {formatNumber(r.receipts)} chek / {formatNumber(r.visits)} tashrif
+            </div>
+          </div>
+        ))}
+      </div>
+    </ExpandableCard>
   );
 }
 
 export function AvgItemsWidget({ rows }: { rows: KpiByBranchRow[] }) {
   return (
-    <Card className="rounded-2xl">
-      <CardHeader>
-        <CardTitle className="text-base">6. Chekdagi o'rt. tovar soni</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-2 gap-3">
-          {rows.map((r) => (
-            <div key={r.branchId} className="rounded-xl bg-muted/40 p-3">
-              <div className="text-xs text-muted-foreground truncate">{r.branchName}</div>
-              <div className="text-2xl font-bold tabular-nums mt-1">
-                {r.avgItemsPerReceipt != null ? r.avgItemsPerReceipt.toFixed(2) : "—"}
-              </div>
-              <div className="text-xs text-muted-foreground mt-1">
-                {formatNumber(r.receipts)} chekdan
-              </div>
+    <ExpandableCard title="6. Chekdagi o'rt. tovar soni" className="rounded-2xl">
+      <div className="grid grid-cols-2 gap-3">
+        {rows.map((r) => (
+          <div key={r.branchId} className="rounded-xl bg-muted/40 p-3">
+            <div className="text-xs text-muted-foreground truncate">{r.branchName}</div>
+            <div className="text-2xl font-bold tabular-nums mt-1">
+              {r.avgItemsPerReceipt != null ? r.avgItemsPerReceipt.toFixed(2) : "—"}
             </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
+            <div className="text-xs text-muted-foreground mt-1">
+              {formatNumber(r.receipts)} chekdan
+            </div>
+          </div>
+        ))}
+      </div>
+    </ExpandableCard>
   );
 }
