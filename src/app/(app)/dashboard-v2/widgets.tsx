@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   LineChart,
   Line,
@@ -13,6 +14,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
+import { Info } from "lucide-react";
 import { formatNumber, formatUZS } from "@/lib/format";
 import { ExpandableCard } from "@/components/ui/expandable-card";
 import type {
@@ -127,14 +129,17 @@ export function DailyByBranchWidget({
   title,
   data,
   unit = "",
-  valueFormatter,
+  format = "number",
 }: {
   title: string;
   data: DailyByBranchSeries;
   unit?: string;
-  valueFormatter?: (v: number) => string;
+  format?: "number" | "uzs-compact";
 }) {
-  const fmt = valueFormatter ?? ((v: number) => `${formatNumber(v)}${unit ? " " + unit : ""}`);
+  const fmt =
+    format === "uzs-compact"
+      ? (v: number) => (v === 0 ? "—" : formatUZS(v, { compact: true }))
+      : (v: number) => `${formatNumber(v)}${unit ? " " + unit : ""}`;
   const chartData = data.values.map((v) => ({
     ...v,
     _label: shortDate(v.date as string),
@@ -170,6 +175,46 @@ export function DailyByBranchWidget({
 }
 
 // ============ 4. Marja breakdown ============
+
+function MarjaInfoTooltip() {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="relative flex items-center">
+      <button
+        onMouseEnter={() => setShow(true)}
+        onMouseLeave={() => setShow(false)}
+        onFocus={() => setShow(true)}
+        onBlur={() => setShow(false)}
+        className="text-muted-foreground hover:text-foreground transition-colors"
+        aria-label="Marja formulasi"
+      >
+        <Info className="h-3.5 w-3.5" />
+      </button>
+      {show && (
+        <div className="absolute left-1/2 -translate-x-1/2 bottom-6 z-50 w-64 rounded-xl border border-border bg-popover shadow-xl p-3 text-xs pointer-events-none">
+          <p className="font-semibold text-foreground mb-1">Marja hisoblash formulasi</p>
+          <p className="font-mono text-[11px] text-muted-foreground">
+            (Sotuv − Tannarx) ÷ Tannarx × 100
+          </p>
+          <div className="mt-2 pt-2 border-t border-border/60 space-y-0.5 text-[11px] text-muted-foreground">
+            <div className="flex justify-between">
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"/>≥ 30%</span>
+              <span>Yaxshi</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400 inline-block"/>15–30%</span>
+              <span>O&apos;rtacha</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400 inline-block"/>&lt; 15%</span>
+              <span>Past</span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function MarjaWidget({
   byCategory,
@@ -211,8 +256,15 @@ export function MarjaWidget({
     );
   };
 
+  const marjaTitle = (
+    <div className="flex items-center gap-2">
+      <span>4. Marja foizi</span>
+      <MarjaInfoTooltip />
+    </div>
+  );
+
   return (
-    <ExpandableCard title="4. Marja foizi" className="rounded-2xl" contentClassName="space-y-4">
+    <ExpandableCard title={marjaTitle} className="rounded-2xl" contentClassName="space-y-4">
       <div>
         <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
           Filiallar

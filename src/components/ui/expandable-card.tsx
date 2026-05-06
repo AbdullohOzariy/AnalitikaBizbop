@@ -3,7 +3,12 @@
 import { useState } from "react";
 import { Maximize2, X } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogOverlay, DialogPortal, DialogTitle, DialogClose } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogClose,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -45,35 +50,37 @@ export function ExpandableCard({
       </Card>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogPortal>
-          <DialogOverlay />
-          {/* DialogContent ishlatilmaydi — uning sm:max-w-sm cheklovi chetlab o'tiladi */}
-          <div
-            role="dialog"
-            className="fixed inset-4 z-50 flex flex-col gap-0 rounded-2xl bg-popover ring-1 ring-foreground/10 shadow-2xl overflow-hidden
-              data-[state=open]:animate-in data-[state=closed]:animate-out
-              data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0
-              data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95"
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between gap-4 border-b border-border/60 px-6 py-4 shrink-0">
-              <DialogTitle className="text-lg font-semibold">{title}</DialogTitle>
-              <DialogClose
-                render={
-                  <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" />
-                }
-              >
-                <X className="h-4 w-4" />
-                <span className="sr-only">Yopish</span>
-              </DialogClose>
-            </div>
-
-            {/* Content */}
-            <div className="flex-1 overflow-auto p-6 min-h-0">
-              {children}
-            </div>
+        {/* inline style orqali sm:max-w-sm va transform ni to'liq bekor qilamiz */}
+        <DialogContent
+          showCloseButton={false}
+          style={{
+            position: "fixed",
+            inset: "16px",
+            maxWidth: "none",
+            width: "auto",
+            height: "auto",
+            maxHeight: "none",
+            transform: "none",
+            top: "16px",
+            left: "16px",
+            right: "16px",
+            bottom: "16px",
+          }}
+          className="flex flex-col p-0 rounded-2xl overflow-hidden gap-0"
+        >
+          <div className="flex items-center justify-between gap-4 border-b border-border/60 px-6 py-4 shrink-0">
+            <DialogTitle className="text-lg font-semibold">{title}</DialogTitle>
+            <DialogClose
+              render={
+                <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" />
+              }
+            >
+              <X className="h-4 w-4" />
+              <span className="sr-only">Yopish</span>
+            </DialogClose>
           </div>
-        </DialogPortal>
+          <div className="flex-1 overflow-auto p-6 min-h-0">{children}</div>
+        </DialogContent>
       </Dialog>
     </>
   );
