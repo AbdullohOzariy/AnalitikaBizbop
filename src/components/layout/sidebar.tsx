@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -15,6 +15,8 @@ import {
   Menu,
   Table2,
   Sparkles,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -34,47 +36,77 @@ type NavItem = {
 };
 
 const NAV: NavItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/dashboard-v2", label: "Dashboard v2", icon: Sparkles },
-  { href: "/branches", label: "Filiallar", icon: Building2 },
-  { href: "/categories", label: "Kategoriyalar", icon: Tag },
-  { href: "/report", label: "Hisobot", icon: Table2 },
-  { href: "/admin/upload", label: "Fayllar", icon: Upload, adminOnly: true },
-  { href: "/admin/plans", label: "Normal Reja", icon: Target, adminOnly: true },
-  { href: "/admin/users", label: "Foydalanuvchilar", icon: Users, adminOnly: true },
+  { href: "/dashboard",    label: "Dashboard",         icon: LayoutDashboard },
+  { href: "/dashboard-v2", label: "Dashboard v2",      icon: Sparkles },
+  { href: "/branches",     label: "Filiallar",          icon: Building2 },
+  { href: "/categories",   label: "Kategoriyalar",      icon: Tag },
+  { href: "/report",       label: "Hisobot",            icon: Table2 },
+  { href: "/admin/upload", label: "Fayllar",            icon: Upload,  adminOnly: true },
+  { href: "/admin/plans",  label: "Normal Reja",        icon: Target,  adminOnly: true },
+  { href: "/admin/users",  label: "Foydalanuvchilar",   icon: Users,   adminOnly: true },
 ];
 
 function SidebarNav({
   role,
+  collapsed,
+  onToggle,
   onNavigate,
 }: {
   role: Role;
+  collapsed?: boolean;
+  onToggle?: () => void;
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
   const items = NAV.filter((i) => !i.adminOnly || role === "ADMIN");
+
   return (
     <>
-      {/* Logo */}
-      <div className="h-16 flex items-center px-5 border-b border-border">
-        <Link
-          href="/dashboard"
-          className="flex items-center"
-          onClick={onNavigate}
-        >
-          <Image
-            src="/logo.png"
-            alt="BizBop Supermarket"
-            width={140}
-            height={46}
-            priority
-            className="h-9 w-auto"
-          />
-        </Link>
+      {/* Logo / header */}
+      <div className="h-16 flex items-center border-b border-border shrink-0 px-3 gap-2">
+        {!collapsed && (
+          <Link
+            href="/dashboard"
+            className="flex-1 flex items-center overflow-hidden"
+            onClick={onNavigate}
+          >
+            <Image
+              src="/logo.png"
+              alt="BizBop Supermarket"
+              width={140}
+              height={46}
+              priority
+              className="h-9 w-auto"
+            />
+          </Link>
+        )}
+
+        {onToggle && (
+          <button
+            onClick={onToggle}
+            className={cn(
+              "flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors shrink-0",
+              collapsed && "mx-auto"
+            )}
+            title={collapsed ? "Kengaytirish" : "Qisqartirish"}
+          >
+            {collapsed
+              ? <PanelLeftOpen  className="h-4 w-4" />
+              : <PanelLeftClose className="h-4 w-4" />
+            }
+          </button>
+        )}
+
+        {/* Mobile: logo only, no toggle */}
+        {!onToggle && (
+          <Link href="/dashboard" onClick={onNavigate}>
+            <Image src="/logo.png" alt="BizBop" width={140} height={46} priority className="h-9 w-auto" />
+          </Link>
+        )}
       </div>
 
       {/* Nav items */}
-      <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
+      <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
         {items.map((item) => {
           const Icon = item.icon;
           const active =
@@ -88,8 +120,10 @@ function SidebarNav({
               <Link
                 href={item.href}
                 onClick={onNavigate}
+                title={collapsed ? item.label : undefined}
                 className={cn(
-                  "relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors duration-150 overflow-hidden",
+                  "relative flex items-center rounded-xl text-sm font-medium transition-colors duration-150 overflow-hidden",
+                  collapsed ? "justify-center px-0 py-2.5" : "gap-3 px-3 py-2.5",
                   active
                     ? "text-primary-foreground shadow-sm"
                     : "text-muted-foreground hover:bg-secondary hover:text-foreground"
@@ -103,13 +137,8 @@ function SidebarNav({
                     transition={{ type: "spring", stiffness: 380, damping: 30 }}
                   />
                 )}
-                <Icon
-                  className={cn(
-                    "h-4 w-4 shrink-0",
-                    active ? "opacity-100" : "opacity-70"
-                  )}
-                />
-                {item.label}
+                <Icon className={cn("h-4 w-4 shrink-0", active ? "opacity-100" : "opacity-70")} />
+                {!collapsed && item.label}
               </Link>
             </motion.div>
           );
@@ -117,15 +146,17 @@ function SidebarNav({
       </nav>
 
       {/* Footer */}
-      <div className="p-4 border-t border-border">
-        <div className="flex items-center gap-2 px-1">
+      <div className="p-3 border-t border-border shrink-0">
+        <div className={cn("flex items-center gap-2 px-1", collapsed && "justify-center")}>
           <div
-            className="h-2 w-2 rounded-full"
+            className="h-2 w-2 rounded-full shrink-0"
             style={{ backgroundColor: "oklch(0.877 0.165 134)" }}
           />
-          <span className="text-xs text-muted-foreground font-medium">
-            {role === "ADMIN" ? "Administrator" : "Ko'ruvchi"} · v0.1
-          </span>
+          {!collapsed && (
+            <span className="text-xs text-muted-foreground font-medium truncate">
+              {role === "ADMIN" ? "Administrator" : "Ko'ruvchi"} · v0.1
+            </span>
+          )}
         </div>
       </div>
     </>
@@ -133,9 +164,27 @@ function SidebarNav({
 }
 
 export function Sidebar({ role }: { role: Role }) {
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("sidebar-collapsed");
+    if (saved === "true") setCollapsed(true);
+  }, []);
+
+  const toggle = () =>
+    setCollapsed((prev) => {
+      localStorage.setItem("sidebar-collapsed", String(!prev));
+      return !prev;
+    });
+
   return (
-    <aside className="hidden md:flex w-64 shrink-0 border-r border-border bg-card flex-col shadow-sm">
-      <SidebarNav role={role} />
+    <aside
+      className={cn(
+        "hidden md:flex shrink-0 border-r border-border bg-card flex-col shadow-sm transition-all duration-300 ease-in-out",
+        collapsed ? "w-[60px]" : "w-64"
+      )}
+    >
+      <SidebarNav role={role} collapsed={collapsed} onToggle={toggle} />
     </aside>
   );
 }
