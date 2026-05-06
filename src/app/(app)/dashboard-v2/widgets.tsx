@@ -294,7 +294,11 @@ function MarjaBaseWidget({ title, rows }: { title: React.ReactNode; rows: MarjaR
               <LabelList
                 dataKey="marja"
                 position="right"
+<<<<<<< HEAD
                 formatter={(v: string | number | null | undefined) => v != null ? `${Number(v).toFixed(1)}%` : ""}
+=======
+                formatter={(v: any) => v != null ? `${Number(v).toFixed(1)}%` : ""}
+>>>>>>> caf5fdb (go)
                 style={{ fontSize: 11, fill: '#64748b', fontWeight: 500 }}
               />
             </Bar>
