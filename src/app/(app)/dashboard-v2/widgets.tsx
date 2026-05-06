@@ -237,7 +237,7 @@ function MarjaInfoTooltip() {
             </div>
             <div className="flex justify-between">
               <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-[#e4e4e7] inline-block" />15–30%
+                <span className="w-2 h-2 rounded-full bg-[#f2c94c] inline-block" />15–30%
               </span>
               <span>O&apos;rtacha</span>
             </div>
@@ -286,7 +286,7 @@ function MarjaBaseWidget({ title, rows }: { title: React.ReactNode; rows: MarjaR
                   fill={
                     !d.hasCost ? "#f1f5f9" :
                     d.marja >= 30 ? "#81b29a" :
-                    d.marja >= 15 ? "#e4e4e7" :
+                    d.marja >= 15 ? "#f2c94c" :
                     "#e07a5f"
                   }
                 />
