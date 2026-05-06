@@ -10,6 +10,13 @@ import {
   kpiByBranch,
 } from "@/lib/analytics-v2";
 import { FiltersBar } from "./filters";
+
+function formatM(n: number): string {
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}mlrd`;
+  if (n >= 1_000_000)     return `${(n / 1_000_000).toFixed(1)}mln`;
+  if (n >= 1_000)         return `${(n / 1_000).toFixed(0)}ming`;
+  return String(Math.round(n));
+}
 import {
   PlanCompletionWidget,
   DailyByBranchWidget,
@@ -55,13 +62,45 @@ export default async function DashboardV2Page({
   const filterByBranch = (s: typeof visits) =>
     branchId == null ? s : { ...s, branches: s.branches.filter((b) => b.id === branchId) };
 
+  // Umumiy marja hisoblash uchun foydalaniladigan qiymatlar
+  const totalSales = marja.byBranch.reduce((s, r) => s + r.sales, 0);
+  const totalCost  = marja.byBranch.reduce((s, r) => s + r.cost, 0);
+  const totalProfit = totalSales - totalCost;
+  const totalMarja  = totalCost > 0 ? (totalProfit / totalCost) * 100 : null;
+
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Dashboard v2</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          Reja bajarilishi va asosiy KPI'lar — filial va davr kesimida
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Dashboard v2</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Reja bajarilishi va asosiy KPI&apos;lar — filial va davr kesimida
+          </p>
+        </div>
+
+        {/* Marja hisoblash formulasi */}
+        <div className="flex items-start gap-2 rounded-xl border border-border/60 bg-muted/40 px-3.5 py-2.5 text-xs text-muted-foreground max-w-sm">
+          <span className="mt-px shrink-0 text-[15px] leading-none">ℹ️</span>
+          <div className="space-y-0.5">
+            <p className="font-semibold text-foreground">Marja hisoblash formulasi</p>
+            <p>
+              <span className="font-mono text-[11px]">
+                (Sotuv − Tannarx) ÷ Tannarx × 100
+              </span>
+            </p>
+            {totalMarja != null && (
+              <p className="text-[11px]">
+                Davr bo&apos;yicha:{" "}
+                <span className="font-semibold text-foreground font-mono">
+                  ({formatM(totalSales)} − {formatM(totalCost)}) ÷ {formatM(totalCost)} ={" "}
+                  <span className={totalMarja >= 20 ? "text-emerald-600" : totalMarja >= 10 ? "text-amber-600" : "text-red-500"}>
+                    {totalMarja.toFixed(1)}%
+                  </span>
+                </span>
+              </p>
+            )}
+          </div>
+        </div>
       </div>
 
       <FiltersBar
