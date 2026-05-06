@@ -27,6 +27,44 @@ function parseISO(s: string | undefined, fallback: Date): Date {
   return isNaN(d.getTime()) ? fallback : d;
 }
 
+type BranchSeries = Awaited<ReturnType<typeof dailyReceiptsByBranch>>;
+
+function getPreviousPeriod(range: { start: Date; end: Date }): { start: Date; end: Date } {
+  const dayMs = 86_400_000;
+  const len = Math.round((range.end.getTime() - range.start.getTime()) / dayMs) + 1;
+  const end = new Date(range.start.getTime() - dayMs);
+  const start = new Date(end.getTime() - (len - 1) * dayMs);
+  return { start, end };
+}
+
+function calcDelta(curr: number | null | undefined, prev: number | null | undefined): number | null {
+  if (curr == null || prev == null || prev === 0) return null;
+  return ((curr - prev) / Math.abs(prev)) * 100;
+}
+
+function seriesTotal(series: BranchSeries): number {
+  return series.values.reduce((sum, row) => {
+    return sum + series.branches.reduce((branchSum, branch) => {
+      return branchSum + Number(row[`b${branch.id}`] ?? 0);
+    }, 0);
+  }, 0);
+}
+
+function seriesAverage(series: BranchSeries): number | null {
+  let sum = 0;
+  let count = 0;
+  for (const row of series.values) {
+    for (const branch of series.branches) {
+      const value = Number(row[`b${branch.id}`] ?? 0);
+      if (value > 0) {
+        sum += value;
+        count += 1;
+      }
+    }
+  }
+  return count > 0 ? sum / count : null;
+}
+
 function WidgetsSkeleton() {
   return (
     <div className="grid gap-4 md:grid-cols-2">
@@ -61,18 +99,66 @@ async function WidgetsSection({
     start: new Date(startStr + "T00:00:00.000Z"),
     end: new Date(endStr + "T00:00:00.000Z"),
   };
+  const previousRange = getPreviousPeriod(range);
 
-  const [planStats, visits, receipts, avgReceipt, marja, kpi] = await Promise.all([
+  const [
+    planStats,
+    visits,
+    receipts,
+    avgReceipt,
+    marja,
+    kpi,
+    prevReceipts,
+    prevAvgReceipt,
+    prevKpi,
+  ] = await Promise.all([
     planCompletion(range, branchId),
     dailyVisitsByBranch(range),
     dailyReceiptsByBranch(range),
     dailyAvgReceiptByBranch(range),
     marjaBreakdown(range, branchId),
     kpiByBranch(range),
+    dailyReceiptsByBranch(previousRange),
+    dailyAvgReceiptByBranch(previousRange),
+    kpiByBranch(previousRange),
   ]);
 
   const filterByBranch = (s: typeof visits) =>
     branchId == null ? s : { ...s, branches: s.branches.filter((b) => b.id === branchId) };
+  const visibleReceipts = filterByBranch(receipts);
+  const visiblePrevReceipts = filterByBranch(prevReceipts);
+  const visibleAvgReceipt = filterByBranch(avgReceipt);
+  const visiblePrevAvgReceipt = filterByBranch(prevAvgReceipt);
+  const visibleKpi = branchId ? kpi.filter((r) => r.branchId === branchId) : kpi;
+  const previousVisibleKpi = branchId ? prevKpi.filter((r) => r.branchId === branchId) : prevKpi;
+  const prevKpiMap = new Map(prevKpi.map((r) => [r.branchId, r]));
+  const kpiWithTrends = visibleKpi.map((r) => {
+    const prev = prevKpiMap.get(r.branchId);
+    return {
+      ...r,
+      conversionTrend: calcDelta(r.conversion, prev?.conversion),
+      avgItemsTrend: calcDelta(r.avgItemsPerReceipt, prev?.avgItemsPerReceipt),
+    };
+  });
+  const sumKpi = (rows: typeof visibleKpi) =>
+    rows.reduce(
+      (acc, r) => ({
+        receipts: acc.receipts + r.receipts,
+        visits: acc.visits + r.visits,
+        avgItemsSum: acc.avgItemsSum + (r.avgItemsPerReceipt ?? 0) * r.receipts,
+      }),
+      { receipts: 0, visits: 0, avgItemsSum: 0 }
+    );
+  const currentKpiTotals = sumKpi(visibleKpi);
+  const previousKpiTotals = sumKpi(previousVisibleKpi);
+  const conversionTrend = calcDelta(
+    currentKpiTotals.visits > 0 ? (currentKpiTotals.receipts / currentKpiTotals.visits) * 100 : null,
+    previousKpiTotals.visits > 0 ? (previousKpiTotals.receipts / previousKpiTotals.visits) * 100 : null
+  );
+  const avgItemsTrend = calcDelta(
+    currentKpiTotals.receipts > 0 ? currentKpiTotals.avgItemsSum / currentKpiTotals.receipts : null,
+    previousKpiTotals.receipts > 0 ? previousKpiTotals.avgItemsSum / previousKpiTotals.receipts : null
+  );
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
@@ -80,14 +166,19 @@ async function WidgetsSection({
       <MarjaByBranchWidget data={marja.byBranch} />
       <MarjaByCategoryWidget data={marja.byCategory} />
       <DailyByBranchWidget title="2. Tashriflar (kunlik)" data={filterByBranch(visits)} />
-      <DailyByBranchWidget title="3. Chek soni (kunlik)" data={filterByBranch(receipts)} />
+      <DailyByBranchWidget
+        title="3. Chek soni (kunlik)"
+        data={visibleReceipts}
+        trend={calcDelta(seriesTotal(visibleReceipts), seriesTotal(visiblePrevReceipts))}
+      />
       <DailyByBranchWidget
         title="7. O'rtacha chek (kunlik)"
-        data={filterByBranch(avgReceipt)}
+        data={visibleAvgReceipt}
         format="uzs-compact"
+        trend={calcDelta(seriesAverage(visibleAvgReceipt), seriesAverage(visiblePrevAvgReceipt))}
       />
-      <ConversionWidget rows={branchId ? kpi.filter((r) => r.branchId === branchId) : kpi} />
-      <AvgItemsWidget rows={branchId ? kpi.filter((r) => r.branchId === branchId) : kpi} />
+      <ConversionWidget rows={kpiWithTrends} trend={conversionTrend} />
+      <AvgItemsWidget rows={kpiWithTrends} trend={avgItemsTrend} />
     </div>
   );
 }
