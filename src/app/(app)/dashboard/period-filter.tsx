@@ -102,14 +102,14 @@ export function PeriodFilter({
   };
 
   const setCompare = (mode: string | undefined) => {
-    if (!mode) navigate({ compare: undefined, cstart: undefined, cend: undefined });
+    if (!mode) navigate({ compare: "none", cstart: undefined, cend: undefined });
     else navigate({ compare: mode });
   };
 
   const COMPARE_BTNS = [
-    { key: "wow", label: "WOW" },
-    { key: "mom", label: "MOM" },
-    { key: "yoy", label: "YOY" },
+    { key: "wow", label: "O'tgan hafta" },
+    { key: "mom", label: "O'tgan oy" },
+    { key: "yoy", label: "O'tgan yil" },
     { key: "custom", label: "Maxsus" },
   ] as const;
 
@@ -183,7 +183,7 @@ export function PeriodFilter({
               {label}
             </Button>
           ))}
-          {compare && (
+          {compare && compare !== "none" && (
             <Button variant="ghost" onClick={() => setCompare(undefined)} className={btnOff}>
               ✕ O'chirish
             </Button>

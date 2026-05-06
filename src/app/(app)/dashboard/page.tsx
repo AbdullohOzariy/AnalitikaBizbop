@@ -57,6 +57,15 @@ function getCompareRange(
   return null;
 }
 
+function getCompareLabel(compare: string): string {
+  return {
+    wow: "O'tgan hafta",
+    mom: "O'tgan oy",
+    yoy: "O'tgan yil",
+    custom: "Maxsus davr",
+  }[compare] ?? "";
+}
+
 function calcDelta(curr: number, prev: number): number | null {
   if (prev === 0) return null;
   return ((curr - prev) / Math.abs(prev)) * 100;
@@ -111,10 +120,9 @@ async function KpiSection({
   const start = new Date(startStr + "T00:00:00.000Z");
   const end   = new Date(endStr   + "T00:00:00.000Z");
   const range = { start, end };
-  const compareRange = compare ? getCompareRange(range, compare, cstart, cend) : null;
-  const cLabel = compare
-    ? ({ wow: "WOW", mom: "MOM", yoy: "YOY", custom: "Maxsus" }[compare] ?? "")
-    : "";
+  const compareMode = compare === "none" ? undefined : compare ?? "mom";
+  const compareRange = compareMode ? getCompareRange(range, compareMode, cstart, cend) : null;
+  const cLabel = compareMode ? getCompareLabel(compareMode) : "";
 
   const [kpi, kpiPrev] = await Promise.all([
     computeKPI(range, branchId),
@@ -356,7 +364,7 @@ export default async function DashboardPage({
       {/* Period filter — darhol ko'rinadi */}
       <PeriodFilter
         start={startStr} end={endStr} branchId={branchId} branches={branches}
-        compare={sp.compare} cstart={sp.cstart} cend={sp.cend}
+        compare={sp.compare ?? "mom"} cstart={sp.cstart} cend={sp.cend}
       />
 
       {/* KPI cards — tez (computeKPI cached) */}
