@@ -13,7 +13,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
-import { formatNumber } from "@/lib/format";
+import { formatNumber, formatUZS } from "@/lib/format";
 import { ExpandableCard } from "@/components/ui/expandable-card";
 import type {
   PlanCompletionStats,
@@ -127,11 +127,14 @@ export function DailyByBranchWidget({
   title,
   data,
   unit = "",
+  valueFormatter,
 }: {
   title: string;
   data: DailyByBranchSeries;
   unit?: string;
+  valueFormatter?: (v: number) => string;
 }) {
+  const fmt = valueFormatter ?? ((v: number) => `${formatNumber(v)}${unit ? " " + unit : ""}`);
   const chartData = data.values.map((v) => ({
     ...v,
     _label: shortDate(v.date as string),
@@ -142,10 +145,10 @@ export function DailyByBranchWidget({
         <LineChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
           <XAxis dataKey="_label" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
-          <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => formatNumber(v)} />
+          <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => fmt(Number(v))} />
           <Tooltip
             contentStyle={tooltipStyle}
-            formatter={(value) => [`${formatNumber(Number(value))}${unit ? " " + unit : ""}`, ""]}
+            formatter={(value) => [fmt(Number(value)), ""]}
           />
           <Legend wrapperStyle={{ fontSize: 12 }} />
           {data.branches.map((b, i) => (

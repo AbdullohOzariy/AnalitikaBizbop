@@ -6,10 +6,12 @@ import {
   planCompletion,
   dailyVisitsByBranch,
   dailyReceiptsByBranch,
+  dailyAvgReceiptByBranch,
   marjaBreakdown,
   kpiByBranch,
 } from "@/lib/analytics-v2";
 import { FiltersBar } from "./filters";
+import { formatUZS } from "@/lib/format";
 
 function formatM(n: number): string {
   if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}mlrd`;
@@ -50,10 +52,11 @@ export default async function DashboardV2Page({
     end: parseISO(sp.end, defaultRange.end),
   };
 
-  const [planStats, visits, receipts, marja, kpi] = await Promise.all([
+  const [planStats, visits, receipts, avgReceipt, marja, kpi] = await Promise.all([
     planCompletion(range, branchId),
     dailyVisitsByBranch(range),
     dailyReceiptsByBranch(range),
+    dailyAvgReceiptByBranch(range),
     marjaBreakdown(range, branchId),
     kpiByBranch(range),
   ]);
@@ -115,6 +118,11 @@ export default async function DashboardV2Page({
         <MarjaWidget byCategory={marja.byCategory} byBranch={marja.byBranch} />
         <DailyByBranchWidget title="2. Tashriflar (kunlik)" data={filterByBranch(visits)} />
         <DailyByBranchWidget title="3. Chek soni (kunlik)" data={filterByBranch(receipts)} />
+        <DailyByBranchWidget
+          title="7. O'rtacha chek (kunlik)"
+          data={filterByBranch(avgReceipt)}
+          valueFormatter={(v) => v === 0 ? "—" : formatUZS(v, { compact: true })}
+        />
         <ConversionWidget rows={branchId ? kpi.filter((r) => r.branchId === branchId) : kpi} />
         <AvgItemsWidget rows={branchId ? kpi.filter((r) => r.branchId === branchId) : kpi} />
       </div>

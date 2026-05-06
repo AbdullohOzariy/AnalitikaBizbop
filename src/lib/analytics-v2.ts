@@ -215,6 +215,18 @@ async function _dailyReceiptsByBranch(range: DateRange): Promise<DailyByBranchSe
   return buildSeries(range, branches, rows);
 }
 
+async function _dailyAvgReceiptByBranch(range: DateRange): Promise<DailyByBranchSeries> {
+  const [branches, rows] = await Promise.all([
+    prisma.branch.findMany({ orderBy: { sortOrder: "asc" } }),
+    prisma.$queryRaw<{ d: Date; branchId: number; v: number }[]>`
+      SELECT date AS d, "branchId", "avgReceipt"::float8 AS v
+      FROM "DailyMetrics"
+      WHERE date BETWEEN ${range.start} AND ${range.end}
+    `,
+  ]);
+  return buildSeries(range, branches, rows);
+}
+
 function buildSeries(
   range: DateRange,
   branches: { id: number; name: string }[],
@@ -249,6 +261,13 @@ export const dailyReceiptsByBranch = (range: DateRange) =>
   unstable_cache(
     () => _dailyReceiptsByBranch(range),
     ["v2_dailyReceipts", ...makeKey(range)],
+    { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
+  )();
+
+export const dailyAvgReceiptByBranch = (range: DateRange) =>
+  unstable_cache(
+    () => _dailyAvgReceiptByBranch(range),
+    ["v2_dailyAvgReceipt", ...makeKey(range)],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
   )();
 
