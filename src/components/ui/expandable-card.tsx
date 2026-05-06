@@ -1,14 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Maximize2, X } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  DialogClose,
-} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -26,6 +21,32 @@ export function ExpandableCard({
   contentClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  // Ochiq bo'lganda body scroll'ini bloklash
+  useEffect(() => {
+    if (open) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [open]);
 
   return (
     <>
@@ -49,39 +70,51 @@ export function ExpandableCard({
         <CardContent className={contentClassName}>{children}</CardContent>
       </Card>
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        {/* inline style orqali sm:max-w-sm va transform ni to'liq bekor qilamiz */}
-        <DialogContent
-          showCloseButton={false}
-          style={{
-            position: "fixed",
-            inset: "16px",
-            maxWidth: "none",
-            width: "auto",
-            height: "auto",
-            maxHeight: "none",
-            transform: "none",
-            top: "16px",
-            left: "16px",
-            right: "16px",
-            bottom: "16px",
-          }}
-          className="flex flex-col p-0 rounded-2xl overflow-hidden gap-0"
-        >
-          <div className="flex items-center justify-between gap-4 border-b border-border/60 px-6 py-4 shrink-0">
-            <DialogTitle className="text-lg font-semibold">{title}</DialogTitle>
-            <DialogClose
-              render={
-                <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" />
-              }
+      {mounted &&
+        createPortal(
+          <div
+            className={cn(
+              "fixed inset-0 z-[100] transition-all duration-200",
+              open ? "pointer-events-auto" : "pointer-events-none"
+            )}
+          >
+            {/* Backdrop */}
+            <div
+              className={cn(
+                "absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-200",
+                open ? "opacity-100" : "opacity-0"
+              )}
+              onClick={() => setOpen(false)}
+            />
+
+            {/* Panel */}
+            <div
+              className={cn(
+                "absolute inset-4 flex flex-col rounded-2xl bg-popover ring-1 ring-foreground/10 shadow-2xl overflow-hidden transition-all duration-200",
+                open
+                  ? "opacity-100 scale-100"
+                  : "opacity-0 scale-95"
+              )}
             >
-              <X className="h-4 w-4" />
-              <span className="sr-only">Yopish</span>
-            </DialogClose>
-          </div>
-          <div className="flex-1 overflow-auto p-6 min-h-0">{children}</div>
-        </DialogContent>
-      </Dialog>
+              {/* Header */}
+              <div className="flex items-center justify-between gap-4 border-b border-border/60 px-6 py-4 shrink-0">
+                <span className="text-lg font-semibold">{title}</span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 shrink-0"
+                  onClick={() => setOpen(false)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 overflow-auto p-6 min-h-0">{children}</div>
+            </div>
+          </div>,
+          document.body
+        )}
     </>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   LineChart,
   Line,
@@ -177,42 +177,61 @@ export function DailyByBranchWidget({
 // ============ 4. Marja breakdown ============
 
 function MarjaInfoTooltip() {
-  const [show, setShow] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+
+  const show = () => {
+    if (!btnRef.current) return;
+    const r = btnRef.current.getBoundingClientRect();
+    setPos({ top: r.bottom + 8, left: r.left + r.width / 2 });
+  };
+
   return (
-    <div className="relative flex items-center">
+    <>
       <button
-        onMouseEnter={() => setShow(true)}
-        onMouseLeave={() => setShow(false)}
-        onFocus={() => setShow(true)}
-        onBlur={() => setShow(false)}
+        ref={btnRef}
+        onMouseEnter={show}
+        onMouseLeave={() => setPos(null)}
+        onFocus={show}
+        onBlur={() => setPos(null)}
         className="text-muted-foreground hover:text-foreground transition-colors"
         aria-label="Marja formulasi"
       >
         <Info className="h-3.5 w-3.5" />
       </button>
-      {show && (
-        <div className="absolute left-1/2 -translate-x-1/2 bottom-6 z-50 w-64 rounded-xl border border-border bg-popover shadow-xl p-3 text-xs pointer-events-none">
+
+      {pos && (
+        <div
+          className="fixed z-[200] w-64 rounded-xl border border-border bg-popover shadow-xl p-3 text-xs pointer-events-none"
+          style={{ top: pos.top, left: pos.left, transform: "translateX(-50%)" }}
+        >
           <p className="font-semibold text-foreground mb-1">Marja hisoblash formulasi</p>
           <p className="font-mono text-[11px] text-muted-foreground">
             (Sotuv − Tannarx) ÷ Tannarx × 100
           </p>
           <div className="mt-2 pt-2 border-t border-border/60 space-y-0.5 text-[11px] text-muted-foreground">
             <div className="flex justify-between">
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"/>≥ 30%</span>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />≥ 30%
+              </span>
               <span>Yaxshi</span>
             </div>
             <div className="flex justify-between">
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400 inline-block"/>15–30%</span>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />15–30%
+              </span>
               <span>O&apos;rtacha</span>
             </div>
             <div className="flex justify-between">
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400 inline-block"/>&lt; 15%</span>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-red-400 inline-block" />&lt; 15%
+              </span>
               <span>Past</span>
             </div>
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
 
