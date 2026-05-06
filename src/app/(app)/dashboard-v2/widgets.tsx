@@ -137,37 +137,32 @@ export function DailyByBranchWidget({
     _label: shortDate(v.date as string),
   }));
   return (
-    <Card className="rounded-2xl">
-      <CardHeader>
-        <CardTitle className="text-base">{title}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-            <XAxis dataKey="_label" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
-            <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => formatNumber(v)} />
-            <Tooltip
-              contentStyle={tooltipStyle}
-              formatter={(value) => [`${formatNumber(Number(value))}${unit ? " " + unit : ""}`, ""]}
+    <ExpandableCard title={title} className="rounded-2xl">
+      <ResponsiveContainer width="100%" height={300}>
+        <LineChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+          <XAxis dataKey="_label" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
+          <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => formatNumber(v)} />
+          <Tooltip
+            contentStyle={tooltipStyle}
+            formatter={(value) => [`${formatNumber(Number(value))}${unit ? " " + unit : ""}`, ""]}
+          />
+          <Legend wrapperStyle={{ fontSize: 12 }} />
+          {data.branches.map((b, i) => (
+            <Line
+              key={b.id}
+              type="monotone"
+              dataKey={`b${b.id}`}
+              name={b.name}
+              stroke={PALETTE[i % PALETTE.length]}
+              strokeWidth={2}
+              dot={false}
+              activeDot={{ r: 4 }}
             />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
-            {data.branches.map((b, i) => (
-              <Line
-                key={b.id}
-                type="monotone"
-                dataKey={`b${b.id}`}
-                name={b.name}
-                stroke={PALETTE[i % PALETTE.length]}
-                strokeWidth={2}
-                dot={false}
-                activeDot={{ r: 4 }}
-              />
-            ))}
-          </LineChart>
-        </ResponsiveContainer>
-      </CardContent>
-    </Card>
+          ))}
+        </LineChart>
+      </ResponsiveContainer>
+    </ExpandableCard>
   );
 }
 
