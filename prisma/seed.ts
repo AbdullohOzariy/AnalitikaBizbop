@@ -89,12 +89,19 @@ async function main() {
     });
   }
 
-  const adminEmail = process.env.SEED_ADMIN_EMAIL ?? "admin@analitika.local";
-  const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? "admin123";
+  const adminEmail = process.env.SEED_ADMIN_EMAIL;
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD;
   const adminName = process.env.SEED_ADMIN_NAME ?? "Admin";
 
+  if (!adminEmail || !adminPassword) {
+    console.log(
+      "⚠ SEED_ADMIN_EMAIL yoki SEED_ADMIN_PASSWORD env o'zgaruvchisi yo'q — admin yaratilmadi."
+    );
+    return;
+  }
+
   console.log(`→ Seeding admin user (${adminEmail})...`);
-  const passwordHash = await bcrypt.hash(adminPassword, 10);
+  const passwordHash = await bcrypt.hash(adminPassword, 12);
   await prisma.user.upsert({
     where: { email: adminEmail },
     update: {},

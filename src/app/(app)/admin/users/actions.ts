@@ -22,7 +22,7 @@ export async function createUserAction(
     const parsed = createSchema.parse(input);
     const exists = await prisma.user.findUnique({ where: { email: parsed.email } });
     if (exists) return { ok: false, error: "Bu email band." };
-    const passwordHash = await bcrypt.hash(parsed.password, 10);
+    const passwordHash = await bcrypt.hash(parsed.password, 12);
     await prisma.user.create({
       data: {
         name: parsed.name,
@@ -63,7 +63,7 @@ export async function resetPasswordAction(
   try {
     await requireAdmin();
     const parsed = passwordSchema.parse(input);
-    const passwordHash = await bcrypt.hash(parsed.password, 10);
+    const passwordHash = await bcrypt.hash(parsed.password, 12);
     await prisma.user.update({
       where: { id: parsed.id },
       data: { passwordHash },
