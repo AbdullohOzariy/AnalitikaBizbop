@@ -125,7 +125,7 @@ async function _planCompletion(range: DateRange, branchId?: number): Promise<Pla
   // Aggregations
   const [branches, categories] = await Promise.all([
     prisma.branch.findMany({ orderBy: { sortOrder: "asc" } }),
-    prisma.category.findMany({ orderBy: { sortOrder: "asc" } }),
+    prisma.category.findMany({ where: { parentId: null }, orderBy: { sortOrder: "asc" } }),
   ]);
 
   let totalPlan = 0;

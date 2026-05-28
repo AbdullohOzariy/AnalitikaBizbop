@@ -42,25 +42,35 @@ const BRANCHES = [
   },
 ];
 
-const CATEGORIES = [
-  "BAKALEYA",
-  "CHISTYASHIE SREDSTVI",
-  "DETSKIY",
-  "IGRUSHKI",
-  "KASSA",
-  "KOFE I CHAY",
-  "KOLBASNIY",
-  "KONFETI I SHOKOLAD",
-  "KONSTOVARI",
-  "MOLOCHKA",
-  "MYASNOY",
-  "OVOSHI I FRUKTI",
-  "PARFUMERIYA",
-  "SNEKI",
-  "SOKI I NAPITKI",
-  "SUXIE FRUKTI",
-  "XLEB I KONDITERSKIY",
-  "XOZ TOVARI",
+const GROUPS = [
+  { name: "FRESH",    sortOrder: 1 },
+  { name: "FOOD",     sortOrder: 2 },
+  { name: "NON-FOOD", sortOrder: 3 },
+];
+
+// name = DB ga yoziladigan kanonik nom, sortOrder > 0 = analitikada ko'rinadi
+const CATEGORIES: { name: string; groupName: string; sortOrder: number }[] = [
+  { name: "MOLOCHKA",            groupName: "FRESH",    sortOrder: 1  },
+  { name: "MYASNOY",             groupName: "FRESH",    sortOrder: 2  },
+  { name: "OVOSH I FRUKTI",      groupName: "FRESH",    sortOrder: 3  },
+  { name: "KOLBASNIY",           groupName: "FRESH",    sortOrder: 4  },
+  { name: "TUXUM",               groupName: "FRESH",    sortOrder: 5  },
+  { name: "TAYYOR MAHSULOT",     groupName: "FRESH",    sortOrder: 6  },
+  { name: "XLEB I KONDITERSKIY", groupName: "FRESH",    sortOrder: 7  },
+  { name: "BAKALEYA",            groupName: "FOOD",     sortOrder: 8  },
+  { name: "KOFE I CHAY",         groupName: "FOOD",     sortOrder: 9  },
+  { name: "SHIRINLIKLAR",        groupName: "FOOD",     sortOrder: 10 },
+  { name: "SNACK&QURUQ MEVALAR", groupName: "FOOD",     sortOrder: 11 },
+  { name: "SOK I NAPITKI",       groupName: "FOOD",     sortOrder: 12 },
+  { name: "ZAMOROZKA",           groupName: "FOOD",     sortOrder: 13 },
+  { name: "DETSOE PITANIE",      groupName: "FOOD",     sortOrder: 14 },
+  { name: "CHISTYASHIE SREDSTO", groupName: "NON-FOOD", sortOrder: 15 },
+  { name: "DETSKIY",             groupName: "NON-FOOD", sortOrder: 16 },
+  { name: "IGRUSHKI",            groupName: "NON-FOOD", sortOrder: 17 },
+  { name: "KONSTOVAR",           groupName: "NON-FOOD", sortOrder: 18 },
+  { name: "PARFYUMERIYA",        groupName: "NON-FOOD", sortOrder: 19 },
+  { name: "XOZ TOVAR",           groupName: "NON-FOOD", sortOrder: 20 },
+  { name: "ZOOTOVAR",            groupName: "NON-FOOD", sortOrder: 21 },
 ];
 
 async function main() {
@@ -80,12 +90,24 @@ async function main() {
     }
   }
 
+  console.log("→ Seeding category groups...");
+  const groupMap = new Map<string, number>();
+  for (const g of GROUPS) {
+    const group = await prisma.categoryGroup.upsert({
+      where: { name: g.name },
+      update: { sortOrder: g.sortOrder },
+      create: { name: g.name, sortOrder: g.sortOrder },
+    });
+    groupMap.set(g.name, group.id);
+  }
+
   console.log("→ Seeding categories...");
-  for (let i = 0; i < CATEGORIES.length; i++) {
+  for (const cat of CATEGORIES) {
+    const groupId = groupMap.get(cat.groupName)!;
     await prisma.category.upsert({
-      where: { name: CATEGORIES[i] },
-      update: { sortOrder: i + 1 },
-      create: { name: CATEGORIES[i], sortOrder: i + 1 },
+      where: { name: cat.name },
+      update: { sortOrder: cat.sortOrder, groupId },
+      create: { name: cat.name, sortOrder: cat.sortOrder, groupId },
     });
   }
 

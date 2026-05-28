@@ -39,7 +39,7 @@ const NAV: NavItem[] = [
   { href: "/dashboard",    label: "Dashboard",         icon: LayoutDashboard },
   { href: "/dashboard-v2", label: "Dashboard v2",      icon: Sparkles },
   { href: "/branches",     label: "Filiallar",          icon: Building2 },
-  { href: "/categories",   label: "Kategoriyalar",      icon: Tag },
+  { href: "/iyerarxiya",   label: "Iyerarxiya",          icon: Tag },
   { href: "/report",       label: "Hisobot",            icon: Table2 },
   { href: "/admin/upload", label: "Fayllar",            icon: Upload,  adminOnly: true },
   { href: "/admin/plans",  label: "Normal Reja",        icon: Target,  adminOnly: true },

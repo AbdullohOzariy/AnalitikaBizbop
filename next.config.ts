@@ -1,7 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  async redirects() {
+    return [
+      { source: "/categories", destination: "/iyerarxiya", permanent: true },
+    ];
+  },
 };
 
 export default nextConfig;

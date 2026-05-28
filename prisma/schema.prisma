@@ -73,10 +73,24 @@ model BranchAlias {
   @@index([branchId])
 }
 
+model CategoryGroup {
+  id        Int    @id @default(autoincrement())
+  name      String @unique
+  sortOrder Int    @default(0)
+
+  categories Category[]
+}
+
 model Category {
   id        Int    @id @default(autoincrement())
   name      String @unique
   sortOrder Int    @default(0)
+  groupId   Int?
+  parentId  Int?
+
+  group    CategoryGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  parent   Category?      @relation("CategoryParent", fields: [parentId], references: [id], onDelete: SetNull)
+  children Category[]     @relation("CategoryParent")
 
   aliases    CategoryAlias[]
   sales      CategorySales[]

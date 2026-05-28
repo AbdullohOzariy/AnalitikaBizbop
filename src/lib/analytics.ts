@@ -499,7 +499,7 @@ async function _topCategories(
   limit = 18
 ): Promise<CategoryRow[]> {
   const [cats, factMap, planMap, costMap] = await Promise.all([
-    prisma.category.findMany({ orderBy: { sortOrder: "asc" } }),
+    prisma.category.findMany({ where: { parentId: null }, orderBy: { sortOrder: "asc" } }),
     _salesByCategory(range, branchId),
     _planByCategory(range, branchId),
     _costByCategory(range, branchId),
@@ -720,7 +720,7 @@ async function _branchReport(range: DateRange): Promise<BranchReportRow[]> {
   const [branches, allCategories, salesBCMap, costBCMap, planBCMap, metricsMap, visitsMap] =
     await Promise.all([
       prisma.branch.findMany({ orderBy: { sortOrder: "asc" } }),
-      prisma.category.findMany({ where: { sortOrder: { gt: 0 } }, orderBy: { sortOrder: "asc" } }),
+      prisma.category.findMany({ where: { parentId: null, sortOrder: { gt: 0 } }, orderBy: { sortOrder: "asc" } }),
       _salesByBranchCategory(range),
       _costByBranchCategory(range),
       _planByBranchCategory(range),
