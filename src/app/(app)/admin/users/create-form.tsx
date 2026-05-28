@@ -27,7 +27,7 @@ export function CreateUserForm() {
         name: String(fd.get("name") ?? ""),
         email: String(fd.get("email") ?? ""),
         password: String(fd.get("password") ?? ""),
-        role: role as "ADMIN" | "VIEWER",
+        role: role as "ADMIN" | "VIEWER" | "CAT_MANAGER",
       });
       if (res.ok) {
         toast.success("Foydalanuvchi qo'shildi.");
@@ -61,6 +61,7 @@ export function CreateUserForm() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="VIEWER">Ko'ruvchi</SelectItem>
+            <SelectItem value="CAT_MANAGER">Kategoriya menejeri</SelectItem>
             <SelectItem value="ADMIN">Admin</SelectItem>
           </SelectContent>
         </Select>

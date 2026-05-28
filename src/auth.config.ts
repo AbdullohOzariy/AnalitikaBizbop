@@ -16,7 +16,9 @@ export const authConfig = {
       if (isOnAuthApi) return true;
       if (isOnLogin) {
         if (isLoggedIn) {
-          return Response.redirect(new URL("/dashboard", nextUrl));
+          const role = (auth as { user?: { role?: string } })?.user?.role;
+          const dest = role === "CAT_MANAGER" ? "/dashboard-v2" : "/dashboard";
+          return Response.redirect(new URL(dest, nextUrl));
         }
         return true;
       }

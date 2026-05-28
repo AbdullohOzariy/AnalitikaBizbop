@@ -20,3 +20,12 @@ export async function requireUser() {
   if (!session?.user) throw new AuthorizationError();
   return session.user;
 }
+
+export async function requireCatManagerOrAdmin() {
+  const session = await auth();
+  const role = session?.user?.role;
+  if (!session?.user || (role !== "ADMIN" && role !== "CAT_MANAGER")) {
+    throw new AuthorizationError();
+  }
+  return session.user;
+}

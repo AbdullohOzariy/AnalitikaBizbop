@@ -15,8 +15,9 @@ import { CreateUserForm } from "./create-form";
 import { UserActions } from "./user-actions";
 
 const ROLE_LABEL: Record<string, string> = {
-  ADMIN: "Admin",
-  VIEWER: "Ko'ruvchi",
+  ADMIN:       "Admin",
+  VIEWER:      "Ko'ruvchi",
+  CAT_MANAGER: "Kategoriya menejeri",
 };
 
 export default async function UsersPage() {

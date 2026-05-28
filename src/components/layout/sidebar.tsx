@@ -33,17 +33,18 @@ type NavItem = {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   adminOnly?: boolean;
+  roles?: Role[]; // faqat shu rollar ko'radi (bo'sh = hammasi)
 };
 
 const NAV: NavItem[] = [
-  { href: "/dashboard",    label: "Dashboard",         icon: LayoutDashboard },
+  { href: "/dashboard",    label: "Dashboard",         icon: LayoutDashboard, roles: ["ADMIN", "VIEWER"] },
   { href: "/dashboard-v2", label: "Dashboard v2",      icon: Sparkles },
-  { href: "/branches",     label: "Filiallar",          icon: Building2 },
-  { href: "/iyerarxiya",   label: "Iyerarxiya",          icon: Tag },
-  { href: "/report",       label: "Hisobot",            icon: Table2 },
-  { href: "/admin/upload", label: "Fayllar",            icon: Upload,  adminOnly: true },
-  { href: "/admin/plans",  label: "Normal Reja",        icon: Target,  adminOnly: true },
-  { href: "/admin/users",  label: "Foydalanuvchilar",   icon: Users,   adminOnly: true },
+  { href: "/branches",     label: "Filiallar",          icon: Building2,       roles: ["ADMIN", "VIEWER"] },
+  { href: "/iyerarxiya",   label: "Iyerarxiya",         icon: Tag },
+  { href: "/report",       label: "Hisobot",            icon: Table2,          roles: ["ADMIN", "VIEWER"] },
+  { href: "/admin/upload", label: "Fayllar",            icon: Upload,          adminOnly: true },
+  { href: "/admin/plans",  label: "Normal Reja",        icon: Target,          adminOnly: true },
+  { href: "/admin/users",  label: "Foydalanuvchilar",   icon: Users,           adminOnly: true },
 ];
 
 function SidebarNav({
@@ -58,7 +59,11 @@ function SidebarNav({
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
-  const items = NAV.filter((i) => !i.adminOnly || role === "ADMIN");
+  const items = NAV.filter((i) => {
+    if (i.adminOnly && role !== "ADMIN") return false;
+    if (i.roles && !i.roles.includes(role)) return false;
+    return true;
+  });
 
   return (
     <>
@@ -154,7 +159,7 @@ function SidebarNav({
           />
           {!collapsed && (
             <span className="text-xs text-muted-foreground font-medium truncate">
-              {role === "ADMIN" ? "Administrator" : "Ko'ruvchi"} · v0.1
+              {role === "ADMIN" ? "Administrator" : role === "CAT_MANAGER" ? "Kategoriya menejeri" : "Ko'ruvchi"} · v0.1
             </span>
           )}
         </div>

@@ -13,6 +13,7 @@ datasource db {
 enum Role {
   ADMIN
   VIEWER
+  CAT_MANAGER
 }
 
 enum FileType {

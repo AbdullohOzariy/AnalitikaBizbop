@@ -11,7 +11,7 @@ const createSchema = z.object({
   name: z.string().trim().min(1).max(100),
   email: z.string().email().toLowerCase(),
   password: z.string().min(6, "Parol kamida 6 belgi"),
-  role: z.enum(["ADMIN", "VIEWER"]),
+  role: z.enum(["ADMIN", "VIEWER", "CAT_MANAGER"]),
 });
 
 export async function createUserAction(
@@ -31,6 +31,7 @@ export async function createUserAction(
         role: parsed.role as Role,
       },
     });
+
     revalidatePath("/admin/users");
     return { ok: true };
   } catch (err) {
