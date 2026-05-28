@@ -406,3 +406,148 @@ export const kpiByBranch = (range: DateRange) =>
     ["v2_kpiByBranch", ...makeKey(range)],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
   )();
+
+// ============ Guruh/Kategoriya bo'yicha kunlik savdo dinamikasi ============
+
+export type GroupSalesDayRow = {
+  date: string;                                       // ISO YYYY-MM-DD
+  total: number;                                      // barcha guruhlar jami
+  groups: { groupId: number; groupName: string; amount: number }[];
+};
+
+export type CategorySalesDayRow = {
+  date: string;
+  total: number;                                      // guruh ichidagi jami
+  categories: { categoryId: number; categoryName: string; amount: number; pct: number }[];
+};
+
+async function _dailySalesByGroup(
+  range: DateRange,
+  branchId?: number
+): Promise<{ days: GroupSalesDayRow[]; groups: { id: number; name: string }[] }> {
+  const branchSql = branchId ? Prisma.sql`AND cs."branchId" = ${branchId}` : Prisma.empty;
+
+  // Kunlik pro-rated savdo: guruh bo'yicha
+  const rows = await prisma.$queryRaw<
+    { d: string; groupId: number; groupName: string; amount: number }[]
+  >`
+    SELECT
+      g.s::text                           AS d,
+      cg.id                               AS "groupId",
+      cg.name                             AS "groupName",
+      COALESCE(SUM(
+        cs.amount::numeric * (
+          (LEAST(cs."periodEnd", ${range.end}::date) - GREATEST(cs."periodStart", g.s::date) + 1)::float8
+          / NULLIF((cs."periodEnd" - cs."periodStart" + 1)::float8, 0)
+        )
+      ), 0)::float8                        AS amount
+    FROM generate_series(${range.start}::date, ${range.end}::date, '1 day'::interval) AS g(s)
+    CROSS JOIN "CategoryGroup" cg
+    LEFT JOIN "Category" cat ON cat."groupId" = cg.id AND cat."parentId" IS NULL AND cat."sortOrder" > 0
+    LEFT JOIN "CategorySales" cs
+      ON cs."categoryId" = cat.id
+      AND cs."periodStart" <= g.s::date
+      AND cs."periodEnd"   >= g.s::date
+      ${branchSql}
+    GROUP BY g.s, cg.id, cg.name
+    ORDER BY g.s, cg."sortOrder"
+  `;
+
+  // Guruhlar ro'yxati (tartib saqlansin)
+  const groupMap = new Map<number, string>();
+  for (const r of rows) groupMap.set(r.groupId, r.groupName);
+  const groups = [...groupMap.entries()].map(([id, name]) => ({ id, name }));
+
+  // Kunlar bo'yicha birlashtirish
+  const dayMap = new Map<string, Map<number, number>>();
+  for (const r of rows) {
+    if (!dayMap.has(r.d)) dayMap.set(r.d, new Map());
+    dayMap.get(r.d)!.set(r.groupId, Number(r.amount));
+  }
+
+  const days: GroupSalesDayRow[] = [];
+  for (let t = range.start.getTime(); t <= range.end.getTime(); t += dayMs) {
+    const iso = isoDay(new Date(t));
+    const gMap = dayMap.get(iso) ?? new Map();
+    const groupAmounts = groups.map((g) => ({ groupId: g.id, groupName: g.name, amount: gMap.get(g.id) ?? 0 }));
+    const total = groupAmounts.reduce((s, g) => s + g.amount, 0);
+    days.push({ date: iso, total, groups: groupAmounts });
+  }
+  return { days, groups };
+}
+
+export const dailySalesByGroup = (range: DateRange, branchId?: number) =>
+  unstable_cache(
+    () => _dailySalesByGroup(range, branchId),
+    ["v2_dailySalesByGroup", ...makeKey(range, branchId)],
+    { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
+  )();
+
+async function _dailySalesByCategory(
+  range: DateRange,
+  groupId: number,
+  branchId?: number
+): Promise<{ days: CategorySalesDayRow[]; categories: { id: number; name: string }[] }> {
+  const branchSql = branchId ? Prisma.sql`AND cs."branchId" = ${branchId}` : Prisma.empty;
+
+  const rows = await prisma.$queryRaw<
+    { d: string; categoryId: number; categoryName: string; amount: number }[]
+  >`
+    SELECT
+      g.s::text                           AS d,
+      cat.id                              AS "categoryId",
+      cat.name                            AS "categoryName",
+      COALESCE(SUM(
+        cs.amount::numeric * (
+          (LEAST(cs."periodEnd", ${range.end}::date) - GREATEST(cs."periodStart", g.s::date) + 1)::float8
+          / NULLIF((cs."periodEnd" - cs."periodStart" + 1)::float8, 0)
+        )
+      ), 0)::float8                        AS amount
+    FROM generate_series(${range.start}::date, ${range.end}::date, '1 day'::interval) AS g(s)
+    CROSS JOIN "Category" cat
+    LEFT JOIN "CategorySales" cs
+      ON cs."categoryId" = cat.id
+      AND cs."periodStart" <= g.s::date
+      AND cs."periodEnd"   >= g.s::date
+      ${branchSql}
+    WHERE cat."groupId" = ${groupId}
+      AND cat."parentId" IS NULL
+      AND cat."sortOrder" > 0
+    GROUP BY g.s, cat.id, cat.name, cat."sortOrder"
+    ORDER BY g.s, cat."sortOrder"
+  `;
+
+  const catMap = new Map<number, string>();
+  for (const r of rows) catMap.set(r.categoryId, r.categoryName);
+  const categories = [...catMap.entries()].map(([id, name]) => ({ id, name }));
+
+  const dayMap = new Map<string, Map<number, number>>();
+  for (const r of rows) {
+    if (!dayMap.has(r.d)) dayMap.set(r.d, new Map());
+    dayMap.get(r.d)!.set(r.categoryId, Number(r.amount));
+  }
+
+  const days: CategorySalesDayRow[] = [];
+  for (let t = range.start.getTime(); t <= range.end.getTime(); t += dayMs) {
+    const iso = isoDay(new Date(t));
+    const cMap = dayMap.get(iso) ?? new Map();
+    const catAmounts = categories.map((c) => ({ categoryId: c.id, categoryName: c.name, amount: cMap.get(c.id) ?? 0 }));
+    const total = catAmounts.reduce((s, c) => s + c.amount, 0);
+    days.push({
+      date: iso,
+      total,
+      categories: catAmounts.map((c) => ({
+        ...c,
+        pct: total > 0 ? (c.amount / total) * 100 : 0,
+      })),
+    });
+  }
+  return { days, categories };
+}
+
+export const dailySalesByCategory = (range: DateRange, groupId: number, branchId?: number) =>
+  unstable_cache(
+    () => _dailySalesByCategory(range, groupId, branchId),
+    ["v2_dailySalesByCategory", ...makeKey(range, branchId, `g${groupId}`)],
+    { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
+  )();

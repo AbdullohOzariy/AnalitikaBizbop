@@ -23,6 +23,8 @@ import type {
   DailyByBranchSeries,
   MarjaRow,
   KpiByBranchRow,
+  GroupSalesDayRow,
+  CategorySalesDayRow,
 } from "@/lib/analytics-v2";
 
 const PALETTE = ["#10b981", "#facc15", "#fb923c", "#6366f1", "#0ea5e9", "#f87171", "#a855f7", "#14b8a6"];
@@ -426,5 +428,179 @@ export function AvgItemsWidget({
         ))}
       </div>
     </ExpandableCard>
+  );
+}
+
+// ============ 8. Guruh/Kategoriya kunlik savdo dinamikasi ============
+
+const GROUP_COLORS: Record<string, string> = {
+  "FRESH":    "#10b981",
+  "FOOD":     "#facc15",
+  "NON-FOOD": "#6366f1",
+};
+const CAT_PALETTE = ["#10b981","#34d399","#6ee7b7","#facc15","#fde047","#fef08a",
+  "#6366f1","#818cf8","#a5b4fc","#fb923c","#f97316","#ea580c",
+  "#0ea5e9","#38bdf8","#7dd3fc","#f87171","#ef4444","#dc2626"];
+
+type GroupMeta = { id: number; name: string };
+
+export function GroupSalesDynamicsWidget({
+  days,
+  groups,
+  categoryDataMap,
+}: {
+  days: GroupSalesDayRow[];
+  groups: GroupMeta[];
+  categoryDataMap: Map<number, { days: CategorySalesDayRow[]; categories: { id: number; name: string }[] }>;
+}) {
+  const [activeGroup, setActiveGroup] = useState<number | null>(null);
+
+  function shortDate(iso: string) {
+    const m = iso.match(/^\d{4}-(\d{2})-(\d{2})$/);
+    return m ? `${m[2]}.${m[1]}` : iso;
+  }
+
+  // Guruhlar bo'yicha chart data
+  const groupChartData = days.map((d) => {
+    const row: Record<string, string | number> = { _label: shortDate(d.date) };
+    for (const g of d.groups) row[`g${g.groupId}`] = g.amount;
+    return row;
+  });
+
+  // Tanlangan guruh uchun kategoriya chart data
+  const catData = activeGroup != null ? categoryDataMap.get(activeGroup) : null;
+  const catChartData = catData
+    ? catData.days.map((d) => {
+        const row: Record<string, string | number> = { _label: shortDate(d.date) };
+        for (const c of d.categories) row[`c${c.categoryId}`] = c.pct;
+        return row;
+      })
+    : null;
+
+  const fmtUZS = (v: number) => v === 0 ? "—" : formatUZS(v, { compact: true });
+
+  return (
+    <div className="col-span-2 space-y-4">
+      {/* Guruhlar bo'yicha kunlik savdo */}
+      <ExpandableCard title="8. Guruhlar bo'yicha kunlik savdo" className="rounded-2xl">
+        {/* Guruh filtr tugmalari */}
+        <div className="flex flex-wrap gap-2 mb-4">
+          <button
+            onClick={() => setActiveGroup(null)}
+            className={`h-7 rounded-full px-3 text-xs font-medium border transition-colors ${
+              activeGroup === null
+                ? "bg-foreground text-background border-foreground"
+                : "bg-background text-muted-foreground border-border hover:border-foreground/40"
+            }`}
+          >
+            Barcha guruhlar
+          </button>
+          {groups.map((g) => {
+            const color = GROUP_COLORS[g.name] ?? "#94a3b8";
+            const isActive = activeGroup === g.id;
+            return (
+              <button
+                key={g.id}
+                onClick={() => setActiveGroup(isActive ? null : g.id)}
+                className={`h-7 rounded-full px-3 text-xs font-semibold border transition-all ${
+                  isActive ? "shadow-sm scale-[1.03]" : "opacity-70 hover:opacity-100"
+                }`}
+                style={{
+                  backgroundColor: isActive ? color + "22" : "transparent",
+                  borderColor: color,
+                  color: color,
+                }}
+              >
+                {g.name}
+              </button>
+            );
+          })}
+        </div>
+
+        <ResponsiveContainer width="100%" height={300}>
+          <LineChart data={groupChartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+            <XAxis dataKey="_label" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
+            <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => fmtUZS(Number(v))} />
+            <Tooltip
+              contentStyle={tooltipStyle}
+              formatter={(value, name) => {
+                const g = groups.find((g) => `g${g.id}` === name);
+                return [fmtUZS(Number(value)), g?.name ?? String(name)];
+              }}
+            />
+            <Legend
+              formatter={(value) => {
+                const g = groups.find((g) => `g${g.id}` === value);
+                return g?.name ?? value;
+              }}
+              wrapperStyle={{ fontSize: 12 }}
+            />
+            {groups.map((g) => (
+              <Line
+                key={g.id}
+                type="monotone"
+                dataKey={`g${g.id}`}
+                name={`g${g.id}`}
+                stroke={GROUP_COLORS[g.name] ?? "#94a3b8"}
+                strokeWidth={activeGroup === null || activeGroup === g.id ? 2.5 : 1}
+                opacity={activeGroup === null || activeGroup === g.id ? 1 : 0.25}
+                dot={false}
+                activeDot={{ r: 4 }}
+              />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      </ExpandableCard>
+
+      {/* Kategoriyalar bo'yicha foiz dinamikasi (guruh tanlanganda) */}
+      {activeGroup != null && catData && catData.categories.length > 0 && (
+        <ExpandableCard
+          title={`${groups.find((g) => g.id === activeGroup)?.name ?? ""} — kategoriyalar bo'yicha foiz (%)`}
+          className="rounded-2xl"
+        >
+          <p className="text-xs text-muted-foreground mb-3">
+            Guruh ichidagi har bir kategoriyaning kunlik ulushi (%)
+          </p>
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={catChartData!} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <XAxis dataKey="_label" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
+              <YAxis
+                tick={{ fontSize: 11 }}
+                tickFormatter={(v) => `${Number(v).toFixed(0)}%`}
+                domain={[0, 100]}
+              />
+              <Tooltip
+                contentStyle={tooltipStyle}
+                formatter={(value, name) => {
+                  const c = catData.categories.find((c) => `c${c.id}` === name);
+                  return [`${Number(value).toFixed(1)}%`, c?.name ?? String(name)];
+                }}
+              />
+              <Legend
+                formatter={(value) => {
+                  const c = catData.categories.find((c) => `c${c.id}` === value);
+                  return c?.name ?? value;
+                }}
+                wrapperStyle={{ fontSize: 11 }}
+              />
+              {catData.categories.map((c, i) => (
+                <Line
+                  key={c.id}
+                  type="monotone"
+                  dataKey={`c${c.id}`}
+                  name={`c${c.id}`}
+                  stroke={CAT_PALETTE[i % CAT_PALETTE.length]}
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{ r: 4 }}
+                />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
+        </ExpandableCard>
+      )}
+    </div>
   );
 }

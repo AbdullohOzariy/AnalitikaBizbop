@@ -10,6 +10,8 @@ import {
   dailyAvgReceiptByBranch,
   marjaBreakdown,
   kpiByBranch,
+  dailySalesByGroup,
+  dailySalesByCategory,
 } from "@/lib/analytics-v2";
 import { FiltersBar } from "./filters";
 import {
@@ -19,6 +21,7 @@ import {
   MarjaByCategoryWidget,
   ConversionWidget,
   AvgItemsWidget,
+  GroupSalesDynamicsWidget,
 } from "./widgets";
 
 function parseISO(s: string | undefined, fallback: Date): Date {
@@ -111,6 +114,7 @@ async function WidgetsSection({
     prevReceipts,
     prevAvgReceipt,
     prevKpi,
+    groupSales,
   ] = await Promise.all([
     planCompletion(range, branchId),
     dailyVisitsByBranch(range),
@@ -121,7 +125,17 @@ async function WidgetsSection({
     dailyReceiptsByBranch(previousRange),
     dailyAvgReceiptByBranch(previousRange),
     kpiByBranch(previousRange),
+    dailySalesByGroup(range, branchId),
   ]);
+
+  // Har bir guruh uchun kategoriya dinamikasini parallel olish
+  const catDataEntries = await Promise.all(
+    groupSales.groups.map(async (g) => {
+      const data = await dailySalesByCategory(range, g.id, branchId);
+      return [g.id, data] as const;
+    })
+  );
+  const categoryDataMap = new Map(catDataEntries);
 
   const filterByBranch = (s: typeof visits) =>
     branchId == null ? s : { ...s, branches: s.branches.filter((b) => b.id === branchId) };
@@ -179,6 +193,11 @@ async function WidgetsSection({
       />
       <ConversionWidget rows={kpiWithTrends} trend={conversionTrend} />
       <AvgItemsWidget rows={kpiWithTrends} trend={avgItemsTrend} />
+      <GroupSalesDynamicsWidget
+        days={groupSales.days}
+        groups={groupSales.groups}
+        categoryDataMap={categoryDataMap}
+      />
     </div>
   );
 }
