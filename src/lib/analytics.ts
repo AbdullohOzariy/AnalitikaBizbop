@@ -193,61 +193,102 @@ function monthsInRange(range: DateRange) {
   return months;
 }
 
-/** Reja: kategoriya bo'yicha (1 query). */
+/**
+ * Reja: kategoriya bo'yicha.
+ * DailyPlan ustunlik qiladi; mavjud bo'lmagan (branchId, categoryId) juftlari uchun
+ * MonthlyPlan pro-rated fallback sifatida ishlatiladi.
+ */
 async function _planByCategory(
   range: DateRange,
   branchId?: number
 ): Promise<Map<number, number>> {
-  const months = monthsInRange(range);
-  if (months.length === 0) return new Map();
-  const ymPairs = Prisma.join(
-    months.map((m) => Prisma.sql`(${m.year}, ${m.month})`)
-  );
-  const rows = await prisma.$queryRaw<
-    { categoryId: number; year: number; month: number; total: number | null }[]
+  const branchSql = branchId ? Prisma.sql`AND "branchId" = ${branchId}` : Prisma.empty;
+
+  // 1. DailyPlan — kategoriya bo'yicha jami (barcha filiallar yoki bitta filial)
+  const dailyRows = await prisma.$queryRaw<
+    { categoryId: number; total: number | null }[]
   >`
-    SELECT "categoryId", "year", "month",
-           COALESCE(SUM("planAmount"::numeric), 0)::float8 AS total
-    FROM "MonthlyPlan"
-    WHERE ("year", "month") IN (${ymPairs})
-      ${branchId ? Prisma.sql`AND "branchId" = ${branchId}` : Prisma.empty}
-    GROUP BY "categoryId", "year", "month"
+    SELECT "categoryId", COALESCE(SUM("planAmount"::numeric), 0)::float8 AS total
+    FROM "DailyPlan"
+    WHERE date BETWEEN ${range.start}::date AND ${range.end}::date
+      ${branchSql}
+    GROUP BY "categoryId"
   `;
-  const monthMeta = new Map(months.map((m) => [`${m.year}-${m.month}`, m]));
-  const map = new Map<number, number>();
-  for (const r of rows) {
-    const meta = monthMeta.get(`${r.year}-${r.month}`);
-    if (!meta || meta.daysInMonth === 0) continue;
-    const prorated = Number(r.total ?? 0) * (meta.overlapDays / meta.daysInMonth);
-    map.set(r.categoryId, (map.get(r.categoryId) ?? 0) + prorated);
+  const dailyMap = new Map<number, number>();
+  for (const r of dailyRows) dailyMap.set(r.categoryId, Number(r.total ?? 0));
+
+  // 2. MonthlyPlan — pro-rated (fallback)
+  const months = monthsInRange(range);
+  const monthlyMap = new Map<number, number>();
+  if (months.length > 0) {
+    const ymPairs = Prisma.join(months.map((m) => Prisma.sql`(${m.year}, ${m.month})`));
+    const rows = await prisma.$queryRaw<
+      { categoryId: number; year: number; month: number; total: number | null }[]
+    >`
+      SELECT "categoryId", "year", "month",
+             COALESCE(SUM("planAmount"::numeric), 0)::float8 AS total
+      FROM "MonthlyPlan"
+      WHERE ("year", "month") IN (${ymPairs})
+        ${branchSql}
+      GROUP BY "categoryId", "year", "month"
+    `;
+    const monthMeta = new Map(months.map((m) => [`${m.year}-${m.month}`, m]));
+    for (const r of rows) {
+      const meta = monthMeta.get(`${r.year}-${r.month}`);
+      if (!meta || meta.daysInMonth === 0) continue;
+      const prorated = Number(r.total ?? 0) * (meta.overlapDays / meta.daysInMonth);
+      monthlyMap.set(r.categoryId, (monthlyMap.get(r.categoryId) ?? 0) + prorated);
+    }
   }
+
+  // DailyPlan ustunlik qiladi; yo'q kategoriyalar uchun MonthlyPlan ishlatiladi
+  const map = new Map<number, number>(monthlyMap);
+  for (const [catId, val] of dailyMap) map.set(catId, val);
   return map;
 }
 
-/** Reja: filial bo'yicha (1 query). */
+/**
+ * Reja: filial bo'yicha.
+ * DailyPlan mavjud filiallar uchun MonthlyPlan ni almashtiradi.
+ */
 async function _planByBranch(range: DateRange): Promise<Map<number, number>> {
-  const months = monthsInRange(range);
-  if (months.length === 0) return new Map();
-  const ymPairs = Prisma.join(
-    months.map((m) => Prisma.sql`(${m.year}, ${m.month})`)
-  );
-  const rows = await prisma.$queryRaw<
-    { branchId: number; year: number; month: number; total: number | null }[]
+  // 1. DailyPlan — filial bo'yicha jami
+  const dailyRows = await prisma.$queryRaw<
+    { branchId: number; total: number | null }[]
   >`
-    SELECT "branchId", "year", "month",
-           COALESCE(SUM("planAmount"::numeric), 0)::float8 AS total
-    FROM "MonthlyPlan"
-    WHERE ("year", "month") IN (${ymPairs})
-    GROUP BY "branchId", "year", "month"
+    SELECT "branchId", COALESCE(SUM("planAmount"::numeric), 0)::float8 AS total
+    FROM "DailyPlan"
+    WHERE date BETWEEN ${range.start}::date AND ${range.end}::date
+    GROUP BY "branchId"
   `;
-  const monthMeta = new Map(months.map((m) => [`${m.year}-${m.month}`, m]));
-  const map = new Map<number, number>();
-  for (const r of rows) {
-    const meta = monthMeta.get(`${r.year}-${r.month}`);
-    if (!meta || meta.daysInMonth === 0) continue;
-    const prorated = Number(r.total ?? 0) * (meta.overlapDays / meta.daysInMonth);
-    map.set(r.branchId, (map.get(r.branchId) ?? 0) + prorated);
+  const dailyMap = new Map<number, number>();
+  for (const r of dailyRows) dailyMap.set(r.branchId, Number(r.total ?? 0));
+
+  // 2. MonthlyPlan — pro-rated (fallback)
+  const months = monthsInRange(range);
+  const monthlyMap = new Map<number, number>();
+  if (months.length > 0) {
+    const ymPairs = Prisma.join(months.map((m) => Prisma.sql`(${m.year}, ${m.month})`));
+    const rows = await prisma.$queryRaw<
+      { branchId: number; year: number; month: number; total: number | null }[]
+    >`
+      SELECT "branchId", "year", "month",
+             COALESCE(SUM("planAmount"::numeric), 0)::float8 AS total
+      FROM "MonthlyPlan"
+      WHERE ("year", "month") IN (${ymPairs})
+      GROUP BY "branchId", "year", "month"
+    `;
+    const monthMeta = new Map(months.map((m) => [`${m.year}-${m.month}`, m]));
+    for (const r of rows) {
+      const meta = monthMeta.get(`${r.year}-${r.month}`);
+      if (!meta || meta.daysInMonth === 0) continue;
+      const prorated = Number(r.total ?? 0) * (meta.overlapDays / meta.daysInMonth);
+      monthlyMap.set(r.branchId, (monthlyMap.get(r.branchId) ?? 0) + prorated);
+    }
   }
+
+  const map = new Map<number, number>(monthlyMap);
+  for (const [branchId, val] of dailyMap) map.set(branchId, val);
   return map;
 }
 
@@ -591,32 +632,55 @@ async function _costByBranchCategory(
   return map;
 }
 
-/** Filial × kategoriya bo'yicha pro-rated reja (2D map). */
+/**
+ * Filial × kategoriya bo'yicha reja (2D map).
+ * DailyPlan mavjud (branchId, categoryId) juftlari uchun MonthlyPlan ni almashtiradi.
+ */
 async function _planByBranchCategory(
   range: DateRange
 ): Promise<Map<number, Map<number, number>>> {
-  const months = monthsInRange(range);
-  if (months.length === 0) return new Map();
-  const ymPairs = Prisma.join(months.map((m) => Prisma.sql`(${m.year}, ${m.month})`));
-  const rows = await prisma.$queryRaw<
-    { branchId: number; categoryId: number; year: number; month: number; total: number | null }[]
+  // 1. DailyPlan — (branch, category) bo'yicha jami
+  const dailyRows = await prisma.$queryRaw<
+    { branchId: number; categoryId: number; total: number | null }[]
   >`
-    SELECT "branchId", "categoryId", "year", "month",
-           COALESCE(SUM("planAmount"::numeric), 0)::float8 AS total
-    FROM "MonthlyPlan"
-    WHERE ("year", "month") IN (${ymPairs})
-    GROUP BY "branchId", "categoryId", "year", "month"
+    SELECT "branchId", "categoryId", COALESCE(SUM("planAmount"::numeric), 0)::float8 AS total
+    FROM "DailyPlan"
+    WHERE date BETWEEN ${range.start}::date AND ${range.end}::date
+    GROUP BY "branchId", "categoryId"
   `;
-  const monthMeta = new Map(months.map((m) => [`${m.year}-${m.month}`, m]));
+  const dailySet = new Set<string>();
   const map = new Map<number, Map<number, number>>();
-  for (const r of rows) {
-    const meta = monthMeta.get(`${r.year}-${r.month}`);
-    if (!meta || meta.daysInMonth === 0) continue;
-    const prorated = Number(r.total ?? 0) * (meta.overlapDays / meta.daysInMonth);
+  for (const r of dailyRows) {
+    dailySet.add(`${r.branchId}-${r.categoryId}`);
     if (!map.has(r.branchId)) map.set(r.branchId, new Map());
-    const catMap = map.get(r.branchId)!;
-    catMap.set(r.categoryId, (catMap.get(r.categoryId) ?? 0) + prorated);
+    map.get(r.branchId)!.set(r.categoryId, Number(r.total ?? 0));
   }
+
+  // 2. MonthlyPlan — pro-rated, faqat DailyPlan yo'q juftlar uchun
+  const months = monthsInRange(range);
+  if (months.length > 0) {
+    const ymPairs = Prisma.join(months.map((m) => Prisma.sql`(${m.year}, ${m.month})`));
+    const rows = await prisma.$queryRaw<
+      { branchId: number; categoryId: number; year: number; month: number; total: number | null }[]
+    >`
+      SELECT "branchId", "categoryId", "year", "month",
+             COALESCE(SUM("planAmount"::numeric), 0)::float8 AS total
+      FROM "MonthlyPlan"
+      WHERE ("year", "month") IN (${ymPairs})
+      GROUP BY "branchId", "categoryId", "year", "month"
+    `;
+    const monthMeta = new Map(months.map((m) => [`${m.year}-${m.month}`, m]));
+    for (const r of rows) {
+      if (dailySet.has(`${r.branchId}-${r.categoryId}`)) continue;
+      const meta = monthMeta.get(`${r.year}-${r.month}`);
+      if (!meta || meta.daysInMonth === 0) continue;
+      const prorated = Number(r.total ?? 0) * (meta.overlapDays / meta.daysInMonth);
+      if (!map.has(r.branchId)) map.set(r.branchId, new Map());
+      const catMap = map.get(r.branchId)!;
+      catMap.set(r.categoryId, (catMap.get(r.categoryId) ?? 0) + prorated);
+    }
+  }
+
   return map;
 }
 

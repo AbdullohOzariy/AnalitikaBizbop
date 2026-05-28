@@ -21,6 +21,7 @@ function parseDate(s: string | null, fallback: Date): Date {
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user) return new Response("Unauthorized", { status: 401 });
+  if (session.user.role !== "ADMIN") return new Response("Forbidden", { status: 403 });
 
   const sp = req.nextUrl.searchParams;
   const def = await getDefaultRange();
