@@ -2,6 +2,8 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { unstable_cache } from "next/cache";
 import { CategoryAliasAddForm, CategoryAliasDeleteButton } from "./alias-manager";
+import { EditModeToggle } from "./edit-mode-toggle";
+import { HierarchyEditor, type EditorGroup } from "./hierarchy-editor";
 
 const getHierarchy = unstable_cache(
   () =>
@@ -13,7 +15,10 @@ const getHierarchy = unstable_cache(
           orderBy: { sortOrder: "asc" },
           include: {
             aliases: { orderBy: { alias: "asc" } },
-            children: { orderBy: { sortOrder: "asc" } },
+            children: {
+              orderBy: { sortOrder: "asc" },
+              include: { _count: { select: { sales: true } } },
+            },
             _count: { select: { sales: true, plans: true, dailyPlans: true } },
           },
         },
@@ -54,15 +59,25 @@ export default async function IyerarxiyaPage() {
     0
   );
 
-  return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Iyerarxiya</h1>
-        <p className="text-sm text-muted-foreground">
-          {groups.length} ta guruh · {totalCategories} ta kategoriya · {totalSubcategories} ta subkategoriya
-        </p>
-      </div>
+  const editorGroups: EditorGroup[] = groups.map((g) => ({
+    id: g.id,
+    name: g.name,
+    code: g.code,
+    categories: g.categories.map((c) => ({
+      id: c.id,
+      name: c.name,
+      code: c.code,
+      salesCount: c._count.sales,
+      children: c.children.map((s) => ({
+        id: s.id,
+        name: s.name,
+        code: s.code,
+        salesCount: s._count.sales,
+      })),
+    })),
+  }));
 
+  const readOnlyTree = (
       <div className="space-y-3">
         {groups.map((group) => {
           const colors = GROUP_COLORS[group.name] ?? {
@@ -237,6 +252,21 @@ export default async function IyerarxiyaPage() {
           </details>
         )}
       </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Iyerarxiya</h1>
+        <p className="text-sm text-muted-foreground">
+          {groups.length} ta guruh · {totalCategories} ta kategoriya · {totalSubcategories} ta subkategoriya
+        </p>
+      </div>
+      {isAdmin ? (
+        <EditModeToggle readOnly={readOnlyTree} editor={<HierarchyEditor groups={editorGroups} />} />
+      ) : (
+        readOnlyTree
+      )}
     </div>
   );
 }

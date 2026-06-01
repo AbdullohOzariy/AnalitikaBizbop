@@ -77,6 +77,7 @@ model BranchAlias {
 model CategoryGroup {
   id        Int    @id @default(autoincrement())
   name      String @unique
+  code      Int?   @unique // 1C KOD — bo'lim identifikatori
   sortOrder Int    @default(0)
 
   categories Category[]
@@ -84,7 +85,8 @@ model CategoryGroup {
 
 model Category {
   id        Int    @id @default(autoincrement())
-  name      String @unique
+  name      String // 1C'da bir xil nom turli joyda bo'lishi mumkin — farqlash code orqali
+  code      Int?   @unique // 1C KOD — kategoriya/subkategoriya identifikatori va matching kaliti
   sortOrder Int    @default(0)
   groupId   Int?
   parentId  Int?
