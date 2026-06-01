@@ -14,13 +14,13 @@ export function LoginForm() {
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") ?? "/dashboard";
   const [isPending, startTransition] = useTransition();
-  const [email, setEmail] = useState("");
+  const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     startTransition(async () => {
-      const result = await signInAction({ email, password, callbackUrl });
+      const result = await signInAction({ login, password, callbackUrl });
       if (result.error) {
         toast.error(result.error);
         return;
@@ -38,14 +38,14 @@ export function LoginForm() {
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="login">Login</Label>
             <Input
-              id="email"
-              type="email"
-              autoComplete="email"
+              id="login"
+              type="text"
+              autoComplete="username"
               required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              value={login}
+              onChange={(e) => setLogin(e.target.value)}
               disabled={isPending}
             />
           </div>

@@ -19,7 +19,7 @@ declare module "next-auth" {
 }
 
 const credentialsSchema = z.object({
-  email: z.string().email(),
+  email: z.string().trim().min(1), // login — email bo'lishi shart emas
   password: z.string().min(1),
 });
 
@@ -28,7 +28,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     Credentials({
       credentials: {
-        email: { label: "Email", type: "email" },
+        email: { label: "Login", type: "text" },
         password: { label: "Parol", type: "password" },
       },
       authorize: async (raw) => {

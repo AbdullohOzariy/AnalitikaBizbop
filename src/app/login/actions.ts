@@ -22,7 +22,7 @@ function checkRateLimit(ip: string): boolean {
 }
 
 export async function signInAction(input: {
-  email: string;
+  login: string;
   password: string;
   callbackUrl?: string;
 }): Promise<{ error?: string; redirectTo?: string }> {
@@ -35,7 +35,7 @@ export async function signInAction(input: {
 
   try {
     await signIn("credentials", {
-      email: input.email,
+      email: input.login,
       password: input.password,
       redirect: false,
     });
@@ -43,7 +43,7 @@ export async function signInAction(input: {
   } catch (error) {
     if (error instanceof AuthError) {
       if (error.type === "CredentialsSignin") {
-        return { error: "Email yoki parol noto'g'ri." };
+        return { error: "Login yoki parol noto'g'ri." };
       }
       return { error: "Kirish xatoligi yuz berdi." };
     }
