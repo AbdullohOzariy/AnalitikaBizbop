@@ -157,10 +157,10 @@ function SidebarNav({
                 type="button"
                 onClick={() => toggleGroup(group.label)}
                 title={folded ? "Ochish" : "Yig'ish"}
-                className="flex w-full items-center justify-between rounded-md px-3 pb-1 pt-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 transition-colors hover:text-foreground"
+                className="flex w-full items-center justify-between rounded-md px-3 pb-1 pt-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
               >
                 <span>{group.label}</span>
-                <ChevronDown className={cn("h-3 w-3 shrink-0 transition-transform", folded && "-rotate-90")} />
+                <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground/70 transition-transform", folded && "-rotate-90")} />
               </button>
             )}
             {(collapsed || !folded) && group.items.map((item) => {
