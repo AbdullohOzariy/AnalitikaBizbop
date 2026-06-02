@@ -22,6 +22,7 @@ import {
   BarChart2,
   Footprints,
   CalendarDays,
+  PackageMinus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -66,7 +67,12 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/baza/reja",    label: "Rejalar",     icon: CalendarDays, roles: ["ADMIN", "CAT_MANAGER"] },
     ],
   },
-  // Keyinroq: { label: "Hisobdan chiqarish", items: [ ... ] },
+  {
+    label: "Hisobdan chiqarish",
+    items: [
+      { href: "/chiqim", label: "Chiqimlar", icon: PackageMinus, roles: ["ADMIN", "CAT_MANAGER"] },
+    ],
+  },
   {
     label: "Tizim",
     items: [
