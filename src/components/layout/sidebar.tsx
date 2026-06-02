@@ -17,6 +17,7 @@ import {
   Sparkles,
   PanelLeftClose,
   PanelLeftOpen,
+  ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -74,6 +75,23 @@ function SidebarNav({
 }) {
   const pathname = usePathname();
   const activeLayoutId = useId(); // har sidebar instansiyasi (desktop/mobil) uchun noyob
+
+  // Yig'ilgan (svernut) parent bo'limlar — localStorage'da saqlanadi
+  const [foldedGroups, setFoldedGroups] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    const saved = localStorage.getItem("sidebar-folded-groups");
+    if (saved) {
+      try { setFoldedGroups(new Set(JSON.parse(saved) as string[])); } catch {}
+    }
+  }, []);
+  const toggleGroup = (label: string) =>
+    setFoldedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label); else next.add(label);
+      localStorage.setItem("sidebar-folded-groups", JSON.stringify([...next]));
+      return next;
+    });
+
   const visibleGroups = NAV_GROUPS.map((g) => ({
     ...g,
     items: g.items.filter((i) => {
@@ -123,7 +141,9 @@ function SidebarNav({
 
       {/* Nav items — bo'limlarga guruhlangan */}
       <nav className="flex-1 p-2 space-y-3 overflow-y-auto">
-        {visibleGroups.map((group, gi) => (
+        {visibleGroups.map((group, gi) => {
+          const folded = foldedGroups.has(group.label);
+          return (
           <div
             key={group.label}
             className={cn(
@@ -133,11 +153,17 @@ function SidebarNav({
             )}
           >
             {!collapsed && (
-              <div className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
-                {group.label}
-              </div>
+              <button
+                type="button"
+                onClick={() => toggleGroup(group.label)}
+                title={folded ? "Ochish" : "Yig'ish"}
+                className="flex w-full items-center justify-between rounded-md px-3 pb-1 pt-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 transition-colors hover:text-foreground"
+              >
+                <span>{group.label}</span>
+                <ChevronDown className={cn("h-3 w-3 shrink-0 transition-transform", folded && "-rotate-90")} />
+              </button>
             )}
-            {group.items.map((item) => {
+            {(collapsed || !folded) && group.items.map((item) => {
               const Icon = item.icon;
               const active =
                 pathname === item.href || pathname.startsWith(item.href + "/");
@@ -175,7 +201,7 @@ function SidebarNav({
               );
             })}
           </div>
-        ))}
+        ); })}
       </nav>
 
       {/* Footer */}
