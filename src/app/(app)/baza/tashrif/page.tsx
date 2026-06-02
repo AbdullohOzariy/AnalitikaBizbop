@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { getDefaultRange } from "@/lib/analytics";
 import { Footprints, Users, Layers, TrendingUp } from "lucide-react";
 import { PageHeader, StatCard, EmptyState } from "@/components/common/page";
 import { Card, CardContent } from "@/components/ui/card";
@@ -41,13 +42,14 @@ export default async function BazaTashrifPage({
   const page = Math.max(1, parseInt(sp.page ?? "1") || 1);
   const skip = (page - 1) * PAGE_SIZE;
 
-  const startDate = parseDate(sp.start);
-  const endDate = parseDate(sp.end);
+  const def = await getDefaultRange();
+  const startDate = parseDate(sp.start) ?? def.start;
+  const endDate = parseDate(sp.end) ?? def.end;
   const branchId = sp.branchId ? parseInt(sp.branchId) : undefined;
 
+  // Faqat belgilangan period (period berilmasa — standart davr)
   const where = {
-    ...(startDate && { date: { gte: startDate } }),
-    ...(endDate && { date: { lte: endDate } }),
+    date: { gte: startDate, lte: endDate },
     ...(branchId && { branchId }),
   };
 
@@ -83,8 +85,8 @@ export default async function BazaTashrifPage({
         <BazaFilter
           basePath="/baza/tashrif"
           branches={branches}
-          defaultStart={sp.start ?? ""}
-          defaultEnd={sp.end ?? ""}
+          defaultStart={sp.start ?? fmtDate(def.start)}
+          defaultEnd={sp.end ?? fmtDate(def.end)}
           defaultBranchId={sp.branchId}
         />
       </PageHeader>
@@ -118,8 +120,8 @@ export default async function BazaTashrifPage({
           {rows.length === 0 ? (
             <EmptyState
               icon={Footprints}
-              title="Hali ma'lumot yo'q"
-              description="Fayllar bo'limidan export (tashriflar) formatidagi fayl yuklang."
+              title="Tanlangan davrda ma'lumot yo'q"
+              description="Boshqa davr tanlang yoki Fayllar bo'limidan tashriflar faylini yuklang."
             />
           ) : (
             <>

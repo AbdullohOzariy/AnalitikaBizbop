@@ -14,6 +14,8 @@ import {
   ResponsiveContainer,
   Cell,
   LabelList,
+  PieChart,
+  Pie,
 } from "recharts";
 import { Info, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { formatNumber, formatUZS } from "@/lib/format";
@@ -497,6 +499,29 @@ export function GroupSalesDynamicsWidget({
   // "Barcha guruhlar" rejimida jami ko'rsatiladimi?
   const showTotal = activeGroup === null;
 
+  // ── Donut: davr bo'yicha umumiy ulush ──────────────────────────────────────
+  // Guruhlar bo'yicha jami (butun davr)
+  const groupTotals = groups
+    .map((g) => {
+      let value = 0;
+      for (const d of days) value += d.groups.find((x) => x.groupId === g.id)?.amount ?? 0;
+      return { id: g.id, name: g.name, value, color: GROUP_COLORS[g.name] ?? "#94a3b8" };
+    })
+    .filter((x) => x.value > 0);
+  const groupGrand = groupTotals.reduce((s, x) => s + x.value, 0);
+
+  // Tanlangan guruh kategoriyalari bo'yicha jami (butun davr)
+  const catTotals = catData
+    ? catData.categories
+        .map((c, i) => {
+          let value = 0;
+          for (const d of catData.days) value += d.categories.find((x) => x.categoryId === c.id)?.amount ?? 0;
+          return { id: c.id, name: c.name, value, color: CAT_PALETTE[i % CAT_PALETTE.length] };
+        })
+        .filter((x) => x.value > 0)
+    : [];
+  const catGrand = catTotals.reduce((s, x) => s + x.value, 0);
+
   return (
     <div className="col-span-2 space-y-4">
       {/* Guruhlar bo'yicha kunlik savdo */}
@@ -535,6 +560,8 @@ export function GroupSalesDynamicsWidget({
           })}
         </div>
 
+        <div className="grid gap-4 lg:grid-cols-3">
+        <div className="lg:col-span-2">
         <ResponsiveContainer width="100%" height={300}>
           <LineChart data={groupChartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_STROKE} />
@@ -584,6 +611,23 @@ export function GroupSalesDynamicsWidget({
             )}
           </LineChart>
         </ResponsiveContainer>
+        </div>
+        <div className="flex flex-col">
+          <p className="mb-1 text-xs font-medium text-muted-foreground">Davr bo&apos;yicha ulush</p>
+          <ResponsiveContainer width="100%" height={280}>
+            <PieChart>
+              <Pie data={groupTotals} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={2} stroke="var(--card)">
+                {groupTotals.map((e) => <Cell key={e.id} fill={e.color} />)}
+              </Pie>
+              <Tooltip
+                contentStyle={tooltipStyle}
+                formatter={(v, n) => [`${fmtUZS(Number(v))} · ${groupGrand > 0 ? ((Number(v) / groupGrand) * 100).toFixed(1) : "0"}%`, String(n)]}
+              />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+        </div>
       </ExpandableCard>
 
       {/* Kategoriyalar bo'yicha foiz dinamikasi (guruh tanlanganda) */}
@@ -595,6 +639,8 @@ export function GroupSalesDynamicsWidget({
           <p className="text-xs text-muted-foreground mb-3">
             Guruh ichidagi har bir kategoriyaning kunlik ulushi (%)
           </p>
+          <div className="grid gap-4 lg:grid-cols-3">
+          <div className="lg:col-span-2">
           <ResponsiveContainer width="100%" height={280}>
             <LineChart data={catChartData!} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_STROKE} />
@@ -632,6 +678,23 @@ export function GroupSalesDynamicsWidget({
               ))}
             </LineChart>
           </ResponsiveContainer>
+          </div>
+          <div className="flex flex-col">
+            <p className="mb-1 text-xs font-medium text-muted-foreground">Davr bo&apos;yicha ulush</p>
+            <ResponsiveContainer width="100%" height={260}>
+              <PieChart>
+                <Pie data={catTotals} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2} stroke="var(--card)">
+                  {catTotals.map((e) => <Cell key={e.id} fill={e.color} />)}
+                </Pie>
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  formatter={(v, n) => [`${fmtUZS(Number(v))} · ${catGrand > 0 ? ((Number(v) / catGrand) * 100).toFixed(1) : "0"}%`, String(n)]}
+                />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+          </div>
         </ExpandableCard>
       )}
     </div>

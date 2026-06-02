@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { getDefaultRange } from "@/lib/analytics";
 import { Database, ShoppingBag, Layers, TrendingUp } from "lucide-react";
 import { PageHeader, StatCard, EmptyState } from "@/components/common/page";
 import { Card, CardContent } from "@/components/ui/card";
@@ -53,16 +54,17 @@ export default async function BazaSotuvPage({
   const page = Math.max(1, parseInt(sp.page ?? "1") || 1);
   const skip = (page - 1) * PAGE_SIZE;
 
-  const startDate = parseDate(sp.start);
-  const endDate = parseDate(sp.end);
+  const def = await getDefaultRange();
+  const startDate = parseDate(sp.start) ?? def.start;
+  const endDate = parseDate(sp.end) ?? def.end;
   const branchId = sp.branchId ? parseInt(sp.branchId) : undefined;
   const categoryId = sp.categoryId ? parseInt(sp.categoryId) : undefined;
   const q = sp.q?.trim() ?? "";
 
-  // Filtr sharti
+  // Filtr sharti — faqat belgilangan period (period berilmasa — standart davr)
   const where = {
-    ...(startDate && { periodStart: { gte: startDate } }),
-    ...(endDate && { periodEnd: { lte: endDate } }),
+    periodStart: { gte: startDate },
+    periodEnd: { lte: endDate },
     ...(branchId && { branchId }),
     ...(categoryId && { product: { categoryId } }),
     ...(q && {
@@ -103,8 +105,8 @@ export default async function BazaSotuvPage({
   const totalCost = agg._sum.costAmount ? Number(agg._sum.costAmount) : 0;
   const margin = totalAmount > 0 ? ((totalAmount - totalCost) / totalAmount) * 100 : 0;
 
-  const startStr = sp.start ?? "";
-  const endStr = sp.end ?? "";
+  const startStr = sp.start ?? startDate.toISOString().slice(0, 10);
+  const endStr = sp.end ?? endDate.toISOString().slice(0, 10);
 
   return (
     <div className="space-y-5">
@@ -162,7 +164,8 @@ export default async function BazaSotuvPage({
           {rows.length === 0 ? (
             <EmptyState
               icon={Database}
-              title="Hali ma'lumot yo'q"
+              title="Tanlangan davrda ma'lumot yo'q"
+              description="Boshqa davr tanlang yoki Fayllar bo'limidan sotuv faylini yuklang."
             />
           ) : (
             <>

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { getDefaultRange } from "@/lib/analytics";
 import { CalendarDays, Target, Layers, Building2 } from "lucide-react";
 import { PageHeader, StatCard, EmptyState } from "@/components/common/page";
 import { Card, CardContent } from "@/components/ui/card";
@@ -58,6 +59,7 @@ export default async function BazaRejaPage({
   const rejaType = sp.type === "monthly" ? "monthly" : "daily"; // default: daily
   const branchId = sp.branchId ? parseInt(sp.branchId) : undefined;
   const categoryId = sp.categoryId ? parseInt(sp.categoryId) : undefined;
+  const def = await getDefaultRange(); // standart davr (period berilmaganda)
 
   const [branches, categories] = await Promise.all([
     prisma.branch.findMany({ orderBy: { sortOrder: "asc" }, select: { id: true, name: true } }),
@@ -75,14 +77,15 @@ export default async function BazaRejaPage({
 
   if (rejaType === "monthly") {
     // Oylik reja
-    const year = sp.year ? parseInt(sp.year) : undefined;
-    const month = sp.month ? parseInt(sp.month) : undefined;
+    // Period berilmasa — standart davr oyi (barcha yozuvlar emas)
+    const year = sp.year ? parseInt(sp.year) : def.start.getUTCFullYear();
+    const month = sp.month ? parseInt(sp.month) : def.start.getUTCMonth() + 1;
 
     const where = {
       ...(branchId && { branchId }),
       ...(categoryId && { categoryId }),
-      ...(year && { year }),
-      ...(month && { month }),
+      year,
+      month,
     };
 
     const [cnt, data, agg] = await Promise.all([
@@ -107,13 +110,13 @@ export default async function BazaRejaPage({
   } else {
     // Kunlik reja
     const startDate = sp.start && /^\d{4}-\d{2}-\d{2}$/.test(sp.start)
-      ? new Date(sp.start + "T00:00:00.000Z") : undefined;
+      ? new Date(sp.start + "T00:00:00.000Z") : def.start;
     const endDate = sp.end && /^\d{4}-\d{2}-\d{2}$/.test(sp.end)
-      ? new Date(sp.end + "T00:00:00.000Z") : undefined;
+      ? new Date(sp.end + "T00:00:00.000Z") : def.end;
 
+    // Faqat belgilangan period (period berilmasa — standart davr)
     const where = {
-      ...(startDate && { date: { gte: startDate } }),
-      ...(endDate && { date: { lte: endDate } }),
+      date: { gte: startDate, lte: endDate },
       ...(branchId && { branchId }),
       ...(categoryId && { categoryId }),
     };
@@ -159,8 +162,8 @@ export default async function BazaRejaPage({
           basePath={`/baza/reja?type=${rejaType}`}
           branches={branches}
           categories={categories}
-          defaultStart={sp.start ?? ""}
-          defaultEnd={sp.end ?? ""}
+          defaultStart={sp.start ?? (rejaType === "daily" ? fmtDate(def.start) : "")}
+          defaultEnd={sp.end ?? (rejaType === "daily" ? fmtDate(def.end) : "")}
           defaultBranchId={sp.branchId}
           defaultCategoryId={sp.categoryId}
           showCategory
@@ -195,8 +198,8 @@ export default async function BazaRejaPage({
           {rows.length === 0 ? (
             <EmptyState
               icon={CalendarDays}
-              title="Hali ma'lumot yo'q"
-              description="Fayllar bo'limidan reja faylini yuklang yoki Admin → Normal Reja bo'limidan kiriting."
+              title="Tanlangan davrda ma'lumot yo'q"
+              description="Boshqa davr tanlang yoki reja faylini yuklang (Admin → Normal Reja)."
             />
           ) : rejaType === "monthly" ? (
             <>
