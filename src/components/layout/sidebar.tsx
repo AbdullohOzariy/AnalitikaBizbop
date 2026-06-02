@@ -23,6 +23,9 @@ import {
   Footprints,
   CalendarDays,
   PackageMinus,
+  ChartPie,
+  Recycle,
+  Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -70,7 +73,10 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "Hisobdan chiqarish",
     items: [
-      { href: "/chiqim", label: "Chiqimlar", icon: PackageMinus, roles: ["ADMIN", "CAT_MANAGER"] },
+      { href: "/chiqim",            label: "Chiqimlar",         icon: PackageMinus, roles: ["ADMIN", "CAT_MANAGER"] },
+      { href: "/chiqim/statistika", label: "Statistika",        icon: ChartPie,     roles: ["ADMIN", "CAT_MANAGER"] },
+      { href: "/chiqim/vozvrat",    label: "Vozvrat nazorati",  icon: Recycle,      roles: ["ADMIN", "CAT_MANAGER"] },
+      { href: "/chiqim/sozlamalar", label: "Sozlamalar",        icon: Settings,     roles: ["ADMIN", "CAT_MANAGER"] },
     ],
   },
   {
