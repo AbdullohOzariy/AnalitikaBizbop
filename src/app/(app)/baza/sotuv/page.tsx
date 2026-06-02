@@ -163,7 +163,6 @@ export default async function BazaSotuvPage({
             <EmptyState
               icon={Database}
               title="Hali ma'lumot yo'q"
-              description="Fayllar bo'limidan ShablonSotuv.xlsx formatidagi fayl yuklang."
             />
           ) : (
             <>
