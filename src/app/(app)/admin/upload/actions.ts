@@ -162,19 +162,56 @@ export async function uploadSalesAction(formData: FormData): Promise<UploadResul
     const catNames = [...cats.keys()];
     const aiCorrections: string[] = [];
 
-    // 1. Birinchi parse — aniq mosliklar bilan
-    let result = parseSalesWorkbook(buf, catNames);
+    // DB'dan Category.code to'plamini olish (v3 uchun iyerarxiya aniqlash)
+    const categoryCodeRecords = await prisma.category.findMany({
+      select: { id: true, code: true },
+    });
+    const categoryCodes = new Set<number>(
+      categoryCodeRecords.flatMap((c) => (c.code != null ? [c.code] : []))
+    );
+    const categoryCodeToId = new Map<number, number>(
+      categoryCodeRecords.flatMap((c) =>
+        c.code != null ? [[c.code, c.id]] : []
+      )
+    );
+
+    // 1. Birinchi parse — aniq mosliklar bilan (v3 uchun categoryCodes ham uzatiladi)
+    const firstParse = parseSalesWorkbook(buf, catNames, undefined, categoryCodes);
+
+    if (firstParse.version === "v3") {
+      // ── v3: mahsulot (SKU) darajasi ──────────────────────────────────────
+      return await uploadV3(
+        firstParse,
+        buf,
+        hash,
+        file,
+        parsed,
+        user,
+        categoryCodeToId,
+        aiCorrections
+      );
+    }
+
+    // ── v1/v2: kategoriya darajasi ────────────────────────────────────────
+    // Bu yerda firstParse.version = "v1" | "v2" — TypeScript toraytirishi to'g'ri
+    type LegacyResult = Extract<
+      ReturnType<typeof parseSalesWorkbook>,
+      { version: "v1" | "v2" }
+    >;
+    let legacyResult: LegacyResult = firstParse;
 
     // 2. AI: noma'lum kategoriyalarni moslashtirish
-    if (result.skippedCategories.length > 0 && process.env.DEEPSEEK_API_KEY) {
+    if (legacyResult.skippedCategories.length > 0 && process.env.DEEPSEEK_API_KEY) {
       const categoryMapping = await matchCategoryNames(
-        result.skippedCategories,
+        legacyResult.skippedCategories,
         catNames
       ).catch(() => new Map<string, string>());
 
       if (categoryMapping.size > 0) {
-        // Qayta parse — AI moslik bilan
-        result = parseSalesWorkbook(buf, catNames, categoryMapping);
+        const reParsed = parseSalesWorkbook(buf, catNames, categoryMapping, categoryCodes);
+        if (reParsed.version !== "v3") {
+          legacyResult = reParsed;
+        }
         for (const [excel, db] of categoryMapping) {
           aiCorrections.push(`Kategoriya: "${excel}" → "${db}"`);
         }
@@ -182,7 +219,7 @@ export async function uploadSalesAction(formData: FormData): Promise<UploadResul
     }
 
     // 3. Filial aliaslarini yechish (AI fallback bilan)
-    const uniqueAliases = [...new Set(result.rows.map((r) => r.branchAlias))];
+    const uniqueAliases = [...new Set(legacyResult.rows.map((r) => r.branchAlias))];
     const aliasToBranchId = new Map<string, number>();
     for (const alias of uniqueAliases) {
       const resolved = await resolveBranchWithAI(alias, AliasSource.SALES);
@@ -200,20 +237,21 @@ export async function uploadSalesAction(formData: FormData): Promise<UploadResul
         originalName: file.name,
         fileHash: hash,
         fileType: FileType.SALES,
-        periodStart: result.periodStart,
-        periodEnd: result.periodEnd,
-        rowCount: result.rows.length,
+        periodStart: legacyResult.periodStart,
+        periodEnd: legacyResult.periodEnd,
+        templateVersion: legacyResult.version,
+        rowCount: legacyResult.rows.length,
         status: UploadStatus.SUCCESS,
         uploadedById: Number(user.id),
       },
     });
 
     try {
-      const values = result.rows.map((row) => {
+      const values = legacyResult.rows.map((row) => {
         const branchId = aliasToBranchId.get(row.branchAlias)!;
         const categoryId = cats.get(row.categoryName)!;
         const cost = row.costAmount != null ? new Prisma.Decimal(row.costAmount) : null;
-        return Prisma.sql`(${fileRecord.id}, ${branchId}, ${categoryId}, ${result.periodStart}::date, ${result.periodEnd}::date, ${new Prisma.Decimal(row.amount)}, ${cost})`;
+        return Prisma.sql`(${fileRecord.id}, ${branchId}, ${categoryId}, ${legacyResult.periodStart}::date, ${legacyResult.periodEnd}::date, ${new Prisma.Decimal(row.amount)}, ${cost})`;
       });
       await prisma.$executeRaw`
         INSERT INTO "CategorySales" ("uploadedFileId", "branchId", "categoryId", "periodStart", "periodEnd", "amount", "costAmount")
@@ -238,10 +276,220 @@ export async function uploadSalesAction(formData: FormData): Promise<UploadResul
       ok: true,
       fileId: fileRecord.id,
       aiCorrections: aiCorrections.length > 0 ? aiCorrections : undefined,
-      summary: `Saqlandi: ${result.rows.length} qator (${branchCount} filial), period ${result.periodStart.toISOString().slice(0, 10)} → ${result.periodEnd.toISOString().slice(0, 10)}.`,
+      summary: `Saqlandi: ${legacyResult.rows.length} qator (${branchCount} filial), period ${legacyResult.periodStart.toISOString().slice(0, 10)} → ${legacyResult.periodEnd.toISOString().slice(0, 10)}.`,
     };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Noma'lum xato." };
+  }
+}
+
+// ─── v3 upload oqimi: Product upsert → ProductSales upsert → CategorySales derive ─
+
+async function uploadV3(
+  result: Extract<import("@/lib/parsers/sales").ParsedSalesResult, { version: "v3" }>,
+  _buf: Buffer,
+  hash: string,
+  file: File,
+  parsed: { label: string },
+  user: { id: string | number },
+  categoryCodeToId: Map<number, number>,
+  aiCorrections: string[]
+): Promise<UploadResult> {
+  // 1. Filial aliaslarini yechish
+  const uniqueAliases = [
+    ...new Set(result.productRows.map((r) => r.branchAlias)),
+  ];
+  const aliasToBranchId = new Map<string, number>();
+  for (const alias of uniqueAliases) {
+    const resolved = await resolveBranchWithAI(alias, AliasSource.SALES);
+    aliasToBranchId.set(alias, resolved.branchId);
+    if (resolved.aiUsed) {
+      aiCorrections.push(
+        `Filial: "${alias}" → "${resolved.branchName}" (AI, alias saqlandi)`
+      );
+    }
+  }
+
+  // 2. UploadedFile yozuvi
+  const fileRecord = await prisma.uploadedFile.create({
+    data: {
+      label: parsed.label,
+      originalName: file.name,
+      fileHash: hash,
+      fileType: FileType.SALES,
+      periodStart: result.periodStart,
+      periodEnd: result.periodEnd,
+      templateVersion: "v3",
+      rowCount: result.productRows.length,
+      status: UploadStatus.SUCCESS,
+      uploadedById: Number(user.id),
+    },
+  });
+
+  try {
+    // 3. Product upsert — bulk, 500 ta lik batch
+    // Unique mahsulot kodlari bo'yicha deduplicate (bir kod bir qatorni beradi)
+    const uniqueProducts = new Map<
+      number,
+      { code: number; name: string; categoryId: number | null }
+    >();
+    for (const row of result.productRows) {
+      if (!uniqueProducts.has(row.productCode)) {
+        const categoryId =
+          row.parentCategoryCode != null
+            ? (categoryCodeToId.get(row.parentCategoryCode) ?? null)
+            : null;
+        uniqueProducts.set(row.productCode, {
+          code: row.productCode,
+          name: row.productName,
+          categoryId,
+        });
+      }
+    }
+
+    const productList = [...uniqueProducts.values()];
+    const BATCH = 500;
+    for (let i = 0; i < productList.length; i += BATCH) {
+      const chunk = productList.slice(i, i + BATCH);
+      const vals = chunk.map((p) =>
+        Prisma.sql`(${p.code}, ${p.name}, ${p.categoryId})`
+      );
+      await prisma.$executeRaw`
+        INSERT INTO "Product" ("code", "name", "categoryId")
+        VALUES ${Prisma.join(vals)}
+        ON CONFLICT ("code") DO UPDATE SET
+          "name"       = EXCLUDED."name",
+          "categoryId" = EXCLUDED."categoryId",
+          "updatedAt"  = now()
+      `;
+    }
+
+    // 4. Product code → DB id mapping ni olish
+    const dbProducts = await prisma.product.findMany({
+      where: { code: { in: productList.map((p) => p.code) } },
+      select: { id: true, code: true },
+    });
+    const productCodeToId = new Map<number, number>(
+      dbProducts.map((p) => [p.code, p.id])
+    );
+
+    // 5. ProductSales upsert — bulk, 500 ta lik batch
+    for (let i = 0; i < result.productRows.length; i += BATCH) {
+      const chunk = result.productRows.slice(i, i + BATCH);
+      const vals = chunk.flatMap((row) => {
+        const productId = productCodeToId.get(row.productCode);
+        const branchId = aliasToBranchId.get(row.branchAlias);
+        if (!productId || !branchId) return [];
+        const stockQty =
+          row.stockQty != null ? new Prisma.Decimal(row.stockQty) : null;
+        const soldQty =
+          row.soldQty != null ? new Prisma.Decimal(row.soldQty) : null;
+        const costAmount =
+          row.costAmount != null ? new Prisma.Decimal(row.costAmount) : null;
+        return [
+          Prisma.sql`(${fileRecord.id}, ${productId}, ${branchId}, ${result.periodStart}::date, ${result.periodEnd}::date, ${stockQty}, ${soldQty}, ${new Prisma.Decimal(row.amount)}, ${costAmount})`,
+        ];
+      });
+      if (vals.length === 0) continue;
+      await prisma.$executeRaw`
+        INSERT INTO "ProductSales"
+          ("uploadedFileId", "productId", "branchId", "periodStart", "periodEnd",
+           "stockQty", "soldQty", "amount", "costAmount")
+        VALUES ${Prisma.join(vals)}
+        ON CONFLICT ("productId", "branchId", "periodStart", "periodEnd") DO UPDATE SET
+          "uploadedFileId" = EXCLUDED."uploadedFileId",
+          "stockQty"       = EXCLUDED."stockQty",
+          "soldQty"        = EXCLUDED."soldQty",
+          "amount"         = EXCLUDED."amount",
+          "costAmount"     = EXCLUDED."costAmount"
+      `;
+    }
+
+    // 6. CategorySales DERIVE: ProductSales dan SUM qilib CategorySales ga upsert
+    // Faqat shu fayl/davr uchun tegishli kategoriyalar bo'yicha
+    await deriveCategorySalesFromProducts(
+      fileRecord.id,
+      result.periodStart,
+      result.periodEnd,
+      aliasToBranchId
+    );
+  } catch (err) {
+    await prisma.uploadedFile.delete({ where: { id: fileRecord.id } }).catch(() => null);
+    throw err;
+  }
+
+  revalidatePath("/admin/files");
+  revalidatePath("/dashboard");
+  revalidateTag(ANALYTICS_CACHE_TAG, "max");
+
+  const uniqueProdCount = new Set(result.productRows.map((r) => r.productCode)).size;
+  return {
+    ok: true,
+    fileId: fileRecord.id,
+    aiCorrections: aiCorrections.length > 0 ? aiCorrections : undefined,
+    summary: `Saqlandi (v3): ${uniqueProdCount} mahsulot × ${uniqueAliases.length} filial = ${result.productRows.length} qator, period ${result.periodStart.toISOString().slice(0, 10)} → ${result.periodEnd.toISOString().slice(0, 10)}. Kategoriya saleslar derive qilindi.`,
+  };
+}
+
+/**
+ * ProductSales dan CategorySales ni derive qiladi.
+ * Shu davr va filiallar uchun har Category.id bo'yicha SUM(amount), SUM(costAmount) hisoblab,
+ * CategorySales ga upsert qiladi.
+ *
+ * Bu mavjud dashboard'larning CategorySales dan ishlaydigan grafiklari uchun zarur.
+ */
+async function deriveCategorySalesFromProducts(
+  fileId: number,
+  periodStart: Date,
+  periodEnd: Date,
+  aliasToBranchId: Map<string, number>
+): Promise<void> {
+  const branchIds = [...aliasToBranchId.values()];
+  if (branchIds.length === 0) return;
+
+  // PostgreSQL'dan to'g'ridan-to'g'ri aggregate qilamiz — N+1 yo'q
+  // Product.categoryId orqali guruhlash
+  const aggregated = await prisma.$queryRaw<
+    Array<{
+      branchId: number;
+      categoryId: number;
+      totalAmount: string;
+      totalCost: string | null;
+    }>
+  >`
+    SELECT
+      ps."branchId",
+      p."categoryId",
+      SUM(ps."amount")::text      AS "totalAmount",
+      SUM(ps."costAmount")::text  AS "totalCost"
+    FROM "ProductSales" ps
+    JOIN "Product" p ON p.id = ps."productId"
+    WHERE
+      ps."periodStart" = ${periodStart}::date
+      AND ps."periodEnd"  = ${periodEnd}::date
+      AND ps."branchId"   = ANY(${branchIds}::int[])
+      AND p."categoryId"  IS NOT NULL
+    GROUP BY ps."branchId", p."categoryId"
+  `;
+
+  if (aggregated.length === 0) return;
+
+  const BATCH = 500;
+  for (let i = 0; i < aggregated.length; i += BATCH) {
+    const chunk = aggregated.slice(i, i + BATCH);
+    const vals = chunk.map((row) => {
+      const cost = row.totalCost != null ? new Prisma.Decimal(row.totalCost) : null;
+      return Prisma.sql`(${fileId}, ${row.branchId}, ${row.categoryId}, ${periodStart}::date, ${periodEnd}::date, ${new Prisma.Decimal(row.totalAmount)}, ${cost})`;
+    });
+    await prisma.$executeRaw`
+      INSERT INTO "CategorySales"
+        ("uploadedFileId", "branchId", "categoryId", "periodStart", "periodEnd", "amount", "costAmount")
+      VALUES ${Prisma.join(vals)}
+      ON CONFLICT ("branchId", "categoryId", "periodStart", "periodEnd") DO UPDATE SET
+        "uploadedFileId" = EXCLUDED."uploadedFileId",
+        "amount"         = EXCLUDED."amount",
+        "costAmount"     = EXCLUDED."costAmount"
+    `;
   }
 }
 

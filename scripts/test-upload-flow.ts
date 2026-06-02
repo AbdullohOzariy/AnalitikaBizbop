@@ -30,43 +30,48 @@ async function main() {
     const buf = readFileSync("samples/1 (2).xlsx");
     const hash = sha256(buf);
     const r = parseSalesWorkbook(buf, [...catMap.keys()]);
-    const aliases = [...new Set(r.rows.map((x) => x.branchAlias))];
-    const aliasMap = new Map<string, number>();
-    for (const a of aliases) {
-      const al = await prisma.branchAlias.findUnique({
-        where: { alias_source: { alias: a, source: AliasSource.SALES } },
-      });
-      if (!al) throw new Error(`Alias not found: ${a}`);
-      aliasMap.set(a, al.branchId);
-    }
+    if (r.version === "v3") {
+      console.log("  v3 format detected — skipping legacy flow test.");
+    } else {
+      const aliases = [...new Set(r.rows.map((x) => x.branchAlias))];
+      const aliasMap = new Map<string, number>();
+      for (const a of aliases) {
+        const al = await prisma.branchAlias.findUnique({
+          where: { alias_source: { alias: a, source: AliasSource.SALES } },
+        });
+        if (!al) throw new Error(`Alias not found: ${a}`);
+        aliasMap.set(a, al.branchId);
+      }
 
-    await prisma.$transaction(async (tx) => {
-      const created = await tx.uploadedFile.create({
-        data: {
-          label: "Aprel — barcha filiallar",
-          originalName: "1 (2).xlsx",
-          fileHash: hash,
-          fileType: FileType.SALES,
-          periodStart: r.periodStart,
-          periodEnd: r.periodEnd,
-          rowCount: r.rows.length,
-          status: UploadStatus.SUCCESS,
-          uploadedById: admin.id,
-        },
-      });
-      for (const row of r.rows) {
-        await tx.categorySales.create({
+      await prisma.$transaction(async (tx) => {
+        const created = await tx.uploadedFile.create({
           data: {
-            uploadedFileId: created.id,
-            branchId: aliasMap.get(row.branchAlias)!,
-            categoryId: catMap.get(row.categoryName)!,
+            label: "Aprel — barcha filiallar",
+            originalName: "1 (2).xlsx",
+            fileHash: hash,
+            fileType: FileType.SALES,
             periodStart: r.periodStart,
             periodEnd: r.periodEnd,
-            amount: new Prisma.Decimal(row.amount),
+            templateVersion: r.version,
+            rowCount: r.rows.length,
+            status: UploadStatus.SUCCESS,
+            uploadedById: admin.id,
           },
         });
-      }
-    });
+        for (const row of r.rows) {
+          await tx.categorySales.create({
+            data: {
+              uploadedFileId: created.id,
+              branchId: aliasMap.get(row.branchAlias)!,
+              categoryId: catMap.get(row.categoryName)!,
+              periodStart: r.periodStart,
+              periodEnd: r.periodEnd,
+              amount: new Prisma.Decimal(row.amount),
+            },
+          });
+        }
+      });
+    }
   }
 
   // === SALES (single day: 29.04.xlsx) ===
@@ -75,41 +80,46 @@ async function main() {
     const buf = readFileSync("samples/29.04.xlsx");
     const hash = sha256(buf);
     const r = parseSalesWorkbook(buf, [...catMap.keys()]);
-    const aliases = [...new Set(r.rows.map((x) => x.branchAlias))];
-    const aliasMap = new Map<string, number>();
-    for (const a of aliases) {
-      const al = await prisma.branchAlias.findUnique({
-        where: { alias_source: { alias: a, source: AliasSource.SALES } },
-      });
-      aliasMap.set(a, al!.branchId);
-    }
-    await prisma.$transaction(async (tx) => {
-      const created = await tx.uploadedFile.create({
-        data: {
-          label: "29.04 — Mega kunlik",
-          originalName: "29.04.xlsx",
-          fileHash: hash,
-          fileType: FileType.SALES,
-          periodStart: r.periodStart,
-          periodEnd: r.periodEnd,
-          rowCount: r.rows.length,
-          status: UploadStatus.SUCCESS,
-          uploadedById: admin.id,
-        },
-      });
-      for (const row of r.rows) {
-        await tx.categorySales.create({
+    if (r.version === "v3") {
+      console.log("  v3 format detected — skipping legacy flow test.");
+    } else {
+      const aliases = [...new Set(r.rows.map((x) => x.branchAlias))];
+      const aliasMap = new Map<string, number>();
+      for (const a of aliases) {
+        const al = await prisma.branchAlias.findUnique({
+          where: { alias_source: { alias: a, source: AliasSource.SALES } },
+        });
+        aliasMap.set(a, al!.branchId);
+      }
+      await prisma.$transaction(async (tx) => {
+        const created = await tx.uploadedFile.create({
           data: {
-            uploadedFileId: created.id,
-            branchId: aliasMap.get(row.branchAlias)!,
-            categoryId: catMap.get(row.categoryName)!,
+            label: "29.04 — Mega kunlik",
+            originalName: "29.04.xlsx",
+            fileHash: hash,
+            fileType: FileType.SALES,
             periodStart: r.periodStart,
             periodEnd: r.periodEnd,
-            amount: new Prisma.Decimal(row.amount),
+            templateVersion: r.version,
+            rowCount: r.rows.length,
+            status: UploadStatus.SUCCESS,
+            uploadedById: admin.id,
           },
         });
-      }
-    });
+        for (const row of r.rows) {
+          await tx.categorySales.create({
+            data: {
+              uploadedFileId: created.id,
+              branchId: aliasMap.get(row.branchAlias)!,
+              categoryId: catMap.get(row.categoryName)!,
+              periodStart: r.periodStart,
+              periodEnd: r.periodEnd,
+              amount: new Prisma.Decimal(row.amount),
+            },
+          });
+        }
+      });
+    }
   }
 
   // === METRICS ===

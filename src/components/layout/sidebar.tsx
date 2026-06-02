@@ -18,6 +18,10 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   ChevronDown,
+  Database,
+  BarChart2,
+  Footprints,
+  CalendarDays,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -51,6 +55,15 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/report",       label: "Hisobot",          icon: Table2,          roles: ["ADMIN", "VIEWER"] },
       { href: "/admin/upload", label: "Fayllar",          icon: Upload,          adminOnly: true },
       { href: "/admin/plans",  label: "Normal Reja",      icon: Target,          adminOnly: true },
+    ],
+  },
+  {
+    label: "Baza",
+    items: [
+      { href: "/baza/sotuv",   label: "Sotuv",      icon: Database,     roles: ["ADMIN", "CAT_MANAGER"] },
+      { href: "/baza/metrika", label: "Metrikalar",  icon: BarChart2,    roles: ["ADMIN", "CAT_MANAGER"] },
+      { href: "/baza/tashrif", label: "Tashriflar",  icon: Footprints,   roles: ["ADMIN", "CAT_MANAGER"] },
+      { href: "/baza/reja",    label: "Rejalar",     icon: CalendarDays, roles: ["ADMIN", "CAT_MANAGER"] },
     ],
   },
   // Keyinroq: { label: "Hisobdan chiqarish", items: [ ... ] },
@@ -179,7 +192,7 @@ function SidebarNav({
                     aria-current={active ? "page" : undefined}
                     title={collapsed ? item.label : undefined}
                     className={cn(
-                      "relative flex items-center rounded-xl text-sm font-medium transition-colors duration-150 overflow-hidden",
+                      "relative isolate flex items-center rounded-xl text-sm font-medium transition-colors duration-150 overflow-hidden",
                       collapsed ? "justify-center px-0 py-2.5" : "gap-3 px-3 py-2.5",
                       active
                         ? "text-primary-foreground shadow-sm"

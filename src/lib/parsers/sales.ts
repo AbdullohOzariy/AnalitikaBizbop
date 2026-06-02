@@ -5,53 +5,216 @@ import {
   normalizeName,
 } from "./utils";
 
+// ─── Shablon versiyasi ───────────────────────────────────────────────────────
+// v1: faqat {Продажи} — eski bir ustunli format
+// v2: {Продажи, Себестоимость} — kategoriya darajasi
+// v3: {Остаток, Количество, Продажи, Себестоимость} — mahsulot (SKU) darajasi
+export type TemplateVersion = "v1" | "v2" | "v3";
+
+// ─── Kategoriya darajasi natijasi (v1/v2) ────────────────────────────────────
 export type ParsedSalesBranchRow = {
-  /** Excel ichidagi sklad nomi (alias). Saqlashdan oldin DB dagi branch.id ga yechilishi kerak. */
   branchAlias: string;
-  /** Kategoriya nomi (Bo'limlar.txt dan birortasiga teng bo'lishi kerak). */
   categoryName: string;
   amount: number;
-  /** Yangi format (2026): Себестоимость ustunidan. Eski formatda null. */
   costAmount: number | null;
 };
 
-export type ParsedSalesResult = {
-  periodStart: Date;
-  periodEnd: Date;
-  rows: ParsedSalesBranchRow[];
-  /** Tanlangan kategoriyalarda yo'q va o'tkazib yuborilgan nomlar (audit uchun). */
-  skippedCategories: string[];
+// ─── Mahsulot (SKU) darajasi natijasi (v3) ───────────────────────────────────
+export type ParsedProductRow = {
+  branchAlias: string;
+  /** 1C mahsulot kodi */
+  productCode: number;
+  productName: string;
+  /** Eng yaqin ota-kategoriya kodi (DB'da topilgan Category.code) */
+  parentCategoryCode: number | null;
+  stockQty: number | null;
+  soldQty: number | null;
+  amount: number;
+  costAmount: number | null;
 };
 
+export type ParsedSalesResult =
+  | {
+      version: "v1" | "v2";
+      periodStart: Date;
+      periodEnd: Date;
+      rows: ParsedSalesBranchRow[];
+      skippedCategories: string[];
+    }
+  | {
+      version: "v3";
+      periodStart: Date;
+      periodEnd: Date;
+      productRows: ParsedProductRow[];
+      /** Kategoriya qatorlar soni (audit) */
+      categoryRowCount: number;
+    };
+
+// ─── Ichki tip: ustun → (filial, metrika) mapping ────────────────────────────
+type MetricLabel = "Остаток" | "Количество" | "Продажи" | "Себестоимость";
+
+interface ColMapping {
+  colIndex: number;
+  branchAlias: string;
+  metric: MetricLabel;
+}
+
+// Ruxsat etilgan metrika yorliqlari
+const ALLOWED_METRICS = new Set<string>([
+  "Остаток",
+  "Количество",
+  "Продажи",
+  "Себестоимость",
+]);
+
+// ─── Yordamchi: R5 da filial nomi yoki sana bloki ekanini aniqlash ───────────
+function isBranchName(v: unknown): v is string {
+  if (typeof v !== "string") return false;
+  const trimmed = v.trim();
+  if (!trimmed) return false;
+  // Sana formati: DD.MM.YYYY
+  if (/^\d{2}\.\d{2}\.\d{4}$/.test(trimmed)) return false;
+  // Kod va Номенклатура ustunlarini o'tkazib yuborish
+  if (
+    trimmed.toLowerCase() === "код" ||
+    trimmed.toLowerCase().startsWith("номенклатура")
+  )
+    return false;
+  return true;
+}
+
 /**
- * Eski format (29.04.xlsx, 1(2).xlsx): har filial uchun 1 ustun (faqat Продажи).
- * Yangi format (NewSampleSotuv.2026.xlsx): har filial uchun 2 ustun (Продажи + Себестоимость).
- * Format avto-aniqlanadi: header keyingi qatorda "Себестоимость" bor bo'lsa → yangi format.
+ * R5 (filial qatori) + R6 (metrika qatori) asosida dinamik ustun mapping quradi.
+ *
+ * Yangi format (v3):
+ *   R5: col2=Market MEGA, col6=31.05.2026(sana, tashlanadi), col10=GoldMart, ...
+ *   R6: Остаток|Количество|Продажи|Себестоимость (har blok 4 ustun)
+ *
+ * Eski format (v2):
+ *   R5: col2=Market MEGA, col4=GoldMart, ...
+ *   R6: Продажи|Себестоимость (har blok 2 ustun)
+ *
+ * Eng eski format (v1):
+ *   R5: col2=Market MEGA, col3=GoldMart, ...
+ *   R6: Продажи (har blok 1 ustun)
+ *
+ * "Итого" nomli bloklar va sana bloklar tashlanadi.
+ */
+function buildColumnMapping(
+  branchRow: (unknown | null)[],
+  metricRow: (unknown | null)[]
+): { mappings: ColMapping[]; version: TemplateVersion } {
+  const mappings: ColMapping[] = [];
+  let currentBranch: string | null = null;
+
+  for (let c = 2; c < branchRow.length; c++) {
+    const branchVal = branchRow[c];
+    const metricVal = metricRow[c];
+
+    // Agar bu ustunda filial nomi bo'lsa — yangi filial bloki boshlanadi
+    if (isBranchName(branchVal)) {
+      const alias = (branchVal as string).trim();
+      // "Итого" tashlanadi
+      if (alias.toLowerCase() === "итого") {
+        currentBranch = null;
+      } else {
+        currentBranch = alias;
+      }
+      // Filial nomli ustunning o'zi ham metrika bo'lishi mumkin
+      // (v2 da R5 da filial nomi, R6 da "Продажи" — bir ustunda)
+    }
+
+    if (!currentBranch) continue;
+
+    // Metrika yorlig'ini tekshirish
+    const metricStr =
+      typeof metricVal === "string" ? metricVal.trim() : null;
+    if (!metricStr) continue;
+
+    if (!ALLOWED_METRICS.has(metricStr)) {
+      throw new Error(
+        `Kutilmagan metrika yorlig'i "${metricStr}" (ustun ${c}). ` +
+          `Ruxsat etilganlar: ${[...ALLOWED_METRICS].join(", ")}. ` +
+          `Fayl tuzilishini tekshiring.`
+      );
+    }
+
+    mappings.push({
+      colIndex: c,
+      branchAlias: currentBranch,
+      metric: metricStr as MetricLabel,
+    });
+  }
+
+  if (mappings.length === 0) {
+    throw new Error(
+      "Filial/metrika ustunlari topilmadi. R5/R6 header qatorlarini tekshiring."
+    );
+  }
+
+  // Versiyani metrika to'plamidan aniqlash
+  const metrics = new Set(mappings.map((m) => m.metric));
+  let version: TemplateVersion;
+  if (
+    metrics.has("Остаток") &&
+    metrics.has("Количество") &&
+    metrics.has("Продажи") &&
+    metrics.has("Себестоимость")
+  ) {
+    version = "v3";
+  } else if (metrics.has("Продажи") && metrics.has("Себестоимость")) {
+    version = "v2";
+  } else if (metrics.has("Продажи")) {
+    version = "v1";
+  } else {
+    throw new Error(
+      `Noma'lum metrika to'plami: {${[...metrics].join(", ")}}. ` +
+        `Kutilgan: {Продажи} yoki {Продажи,Себестоимость} yoki to'liq to'rt metrika.`
+    );
+  }
+
+  return { mappings, version };
+}
+
+/**
+ * Sotuv Excel faylini parse qiladi.
+ *
+ * v1/v2 (kategoriya darajasi):
+ *   allowedCategoryNames va categoryMapping ixtiyoriy.
+ *   ParsedSalesResult.version = "v1" | "v2", .rows = ParsedSalesBranchRow[].
+ *
+ * v3 (mahsulot/SKU darajasi):
+ *   categoryCodes = DB'dan olingan Category.code to'plami (iyerarxiya aniqlash uchun).
+ *   ParsedSalesResult.version = "v3", .productRows = ParsedProductRow[].
  */
 export function parseSalesWorkbook(
   buffer: Buffer,
   allowedCategoryNames: string[],
-  /** AI tomonidan taklif qilingan moslik: normalizedExcelName → normalizedDbName */
-  categoryMapping?: Map<string, string>
+  categoryMapping?: Map<string, string>,
+  /** v3 uchun: DB'dan olingan Category.code to'plami */
+  categoryCodes?: Set<number>
 ): ParsedSalesResult {
   const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
   const sheetName = wb.SheetNames[0];
   const sheet = wb.Sheets[sheetName];
   if (!sheet) throw new Error("Excel ichida birorta varaq topilmadi.");
 
-  const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+  const rows = XLSX.utils.sheet_to_json<(unknown | null)[]>(sheet, {
     header: 1,
     defval: null,
     raw: true,
-    blankrows: false,
+    blankrows: true,
   });
 
-  // 1) Period sarlavhadan topish
+  // ── 1. Period sarlavhadan topish ──────────────────────────────────────────
   let period: { start: Date; end: Date } | null = null;
   for (let i = 0; i < Math.min(rows.length, 10); i++) {
     for (const cell of rows[i] ?? []) {
       const p = parseRussianPeriod(cell);
-      if (p) { period = p; break; }
+      if (p) {
+        period = p;
+        break;
+      }
     }
     if (period) break;
   }
@@ -61,7 +224,7 @@ export function parseSalesWorkbook(
     );
   }
 
-  // 2) Header qatorini topish: "Код" va "Номенклатура"
+  // ── 2. Header qatorini topish: "Код" va "Номенклатура" ───────────────────
   let headerIdx = -1;
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
@@ -69,7 +232,8 @@ export function parseSalesWorkbook(
     const a = r[0];
     const b = r[1];
     if (
-      typeof a === "string" && typeof b === "string" &&
+      typeof a === "string" &&
+      typeof b === "string" &&
       a.trim().toLowerCase() === "код" &&
       b.trim().toLowerCase().startsWith("номенклатура")
     ) {
@@ -78,50 +242,24 @@ export function parseSalesWorkbook(
     }
   }
   if (headerIdx === -1) {
-    throw new Error("Sotuv faylida header qatori (Код | Номенклатура | ...) topilmadi.");
+    throw new Error(
+      "Sotuv faylida header qatori (Код | Номенклатура | ...) topilmadi."
+    );
   }
 
-  const headerRow = rows[headerIdx] as (string | null)[];
+  // ── 3. Dinamik header mapping ─────────────────────────────────────────────
+  // R(headerIdx)   = filial qatori (R5 yangi formatda)
+  // R(headerIdx+1) = metrika qatori (R6)
+  // R(headerIdx+2) = "Сумма" qatori (R7, o'tkazib yuboriladi)
+  const branchRow = rows[headerIdx] as (unknown | null)[];
+  const metricRow =
+    headerIdx + 1 < rows.length
+      ? (rows[headerIdx + 1] as (unknown | null)[])
+      : [];
 
-  // 3) Format aniqlash: header dan keyingi qatorda "Себестоимость" bormi?
-  let isNewFormat = false;
-  for (let i = headerIdx + 1; i < Math.min(headerIdx + 4, rows.length); i++) {
-    const r = rows[i];
-    if (r?.some((v) => typeof v === "string" && v.trim().toLowerCase() === "себестоимость")) {
-      isNewFormat = true;
-      break;
-    }
-  }
+  const { mappings, version } = buildColumnMapping(branchRow, metricRow);
 
-  // 4) Filial ustunlarini aniqlash
-  type BranchCol = { salesIndex: number; costIndex: number | null; alias: string };
-  const branchCols: BranchCol[] = [];
-
-  if (isNewFormat) {
-    // Yangi format: filial nomi juft ustunlarda (col, col+1) = (Продажи, Себестоимость)
-    for (let c = 2; c < headerRow.length; c += 2) {
-      const v = headerRow[c];
-      if (typeof v !== "string") continue;
-      const alias = v.trim();
-      if (!alias || alias.toLowerCase() === "итого") continue;
-      branchCols.push({ salesIndex: c, costIndex: c + 1, alias });
-    }
-  } else {
-    // Eski format: har filial uchun 1 ustun
-    for (let c = 2; c < headerRow.length; c++) {
-      const v = headerRow[c];
-      if (typeof v !== "string") continue;
-      const alias = v.trim();
-      if (!alias || alias.toLowerCase() === "итого") continue;
-      branchCols.push({ salesIndex: c, costIndex: null, alias });
-    }
-  }
-
-  if (branchCols.length === 0) {
-    throw new Error("Filial ustunlari topilmadi (header qatorida sklad nomi yo'q).");
-  }
-
-  // 5) Sub-headerlarni o'tkazib yuborish ("Продажи", "Себестоимость", "Сумма")
+  // Data qatori boshlanishi: header dan keyin sub-headerlarni o'tkazib yuborish
   let dataStartIdx = headerIdx + 1;
   while (dataStartIdx < rows.length) {
     const r = rows[dataStartIdx];
@@ -131,16 +269,32 @@ export function parseSalesWorkbook(
       r?.some(
         (v) =>
           typeof v === "string" &&
-          ["продажи", "себестоимость", "сумма"].includes(v.trim().toLowerCase())
+          ["продажи", "себестоимость", "сумма", "остаток", "количество"].includes(
+            v.trim().toLowerCase()
+          )
       );
     if (looksLikeSubHeader) dataStartIdx++;
     else break;
   }
 
-  // 6) Data qatorlarini yig'ish
+  // ── 4. v3 format: mahsulot darajasi ──────────────────────────────────────
+  if (version === "v3") {
+    return parseProductLevel(
+      rows,
+      dataStartIdx,
+      period,
+      mappings,
+      categoryCodes ?? new Set()
+    );
+  }
+
+  // ── 5. v1/v2 format: kategoriya darajasi (mavjud mantiq) ─────────────────
   const allowed = new Set(allowedCategoryNames.map(normalizeName));
   const out: ParsedSalesBranchRow[] = [];
   const skipped = new Set<string>();
+
+  // Filial bo'yicha ustun indekslarini mapping dan ajratish
+  const branchCols = buildLegacyBranchCols(mappings);
 
   for (let i = dataStartIdx; i < rows.length; i++) {
     const r = rows[i];
@@ -155,7 +309,7 @@ export function parseSalesWorkbook(
       continue;
     }
 
-    for (const { salesIndex, costIndex, alias } of branchCols) {
+    for (const { alias, salesIndex, costIndex } of branchCols) {
       const amt = parseAmount(r[salesIndex]);
       if (amt == null || amt === 0) continue;
       const cost = costIndex != null ? (parseAmount(r[costIndex]) ?? null) : null;
@@ -175,9 +329,192 @@ export function parseSalesWorkbook(
   }
 
   return {
+    version,
     periodStart: period.start,
     periodEnd: period.end,
     rows: out,
     skippedCategories: [...skipped],
+  };
+}
+
+// ─── Yordamchi: v1/v2 uchun eski mapping tuzilmasiga o'tkazish ───────────────
+function buildLegacyBranchCols(mappings: ColMapping[]): {
+  alias: string;
+  salesIndex: number;
+  costIndex: number | null;
+}[] {
+  // Filial bo'yicha guruhlaymiz
+  const byBranch = new Map<string, ColMapping[]>();
+  for (const m of mappings) {
+    if (!byBranch.has(m.branchAlias)) byBranch.set(m.branchAlias, []);
+    byBranch.get(m.branchAlias)!.push(m);
+  }
+
+  return [...byBranch.entries()].map(([alias, cols]) => {
+    const salesCol = cols.find((c) => c.metric === "Продажи");
+    const costCol = cols.find((c) => c.metric === "Себестоимость");
+    if (!salesCol) {
+      throw new Error(
+        `Filial "${alias}" uchun "Продажи" ustuni topilmadi.`
+      );
+    }
+    return {
+      alias,
+      salesIndex: salesCol.colIndex,
+      costIndex: costCol?.colIndex ?? null,
+    };
+  });
+}
+
+// ─── v3 parse: mahsulot darajasi ─────────────────────────────────────────────
+function parseProductLevel(
+  rows: (unknown | null)[][],
+  dataStartIdx: number,
+  period: { start: Date; end: Date },
+  mappings: ColMapping[],
+  categoryCodes: Set<number>
+): Extract<ParsedSalesResult, { version: "v3" }> {
+  // Filial bo'yicha indekslar
+  const branchMetrics = new Map<
+    string,
+    {
+      stockIdx: number | null;
+      qtyIdx: number | null;
+      salesIdx: number | null;
+      costIdx: number | null;
+    }
+  >();
+
+  for (const m of mappings) {
+    if (!branchMetrics.has(m.branchAlias)) {
+      branchMetrics.set(m.branchAlias, {
+        stockIdx: null,
+        qtyIdx: null,
+        salesIdx: null,
+        costIdx: null,
+      });
+    }
+    const entry = branchMetrics.get(m.branchAlias)!;
+    if (m.metric === "Остаток") entry.stockIdx = m.colIndex;
+    else if (m.metric === "Количество") entry.qtyIdx = m.colIndex;
+    else if (m.metric === "Продажи") entry.salesIdx = m.colIndex;
+    else if (m.metric === "Себестоимость") entry.costIdx = m.colIndex;
+  }
+
+  // ── Data qatorlarini yig'ish (kod=raqam, nom=matn) ──────────────────────────
+  // 1C eksporti tekis daraxt: ierarxiya qatorlari (MARKET/FOOD/.../DON) SUBTOTAL,
+  // mahsulot (SKU) qatorlari — barg (leaf). Daraja markeri yo'q (outline/indent yo'q),
+  // shuning uchun GROUP vs LEAF ni SUBTOTAL orqali qayta quramiz:
+  // qator GROUP, agar uning Продажи (umumiy) qiymati o'zidan keyingi ketma-ket
+  // qatorlar yig'indisiga teng bo'lsa (parent bolalardan oldin keladi).
+  const salesIdxs = mappings.filter((m) => m.metric === "Продажи").map((m) => m.colIndex);
+  const totalOf = (r: (unknown | null)[]) =>
+    salesIdxs.reduce((s, idx) => s + (parseAmount(r[idx]) ?? 0), 0);
+
+  type DataRow = { r: (unknown | null)[]; code: number; name: string; total: number };
+  const data: DataRow[] = [];
+  for (let i = dataStartIdx; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r) continue;
+    const code = r[0];
+    const name = r[1];
+    if (typeof code !== "number" || typeof name !== "string") continue;
+    data.push({ r, code, name: name.trim(), total: totalOf(r) });
+  }
+
+  const n = data.length;
+  const isGroup = new Array<boolean>(n).fill(false);
+  const EPS = 1; // summalar 2 kasrda, 4 filial — yaxlitlash < 0.05, EPS=1 xavfsiz
+
+  // parseNode: p-qatordagi tugunning butun pastki-daraxtini parse qiladi,
+  // pastki-daraxtdan keyingi indeksni qaytaradi. Tugun GROUP, agar uning DIRECT
+  // bolalari (har biri o'z pastki-daraxti bilan) yig'indisi uning totaliga teng bo'lsa.
+  // MUHIM: har bola pastki-daraxti rekursiv o'tkazib yuboriladi (ichma-ich subtotal
+  // ikki marta sanalmasligi uchun).
+  const parseNode = (p: number, limit: number): number => {
+    const t = data[p].total;
+    if (t <= EPS) { isGroup[p] = false; return p + 1; } // 0-summa → leaf
+    let acc = 0;
+    let q = p + 1;
+    let hadChild = false;
+    while (q < limit && acc < t - EPS) {
+      const childTotal = data[q].total;
+      const childEnd = parseNode(q, limit); // bola pastki-daraxtini o'tkazib yuborish
+      acc += childTotal;
+      hadChild = true;
+      q = childEnd;
+    }
+    if (hadChild && Math.abs(acc - t) <= EPS) {
+      isGroup[p] = true;
+      return q; // pastki-daraxt q da tugadi
+    }
+    // p — leaf (bolalar totaliga to'g'ri kelmadi). p+1 dan qayta parse qilinadi.
+    isGroup[p] = false;
+    return p + 1;
+  };
+  { let i = 0; while (i < n) i = parseNode(i, n); }
+
+  // ── Leaf (SKU) lardan ProductSales qatorlari + kategoriya biriktirish ───────
+  const productRows: ParsedProductRow[] = [];
+  let categoryRowCount = 0;
+  let currentCategoryCode: number | null = null; // eng yaqin BIZGA MA'LUM kategoriya/subkategoriya
+
+  for (let i = 0; i < n; i++) {
+    const d = data[i];
+    if (isGroup[i]) {
+      categoryRowCount++;
+      // Faqat DB'da mavjud (Category.code) GROUP'lar kategoriya biriktirishda ishtirok etadi.
+      // Oraliq 1C guruhlari (DON, YORMA/KRUPA, MARKET root...) e'tiborga olinmaydi.
+      if (categoryCodes.has(d.code)) currentCategoryCode = d.code;
+      continue;
+    }
+    // Leaf (SKU) — har filial uchun bir qator (faqat sotuv > 0)
+    for (const [branchAlias, cols] of branchMetrics) {
+      if (cols.salesIdx == null) continue;
+      const amount = parseAmount(d.r[cols.salesIdx]);
+      if (amount == null || amount === 0) continue;
+      const stockQty = cols.stockIdx != null ? (parseAmount(d.r[cols.stockIdx]) ?? null) : null;
+      const soldQty = cols.qtyIdx != null ? (parseAmount(d.r[cols.qtyIdx]) ?? null) : null;
+      const costAmount = cols.costIdx != null ? (parseAmount(d.r[cols.costIdx]) ?? null) : null;
+      productRows.push({
+        branchAlias,
+        productCode: d.code,
+        productName: d.name,
+        parentCategoryCode: currentCategoryCode,
+        stockQty,
+        soldQty,
+        amount,
+        costAmount,
+      });
+    }
+  }
+
+  // ── VALIDATSIYA (fail-safe): leaf yig'indisi == root (MARKET) — har filial ──
+  // data[0] = tepa root (MARKET) — uning per-filial Продажиси umumiy total bo'lishi kerak.
+  if (n > 0) {
+    for (const [alias, cols] of branchMetrics) {
+      if (cols.salesIdx == null) continue;
+      const rootVal = parseAmount(data[0].r[cols.salesIdx]) ?? 0;
+      let leafSum = 0;
+      for (let i = 0; i < n; i++) {
+        if (!isGroup[i]) leafSum += parseAmount(data[i].r[cols.salesIdx]) ?? 0;
+      }
+      const tol = Math.max(1, Math.abs(rootVal) * 0.0001);
+      if (Math.abs(leafSum - rootVal) > tol) {
+        throw new Error(
+          `Validatsiya xato: "${alias}" bo'yicha SKU yig'indisi (${leafSum.toFixed(2)}) ` +
+            `fayl umumiy totaliga (${rootVal.toFixed(2)}) teng emas. ` +
+            `Shablon tuzilishi o'zgargan bo'lishi mumkin — parser tekshirilsin.`
+        );
+      }
+    }
+  }
+
+  return {
+    version: "v3",
+    periodStart: period.start,
+    periodEnd: period.end,
+    productRows,
+    categoryRowCount,
   };
 }
