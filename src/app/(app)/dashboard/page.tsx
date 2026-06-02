@@ -17,10 +17,11 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  ShoppingBag, Users, Receipt, TrendingUp, ArrowRight, Download, BarChart3,
+  ShoppingBag, Users, Receipt, TrendingUp, ArrowRight, Download, BarChart3, LayoutDashboard,
 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PeriodFilter } from "./period-filter";
 import {
@@ -416,14 +417,11 @@ export default async function DashboardPage({
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex items-start sm:items-end justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl sm:text-3xl lg:text-[32px] font-semibold tracking-tight">Dashboard</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {startStr} – {endStr}
-            {branchId && ` · ${branches.find((b) => b.id === branchId)?.name ?? ""}`}
-          </p>
-        </div>
+      <PageHeader
+        icon={LayoutDashboard}
+        title="Dashboard"
+        description={`${startStr} – ${endStr}${branchId ? ` · ${branches.find((b) => b.id === branchId)?.name ?? ""}` : ""}`}
+      >
         <a href={`/api/export?start=${startStr}&end=${endStr}${branchId ? `&branchId=${branchId}` : ""}`}>
           <Button variant="outline" size="sm"
             className="rounded-full bg-card border-border/60 hover:bg-secondary gap-2 h-9 px-4 text-sm font-medium shadow-sm">
@@ -432,7 +430,7 @@ export default async function DashboardPage({
             <span className="sm:hidden">Eksport</span>
           </Button>
         </a>
-      </div>
+      </PageHeader>
 
       {/* Period filter — darhol ko'rinadi */}
       <PeriodFilter
