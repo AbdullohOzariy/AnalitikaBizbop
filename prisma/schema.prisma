@@ -55,6 +55,7 @@ model Branch {
 
   aliases       BranchAlias[]
   sales         CategorySales[]
+  productSales  ProductSales[]
   metrics       DailyMetrics[]
   visits        DailyVisits[]
   plans         MonthlyPlan[]
@@ -97,6 +98,7 @@ model Category {
 
   aliases    CategoryAlias[]
   sales      CategorySales[]
+  products   Product[]
   plans      MonthlyPlan[]
   dailyPlans DailyPlan[]
 }
@@ -222,6 +224,7 @@ model UploadedFile {
   periodStart  DateTime?    @db.Date
   periodEnd    DateTime?    @db.Date
   yearOverride Int?         // VISITS faylda yil bo'lmaganda admin tanlaydi
+  templateVersion String?   // sotuv shabloni versiyasi (header signaturasidan: v1/v2/v3)
   rowCount     Int          @default(0)
   status       UploadStatus @default(SUCCESS)
   errorMessage String?
@@ -231,11 +234,53 @@ model UploadedFile {
   uploadedBy User    @relation(fields: [uploadedById], references: [id])
   branch     Branch? @relation(fields: [branchId], references: [id])
 
-  sales      CategorySales[]
-  metrics    DailyMetrics[]
-  visits     DailyVisits[]
-  dailyPlans DailyPlan[]
+  sales        CategorySales[]
+  productSales ProductSales[]
+  metrics      DailyMetrics[]
+  visits       DailyVisits[]
+  dailyPlans   DailyPlan[]
 
   @@index([fileType, periodStart, periodEnd])
   @@index([uploadedById])
+}
+
+// ─── Master baza: mahsulot (SKU) darajasidagi ma'lumot ───────────────────────
+// Yangi sotuv shabloni (ShablonSotuv.xlsx) mahsulot darajasida keladi.
+// Product = 1C mahsulot katalogi; ProductSales = SKU × filial × davr fakt jadval.
+
+model Product {
+  id         Int      @id @default(autoincrement())
+  code       Int      @unique // 1C mahsulot kodi
+  name       String
+  categoryId Int? // tegishli kategoriya/subkategoriya (iyerarxiyadagi joyi)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  category Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  sales    ProductSales[]
+
+  @@index([categoryId])
+}
+
+// Master sotuv fakti — SKU × filial × davr. Qayta yuklashda upsert (ustiga yoziladi).
+model ProductSales {
+  id             Int      @id @default(autoincrement())
+  uploadedFileId Int
+  productId      Int
+  branchId       Int
+  periodStart    DateTime @db.Date
+  periodEnd      DateTime @db.Date
+  stockQty       Decimal? @db.Decimal(20, 3) // Остаток (qoldiq dona)
+  soldQty        Decimal? @db.Decimal(20, 3) // Количество (sotilgan dona)
+  amount         Decimal  @db.Decimal(20, 2) // Продажи (savdo summasi)
+  costAmount     Decimal? @db.Decimal(20, 2) // Себестоимость (tannarx)
+
+  uploadedFile UploadedFile @relation(fields: [uploadedFileId], references: [id], onDelete: Cascade)
+  product      Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  branch       Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, branchId, periodStart, periodEnd])
+  @@index([periodStart, periodEnd])
+  @@index([branchId, periodStart, periodEnd])
+  @@index([productId, periodStart, periodEnd])
 }
