@@ -1,9 +1,8 @@
 import { redirect } from "next/navigation";
-import { UsersRound } from "lucide-react";
-import { PageHeader } from "@/components/common/page";
+import { UsersRound, ShieldCheck, Eye, FolderKanban } from "lucide-react";
+import { PageHeader, StatCard, SectionCard, EmptyState, Pill } from "@/components/common/page";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -16,12 +15,38 @@ import { formatDateUZ } from "@/lib/format";
 import { CreateUserForm } from "./create-form";
 import { UserActions } from "./user-actions";
 
-const ROLE_LABEL: Record<string, string> = {
-  ADMIN:       "Admin",
-  VIEWER:      "Ko'ruvchi",
-  CAT_MANAGER: "Kategoriya menejeri",
+// ── Rol konfiguratsiyasi ──────────────────────────────────────────────────────
+const ROLE_CONFIG: Record<
+  string,
+  { label: string; tone: "green" | "blue" | "muted"; icon: string }
+> = {
+  ADMIN:       { label: "Admin",               tone: "green",  icon: "A" },
+  CAT_MANAGER: { label: "Kategoriya menejeri", tone: "blue",   icon: "K" },
+  VIEWER:      { label: "Ko'ruvchi",           tone: "muted",  icon: "V" },
 };
 
+// ── Avatar: ismdagi bosh harflar ─────────────────────────────────────────────
+const AVATAR_COLORS = [
+  "bg-primary/15 text-primary",
+  "bg-blue-500/15 text-blue-600 dark:text-blue-400",
+  "bg-accent/15 text-accent",
+  "bg-purple-500/15 text-purple-600 dark:text-purple-400",
+  "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+];
+
+function getAvatarColor(id: number) {
+  return AVATAR_COLORS[id % AVATAR_COLORS.length];
+}
+
+function getInitials(name: string) {
+  return name
+    .split(" ")
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .slice(0, 2)
+    .join("");
+}
+
+// ── Sahifa ────────────────────────────────────────────────────────────────────
 export default async function UsersPage() {
   const session = await auth();
   if (session?.user.role !== "ADMIN") redirect("/dashboard");
@@ -30,62 +55,139 @@ export default async function UsersPage() {
     orderBy: [{ role: "asc" }, { createdAt: "asc" }],
   });
 
+  const totalAdmin      = users.filter((u) => u.role === "ADMIN").length;
+  const totalCatManager = users.filter((u) => u.role === "CAT_MANAGER").length;
+  const totalViewer     = users.filter((u) => u.role === "VIEWER").length;
+
   return (
     <div className="space-y-6">
       <PageHeader
         icon={UsersRound}
         title="Foydalanuvchilar"
-        description="Yangi ko'ruvchi (viewer) qo'shing yoki adminni tayinlang."
+        description="Yangi foydalanuvchi qo'shing, parol o'zgartiring yoki o'chiring."
       />
 
-      <div className="grid lg:grid-cols-[1fr_360px] gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Hammasi: {users.length}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Ism</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Rol</TableHead>
-                  <TableHead>Yaratilgan</TableHead>
-                  <TableHead></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {users.map((u) => (
-                  <TableRow key={u.id}>
-                    <TableCell className="font-medium">{u.name}</TableCell>
-                    <TableCell>{u.email}</TableCell>
-                    <TableCell>{ROLE_LABEL[u.role] ?? u.role}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {formatDateUZ(u.createdAt)}
-                    </TableCell>
-                    <TableCell>
-                      <UserActions
-                        id={u.id}
-                        name={u.name}
-                        role={u.role}
-                        isSelf={String(u.id) === session.user.id}
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+      {/* Statistika qatori */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <StatCard
+          label="Jami"
+          value={users.length}
+          icon={UsersRound}
+          tone="default"
+        />
+        <StatCard
+          label="Adminlar"
+          value={totalAdmin}
+          icon={ShieldCheck}
+          tone="green"
+        />
+        <StatCard
+          label="Kat. menejerlar"
+          value={totalCatManager}
+          icon={FolderKanban}
+          tone="blue"
+        />
+        <StatCard
+          label="Ko'ruvchilar"
+          value={totalViewer}
+          icon={Eye}
+          tone="default"
+        />
+      </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Yangi foydalanuvchi</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <CreateUserForm />
-          </CardContent>
-        </Card>
+      {/* Asosiy kontent */}
+      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+        {/* Foydalanuvchilar jadvali */}
+        <SectionCard title={`Ro'yxat — ${users.length} nafar`}>
+          {users.length === 0 ? (
+            <EmptyState
+              icon={UsersRound}
+              title="Foydalanuvchi yo'q"
+              description="Hozircha hech kim qo'shilmagan. O'ngdagi forma orqali qo'shing."
+            />
+          ) : (
+            <div className="overflow-x-auto -mx-5">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="pl-5">Foydalanuvchi</TableHead>
+                    <TableHead className="hidden sm:table-cell">Login</TableHead>
+                    <TableHead>Rol</TableHead>
+                    <TableHead className="hidden md:table-cell">Qo'shilgan</TableHead>
+                    <TableHead className="w-10 pr-5"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {users.map((u) => {
+                    const isSelf = String(u.id) === session.user.id;
+                    const cfg = ROLE_CONFIG[u.role] ?? ROLE_CONFIG.VIEWER;
+                    return (
+                      <TableRow key={u.id} className="group">
+                        {/* Avatar + Ism */}
+                        <TableCell className="pl-5">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span
+                              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold ${getAvatarColor(u.id)}`}
+                            >
+                              {getInitials(u.name)}
+                            </span>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-medium text-sm truncate">{u.name}</span>
+                                {isSelf && (
+                                  <Pill tone="green" className="text-[10px] py-0 px-1.5">
+                                    Siz
+                                  </Pill>
+                                )}
+                              </div>
+                              {/* Mobilda login ko'rinadi */}
+                              <span className="block text-xs text-muted-foreground truncate sm:hidden">
+                                {u.email}
+                              </span>
+                            </div>
+                          </div>
+                        </TableCell>
+
+                        {/* Login (katta ekranda) */}
+                        <TableCell className="hidden sm:table-cell text-sm text-muted-foreground">
+                          {u.email}
+                        </TableCell>
+
+                        {/* Rol badge */}
+                        <TableCell>
+                          <Pill tone={cfg.tone}>{cfg.label}</Pill>
+                        </TableCell>
+
+                        {/* Sana (o'rta ekrandan) */}
+                        <TableCell className="hidden md:table-cell text-xs text-muted-foreground">
+                          {formatDateUZ(u.createdAt)}
+                        </TableCell>
+
+                        {/* Amallar */}
+                        <TableCell className="pr-5">
+                          <UserActions
+                            id={u.id}
+                            name={u.name}
+                            role={u.role}
+                            isSelf={isSelf}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </SectionCard>
+
+        {/* Yangi foydalanuvchi formasi */}
+        <SectionCard
+          title="Yangi foydalanuvchi"
+          description="Ma'lumotlarni to'ldiring va qo'shing."
+        >
+          <CreateUserForm />
+        </SectionCard>
       </div>
     </div>
   );

@@ -9,7 +9,7 @@ import { requireAdmin } from "@/lib/auth-helpers";
 
 const createSchema = z.object({
   name: z.string().trim().min(1).max(100),
-  email: z.string().email().toLowerCase(),
+  email: z.string().trim().min(1).max(100), // login — email bo'lishi shart emas
   password: z.string().min(6, "Parol kamida 6 belgi"),
   role: z.enum(["ADMIN", "VIEWER", "CAT_MANAGER"]),
 });
@@ -21,7 +21,7 @@ export async function createUserAction(
     await requireAdmin();
     const parsed = createSchema.parse(input);
     const exists = await prisma.user.findUnique({ where: { email: parsed.email } });
-    if (exists) return { ok: false, error: "Bu email band." };
+    if (exists) return { ok: false, error: "Bu login band." };
     const passwordHash = await bcrypt.hash(parsed.password, 12);
     await prisma.user.create({
       data: {
