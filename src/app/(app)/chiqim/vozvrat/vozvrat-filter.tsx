@@ -14,41 +14,32 @@ import {
 } from "@/components/ui/select";
 import { Search, X } from "lucide-react";
 
-// bot-db.ts Node.js-only (pg pool) — brauzerda import qilib bo'lmaydi.
-// TUR_LABEL ni bu yerda takrorlaymiz (server prop sifatida ham uzatish mumkin edi,
-// lekin bu turg'un qiymat — prop oqimiga hojat yo'q).
-const TURS: [string, string][] = [
-  ["spisaniya",   "Spisaniya"],
-  ["vozvrat",     "Vozvrat"],
-  ["kafe",        "Kafe"],
-  ["ovqatlanish", "Ovqatlanish"],
+const STATUSES: [string, string][] = [
+  ["kutilmoqda", "Kutilmoqda"],
+  ["jarayonda",  "Jarayonda"],
+  ["bajarildi",  "Bajarildi"],
+  ["rad_etildi", "Rad etildi"],
 ];
 
-export function ChiqimFilter({
+export function VozvratFilter({
   filials,
   defaultStart,
   defaultEnd,
-  defaultTur,
+  defaultStatus,
   defaultFilial,
-  hideTur,
-  hideFilial,
-  basePath = "/chiqim",
 }: {
   filials: string[];
   defaultStart: string;
   defaultEnd: string;
-  defaultTur?: string;
+  defaultStatus?: string;
   defaultFilial?: string;
-  hideTur?: boolean;
-  hideFilial?: boolean;
-  basePath?: string;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   const [start, setStart] = useState(defaultStart);
   const [end, setEnd] = useState(defaultEnd);
-  const [tur, setTur] = useState(defaultTur ?? "all");
+  const [status, setStatus] = useState(defaultStatus ?? "all");
   const [filial, setFilial] = useState(defaultFilial ?? "all");
 
   const apply = () => {
@@ -57,56 +48,50 @@ export function ChiqimFilter({
     else p.delete("start");
     if (/^\d{4}-\d{2}-\d{2}$/.test(end)) p.set("end", end);
     else p.delete("end");
-    if (!hideTur) {
-      if (tur && tur !== "all") p.set("tur", tur);
-      else p.delete("tur");
-    }
-    if (!hideFilial) {
-      if (filial && filial !== "all") p.set("filial", filial);
-      else p.delete("filial");
-    }
+    if (status && status !== "all") p.set("status", status);
+    else p.delete("status");
+    if (filial && filial !== "all") p.set("filial", filial);
+    else p.delete("filial");
     p.delete("page");
-    router.replace(`${basePath}?${p.toString()}`);
+    router.replace(`/chiqim/vozvrat?${p.toString()}`);
   };
 
   const reset = () => {
     setStart("");
     setEnd("");
-    setTur("all");
+    setStatus("all");
     setFilial("all");
-    router.replace(basePath);
+    router.replace("/chiqim/vozvrat");
   };
 
   const hasFilters =
     start ||
     end ||
-    (tur && tur !== "all") ||
+    (status && status !== "all") ||
     (filial && filial !== "all");
 
   return (
     <div className="flex flex-wrap items-end gap-3">
-      {/* Tur filtri */}
-      {!hideTur && (
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Tur</Label>
-          <Select value={tur} onValueChange={(v: string | null) => setTur(v ?? "all")}>
-            <SelectTrigger className="h-9 w-44">
-              <SelectValue placeholder="Barcha turlar" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Barcha turlar</SelectItem>
-              {TURS.map(([key, label]) => (
-                <SelectItem key={key} value={key}>
-                  {label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
+      {/* Status filtri */}
+      <div className="space-y-1">
+        <Label className="text-xs text-muted-foreground">Holat</Label>
+        <Select value={status} onValueChange={(v: string | null) => setStatus(v ?? "all")}>
+          <SelectTrigger className="h-9 w-44">
+            <SelectValue placeholder="Barcha holatlar" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Barcha holatlar</SelectItem>
+            {STATUSES.map(([key, label]) => (
+              <SelectItem key={key} value={key}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
       {/* Filial filtri */}
-      {!hideFilial && filials.length > 0 && (
+      {filials.length > 0 && (
         <div className="space-y-1">
           <Label className="text-xs text-muted-foreground">Filial</Label>
           <Select value={filial} onValueChange={(v: string | null) => setFilial(v ?? "all")}>
@@ -125,7 +110,7 @@ export function ChiqimFilter({
         </div>
       )}
 
-      {/* Davr: boshlanish */}
+      {/* Boshlanish */}
       <div className="space-y-1">
         <Label className="text-xs text-muted-foreground">Boshlanish</Label>
         <Input
@@ -137,7 +122,7 @@ export function ChiqimFilter({
         />
       </div>
 
-      {/* Davr: tugash */}
+      {/* Tugash */}
       <div className="space-y-1">
         <Label className="text-xs text-muted-foreground">Tugash</Label>
         <Input

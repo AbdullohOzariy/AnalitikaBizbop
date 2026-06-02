@@ -8,7 +8,7 @@ import {
   chiqimRecords,
   chiqimFilials,
   TUR_LABEL,
-} from "@/lib/bot-db";
+} from "@/lib/spisaniya/db";
 import { formatUZS } from "@/lib/format";
 import {
   PackageMinus,
