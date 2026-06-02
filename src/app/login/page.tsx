@@ -60,7 +60,7 @@ export default function LoginPage() {
             </ul>
           </div>
 
-          <p className="text-xs text-white/60">analitika.oilagroup.uz · © {new Date().getFullYear()} BizBop</p>
+          <p className="text-xs text-white/60">analitika.oilagroup.uz · © {new Date().getFullYear()} BizBop · by #Bozorov</p>
         </div>
       </div>
 
@@ -82,7 +82,7 @@ export default function LoginPage() {
           </div>
 
           <p className="mt-6 text-center text-xs text-muted-foreground lg:hidden">
-            © {new Date().getFullYear()} BizBop Analitika
+            © {new Date().getFullYear()} BizBop Analitika · by #Bozorov
           </p>
         </div>
       </div>
