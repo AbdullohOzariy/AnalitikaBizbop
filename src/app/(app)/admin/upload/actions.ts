@@ -166,9 +166,14 @@ export async function uploadSalesAction(formData: FormData): Promise<UploadResul
     const categoryCodeRecords = await prisma.category.findMany({
       select: { id: true, code: true },
     });
-    const categoryCodes = new Set<number>(
-      categoryCodeRecords.flatMap((c) => (c.code != null ? [c.code] : []))
-    );
+    const groupCodeRecords = await prisma.categoryGroup.findMany({
+      select: { code: true },
+    });
+    // Ierarxiya qatorlarini tanish uchun: guruh ∪ kategoriya ∪ subkategoriya kodlari.
+    const categoryCodes = new Set<number>([
+      ...categoryCodeRecords.flatMap((c) => (c.code != null ? [c.code] : [])),
+      ...groupCodeRecords.flatMap((g) => (g.code != null ? [g.code] : [])),
+    ]);
     const categoryCodeToId = new Map<number, number>(
       categoryCodeRecords.flatMap((c) =>
         c.code != null ? [[c.code, c.id]] : []

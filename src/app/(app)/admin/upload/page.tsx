@@ -40,7 +40,7 @@ export default async function UploadPage() {
       orderBy: { createdAt: "desc" },
       include: {
         branch: { select: { name: true } },
-        uploadedBy: { select: { name: true } },
+        uploadedBy: { select: { name: true, email: true } },
         _count: {
           select: { sales: true, metrics: true, visits: true, dailyPlans: true },
         },
@@ -130,8 +130,13 @@ export default async function UploadPage() {
                               : "—"}
                           </TableCell>
                           <TableCell className="text-right tabular-nums">{rowCount}</TableCell>
-                          <TableCell className="text-sm text-muted-foreground">
-                            {f.uploadedBy.name}
+                          <TableCell>
+                            <div className="text-sm font-medium text-foreground">
+                              {f.uploadedBy.name?.trim() || f.uploadedBy.email}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {f.uploadedBy.email}
+                            </div>
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground">
                             {formatDateUZ(f.createdAt)}

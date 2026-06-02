@@ -13,8 +13,9 @@ import {
   dailySalesByGroup,
   dailySalesByCategory,
 } from "@/lib/analytics-v2";
-import { Sparkles } from "lucide-react";
-import { PageHeader } from "@/components/common/page";
+import { Sparkles, ShoppingCart, TrendingUp, Users, ReceiptText } from "lucide-react";
+import { PageHeader, StatCard } from "@/components/common/page";
+import { formatUZS, formatNumber } from "@/lib/format";
 import { FiltersBar } from "./filters";
 import {
   PlanCompletionWidget,
@@ -176,30 +177,76 @@ async function WidgetsSection({
     previousKpiTotals.receipts > 0 ? previousKpiTotals.avgItemsSum / previousKpiTotals.receipts : null
   );
 
+  // ── KPI hero row uchun jami hisoblar ──────────────────────────────
+  // Umumiy savdo: GroupSalesDayRow.total yig'indisi (mavjud ma'lumotdan)
+  const totalSales = groupSales.days.reduce((s, d) => s + d.total, 0);
+  // Umumiy marja: marja.byBranch dan weighted average
+  const marjaTotalSales = marja.byBranch.reduce((s, r) => s + r.sales, 0);
+  const marjaTotalCost  = marja.byBranch.reduce((s, r) => s + r.cost, 0);
+  const overallMarja    = marjaTotalSales > 0
+    ? ((marjaTotalSales - marjaTotalCost) / marjaTotalSales) * 100
+    : null;
+  // Umumiy tashriflar va cheklar
+  const totalVisits   = currentKpiTotals.visits;
+  const totalReceipts = currentKpiTotals.receipts;
+  const overallConversion = totalVisits > 0 ? (totalReceipts / totalVisits) * 100 : null;
+
   return (
-    <div className="grid gap-4 md:grid-cols-2">
-      <PlanCompletionWidget data={planStats} />
-      <MarjaByBranchWidget data={marja.byBranch} />
-      <MarjaByCategoryWidget data={marja.byCategory} />
-      <DailyByBranchWidget title="2. Tashriflar (kunlik)" data={filterByBranch(visits)} />
-      <DailyByBranchWidget
-        title="3. Chek soni (kunlik)"
-        data={visibleReceipts}
-        trend={calcDelta(seriesTotal(visibleReceipts), seriesTotal(visiblePrevReceipts))}
-      />
-      <DailyByBranchWidget
-        title="7. O'rtacha chek (kunlik)"
-        data={visibleAvgReceipt}
-        format="uzs-compact"
-        trend={calcDelta(seriesAverage(visibleAvgReceipt), seriesAverage(visiblePrevAvgReceipt))}
-      />
-      <ConversionWidget rows={kpiWithTrends} trend={conversionTrend} />
-      <AvgItemsWidget rows={kpiWithTrends} trend={avgItemsTrend} />
-      <GroupSalesDynamicsWidget
-        days={groupSales.days}
-        groups={groupSales.groups}
-        categoryDataMap={categoryDataMap}
-      />
+    <div className="space-y-4">
+      {/* KPI Hero qatori */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <StatCard
+          label="Umumiy savdo"
+          value={totalSales > 0 ? formatUZS(totalSales, { compact: true }) : "—"}
+          icon={ShoppingCart}
+          tone="green"
+        />
+        <StatCard
+          label="Marja"
+          value={overallMarja != null ? `${overallMarja.toFixed(1)}%` : "—"}
+          icon={TrendingUp}
+          tone={overallMarja != null && overallMarja >= 30 ? "green" : overallMarja != null && overallMarja >= 15 ? "orange" : "default"}
+        />
+        <StatCard
+          label="Tashriflar"
+          value={totalVisits > 0 ? formatNumber(totalVisits) : "—"}
+          icon={Users}
+          tone="blue"
+        />
+        <StatCard
+          label="Konversiya"
+          value={overallConversion != null ? `${overallConversion.toFixed(1)}%` : "—"}
+          icon={ReceiptText}
+          hint={totalReceipts > 0 ? `${formatNumber(totalReceipts)} chek` : undefined}
+          tone="default"
+        />
+      </div>
+
+      {/* Widgetlar gridi */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <PlanCompletionWidget data={planStats} />
+        <MarjaByBranchWidget data={marja.byBranch} />
+        <MarjaByCategoryWidget data={marja.byCategory} />
+        <DailyByBranchWidget title="Tashriflar (kunlik)" data={filterByBranch(visits)} />
+        <DailyByBranchWidget
+          title="Chek soni (kunlik)"
+          data={visibleReceipts}
+          trend={calcDelta(seriesTotal(visibleReceipts), seriesTotal(visiblePrevReceipts))}
+        />
+        <DailyByBranchWidget
+          title="O'rtacha chek (kunlik)"
+          data={visibleAvgReceipt}
+          format="uzs-compact"
+          trend={calcDelta(seriesAverage(visibleAvgReceipt), seriesAverage(visiblePrevAvgReceipt))}
+        />
+        <ConversionWidget rows={kpiWithTrends} trend={conversionTrend} />
+        <AvgItemsWidget rows={kpiWithTrends} trend={avgItemsTrend} />
+        <GroupSalesDynamicsWidget
+          days={groupSales.days}
+          groups={groupSales.groups}
+          categoryDataMap={categoryDataMap}
+        />
+      </div>
     </div>
   );
 }

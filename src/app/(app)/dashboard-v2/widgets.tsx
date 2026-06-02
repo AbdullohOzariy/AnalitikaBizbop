@@ -27,6 +27,7 @@ import type {
   CategorySalesDayRow,
 } from "@/lib/analytics-v2";
 
+// Barqaror grafik palitra — faqat chiziq/bar ranglari uchun
 const PALETTE = ["#10b981", "#facc15", "#fb923c", "#6366f1", "#0ea5e9", "#f87171", "#a855f7", "#14b8a6"];
 
 function pctColor(p: number | null): string {
@@ -44,14 +45,22 @@ function fmtPct(p: number | null): string {
   return p == null ? "—" : `${p.toFixed(1)}%`;
 }
 
-const tooltipStyle = {
-  backgroundColor: "rgba(255, 255, 255, 0.85)",
+// CSS tokenlariga asoslangan tooltip — dark mode'da ham to'g'ri
+const tooltipStyle: React.CSSProperties = {
+  backgroundColor: "var(--card)",
   backdropFilter: "blur(12px)",
   borderRadius: "12px",
-  border: "none",
-  boxShadow: "0 8px 24px -8px rgba(0,0,0,0.08)",
+  border: "1px solid var(--border)",
+  boxShadow: "0 8px 24px -8px rgba(0,0,0,0.12)",
   fontSize: "13px",
+  color: "var(--foreground)",
 };
+
+// Grafik o'qi / grid uchun CSS token yordamchi qiymatlari
+// (recharts SVG elementlari CSS variables qo'llab-quvvatlamaydi,
+//  shuning uchun bir joyda saqlangan o'zgaruvchilar orqali boshqaramiz)
+const CHART_GRID_STROKE = "var(--border)";
+const CHART_TICK_FILL = "var(--muted-foreground)";
 
 export function TrendIndicator({ value }: { value?: number | null }) {
   if (value == null) return null;
@@ -134,7 +143,7 @@ export function PlanCompletionWidget({ data }: { data: PlanCompletionStats }) {
   const sortedBranches = [...byBranch].sort((a, b) => (b.pct ?? -1) - (a.pct ?? -1));
 
   return (
-    <ExpandableCard title="1. Reja bajarilishi" className="rounded-2xl" headerClassName="pb-3" contentClassName="space-y-4">
+    <ExpandableCard title="Reja bajarilishi" className="rounded-2xl" headerClassName="pb-3" contentClassName="space-y-4">
       <div className="flex items-baseline gap-3">
         <div className={`text-4xl font-bold tabular-nums ${pctColor(overall.pct)}`}>
           {fmtPct(overall.pct)}
@@ -202,11 +211,11 @@ export function DailyByBranchWidget({
   }));
   return (
     <ExpandableCard title={<WidgetTitle title={title} trend={trend} />} className="rounded-2xl">
-      <ResponsiveContainer width="100%" height={300}>
+      <ResponsiveContainer width="100%" height={280}>
         <LineChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-          <XAxis dataKey="_label" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
-          <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => fmt(Number(v))} />
+          <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_STROKE} />
+          <XAxis dataKey="_label" tick={{ fontSize: 11, fill: CHART_TICK_FILL }} interval="preserveStartEnd" />
+          <YAxis tick={{ fontSize: 11, fill: CHART_TICK_FILL }} tickFormatter={(v) => fmt(Number(v))} />
           <Tooltip
             contentStyle={tooltipStyle}
             formatter={(value) => [fmt(Number(value)), ""]}
@@ -298,19 +307,19 @@ function MarjaBaseWidget({ title, rows }: { title: React.ReactNode; rows: MarjaR
 
   if (sortedData.length === 0) {
     return (
-      <ExpandableCard title={title} className="rounded-2xl shadow-[0_2px_12px_rgb(0,0,0,0.03)] border-border/50">
+      <ExpandableCard title={title} className="rounded-2xl border-border/50">
         <p className="text-xs text-muted-foreground italic text-center py-6">Ma'lumot yo'q</p>
       </ExpandableCard>
     );
   }
 
   return (
-    <ExpandableCard title={title} className="rounded-2xl shadow-[0_2px_12px_rgb(0,0,0,0.03)] border-border/50">
+    <ExpandableCard title={title} className="rounded-2xl border-border/50">
       <div className="pt-2">
         <ResponsiveContainer width="100%" height={Math.max(160, sortedData.length * 36)}>
           <BarChart data={sortedData} layout="vertical" margin={{ top: 0, right: 40, left: 0, bottom: 0 }} barSize={10}>
             <XAxis type="number" hide />
-            <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+            <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 11, fill: CHART_TICK_FILL }} axisLine={false} tickLine={false} />
             <Tooltip
               contentStyle={tooltipStyle}
               cursor={{ fill: 'transparent' }}
@@ -332,7 +341,7 @@ function MarjaBaseWidget({ title, rows }: { title: React.ReactNode; rows: MarjaR
                 dataKey="marja"
                 position="right"
                 formatter={(v) => (typeof v === "number" || typeof v === "string" ? `${Number(v).toFixed(1)}%` : "")}
-                style={{ fontSize: 11, fill: '#64748b', fontWeight: 500 }}
+                style={{ fontSize: 11, fill: CHART_TICK_FILL, fontWeight: 500 }}
               />
             </Bar>
           </BarChart>
@@ -385,7 +394,7 @@ export function ConversionWidget({
   trend?: number | null;
 }) {
   return (
-    <ExpandableCard title={<WidgetTitle title="5. Konversiya" trend={trend} />} className="rounded-2xl">
+    <ExpandableCard title={<WidgetTitle title="Konversiya" trend={trend} />} className="rounded-2xl">
       <div className="grid grid-cols-2 gap-3">
         {rows.map((r) => (
           <div key={r.branchId} className="rounded-xl bg-muted/40 p-3">
@@ -412,7 +421,7 @@ export function AvgItemsWidget({
   trend?: number | null;
 }) {
   return (
-    <ExpandableCard title={<WidgetTitle title="6. Chekdagi o'rt. tovar soni" trend={trend} />} className="rounded-2xl">
+    <ExpandableCard title={<WidgetTitle title="Chekdagi o'rt. tovar soni" trend={trend} />} className="rounded-2xl">
       <div className="grid grid-cols-2 gap-3">
         {rows.map((r) => (
           <div key={r.branchId} className="rounded-xl bg-muted/40 p-3">
@@ -431,16 +440,22 @@ export function AvgItemsWidget({
   );
 }
 
-// ============ 8. Guruh/Kategoriya kunlik savdo dinamikasi ============
+// ============ Guruh/Kategoriya kunlik savdo dinamikasi ============
 
+// Har bir guruh nomi uchun barqaror rang — chart chiziqlar uchun
 const GROUP_COLORS: Record<string, string> = {
   "FRESH":    "#10b981",
   "FOOD":     "#facc15",
   "NON-FOOD": "#6366f1",
 };
-const CAT_PALETTE = ["#10b981","#34d399","#6ee7b7","#facc15","#fde047","#fef08a",
+const CAT_PALETTE = [
+  "#10b981","#34d399","#6ee7b7","#facc15","#fde047","#fef08a",
   "#6366f1","#818cf8","#a5b4fc","#fb923c","#f97316","#ea580c",
-  "#0ea5e9","#38bdf8","#7dd3fc","#f87171","#ef4444","#dc2626"];
+  "#0ea5e9","#38bdf8","#7dd3fc","#f87171","#ef4444","#dc2626",
+];
+
+// Primary yashil token — "Jami" chizig'i uchun
+const TOTAL_LINE_COLOR = "#1FBF5C";
 
 type GroupMeta = { id: number; name: string };
 
@@ -455,15 +470,15 @@ export function GroupSalesDynamicsWidget({
 }) {
   const [activeGroup, setActiveGroup] = useState<number | null>(null);
 
-  function shortDate(iso: string) {
-    const m = iso.match(/^\d{4}-(\d{2})-(\d{2})$/);
-    return m ? `${m[2]}.${m[1]}` : iso;
-  }
-
-  // Guruhlar bo'yicha chart data
+  // Guruhlar bo'yicha chart data + kunlik jami (_total)
   const groupChartData = days.map((d) => {
     const row: Record<string, string | number> = { _label: shortDate(d.date) };
-    for (const g of d.groups) row[`g${g.groupId}`] = g.amount;
+    let total = 0;
+    for (const g of d.groups) {
+      row[`g${g.groupId}`] = g.amount;
+      total += g.amount;
+    }
+    row["_total"] = total;
     return row;
   });
 
@@ -479,10 +494,13 @@ export function GroupSalesDynamicsWidget({
 
   const fmtUZS = (v: number) => v === 0 ? "—" : formatUZS(v, { compact: true });
 
+  // "Barcha guruhlar" rejimida jami ko'rsatiladimi?
+  const showTotal = activeGroup === null;
+
   return (
     <div className="col-span-2 space-y-4">
       {/* Guruhlar bo'yicha kunlik savdo */}
-      <ExpandableCard title="8. Guruhlar bo'yicha kunlik savdo" className="rounded-2xl">
+      <ExpandableCard title="Guruhlar bo'yicha kunlik savdo" className="rounded-2xl">
         {/* Guruh filtr tugmalari */}
         <div className="flex flex-wrap gap-2 mb-4">
           <button
@@ -519,18 +537,20 @@ export function GroupSalesDynamicsWidget({
 
         <ResponsiveContainer width="100%" height={300}>
           <LineChart data={groupChartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-            <XAxis dataKey="_label" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
-            <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => fmtUZS(Number(v))} />
+            <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_STROKE} />
+            <XAxis dataKey="_label" tick={{ fontSize: 11, fill: CHART_TICK_FILL }} interval="preserveStartEnd" />
+            <YAxis tick={{ fontSize: 11, fill: CHART_TICK_FILL }} tickFormatter={(v) => fmtUZS(Number(v))} />
             <Tooltip
               contentStyle={tooltipStyle}
               formatter={(value, name) => {
+                if (name === "_total") return [fmtUZS(Number(value)), "Jami"];
                 const g = groups.find((g) => `g${g.id}` === name);
                 return [fmtUZS(Number(value)), g?.name ?? String(name)];
               }}
             />
             <Legend
               formatter={(value) => {
+                if (value === "_total") return "Jami";
                 const g = groups.find((g) => `g${g.id}` === value);
                 return g?.name ?? value;
               }}
@@ -543,12 +563,25 @@ export function GroupSalesDynamicsWidget({
                 dataKey={`g${g.id}`}
                 name={`g${g.id}`}
                 stroke={GROUP_COLORS[g.name] ?? "#94a3b8"}
-                strokeWidth={activeGroup === null || activeGroup === g.id ? 2.5 : 1}
-                opacity={activeGroup === null || activeGroup === g.id ? 1 : 0.25}
+                strokeWidth={activeGroup === null || activeGroup === g.id ? 2 : 1}
+                opacity={activeGroup === null || activeGroup === g.id ? 1 : 0.2}
                 dot={false}
                 activeDot={{ r: 4 }}
               />
             ))}
+            {/* Umumiy jami chizig'i — faqat "Barcha guruhlar" rejimida */}
+            {showTotal && (
+              <Line
+                type="monotone"
+                dataKey="_total"
+                name="_total"
+                stroke={TOTAL_LINE_COLOR}
+                strokeWidth={3}
+                strokeDasharray="0"
+                dot={false}
+                activeDot={{ r: 5 }}
+              />
+            )}
           </LineChart>
         </ResponsiveContainer>
       </ExpandableCard>
@@ -556,18 +589,18 @@ export function GroupSalesDynamicsWidget({
       {/* Kategoriyalar bo'yicha foiz dinamikasi (guruh tanlanganda) */}
       {activeGroup != null && catData && catData.categories.length > 0 && (
         <ExpandableCard
-          title={`${groups.find((g) => g.id === activeGroup)?.name ?? ""} — kategoriyalar bo'yicha foiz (%)`}
+          title={`${groups.find((g) => g.id === activeGroup)?.name ?? ""} — kategoriyalar ulushi (%)`}
           className="rounded-2xl"
         >
           <p className="text-xs text-muted-foreground mb-3">
             Guruh ichidagi har bir kategoriyaning kunlik ulushi (%)
           </p>
-          <ResponsiveContainer width="100%" height={300}>
+          <ResponsiveContainer width="100%" height={280}>
             <LineChart data={catChartData!} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="_label" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
+              <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_STROKE} />
+              <XAxis dataKey="_label" tick={{ fontSize: 11, fill: CHART_TICK_FILL }} interval="preserveStartEnd" />
               <YAxis
-                tick={{ fontSize: 11 }}
+                tick={{ fontSize: 11, fill: CHART_TICK_FILL }}
                 tickFormatter={(v) => `${Number(v).toFixed(0)}%`}
                 domain={[0, 100]}
               />

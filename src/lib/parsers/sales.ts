@@ -426,33 +426,16 @@ function parseProductLevel(
   const isGroup = new Array<boolean>(n).fill(false);
   const EPS = 1; // summalar 2 kasrda, 4 filial — yaxlitlash < 0.05, EPS=1 xavfsiz
 
-  // parseNode: p-qatordagi tugunning butun pastki-daraxtini parse qiladi,
-  // pastki-daraxtdan keyingi indeksni qaytaradi. Tugun GROUP, agar uning DIRECT
-  // bolalari (har biri o'z pastki-daraxti bilan) yig'indisi uning totaliga teng bo'lsa.
-  // MUHIM: har bola pastki-daraxti rekursiv o'tkazib yuboriladi (ichma-ich subtotal
-  // ikki marta sanalmasligi uchun).
-  const parseNode = (p: number, limit: number): number => {
-    const t = data[p].total;
-    if (t <= EPS) { isGroup[p] = false; return p + 1; } // 0-summa → leaf
-    let acc = 0;
-    let q = p + 1;
-    let hadChild = false;
-    while (q < limit && acc < t - EPS) {
-      const childTotal = data[q].total;
-      const childEnd = parseNode(q, limit); // bola pastki-daraxtini o'tkazib yuborish
-      acc += childTotal;
-      hadChild = true;
-      q = childEnd;
+  // Toza 3-pog'onali 1C eksporti: ierarxiya qatori = kodi DB'da ma'lum
+  // (guruh ∪ kategoriya ∪ subkategoriya — `categoryCodes`). Root (MARKET) = umumiy
+  // jami qatori (totali = grand total) — u ham guruh sifatida o'tkaziladi.
+  // Qolgan barcha kodli qatorlar = SKU (leaf). Subtotal-rekonstruksiya kerak emas.
+  const rootTotal = n > 0 ? data[0].total : 0;
+  for (let i = 0; i < n; i++) {
+    if (categoryCodes.has(data[i].code) || Math.abs(data[i].total - rootTotal) <= EPS) {
+      isGroup[i] = true;
     }
-    if (hadChild && Math.abs(acc - t) <= EPS) {
-      isGroup[p] = true;
-      return q; // pastki-daraxt q da tugadi
-    }
-    // p — leaf (bolalar totaliga to'g'ri kelmadi). p+1 dan qayta parse qilinadi.
-    isGroup[p] = false;
-    return p + 1;
-  };
-  { let i = 0; while (i < n) i = parseNode(i, n); }
+  }
 
   // ── Leaf (SKU) lardan ProductSales qatorlari + kategoriya biriktirish ───────
   const productRows: ParsedProductRow[] = [];
