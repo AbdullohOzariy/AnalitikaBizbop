@@ -1,12 +1,12 @@
 /**
- * BotBizBopSPS (spisaniya-bot) bazasiga READ-ONLY ko'prik.
+ * BotBizBopSPS (spisaniya-bot) bazasi — `bizbop` Postgres (Prisma EMAS, alohida pg.Pool).
  *
- * Bot o'zining `bizbop` Postgres bazasida ishlaydi (Prisma EMAS — alohida pg.Pool).
- * Bu yerda FAQAT SELECT qilinadi — botga hech narsa yozilmaydi.
- * `BOT_DATABASE_URL` env sozlanmagan bo'lsa — barcha funksiyalar bo'sh qaytaradi
+ * Bot endi alohida servis emas — hammasi shu Next ilovaning ichida. Bu modul
+ * bizbop bazasiga ham O'QIYDI (sahifalar), ham YOZADI (miniapp /api/yozuv, vozvrat).
+ * `BOT_DATABASE_URL` env sozlanmagan bo'lsa — read funksiyalar bo'sh qaytaradi
  * (sahifa "ulanmagan" holatini ko'rsatadi, crash bo'lmaydi).
  */
-import { Pool } from "pg";
+import { Pool, type PoolClient } from "pg";
 
 let _pool: Pool | null = null;
 
@@ -14,9 +14,16 @@ function getPool(): Pool | null {
   const url = process.env.BOT_DATABASE_URL;
   if (!url) return null;
   if (!_pool) {
-    _pool = new Pool({ connectionString: url, max: 3, idleTimeoutMillis: 10_000 });
+    _pool = new Pool({ connectionString: url, max: 5, idleTimeoutMillis: 10_000 });
   }
   return _pool;
+}
+
+/** Yozish uchun — pool yo'q bo'lsa xato tashlaydi (read'dagidek jim qaytmaydi). */
+export function requirePool(): Pool {
+  const p = getPool();
+  if (!p) throw new Error("BOT_DATABASE_URL sozlanmagan — bizbop bazasiga ulanib bo'lmadi.");
+  return p;
 }
 
 export function botConfigured(): boolean {
@@ -243,4 +250,167 @@ export async function botKategoriyalar(): Promise<{ id: number; nomi: string }[]
   } catch {
     return [];
   }
+}
+
+// ─── YOZISH (miniapp + vozvrat) ───────────────────────────────────────────────
+
+export type YozuvKirim = {
+  tur: string;
+  tovar: string;
+  miqdor: number | string;
+  birlik?: string | null;
+  summa: number | string;
+  sabab?: string | null;
+  filial: string;
+  firma?: string | null;
+  kafe_nomi?: string | null;
+  xodim_ism: string;
+  xodim_username?: string | null;
+  xodim_id: number | string;
+  rasm_file_id?: string | null;
+};
+
+/**
+ * Yangi yozuv qo'shadi (tranzaksiya: yozuvlar + vozvrat bo'lsa vozvrat_nazorat).
+ * Yangi yozuv id'sini qaytaradi. Guruhga xabar / AI kategoriya — chaqiruvchi fonda qiladi.
+ */
+export async function insertYozuv(d: YozuvKirim): Promise<number> {
+  const p = requirePool();
+  const client: PoolClient = await p.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query(
+      `INSERT INTO yozuvlar
+        (tur, tovar, miqdor, birlik, summa, sabab, filial,
+         firma, kafe_nomi, xodim_ism, xodim_username, xodim_id, rasm_file_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+       RETURNING id`,
+      [
+        d.tur, d.tovar, d.miqdor, d.birlik || "kg", d.summa,
+        d.sabab || null, d.filial, d.firma || null, d.kafe_nomi || null,
+        d.xodim_ism, d.xodim_username || null, d.xodim_id, d.rasm_file_id || null,
+      ]
+    );
+    const yozuvId = rows[0].id as number;
+    if (d.tur === "vozvrat") {
+      await client.query(
+        `INSERT INTO vozvrat_nazorat (yozuv_id, status) VALUES ($1, 'kutilmoqda')`,
+        [yozuvId]
+      );
+    }
+    await client.query("COMMIT");
+    return yozuvId;
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/** Yozuvga guruh message_id'ni biriktiradi (xabar yuborilgandan keyin). */
+export async function setGuruhMessageId(yozuvId: number, messageId: number): Promise<void> {
+  const p = getPool();
+  if (!p) return;
+  await p.query(`UPDATE yozuvlar SET guruh_message_id=$1 WHERE id=$2`, [messageId, yozuvId]).catch(() => {});
+}
+
+/** Miniapp uchun aktiv filial nomlari. */
+export async function aktivFilialNomlari(): Promise<string[]> {
+  const p = getPool();
+  if (!p) return [];
+  try {
+    const { rows } = await p.query(`SELECT nomi FROM filialar WHERE aktiv = true ORDER BY nomi`);
+    return rows.map((r) => r.nomi as string);
+  } catch {
+    return [];
+  }
+}
+
+/** Filialning guruh topic_id'si (mavzuli guruh uchun). */
+export async function filialTopicId(filial: string): Promise<number | null> {
+  const p = getPool();
+  if (!p) return null;
+  try {
+    const { rows } = await p.query(
+      `SELECT topic_id FROM filialar WHERE nomi=$1 AND aktiv=true LIMIT 1`,
+      [filial]
+    );
+    return rows[0]?.topic_id ? Number(rows[0].topic_id) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** GROUP_CHAT_ID — avval env, keyin bizbop sozlamalar jadvali (5 daqiqa kesh). */
+let _chatIdCache: { val: string | null; at: number } | null = null;
+export async function getGroupChatId(): Promise<string | null> {
+  if (process.env.GROUP_CHAT_ID) return process.env.GROUP_CHAT_ID;
+  const now = Date.now();
+  if (_chatIdCache && now - _chatIdCache.at < 5 * 60_000) return _chatIdCache.val;
+  const p = getPool();
+  let val: string | null = null;
+  if (p) {
+    try {
+      const { rows } = await p.query(`SELECT qiymat FROM sozlamalar WHERE kalit='GROUP_CHAT_ID'`);
+      val = rows[0]?.qiymat ?? null;
+    } catch { /* sozlamalar jadvali yo'q bo'lishi mumkin */ }
+  }
+  _chatIdCache = { val, at: now };
+  return val;
+}
+
+/** AI kategoriyalash uchun mavjud kategoriya nomlari. */
+export async function kategoriyaNomlari(): Promise<string[]> {
+  const p = getPool();
+  if (!p) return [];
+  try {
+    const { rows } = await p.query(`SELECT nomi FROM kategoriyalar ORDER BY nomi`);
+    return rows.map((r) => r.nomi as string);
+  } catch {
+    return [];
+  }
+}
+
+/** Kategoriyani yozuvga yozadi (mavjud bo'lmasa kategoriyalar jadvaliga qo'shadi). */
+export async function yozuvKategoriyaSaqla(yozuvId: number, kategoriya: string): Promise<void> {
+  const p = requirePool();
+  await p.query(`INSERT INTO kategoriyalar (nomi) VALUES ($1) ON CONFLICT (nomi) DO NOTHING`, [kategoriya]);
+  await p.query(`UPDATE yozuvlar SET kategoriya=$1 WHERE id=$2`, [kategoriya, yozuvId]);
+}
+
+/** Kategoriyasi yo'q yozuvlar (backfill uchun). */
+export async function kategoriyasizYozuvlar(limit: number): Promise<{ id: number; tovar: string }[]> {
+  const p = getPool();
+  if (!p) return [];
+  const { rows } = await p.query(
+    `SELECT id, tovar FROM yozuvlar WHERE kategoriya IS NULL OR kategoriya=''
+     ORDER BY vaqt DESC LIMIT $1`,
+    [limit]
+  );
+  return rows as { id: number; tovar: string }[];
+}
+
+/**
+ * Vozvrat nazorati statusini yangilaydi (in-process — eski bot HTTP API o'rniga).
+ * Topilsa yozuv (tovar, firma) ma'lumotini qaytaradi (Telegram xabari uchun), aks holda null.
+ */
+export async function vozvratStatusYangila(
+  yozuvId: number,
+  status: string,
+  firmaJavob: string | null,
+  yangilaganIsm: string
+): Promise<{ tovar: string; firma: string | null } | null> {
+  const p = requirePool();
+  const { rows } = await p.query(
+    `UPDATE vozvrat_nazorat
+       SET status=$1, firma_javob=$2, yangilagan_id=NULL,
+           yangilagan_ism=$3, yangilangan_vaqt=NOW()
+     WHERE yozuv_id=$4
+     RETURNING yozuv_id`,
+    [status, firmaJavob, yangilaganIsm, yozuvId]
+  );
+  if (!rows.length) return null;
+  const { rows: t } = await p.query(`SELECT tovar, firma FROM yozuvlar WHERE id=$1`, [yozuvId]);
+  return t.length ? { tovar: t[0].tovar as string, firma: (t[0].firma as string) ?? null } : { tovar: "", firma: null };
 }
