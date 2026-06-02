@@ -1,4 +1,6 @@
 import { redirect } from "next/navigation";
+import { UsersRound } from "lucide-react";
+import { PageHeader } from "@/components/ui/page";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,12 +32,11 @@ export default async function UsersPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Foydalanuvchilar</h1>
-        <p className="text-sm text-muted-foreground">
-          Yangi ko'ruvchi (viewer) qo'shing yoki adminni tayinlang.
-        </p>
-      </div>
+      <PageHeader
+        icon={UsersRound}
+        title="Foydalanuvchilar"
+        description="Yangi ko'ruvchi (viewer) qo'shing yoki adminni tayinlang."
+      />
 
       <div className="grid lg:grid-cols-[1fr_360px] gap-6">
         <Card>

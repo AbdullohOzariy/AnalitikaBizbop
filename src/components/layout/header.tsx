@@ -1,6 +1,6 @@
 import { signOut } from "@/auth";
 import { Button } from "@/components/ui/button";
-import { LogOut, Bell } from "lucide-react";
+import { LogOut } from "lucide-react";
 import {
   Avatar,
   AvatarFallback,
@@ -24,11 +24,6 @@ export function Header({ user }: { user: Session["user"] }) {
       <div className="flex items-center gap-2 sm:gap-3 ml-auto">
         <ThemeToggle />
 
-        {/* Notification bell */}
-        <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-foreground">
-          <Bell className="h-4 w-4" />
-        </Button>
-
         {/* Divider */}
         <div className="h-6 w-px bg-border hidden sm:block" />
 
@@ -41,8 +36,8 @@ export function Header({ user }: { user: Session["user"] }) {
           <AvatarFallback
             className="text-xs font-semibold"
             style={{
-              background: "linear-gradient(135deg, oklch(0.877 0.165 134), oklch(0.73 0.17 48))",
-              color: "oklch(0.18 0.04 145)",
+              background: "linear-gradient(135deg, oklch(0.70 0.185 150), oklch(0.73 0.17 48))",
+              color: "oklch(1 0 0)",
             }}
           >
             {initials}

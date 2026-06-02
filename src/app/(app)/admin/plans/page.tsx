@@ -1,4 +1,6 @@
 import { redirect } from "next/navigation";
+import { Target } from "lucide-react";
+import { PageHeader } from "@/components/ui/page";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { DailyComparisonView } from "./daily-comparison";
@@ -36,13 +38,11 @@ export default async function PlansPage({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Normal Reja</h1>
-        <p className="text-sm text-muted-foreground">
-          Yuklangan kunlik rejalarni real sotuv bilan solishtiring. Real sotuv yo'q kunlar
-          bo'sh ko'rsatiladi.
-        </p>
-      </div>
+      <PageHeader
+        icon={Target}
+        title="Normal Reja"
+        description="Yuklangan kunlik rejalarni real sotuv bilan solishtiring. Real sotuv yo'q kunlar bo'sh ko'rsatiladi."
+      />
 
       <DailyComparisonView
         branches={branches}

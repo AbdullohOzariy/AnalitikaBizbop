@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { branchReport, findMissingDays, getDefaultRange, diffDaysInclusive } from "@/lib/analytics";
+import { Table2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page";
 import { PeriodFilter } from "./period-filter";
 import { ReportTable } from "./report-table";
 import { MissingDaysAlert } from "./missing-days-alert";
@@ -39,15 +41,13 @@ export default async function ReportPage({
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col sm:flex-row sm:items-end gap-4 justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Hisobot</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Filial bo'yicha to'plangan ko'rsatkichlar — kategoriyalar bilan
-          </p>
-        </div>
+      <PageHeader
+        icon={Table2}
+        title="Hisobot"
+        description="Filial bo'yicha to'plangan ko'rsatkichlar — kategoriyalar bilan"
+      >
         <PeriodFilter defaultStart={startStr} defaultEnd={endStr} />
-      </div>
+      </PageHeader>
 
       <MissingDaysAlert
         salesDays={missing.sales}

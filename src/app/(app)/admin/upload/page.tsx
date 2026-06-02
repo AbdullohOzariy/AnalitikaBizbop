@@ -1,4 +1,6 @@
 import { redirect } from "next/navigation";
+import { FolderUp } from "lucide-react";
+import { PageHeader } from "@/components/ui/page";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { SalesUploadForm } from "./sales-form";
@@ -48,12 +50,11 @@ export default async function UploadPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Fayllar</h1>
-        <p className="text-sm text-muted-foreground">
-          Yangi Excel fayllarni yuklang yoki avval yuklanganlarni ko'ring/o'chiring.
-        </p>
-      </div>
+      <PageHeader
+        icon={FolderUp}
+        title="Fayllar"
+        description="Yangi Excel fayllarni yuklang yoki avval yuklanganlarni ko'ring/o'chiring."
+      />
 
       <Tabs defaultValue="upload" className="space-y-6">
         <TabsList>

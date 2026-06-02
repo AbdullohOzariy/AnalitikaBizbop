@@ -180,7 +180,7 @@ export default async function BranchDetailPage({
 }
 
 const ACCENT_STYLES = {
-  green:  { iconBg: "bg-[#B7EB76]/20", iconColor: "text-[#3a7d1e]",  bar: "bg-[#B7EB76]" },
+  green:  { iconBg: "bg-[#1FBF5C]/15", iconColor: "text-[#15803d]",  bar: "bg-[#1FBF5C]" },
   orange: { iconBg: "bg-[#FF8730]/15", iconColor: "text-[#b85a10]",  bar: "bg-[#FF8730]" },
   purple: { iconBg: "bg-[#7B69EE]/15", iconColor: "text-[#4b38b3]",  bar: "bg-[#7B69EE]" },
   cyan:   { iconBg: "bg-[#4EC8E4]/15", iconColor: "text-[#1a7d96]",  bar: "bg-[#4EC8E4]" },

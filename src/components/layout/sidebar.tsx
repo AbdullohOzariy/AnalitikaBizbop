@@ -153,10 +153,7 @@ function SidebarNav({
       {/* Footer */}
       <div className="p-3 border-t border-border shrink-0">
         <div className={cn("flex items-center gap-2 px-1", collapsed && "justify-center")}>
-          <div
-            className="h-2 w-2 rounded-full shrink-0"
-            style={{ backgroundColor: "oklch(0.877 0.165 134)" }}
-          />
+          <div className="h-2 w-2 rounded-full shrink-0 bg-primary" />
           {!collapsed && (
             <span className="text-xs text-muted-foreground font-medium truncate">
               {role === "ADMIN" ? "Administrator" : role === "CAT_MANAGER" ? "Kategoriya menejeri" : "Ko'ruvchi"} · v0.1

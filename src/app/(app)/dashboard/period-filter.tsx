@@ -114,8 +114,8 @@ export function PeriodFilter({
   ] as const;
 
   const btnBase = "rounded-full text-[13px] font-medium h-9 px-4 border-none shadow-none transition-all";
-  const btnInactive = `${btnBase} bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-300 hover:bg-[#10b981]/10 hover:text-[#10b981]`;
-  const btnActive = `${btnBase} bg-[#10b981]/15 text-[#10b981] font-semibold`;
+  const btnInactive = `${btnBase} bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary`;
+  const btnActive = `${btnBase} bg-primary/15 text-primary font-semibold`;
   const btnOff = `${btnBase} bg-gray-100 dark:bg-zinc-800 text-gray-400 hover:bg-red-50 hover:text-red-400`;
 
   return (

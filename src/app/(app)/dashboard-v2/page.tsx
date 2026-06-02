@@ -13,6 +13,8 @@ import {
   dailySalesByGroup,
   dailySalesByCategory,
 } from "@/lib/analytics-v2";
+import { Sparkles } from "lucide-react";
+import { PageHeader } from "@/components/ui/page";
 import { FiltersBar } from "./filters";
 import {
   PlanCompletionWidget,
@@ -221,12 +223,11 @@ export default async function DashboardV2Page({
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Dashboard v2</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          Reja bajarilishi va asosiy KPI&apos;lar — filial va davr kesimida
-        </p>
-      </div>
+      <PageHeader
+        icon={Sparkles}
+        title="Dashboard v2"
+        description="Reja bajarilishi va asosiy KPI'lar — filial va davr kesimida"
+      />
 
       <FiltersBar
         branches={branches}

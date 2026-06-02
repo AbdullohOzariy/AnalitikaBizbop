@@ -60,8 +60,8 @@
   --popover-foreground: oklch(0.18 0.025 250);
 
   /* Primary: lime green #B7EB76 */
-  --primary: oklch(0.877 0.165 134);
-  --primary-foreground: oklch(0.18 0.04 145);
+  --primary: oklch(0.70 0.185 150);
+  --primary-foreground: oklch(1 0 0);
 
   /* Secondary: light surface */
   --secondary: oklch(0.955 0.018 145);
@@ -78,10 +78,10 @@
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.91 0.02 145);
   --input: oklch(0.94 0.015 145);
-  --ring: oklch(0.877 0.165 134);
+  --ring: oklch(0.70 0.185 150);
 
   /* Chart palette: green, orange, purple, cyan, pink */
-  --chart-1: oklch(0.877 0.165 134);
+  --chart-1: oklch(0.70 0.185 150);
   --chart-2: oklch(0.73 0.17 48);
   --chart-3: oklch(0.60 0.18 278);
   --chart-4: oklch(0.78 0.10 214);
@@ -92,12 +92,12 @@
   /* Sidebar: white */
   --sidebar: oklch(1 0 0);
   --sidebar-foreground: oklch(0.18 0.025 250);
-  --sidebar-primary: oklch(0.877 0.165 134);
-  --sidebar-primary-foreground: oklch(0.18 0.04 145);
+  --sidebar-primary: oklch(0.70 0.185 150);
+  --sidebar-primary-foreground: oklch(1 0 0);
   --sidebar-accent: oklch(0.955 0.018 145);
   --sidebar-accent-foreground: oklch(0.28 0.03 250);
   --sidebar-border: oklch(0.93 0.015 145);
-  --sidebar-ring: oklch(0.877 0.165 134);
+  --sidebar-ring: oklch(0.70 0.185 150);
 }
 
 .dark {
@@ -110,8 +110,8 @@
   --popover-foreground: oklch(0.96 0.01 145);
 
   /* Primary stays lime green in dark */
-  --primary: oklch(0.877 0.165 134);
-  --primary-foreground: oklch(0.15 0.04 145);
+  --primary: oklch(0.70 0.185 150);
+  --primary-foreground: oklch(1 0 0);
 
   --secondary: oklch(0.24 0.025 250);
   --secondary-foreground: oklch(0.90 0.01 145);
@@ -125,9 +125,9 @@
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 12%);
-  --ring: oklch(0.877 0.165 134);
+  --ring: oklch(0.70 0.185 150);
 
-  --chart-1: oklch(0.877 0.165 134);
+  --chart-1: oklch(0.70 0.185 150);
   --chart-2: oklch(0.73 0.17 48);
   --chart-3: oklch(0.60 0.18 278);
   --chart-4: oklch(0.78 0.10 214);
@@ -135,12 +135,12 @@
 
   --sidebar: oklch(0.185 0.022 250);
   --sidebar-foreground: oklch(0.96 0.01 145);
-  --sidebar-primary: oklch(0.877 0.165 134);
-  --sidebar-primary-foreground: oklch(0.15 0.04 145);
+  --sidebar-primary: oklch(0.70 0.185 150);
+  --sidebar-primary-foreground: oklch(1 0 0);
   --sidebar-accent: oklch(0.24 0.025 250);
   --sidebar-accent-foreground: oklch(0.90 0.01 145);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.877 0.165 134);
+  --sidebar-ring: oklch(0.70 0.185 150);
 }
 
 @layer base {
@@ -164,7 +164,7 @@
 ::-webkit-scrollbar-thumb { background: oklch(0.85 0.03 145); border-radius: 99px; }
 ::-webkit-scrollbar-thumb:hover { background: oklch(0.75 0.05 145); }
 
-::selection { background: oklch(0.877 0.165 134 / 0.3); color: oklch(0.18 0.04 145); }
+::selection { background: oklch(0.70 0.185 150 / 0.3); color: oklch(1 0 0); }
 
 /* Smooth card hover lift */
 @layer utilities {
@@ -174,7 +174,7 @@
   .badge-green {
     @apply bg-primary/20 text-primary-foreground/90 text-xs font-semibold px-2 py-0.5 rounded-full;
     color: oklch(0.30 0.12 145);
-    background-color: oklch(0.877 0.165 134 / 0.25);
+    background-color: oklch(0.70 0.185 150 / 0.25);
   }
   .badge-orange {
     @apply text-xs font-semibold px-2 py-0.5 rounded-full;

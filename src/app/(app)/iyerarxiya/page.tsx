@@ -1,6 +1,8 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { unstable_cache } from "next/cache";
+import { Tag } from "lucide-react";
+import { PageHeader } from "@/components/ui/page";
 import { IyerarxiyaClient, type HGroup } from "./iyerarxiya-client";
 
 const getHierarchy = unstable_cache(
@@ -52,12 +54,11 @@ export default async function IyerarxiyaPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Iyerarxiya</h1>
-        <p className="text-sm text-muted-foreground">
-          Bo&apos;lim → kategoriya → subkategoriya · har biri 1C KOD bilan
-        </p>
-      </div>
+      <PageHeader
+        icon={Tag}
+        title="Iyerarxiya"
+        description="Bo'lim → kategoriya → subkategoriya · har biri 1C KOD bilan"
+      />
       <IyerarxiyaClient groups={data} isAdmin={isAdmin} />
     </div>
   );
