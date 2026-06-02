@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kirish — Nazorat panel</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f0f2f5;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .login-karta {
+      background: #fff;
+      border-radius: 16px;
+      padding: 40px 36px;
+      width: 100%;
+      max-width: 380px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+    }
+
+    .login-karta h1 {
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      color: #1a1a1a;
+    }
+
+    .login-karta p {
+      font-size: 14px;
+      color: #888;
+      margin-bottom: 28px;
+    }
+
+    .maydon {
+      margin-bottom: 16px;
+    }
+
+    .maydon label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: #555;
+      margin-bottom: 6px;
+    }
+
+    .maydon input {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1.5px solid #e0e0e0;
+      border-radius: 10px;
+      font-size: 15px;
+      outline: none;
+      transition: border-color .15s;
+      color: #1a1a1a;
+    }
+
+    .maydon input:focus {
+      border-color: #2196F3;
+    }
+
+    .xato-xabar {
+      background: #FFF0F0;
+      color: #c0392b;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 13px;
+      margin-bottom: 16px;
+      display: none;
+    }
+
+    .xato-xabar.korsatish { display: block; }
+
+    .kirish-btn {
+      width: 100%;
+      padding: 13px;
+      border-radius: 10px;
+      background: #2196F3;
+      color: #fff;
+      border: none;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .15s;
+      margin-top: 4px;
+    }
+
+    .kirish-btn:hover { background: #1976D2; }
+    .kirish-btn:disabled { opacity: .6; cursor: default; }
+  </style>
+</head>
+<body>
+  <div class="login-karta">
+    <h1>Nazorat panel</h1>
+    <p>Kirish uchun ma'lumotlarni kiriting</p>
+
+    <div class="xato-xabar" id="xato">Login yoki parol noto'g'ri</div>
+
+    <form id="forma" onsubmit="kirish(event)">
+      <div class="maydon">
+        <label>Login</label>
+        <input type="text" id="login" placeholder="admin" autocomplete="username" required>
+      </div>
+      <div class="maydon">
+        <label>Parol</label>
+        <input type="password" id="parol" placeholder="••••••••" autocomplete="current-password" required>
+      </div>
+      <button type="submit" class="kirish-btn" id="btn">Kirish</button>
+    </form>
+  </div>
+
+  <script>
+    async function kirish(e) {
+      e.preventDefault();
+      const btn = document.getElementById('btn');
+      btn.disabled = true;
+      btn.textContent = 'Tekshirilmoqda...';
+      document.getElementById('xato').classList.remove('korsatish');
+
+      const res = await fetch(window.location.pathname, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          login: document.getElementById('login').value,
+          parol: document.getElementById('parol').value
+        })
+      });
+
+      if (res.ok) {
+        window.location.href = window.location.pathname.replace('/login', '');
+      } else {
+        document.getElementById('xato').classList.add('korsatish');
+        btn.disabled = false;
+        btn.textContent = 'Kirish';
+      }
+    }
+  </script>
+</body>
+</html>

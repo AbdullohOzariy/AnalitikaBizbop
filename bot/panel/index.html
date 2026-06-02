@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BizBop</title>
+  <link rel="stylesheet" href="/panel-assets/style.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ── Sidebar ───────────────────────────────────────── -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-icon">🏪</div>
+      <span class="brand-text">BizBop</span>
+      <span class="brand-badge">Admin</span>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Asosiy</div>
+      <a class="nav-item" data-bolim="dashboard" onclick="bolimOch('dashboard')">
+        <span class="nav-icon">◻</span><span>Dashboard</span>
+      </a>
+      <a class="nav-item nav-disabled">
+        <span class="nav-icon">♻</span>
+        <span>Qayta ishlash</span>
+        <span class="nav-soon">Tez kunda</span>
+      </a>
+      <a class="nav-item" data-bolim="kafe" onclick="bolimOch('kafe')">
+        <span class="nav-icon">☕</span><span>Kafe</span>
+      </a>
+      <a class="nav-item" data-bolim="ovqatlanish" onclick="bolimOch('ovqatlanish')">
+        <span class="nav-icon">🍽</span><span>Ovqatlanish</span>
+      </a>
+      <a class="nav-item" data-bolim="spisaniya" onclick="bolimOch('spisaniya')">
+        <span class="nav-icon">🗑</span><span>Spisaniya</span>
+      </a>
+      <div class="nav-section-label" style="margin-top:8px">Tizim</div>
+      <a class="nav-item" data-bolim="sozlamalar" onclick="bolimOch('sozlamalar')">
+        <span class="nav-icon">⚙</span><span>Sozlamalar</span>
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <span id="admin-ism" class="admin-ism"></span>
+      <button class="chiqish-btn" onclick="chiqish()"><span>↪</span> Chiqish</button>
+    </div>
+  </aside>
+
+  <!-- ── Mobile topbar ─────────────────────────────────── -->
+  <header class="mob-header">
+    <button class="burger" onclick="sidebarToggle()">☰</button>
+    <span id="mob-bolim-nom">Dashboard</span>
+    <button class="eksport-btn" onclick="eksport()">↓ Excel</button>
+  </header>
+
+  <!-- ── Main ──────────────────────────────────────────── -->
+  <main class="main-kontent">
+
+    <!-- DASHBOARD -->
+    <section id="bolim-dashboard" class="bolim">
+      <div class="page-topbar">
+        <div class="page-topbar-left">
+          <span class="page-topbar-title">Dashboard</span>
+          <span class="page-topbar-sub">Umumiy statistika va yozuvlar</span>
+        </div>
+        <div class="page-topbar-right">
+          <button class="eksport-btn desk-only" onclick="eksport()">↓ Excel</button>
+        </div>
+      </div>
+      <div class="page-body">
+        <div class="filtr-bar" id="d-filtr">
+          <div class="filtr-select-wrap" id="d-filial-wrap">
+            <button class="filtr-select-btn" onclick="filtrSelectToggle('d-filial-wrap')">
+              <span class="filtr-select-icon">📍</span>
+              <span class="filtr-select-val" id="d-filial-val">Barcha filiallar</span>
+              <span class="filtr-chevron">▾</span>
+            </button>
+            <div class="filtr-select-dropdown" id="d-filial-dropdown">
+              <div class="filtr-select-opt filtr-opt-active" data-val="" onclick="filtrSelectPick('d-filial-wrap','')">Barcha filiallar</div>
+            </div>
+            <input type="hidden" id="d-filial">
+          </div>
+
+          <div class="filtr-date-wrap">
+            <span class="filtr-date-icon">📅</span>
+            <input type="date" id="d-sana-dan"   class="filtr-date" onchange="filtrSanaOzgardi()" placeholder="Dan">
+            <span class="filtr-date-sep">—</span>
+            <input type="date" id="d-sana-gacha" class="filtr-date" onchange="filtrSanaOzgardi()" placeholder="Gacha">
+          </div>
+
+          <button class="filtr-clear" onclick="filtrTozala()" id="d-clear" style="display:none">
+            <span>✕</span> Tozalash
+          </button>
+        </div>
+
+        <div id="stat-grid" class="stat-grid"></div>
+
+        <div class="kesim-grid">
+          <div class="table-card">
+            <div class="table-card-header">
+              <span class="table-card-title">📦 Kategoriya kesimi</span>
+              <span class="table-card-count" id="kat-count"></span>
+            </div>
+            <div class="jadval-wrap">
+              <table><thead><tr>
+                <th>Kategoriya</th><th class="td-num">Soni</th>
+                <th class="td-num">Spisaniya</th><th class="td-num">Qayta ishlash</th>
+                <th class="td-num">Kafe</th><th class="td-num">Ovqat</th>
+                <th class="td-num">Jami</th>
+              </tr></thead><tbody id="kat-tbody"></tbody></table>
+            </div>
+          </div>
+
+          <div class="table-card">
+            <div class="table-card-header">
+              <span class="table-card-title">📍 Filial kesimi</span>
+              <span class="table-card-count" id="fil-count"></span>
+            </div>
+            <div class="jadval-wrap">
+              <table><thead><tr>
+                <th>Filial</th><th class="td-num">Soni</th>
+                <th class="td-num">Spisaniya</th><th class="td-num">Qayta ishlash</th>
+                <th class="td-num">Kafe</th><th class="td-num">Ovqat</th>
+                <th class="td-num">Jami</th>
+              </tr></thead><tbody id="fil-tbody"></tbody></table>
+            </div>
+          </div>
+        </div>
+
+        <div class="table-card">
+          <div class="table-card-header">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="table-card-title">Barcha yozuvlar</span>
+              <span class="table-card-count" id="d-count"></span>
+            </div>
+            <button class="eksport-btn" onclick="eksport()">↓ Excel</button>
+          </div>
+          <div class="jadval-wrap">
+            <table><thead><tr>
+              <th class="td-img"></th>
+              <th>#</th><th>Vaqt</th><th>Tur</th>
+              <th>Tovar</th><th>Miqdor</th><th>Summa</th>
+              <th>Xodim</th><th>Holat</th><th></th>
+            </tr></thead><tbody id="d-tbody"></tbody></table>
+          </div>
+        </div>
+        <div id="d-kartalar" class="kartalar-wrap"></div>
+      </div>
+    </section>
+
+    <!-- QAYTA ISHLASH -->
+    <section id="bolim-vozvrat" class="bolim gizli">
+      <div class="page-topbar">
+        <div class="page-topbar-left">
+          <span class="page-topbar-title">♻ Qayta ishlash</span>
+          <span class="page-topbar-sub">Qayta ishlab sotuvga chiqarilgan mahsulotlar</span>
+        </div>
+      </div>
+      <div class="page-body">
+        <div style="text-align:center;padding:80px 20px;color:var(--text3)">
+          <div style="font-size:40px;margin-bottom:16px">🚧</div>
+          <div style="font-size:16px;font-weight:700;color:var(--text2);margin-bottom:6px">Ishlab chiqilmoqda</div>
+          <div style="font-size:13px">Bu bo'lim tez orada faol bo'ladi</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- KAFE -->
+    <section id="bolim-kafe" class="bolim gizli">
+      <div class="page-topbar">
+        <div class="page-topbar-left">
+          <span class="page-topbar-title">☕ Kafe</span>
+          <span class="page-topbar-sub">Kafe uchun sarflangan mahsulotlar</span>
+        </div>
+        <div class="page-topbar-right">
+          <button class="eksport-btn desk-only" onclick="eksport()">↓ Excel</button>
+        </div>
+      </div>
+      <div class="page-body">
+        <div class="filtr-bar" id="k-filtr">
+          <div class="filtr-select-wrap" id="k-filial-wrap">
+            <button class="filtr-select-btn" onclick="filtrSelectToggle('k-filial-wrap')">
+              <span class="filtr-select-icon">📍</span>
+              <span class="filtr-select-val" id="k-filial-val">Barcha filiallar</span>
+              <span class="filtr-chevron">▾</span>
+            </button>
+            <div class="filtr-select-dropdown" id="k-filial-dropdown">
+              <div class="filtr-select-opt filtr-opt-active" data-val="" onclick="filtrSelectPick('k-filial-wrap','')">Barcha filiallar</div>
+            </div>
+            <input type="hidden" id="k-filial">
+          </div>
+
+          <div class="filtr-date-wrap">
+            <span class="filtr-date-icon">📅</span>
+            <input type="date" id="k-sana-dan"   class="filtr-date" onchange="filtrSanaOzgardi()">
+            <span class="filtr-date-sep">—</span>
+            <input type="date" id="k-sana-gacha" class="filtr-date" onchange="filtrSanaOzgardi()">
+          </div>
+
+          <button class="filtr-clear" onclick="filtrTozala()" id="k-clear" style="display:none">
+            <span>✕</span> Tozalash
+          </button>
+        </div>
+
+        <div class="table-card">
+          <div class="table-card-header">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="table-card-title">Kafe xarajatlari</span>
+              <span class="table-card-count" id="k-count"></span>
+            </div>
+            <button class="eksport-btn" onclick="eksport()">↓ Excel</button>
+          </div>
+          <div class="jadval-wrap">
+            <table><thead><tr>
+              <th class="td-img"></th>
+              <th>#</th><th>Vaqt</th><th>Tovar</th>
+              <th>Sabab</th><th>Miqdor</th><th>Summa</th><th>Xodim</th>
+            </tr></thead><tbody id="k-tbody"></tbody></table>
+          </div>
+        </div>
+        <div id="k-kartalar" class="kartalar-wrap"></div>
+      </div>
+    </section>
+
+    <!-- OVQATLANISH -->
+    <section id="bolim-ovqatlanish" class="bolim gizli">
+      <div class="page-topbar">
+        <div class="page-topbar-left">
+          <span class="page-topbar-title">🍽 Ovqatlanish</span>
+          <span class="page-topbar-sub">Xodimlar ovqatlanishi uchun mahsulotlar</span>
+        </div>
+        <div class="page-topbar-right">
+          <button class="eksport-btn desk-only" onclick="eksport()">↓ Excel</button>
+        </div>
+      </div>
+      <div class="page-body">
+        <div class="filtr-bar" id="o-filtr">
+          <div class="filtr-select-wrap" id="o-filial-wrap">
+            <button class="filtr-select-btn" onclick="filtrSelectToggle('o-filial-wrap')">
+              <span class="filtr-select-icon">📍</span>
+              <span class="filtr-select-val" id="o-filial-val">Barcha filiallar</span>
+              <span class="filtr-chevron">▾</span>
+            </button>
+            <div class="filtr-select-dropdown" id="o-filial-dropdown">
+              <div class="filtr-select-opt filtr-opt-active" data-val="" onclick="filtrSelectPick('o-filial-wrap','')">Barcha filiallar</div>
+            </div>
+            <input type="hidden" id="o-filial">
+          </div>
+
+          <div class="filtr-date-wrap">
+            <span class="filtr-date-icon">📅</span>
+            <input type="date" id="o-sana-dan"   class="filtr-date" onchange="filtrSanaOzgardi()">
+            <span class="filtr-date-sep">—</span>
+            <input type="date" id="o-sana-gacha" class="filtr-date" onchange="filtrSanaOzgardi()">
+          </div>
+
+          <button class="filtr-clear" onclick="filtrTozala()" id="o-clear" style="display:none">
+            <span>✕</span> Tozalash
+          </button>
+        </div>
+
+        <div class="table-card">
+          <div class="table-card-header">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="table-card-title">Ovqatlanish xarajatlari</span>
+              <span class="table-card-count" id="o-count"></span>
+            </div>
+            <button class="eksport-btn" onclick="eksport()">↓ Excel</button>
+          </div>
+          <div class="jadval-wrap">
+            <table><thead><tr>
+              <th class="td-img"></th>
+              <th>#</th><th>Vaqt</th><th>Tovar</th>
+              <th>Sabab</th><th>Miqdor</th><th>Summa</th><th>Xodim</th>
+            </tr></thead><tbody id="o-tbody"></tbody></table>
+          </div>
+        </div>
+        <div id="o-kartalar" class="kartalar-wrap"></div>
+      </div>
+    </section>
+
+    <!-- SOZLAMALAR -->
+    <section id="bolim-sozlamalar" class="bolim gizli">
+      <div class="page-topbar">
+        <div class="page-topbar-left">
+          <span class="page-topbar-title">⚙ Sozlamalar</span>
+          <span class="page-topbar-sub">Filiallar, kategoriyalar, Telegram guruh va panel paroli</span>
+        </div>
+      </div>
+      <div class="page-body">
+        <div class="soz-grid">
+
+          <!-- ── Filiallar ── -->
+          <div class="soz-karta">
+            <div class="soz-karta-head">
+              <div>
+                <div class="soz-karta-title">📍 Filiallar</div>
+                <div class="soz-karta-sub">Qo'shish, o'chirish va topic ID biriktirish</div>
+              </div>
+              <button class="btn btn-primary btn-sm" onclick="filialQosh()">+ Qo'shish</button>
+            </div>
+            <div id="filiallar-list" class="filiallar-list">
+              <div class="soz-loading">Yuklanmoqda...</div>
+            </div>
+          </div>
+
+          <!-- ── Kategoriyalar ── -->
+          <div class="soz-karta">
+            <div class="soz-karta-head">
+              <div>
+                <div class="soz-karta-title">📦 Kategoriyalar</div>
+                <div class="soz-karta-sub">AI avtomatik to'ldiradi — bu yerda tahrirlash va boshqarish</div>
+              </div>
+              <div style="display:flex;gap:8px">
+                <button class="btn btn-default btn-sm" onclick="kategoriyaBackfill()" id="kat-backfill-btn" title="Kategoriyasi yo'q yozuvlarni AI bilan to'ldirish">✨ AI to'ldirish</button>
+                <button class="btn btn-primary btn-sm" onclick="kategoriyaQosh()">+ Qo'shish</button>
+              </div>
+            </div>
+            <div id="kat-backfill-natija" class="soz-ok"></div>
+            <div id="kategoriyalar-list" class="filiallar-list">
+              <div class="soz-loading">Yuklanmoqda...</div>
+            </div>
+          </div>
+
+          <!-- ── Telegram guruh ── -->
+          <div class="soz-karta">
+            <div class="soz-karta-head">
+              <div>
+                <div class="soz-karta-title">💬 Telegram guruh</div>
+                <div class="soz-karta-sub">Xabarlar yuboriladigan guruh Chat ID</div>
+              </div>
+            </div>
+            <div class="soz-maydon">
+              <label class="soz-label">GROUP_CHAT_ID</label>
+              <div class="soz-input-row">
+                <input type="text" id="guruh-chat-id" class="soz-input" placeholder="-1001234567890">
+                <button class="btn btn-primary" onclick="guruhSaqla()">Saqlash</button>
+              </div>
+              <div class="soz-hint">Telegram havolasidan: t.me/c/<b>XXXXXXXXXX</b>/topic/msg — bosh qismiga -100 qo'shing</div>
+              <div class="soz-xato" id="guruh-xato"></div>
+              <div class="soz-ok" id="guruh-ok"></div>
+            </div>
+          </div>
+
+          <!-- ── Parol ── -->
+          <div class="soz-karta">
+            <div class="soz-karta-head">
+              <div>
+                <div class="soz-karta-title">🔒 Parol o'zgartirish</div>
+                <div class="soz-karta-sub">Panel kirish paroli</div>
+              </div>
+            </div>
+            <div class="soz-maydon">
+              <label class="soz-label">Joriy parol</label>
+              <input type="password" id="parol-joriy" class="soz-input" placeholder="••••••••">
+            </div>
+            <div class="soz-maydon">
+              <label class="soz-label">Yangi parol</label>
+              <input type="password" id="parol-yangi" class="soz-input" placeholder="Kamida 6 ta belgi">
+            </div>
+            <div class="soz-maydon">
+              <label class="soz-label">Yangi parolni tasdiqlang</label>
+              <input type="password" id="parol-tasdiq" class="soz-input" placeholder="••••••••">
+            </div>
+            <div class="soz-xato" id="parol-xato"></div>
+            <div class="soz-ok" id="parol-ok"></div>
+            <button class="btn btn-primary" style="width:100%;margin-top:4px" onclick="parolSaqla()">Parolni yangilash</button>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- SPISANIYA -->
+    <section id="bolim-spisaniya" class="bolim gizli">
+      <div class="page-topbar">
+        <div class="page-topbar-left">
+          <span class="page-topbar-title">🗑 Spisaniya</span>
+          <span class="page-topbar-sub">Yaroqsiz tovarlar hisobdan chiqarish</span>
+        </div>
+        <div class="page-topbar-right">
+          <button class="eksport-btn desk-only" onclick="eksport()">↓ Excel</button>
+        </div>
+      </div>
+      <div class="page-body">
+        <div class="filtr-bar" id="s-filtr">
+          <div class="filtr-select-wrap" id="s-filial-wrap">
+            <button class="filtr-select-btn" onclick="filtrSelectToggle('s-filial-wrap')">
+              <span class="filtr-select-icon">📍</span>
+              <span class="filtr-select-val" id="s-filial-val">Barcha filiallar</span>
+              <span class="filtr-chevron">▾</span>
+            </button>
+            <div class="filtr-select-dropdown" id="s-filial-dropdown">
+              <div class="filtr-select-opt filtr-opt-active" data-val="" onclick="filtrSelectPick('s-filial-wrap','')">Barcha filiallar</div>
+            </div>
+            <input type="hidden" id="s-filial">
+          </div>
+
+          <div class="filtr-date-wrap">
+            <span class="filtr-date-icon">📅</span>
+            <input type="date" id="s-sana-dan"   class="filtr-date" onchange="filtrSanaOzgardi()">
+            <span class="filtr-date-sep">—</span>
+            <input type="date" id="s-sana-gacha" class="filtr-date" onchange="filtrSanaOzgardi()">
+          </div>
+
+          <button class="filtr-clear" onclick="filtrTozala()" id="s-clear" style="display:none">
+            <span>✕</span> Tozalash
+          </button>
+        </div>
+
+        <div class="table-card">
+          <div class="table-card-header">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="table-card-title">Spisaniya ro'yxati</span>
+              <span class="table-card-count" id="s-count"></span>
+            </div>
+            <button class="eksport-btn" onclick="eksport()">↓ Excel</button>
+          </div>
+          <div class="jadval-wrap">
+            <table><thead><tr>
+              <th class="td-img"></th>
+              <th>#</th><th>Vaqt</th><th>Tovar</th>
+              <th>Sabab</th><th>Miqdor</th><th>Summa</th><th>Xodim</th>
+            </tr></thead><tbody id="s-tbody"></tbody></table>
+          </div>
+        </div>
+        <div id="s-kartalar" class="kartalar-wrap"></div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div id="sidebar-overlay" class="sidebar-overlay" onclick="sidebarToggle()"></div>
+
+<!-- Tahrirlash modal -->
+<div id="tahrir-modal-overlay" class="modal-overlay" onclick="tahrirModalYop(event)">
+  <div class="modal" style="max-width:460px">
+    <div class="modal-header">
+      <h3>Yozuvni tahrirlash <span id="tahrir-id" style="color:var(--text3);font-weight:400;font-size:13px"></span></h3>
+      <button class="modal-yop" onclick="tahrirModalYoptugma()">✕</button>
+    </div>
+    <div class="modal-kontent" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="modal-maydon" style="grid-column:1/-1">
+        <label>Tur</label>
+        <div class="tahrir-tur-wrap">
+          <button class="tahrir-tur-btn" data-tur="kafe"        onclick="tahrirTurTanla(this)">☕ Kafe</button>
+          <button class="tahrir-tur-btn" data-tur="ovqatlanish" onclick="tahrirTurTanla(this)">🍽 Ovqatlanish</button>
+          <button class="tahrir-tur-btn" data-tur="spisaniya"   onclick="tahrirTurTanla(this)">🗑 Spisaniya</button>
+          <button class="tahrir-tur-btn" data-tur="vozvrat"     onclick="tahrirTurTanla(this)">♻ Qayta ishlash</button>
+        </div>
+      </div>
+      <div class="modal-maydon" style="grid-column:1/-1">
+        <label>Tovar nomi</label>
+        <input type="text" id="tahrir-tovar" class="soz-input" placeholder="Tovar nomi">
+      </div>
+      <div class="modal-maydon">
+        <label>Miqdor</label>
+        <input type="text" id="tahrir-miqdor" class="soz-input" placeholder="0" inputmode="decimal">
+      </div>
+      <div class="modal-maydon">
+        <label>Birlik</label>
+        <select id="tahrir-birlik" class="soz-input" style="cursor:pointer">
+          <option value="dona">dona</option>
+          <option value="kg">kg</option>
+          <option value="litr">litr</option>
+        </select>
+      </div>
+      <div class="modal-maydon" style="grid-column:1/-1">
+        <label>Summa (so'm)</label>
+        <input type="text" id="tahrir-summa" class="soz-input" placeholder="0" inputmode="numeric">
+      </div>
+      <div class="modal-maydon" style="grid-column:1/-1">
+        <label>Sabab</label>
+        <input type="text" id="tahrir-sabab" class="soz-input" placeholder="Sabab">
+      </div>
+      <div class="modal-maydon" style="grid-column:1/-1">
+        <label>Filial</label>
+        <select id="tahrir-filial" class="soz-input" style="cursor:pointer"></select>
+      </div>
+      <div class="modal-maydon" style="grid-column:1/-1" id="tahrir-firma-wrap">
+        <label>Firma (qayta ishlash uchun)</label>
+        <input type="text" id="tahrir-firma" class="soz-input" placeholder="Firma nomi">
+      </div>
+      <div class="modal-xato" id="tahrir-xato" style="grid-column:1/-1"></div>
+    </div>
+    <div class="modal-footer" style="justify-content:space-between">
+      <button class="modal-bekor" style="color:var(--red);border-color:#FECACA" onclick="yozuvOchir()">🗑 O'chirish</button>
+      <div style="display:flex;gap:6px">
+        <button class="modal-bekor" onclick="tahrirModalYoptugma()">Bekor</button>
+        <button class="modal-saqlash" id="tahrir-saqlash-btn" onclick="tahrirSaqla()">Saqlash</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Filial modal -->
+<div id="filial-modal-overlay" class="modal-overlay" onclick="filialModalYop(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="filial-modal-sarlavha">Filial qo'shish</h3>
+      <button class="modal-yop" onclick="filialModalYoptugma()">✕</button>
+    </div>
+    <div class="modal-kontent">
+      <div class="modal-maydon">
+        <label>Filial nomi</label>
+        <input type="text" id="filial-nomi" class="soz-input" placeholder="Masalan: Yunusobod">
+      </div>
+      <div class="modal-maydon">
+        <label>Telegram Topic ID <span style="color:var(--text3);font-weight:400">(ixtiyoriy)</span></label>
+        <input type="text" id="filial-topic" class="soz-input" placeholder="Masalan: 3">
+        <div style="font-size:11.5px;color:var(--text3);margin-top:5px">t.me/c/CHATID/<b>TOPICID</b>/msgid — o'rtadagi raqam</div>
+      </div>
+      <div class="modal-xato" id="filial-modal-xato"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-bekor" onclick="filialModalYoptugma()">Bekor</button>
+      <button class="modal-saqlash" id="filial-modal-btn" onclick="filialModalSaqla()">Saqlash</button>
+    </div>
+  </div>
+</div>
+
+<!-- Kategoriya modal -->
+<div id="kategoriya-modal-overlay" class="modal-overlay" onclick="kategoriyaModalYop(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="kategoriya-modal-sarlavha">Kategoriya qo'shish</h3>
+      <button class="modal-yop" onclick="kategoriyaModalYoptugma()">✕</button>
+    </div>
+    <div class="modal-kontent">
+      <div class="modal-maydon">
+        <label>Kategoriya nomi</label>
+        <input type="text" id="kategoriya-nomi" class="soz-input" placeholder="Masalan: Sut mahsulotlari">
+      </div>
+      <div class="modal-xato" id="kategoriya-modal-xato"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-bekor" onclick="kategoriyaModalYoptugma()">Bekor</button>
+      <button class="modal-saqlash" id="kategoriya-modal-btn" onclick="kategoriyaModalSaqla()">Saqlash</button>
+    </div>
+  </div>
+</div>
+
+<!-- Status modal -->
+<div id="modal-overlay" class="modal-overlay" onclick="modalYop(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-sarlavha">Qayta ishlash holati</h3>
+      <button class="modal-yop" onclick="modalYoptugma()">✕</button>
+    </div>
+    <div class="modal-kontent">
+      <div class="modal-maydon">
+        <label>Yangi holat</label>
+        <div class="status-tanlov">
+          <button class="status-tanlov-btn" data-status="kutilmoqda" onclick="statusTanla(this)">⏳ Kutilmoqda</button>
+          <button class="status-tanlov-btn" data-status="jarayonda"  onclick="statusTanla(this)">🔄 Jarayonda</button>
+          <button class="status-tanlov-btn" data-status="bajarildi"  onclick="statusTanla(this)">✅ Bajarildi</button>
+          <button class="status-tanlov-btn" data-status="rad_etildi" onclick="statusTanla(this)">❌ Rad etildi</button>
+        </div>
+      </div>
+      <div class="modal-maydon">
+        <label>Izoh (ixtiyoriy)</label>
+        <textarea id="modal-firma-javob" placeholder="Firma javobi yoki izoh..."></textarea>
+      </div>
+      <div class="modal-xato" id="modal-xato"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-bekor" onclick="modalYoptugma()">Bekor</button>
+      <button class="modal-saqlash" id="modal-saqlash-btn" onclick="statusSaqlash()">Saqlash</button>
+    </div>
+  </div>
+</div>
+
+<!-- Image modal -->
+<div id="rasm-modal-overlay" class="modal-overlay rasm-modal-overlay" onclick="rasmModalYop()">
+  <img id="rasm-modal-img" src="" alt="" class="rasm-modal-img">
+</div>
+
+<script src="/panel-assets/app.js"></script>
+</body>
+</html>

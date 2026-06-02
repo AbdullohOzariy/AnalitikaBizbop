@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // bot/ — alohida loyiha (BotBizBopSPS), web lint/build'iga kirmaydi
+    "bot/**",
   ]),
 ]);
 
