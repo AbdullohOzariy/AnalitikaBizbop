@@ -2,7 +2,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { unstable_cache } from "next/cache";
 import { Tag } from "lucide-react";
-import { PageHeader } from "@/components/ui/page";
+import { PageHeader } from "@/components/common/page";
 import { IyerarxiyaClient, type HGroup } from "./iyerarxiya-client";
 
 const getHierarchy = unstable_cache(

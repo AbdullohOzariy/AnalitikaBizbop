@@ -21,11 +21,11 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, ShoppingBag, Users, Receipt, TrendingUp } from "lucide-react";
-import { PeriodFilter } from "../../dashboard/period-filter";
+import { PeriodFilter } from "@/components/common/period-filter";
 import {
   DailyDynamicsChart,
   TopCategoriesChart,
-} from "../../dashboard/charts";
+} from "@/components/charts";
 
 function parseDate(s: string | undefined, fallback: Date): Date {
   if (!s) return fallback;

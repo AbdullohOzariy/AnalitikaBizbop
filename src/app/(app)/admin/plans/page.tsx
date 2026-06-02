@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { Target } from "lucide-react";
-import { PageHeader } from "@/components/ui/page";
+import { PageHeader } from "@/components/common/page";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { DailyComparisonView } from "./daily-comparison";

@@ -21,12 +21,12 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/ui/page";
+import { PageHeader } from "@/components/common/page";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PeriodFilter } from "./period-filter";
+import { PeriodFilter } from "@/components/common/period-filter";
 import {
   DailySalesChart, DailyReceiptsChart, BranchShareChart, TopCategoriesChart,
-} from "./charts";
+} from "@/components/charts";
 import { StaggerList, StaggerItem } from "@/components/motion";
 
 // ─── Yordamchi funksiyalar ────────────────────────────────────────────────────

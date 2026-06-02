@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { unstable_cache } from "next/cache";
 import { ShoppingBag, Receipt, Users, Target, ChevronRight, Building2, Tag } from "lucide-react";
-import { PageHeader } from "@/components/ui/page";
+import { PageHeader } from "@/components/common/page";
 import { AliasAddForm, AliasDeleteButton } from "./alias-manager";
 
 const SOURCE_LABEL: Record<string, string> = {

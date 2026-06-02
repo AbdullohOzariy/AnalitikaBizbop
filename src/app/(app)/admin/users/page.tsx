@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { UsersRound } from "lucide-react";
-import { PageHeader } from "@/components/ui/page";
+import { PageHeader } from "@/components/common/page";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

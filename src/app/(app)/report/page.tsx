@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { branchReport, findMissingDays, getDefaultRange, diffDaysInclusive } from "@/lib/analytics";
 import { Table2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { PageHeader } from "@/components/ui/page";
+import { PageHeader } from "@/components/common/page";
 import { PeriodFilter } from "./period-filter";
 import { ReportTable } from "./report-table";
 import { MissingDaysAlert } from "./missing-days-alert";

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { FolderUp } from "lucide-react";
-import { PageHeader } from "@/components/ui/page";
+import { PageHeader } from "@/components/common/page";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { SalesUploadForm } from "./sales-form";

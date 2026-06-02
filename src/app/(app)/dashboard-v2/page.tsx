@@ -14,7 +14,7 @@ import {
   dailySalesByCategory,
 } from "@/lib/analytics-v2";
 import { Sparkles } from "lucide-react";
-import { PageHeader } from "@/components/ui/page";
+import { PageHeader } from "@/components/common/page";
 import { FiltersBar } from "./filters";
 import {
   PlanCompletionWidget,
