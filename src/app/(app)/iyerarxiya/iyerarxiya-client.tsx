@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import {
   Search, ChevronRight, Eye, Pencil, FoldVertical, UnfoldVertical, X,
 } from "lucide-react";
-import { CategoryAliasAddForm, CategoryAliasDeleteButton } from "./alias-manager";
 import { HierarchyEditor } from "./hierarchy-editor";
 
 export type HSub = { id: number; name: string; code: number | null; salesCount: number };
@@ -15,7 +14,6 @@ export type HCat = {
   name: string;
   code: number | null;
   salesCount: number;
-  aliases: { id: number; alias: string }[];
   children: HSub[];
 };
 export type HGroup = { id: number; name: string; code: number | null; categories: HCat[] };
@@ -208,7 +206,6 @@ export function IyerarxiyaClient({
                               <span className="text-xs text-muted-foreground">
                                 {cat.children.length > 0 && `${cat.children.length} sub`}
                                 {cat.salesCount > 0 && ` · ${cat.salesCount} sotuv`}
-                                {cat.aliases.length > 0 && ` · ${cat.aliases.length} alias`}
                               </span>
                             </span>
                           </button>
@@ -228,24 +225,9 @@ export function IyerarxiyaClient({
                                   </div>
                                 </div>
                               )}
-                              <div>
-                                <p className="text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wide">Aliaslar (Excel nomlar)</p>
-                                <div className="space-y-1.5">
-                                  {cat.aliases.length === 0 ? (
-                                    <p className="text-xs text-muted-foreground italic">Alias yo&apos;q</p>
-                                  ) : (
-                                    <div className="flex flex-wrap gap-1.5">
-                                      {cat.aliases.map((a) => (
-                                        <span key={a.id} className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs font-mono">
-                                          {a.alias}
-                                          {isAdmin && <CategoryAliasDeleteButton id={a.id} alias={a.alias} />}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  )}
-                                  {isAdmin && <CategoryAliasAddForm categoryId={cat.id} />}
-                                </div>
-                              </div>
+                              {cat.children.length === 0 && (
+                                <p className="text-xs text-muted-foreground italic">Subkategoriya yo&apos;q</p>
+                              )}
                             </div>
                           )}
                         </div>

@@ -14,7 +14,6 @@ const getHierarchy = unstable_cache(
           where: { parentId: null },
           orderBy: { sortOrder: "asc" },
           include: {
-            aliases: { orderBy: { alias: "asc" } },
             children: {
               orderBy: { sortOrder: "asc" },
               include: { _count: { select: { sales: true } } },
@@ -42,7 +41,6 @@ export default async function IyerarxiyaPage() {
       name: c.name,
       code: c.code,
       salesCount: c._count.sales,
-      aliases: c.aliases.map((a) => ({ id: a.id, alias: a.alias })),
       children: c.children.map((s) => ({
         id: s.id,
         name: s.name,
