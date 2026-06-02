@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,12 +13,48 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Calendar } from "lucide-react";
+import { CalendarDays, Building2, GitCompareArrows, X } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 type Branch = { id: number; name: string };
 
 function fmtInput(d: Date): string {
   return d.toISOString().slice(0, 10);
+}
+
+const PRESETS = [
+  { key: "today", label: "Bugun" },
+  { key: "yesterday", label: "Kecha" },
+  { key: "last7", label: "7 kun" },
+  { key: "last30", label: "30 kun" },
+  { key: "thisMonth", label: "Joriy oy" },
+  { key: "lastMonth", label: "O'tgan oy" },
+] as const;
+
+const COMPARE_BTNS = [
+  { key: "wow", label: "O'tgan hafta" },
+  { key: "mom", label: "O'tgan oy" },
+  { key: "yoy", label: "O'tgan yil" },
+  { key: "custom", label: "Maxsus" },
+] as const;
+
+/** Tanlangan oraliq qaysi presetga mos kelishini aniqlaydi (faol holat uchun). */
+function presetRange(preset: string): { start: string; end: string } | null {
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  let s: Date, e: Date;
+  if (preset === "today") { s = e = today; }
+  else if (preset === "yesterday") { s = e = new Date(today.getTime() - 86400000); }
+  else if (preset === "last7") { e = today; s = new Date(today.getTime() - 6 * 86400000); }
+  else if (preset === "last30") { e = today; s = new Date(today.getTime() - 29 * 86400000); }
+  else if (preset === "thisMonth") {
+    s = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
+    e = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 0));
+  } else if (preset === "lastMonth") {
+    s = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1));
+    e = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 0));
+  } else return null;
+  return { start: fmtInput(s), end: fmtInput(e) };
 }
 
 export function PeriodFilter({
@@ -82,23 +118,11 @@ export function PeriodFilter({
   };
 
   const setPreset = (preset: string) => {
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0);
-    let s: Date, e: Date;
-    if (preset === "today") { s = e = today; }
-    else if (preset === "yesterday") { s = e = new Date(today.getTime() - 86400000); }
-    else if (preset === "last7") { e = today; s = new Date(today.getTime() - 6 * 86400000); }
-    else if (preset === "last30") { e = today; s = new Date(today.getTime() - 29 * 86400000); }
-    else if (preset === "thisMonth") {
-      s = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
-      e = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 0));
-    } else if (preset === "lastMonth") {
-      s = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1));
-      e = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 0));
-    } else return;
-    const ns = fmtInput(s), ne = fmtInput(e);
-    setLocalStart(ns); setLocalEnd(ne);
-    navigate({ start: ns, end: ne });
+    const r = presetRange(preset);
+    if (!r) return;
+    setLocalStart(r.start);
+    setLocalEnd(r.end);
+    navigate({ start: r.start, end: r.end });
   };
 
   const setCompare = (mode: string | undefined) => {
@@ -106,116 +130,159 @@ export function PeriodFilter({
     else navigate({ compare: mode });
   };
 
-  const COMPARE_BTNS = [
-    { key: "wow", label: "O'tgan hafta" },
-    { key: "mom", label: "O'tgan oy" },
-    { key: "yoy", label: "O'tgan yil" },
-    { key: "custom", label: "Maxsus" },
-  ] as const;
+  // Joriy oraliqqa mos faol preset
+  const activePreset = useMemo(() => {
+    for (const p of PRESETS) {
+      const r = presetRange(p.key);
+      if (r && r.start === localStart && r.end === localEnd) return p.key;
+    }
+    return null;
+  }, [localStart, localEnd]);
 
-  const btnBase = "rounded-full text-[13px] font-medium h-9 px-4 border-none shadow-none transition-all";
-  const btnInactive = `${btnBase} bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary`;
-  const btnActive = `${btnBase} bg-primary/15 text-primary font-semibold`;
-  const btnOff = `${btnBase} bg-gray-100 dark:bg-zinc-800 text-gray-400 hover:bg-red-50 hover:text-red-400`;
+  const activeCompare = compare && compare !== "none" ? compare : null;
+  const selectedBranch = branches.find((b) => b.id === branchId) ?? null;
 
   return (
-    <Card className="rounded-[24px] border-none shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden font-['Sora',sans-serif]">
-      <CardContent className="pt-6 pb-6 px-8 space-y-4">
-        {/* Period + filial */}
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_1fr_auto] gap-6 items-end">
+    <Card className="rounded-2xl border-border/60 bg-card shadow-sm">
+      <CardContent className="space-y-4 p-4 sm:p-5">
+        {/* Asosiy qator: sana oralig'i + filial */}
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          {/* Sana oralig'i */}
           <div className="space-y-2">
-            <Label htmlFor="d-start" className="text-[14px] text-gray-500 font-medium ml-1">Boshlanish</Label>
-            <div className="relative group">
-              <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none text-gray-400">
-                <Calendar className="h-4 w-4" />
+            <Label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <CalendarDays className="h-3.5 w-3.5" /> Davr
+            </Label>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <div className="relative">
+                <Input
+                  id="d-start"
+                  type="date"
+                  aria-label="Boshlanish sanasi"
+                  value={localStart}
+                  onChange={(e) => handleDateChange("start", e.target.value)}
+                  onBlur={(e) => handleDateBlur("start", e.target.value)}
+                  className="h-11 w-full rounded-xl border-border bg-background text-sm shadow-sm transition-colors focus-visible:ring-2 focus-visible:ring-ring/40 sm:w-40 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-60"
+                />
               </div>
-              <Input id="d-start" type="date" value={localStart}
-                onChange={(e) => handleDateChange("start", e.target.value)}
-                onBlur={(e) => handleDateBlur("start", e.target.value)}
-                className="pl-12 rounded-full bg-gray-50 dark:bg-zinc-800 border-none shadow-none h-12 text-[14px] text-gray-900 dark:text-gray-100 cursor-pointer focus-visible:ring-1 focus-visible:ring-gray-300 [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
-              />
+              <span className="hidden text-muted-foreground sm:inline">–</span>
+              <div className="relative">
+                <Input
+                  id="d-end"
+                  type="date"
+                  aria-label="Tugash sanasi"
+                  value={localEnd}
+                  onChange={(e) => handleDateChange("end", e.target.value)}
+                  onBlur={(e) => handleDateBlur("end", e.target.value)}
+                  className="h-11 w-full rounded-xl border-border bg-background text-sm shadow-sm transition-colors focus-visible:ring-2 focus-visible:ring-ring/40 sm:w-40 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-60"
+                />
+              </div>
             </div>
           </div>
+
+          {/* Filial */}
           <div className="space-y-2">
-            <Label htmlFor="d-end" className="text-[14px] text-gray-500 font-medium ml-1">Tugash</Label>
-            <div className="relative group">
-              <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none text-gray-400">
-                <Calendar className="h-4 w-4" />
-              </div>
-              <Input id="d-end" type="date" value={localEnd}
-                onChange={(e) => handleDateChange("end", e.target.value)}
-                onBlur={(e) => handleDateBlur("end", e.target.value)}
-                className="pl-12 rounded-full bg-gray-50 dark:bg-zinc-800 border-none shadow-none h-12 text-[14px] text-gray-900 dark:text-gray-100 cursor-pointer focus-visible:ring-1 focus-visible:ring-gray-300 [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
-              />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label className="text-[14px] text-gray-500 font-medium ml-1">Filial</Label>
-            <Select value={branchId ? String(branchId) : "all"}
-              onValueChange={(v) => navigate({ branchId: !v || v === "all" ? undefined : v })}>
-              <SelectTrigger className="rounded-full bg-gray-50 dark:bg-zinc-800 border-none shadow-none h-12 text-[14px] text-gray-900 dark:text-gray-100 focus:ring-1 focus:ring-gray-300">
-                <SelectValue />
+            <Label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <Building2 className="h-3.5 w-3.5" /> Filial
+            </Label>
+            <Select
+              value={branchId ? String(branchId) : "all"}
+              onValueChange={(v) => navigate({ branchId: !v || v === "all" ? undefined : v })}
+            >
+              <SelectTrigger className="h-11 w-full min-w-0 rounded-xl border-border bg-background px-3 text-sm shadow-sm focus:ring-2 focus:ring-ring/40 sm:w-64">
+                <SelectValue>{selectedBranch?.name ?? "Barcha filiallar"}</SelectValue>
               </SelectTrigger>
-              <SelectContent className="rounded-2xl border-none shadow-[0_10px_40px_-10px_rgba(0,0,0,0.1)]">
+              <SelectContent className="max-h-80 rounded-xl">
                 <SelectItem value="all">Barcha filiallar</SelectItem>
                 {branches.map((b) => (
-                  <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>
+                  <SelectItem key={b.id} value={String(b.id)}>
+                    {b.name}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
-          <div className="flex flex-wrap gap-2 pb-1">
-            {(["today", "last7", "last30", "thisMonth", "lastMonth"] as const).map((p) => (
-              <Button key={p} variant="ghost" onClick={() => setPreset(p)}
-                className={btnInactive}>
-                {p === "today" ? "Bugun" : p === "last7" ? "7 kun" : p === "last30" ? "30 kun" : p === "thisMonth" ? "Joriy oy" : "O'tgan oy"}
-              </Button>
-            ))}
-          </div>
+        </div>
+
+        {/* Preset chiplar */}
+        <div className="flex flex-wrap items-center gap-2">
+          {PRESETS.map((p) => {
+            const active = activePreset === p.key;
+            return (
+              <button
+                key={p.key}
+                type="button"
+                onClick={() => setPreset(p.key)}
+                aria-pressed={active}
+                className={cn(
+                  "h-9 rounded-full px-4 text-[13px] font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+                  active
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                )}
+              >
+                {p.label}
+              </button>
+            );
+          })}
         </div>
 
         {/* Taqqoslash */}
-        <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-gray-100 dark:border-zinc-800">
-          <span className="text-[13px] text-gray-400 font-medium mr-1">Taqqoslash:</span>
-          {COMPARE_BTNS.map(({ key, label }) => (
-            <Button key={key} variant="ghost" onClick={() => setCompare(compare === key ? undefined : key)}
-              className={compare === key ? btnActive : btnInactive}>
-              {label}
-            </Button>
-          ))}
-          {compare && compare !== "none" && (
-            <Button variant="ghost" onClick={() => setCompare(undefined)} className={btnOff}>
-              ✕ O'chirish
-            </Button>
+        <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-4">
+          <span className="mr-1 inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+            <GitCompareArrows className="h-3.5 w-3.5" /> Taqqoslash
+          </span>
+          {COMPARE_BTNS.map(({ key, label }) => {
+            const active = activeCompare === key;
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setCompare(active ? undefined : key)}
+                aria-pressed={active}
+                className={cn(
+                  "h-9 rounded-full px-4 text-[13px] font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+                  active
+                    ? "bg-accent/15 text-accent-foreground ring-1 ring-accent/40"
+                    : "bg-muted text-muted-foreground hover:bg-accent/10 hover:text-foreground"
+                )}
+              >
+                {label}
+              </button>
+            );
+          })}
+          {activeCompare && (
+            <button
+              type="button"
+              onClick={() => setCompare(undefined)}
+              className="inline-flex h-9 items-center gap-1 rounded-full px-3 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            >
+              <X className="h-3.5 w-3.5" /> O'chirish
+            </button>
           )}
         </div>
 
         {/* Maxsus taqqoslash sanalari */}
-        {compare === "custom" && (
-          <div className="grid grid-cols-2 gap-4 pt-1">
-            <div className="space-y-2">
-              <Label className="text-[13px] text-gray-400 ml-1">Taqqoslash boshlanish</Label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none text-gray-400">
-                  <Calendar className="h-4 w-4" />
-                </div>
-                <Input type="date" value={localCstart}
-                  onChange={(e) => handleCustomCompare("cstart", e.target.value)}
-                  className="pl-12 rounded-full bg-gray-50 dark:bg-zinc-800 border-none shadow-none h-10 text-[13px] text-gray-700 [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
-                />
-              </div>
+        {activeCompare === "custom" && (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label className="ml-0.5 text-xs text-muted-foreground">Taqqoslash boshlanishi</Label>
+              <Input
+                type="date"
+                aria-label="Taqqoslash boshlanish sanasi"
+                value={localCstart}
+                onChange={(e) => handleCustomCompare("cstart", e.target.value)}
+                className="h-10 w-full rounded-xl border-border bg-background text-sm shadow-sm focus-visible:ring-2 focus-visible:ring-ring/40 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-60"
+              />
             </div>
-            <div className="space-y-2">
-              <Label className="text-[13px] text-gray-400 ml-1">Taqqoslash tugash</Label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none text-gray-400">
-                  <Calendar className="h-4 w-4" />
-                </div>
-                <Input type="date" value={localCend}
-                  onChange={(e) => handleCustomCompare("cend", e.target.value)}
-                  className="pl-12 rounded-full bg-gray-50 dark:bg-zinc-800 border-none shadow-none h-10 text-[13px] text-gray-700 [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
-                />
-              </div>
+            <div className="space-y-1.5">
+              <Label className="ml-0.5 text-xs text-muted-foreground">Taqqoslash tugashi</Label>
+              <Input
+                type="date"
+                aria-label="Taqqoslash tugash sanasi"
+                value={localCend}
+                onChange={(e) => handleCustomCompare("cend", e.target.value)}
+                className="h-10 w-full rounded-xl border-border bg-background text-sm shadow-sm focus-visible:ring-2 focus-visible:ring-ring/40 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-60"
+              />
             </div>
           </div>
         )}

@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ChevronLeft, ChevronRight, Building2, Calendar, Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 type Branch = { id: number; name: string };
 
@@ -77,12 +78,12 @@ export function FiltersBar({
   };
 
   return (
-    <Card className="rounded-2xl border-none shadow-[0_4px_20px_rgb(0,0,0,0.04)]">
-      <CardContent className="pt-5 pb-5 space-y-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+    <Card className="rounded-2xl border-border/60 bg-card shadow-sm">
+      <CardContent className="space-y-4 p-4 sm:p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="min-w-0 space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+            <div className="flex items-center gap-2">
+              <Label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                 <Building2 className="h-3.5 w-3.5" /> Filial
               </Label>
               {isPending && (
@@ -97,7 +98,7 @@ export function FiltersBar({
               onValueChange={(v) => navigate({ branchId: !v || v === "all" ? undefined : v })}
               disabled={isPending}
             >
-              <SelectTrigger className="h-11 w-full min-w-0 rounded-xl border-border bg-background px-3 text-sm shadow-sm sm:w-80">
+              <SelectTrigger className="h-11 w-full min-w-0 rounded-xl border-border bg-background px-3 text-sm shadow-sm focus:ring-2 focus:ring-ring/40 sm:w-80">
                 <SelectValue>
                   {selectedBranch?.name ?? "Barcha filiallar"}
                 </SelectValue>
@@ -113,66 +114,93 @@ export function FiltersBar({
             </Select>
           </div>
 
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant={branchId == null ? "default" : "outline"}
-              onMouseEnter={() => prefetchBranch(undefined)}
-              onFocus={() => prefetchBranch(undefined)}
-              onClick={() => navigate({ branchId: undefined })}
-              disabled={isPending}
-              className="h-8 rounded-full px-3 text-xs"
-            >
-              Barchasi
-            </Button>
-            {quickBranches.map((b) => (
+          {/* Davr navigatsiyasi */}
+          <div className="space-y-2">
+            <Label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <Calendar className="h-3.5 w-3.5" /> Davr
+            </Label>
+            <div className="flex flex-wrap items-center gap-2">
               <Button
+                size="sm"
+                variant="outline"
+                onClick={() => shift(-1)}
+                disabled={isPending}
+                className="h-11 w-11 rounded-xl border-border bg-background p-0 shadow-sm"
+                title="Oldingi davr"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Input
+                type="date"
+                aria-label="Boshlanish sanasi"
+                value={start}
+                onChange={(e) => navigate({ start: e.target.value })}
+                disabled={isPending}
+                className="h-11 w-full rounded-xl border-border bg-background text-sm shadow-sm focus-visible:ring-2 focus-visible:ring-ring/40 sm:w-40 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-60"
+              />
+              <span className="hidden text-muted-foreground sm:inline">–</span>
+              <Input
+                type="date"
+                aria-label="Tugash sanasi"
+                value={end}
+                onChange={(e) => navigate({ end: e.target.value })}
+                disabled={isPending}
+                className="h-11 w-full rounded-xl border-border bg-background text-sm shadow-sm focus-visible:ring-2 focus-visible:ring-ring/40 sm:w-40 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-60"
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => shift(1)}
+                disabled={isPending}
+                className="h-11 w-11 rounded-xl border-border bg-background p-0 shadow-sm"
+                title="Keyingi davr"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* Tezkor filial chiplari */}
+        <div className="flex min-w-0 flex-wrap items-center gap-2 border-t border-border/60 pt-4">
+          <button
+            type="button"
+            aria-pressed={branchId == null}
+            onMouseEnter={() => prefetchBranch(undefined)}
+            onFocus={() => prefetchBranch(undefined)}
+            onClick={() => navigate({ branchId: undefined })}
+            disabled={isPending}
+            className={cn(
+              "h-9 rounded-full px-4 text-[13px] font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-60",
+              branchId == null
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary"
+            )}
+          >
+            Barchasi
+          </button>
+          {quickBranches.map((b) => {
+            const active = branchId === b.id;
+            return (
+              <button
                 key={b.id}
                 type="button"
-                size="sm"
-                variant={branchId === b.id ? "default" : "outline"}
+                aria-pressed={active}
                 onMouseEnter={() => prefetchBranch(String(b.id))}
                 onFocus={() => prefetchBranch(String(b.id))}
                 onClick={() => navigate({ branchId: String(b.id) })}
                 disabled={isPending}
-                className="h-8 max-w-36 rounded-full px-3 text-xs"
+                className={cn(
+                  "h-9 max-w-40 rounded-full px-4 text-[13px] font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-60",
+                  active
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                )}
               >
-                <span className="truncate">{b.name}</span>
-              </Button>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-end gap-3 pt-2 border-t">
-          <Button size="sm" variant="outline" onClick={() => shift(-1)} className="h-9 w-9 p-0" title="Oldingi davr">
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground flex items-center gap-1">
-              <Calendar className="h-3 w-3" /> Boshlanish
-            </Label>
-            <Input
-              type="date"
-              value={start}
-              onChange={(e) => navigate({ start: e.target.value })}
-              className="h-9 w-40"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground flex items-center gap-1">
-              <Calendar className="h-3 w-3" /> Tugash
-            </Label>
-            <Input
-              type="date"
-              value={end}
-              onChange={(e) => navigate({ end: e.target.value })}
-              className="h-9 w-40"
-            />
-          </div>
-          <Button size="sm" variant="outline" onClick={() => shift(1)} className="h-9 w-9 p-0" title="Keyingi davr">
-            <ChevronRight className="h-4 w-4" />
-          </Button>
+                <span className="block truncate">{b.name}</span>
+              </button>
+            );
+          })}
         </div>
       </CardContent>
     </Card>
