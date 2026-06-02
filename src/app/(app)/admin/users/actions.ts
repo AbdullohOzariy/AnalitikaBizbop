@@ -45,7 +45,15 @@ export async function deleteUserAction(
   try {
     const me = await requireAdmin();
     if (Number(me.id) === id) return { ok: false, error: "O'zingizni o'chira olmaysiz." };
-    await prisma.user.delete({ where: { id } });
+    // Foydalanuvchi yuklagan fayllar UploadedFile.uploadedById orqali bog'langan (FK).
+    // O'chirishdan oldin ularni joriy adminga qayta biriktiramiz (ma'lumot saqlanadi).
+    await prisma.$transaction([
+      prisma.uploadedFile.updateMany({
+        where: { uploadedById: id },
+        data: { uploadedById: Number(me.id) },
+      }),
+      prisma.user.delete({ where: { id } }),
+    ]);
     revalidatePath("/admin/users");
     return { ok: true };
   } catch (err) {
