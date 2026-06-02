@@ -52,6 +52,16 @@ function panelAuth(req, res, next) {
   res.redirect(`/${PANEL_PATH}/login${t}`);
 }
 
+// Panel sessiyasi YOKI server-server token (Analitika "Hisobdan chiqarish" uchun).
+function panelOrInternal(req, res, next) {
+  const token = process.env.INTERNAL_API_TOKEN;
+  if (token && req.headers['x-internal-token'] === token) {
+    req.internalUser = req.headers['x-internal-user'] || 'Analitika';
+    return next();
+  }
+  return panelAuth(req, res, next);
+}
+
 function servePanel(file, res) {
   const html = fs.readFileSync(path.join(__dirname, '../panel', file), 'utf8')
     .replace(/\/panel-assets/g, `/${PANEL_PATH}-assets`)
@@ -417,13 +427,13 @@ app.delete('/api/yozuv/:id', panelAuth, async (req, res) => {
 });
 
 // ─── Vozvrat status yangilash ──────────────────────────────────────
-app.patch('/api/vozvrat/:id', panelAuth, async (req, res) => {
+app.patch('/api/vozvrat/:id', panelOrInternal, async (req, res) => {
   const { id } = req.params;
   const { status, firma_javob } = req.body;
   // Panel admin'ida raqamli Telegram ID yo'q — yangilagan_id (BIGINT) null bo'ladi,
   // kim yangilagani yangilagan_ism (matn) orqali saqlanadi.
   const yangilagan_id  = null;
-  const yangilagan_ism = req.session.adminIsm || 'Admin';
+  const yangilagan_ism = (req.session && req.session.adminIsm) || req.internalUser || 'Admin';
 
   const validStatuslar = ['kutilmoqda', 'jarayonda', 'bajarildi', 'rad_etildi'];
   if (!validStatuslar.includes(status)) {

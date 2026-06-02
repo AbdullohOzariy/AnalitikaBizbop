@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/table";
 import { BazaPagination } from "../../baza/baza-pagination";
 import { VozvratFilter } from "./vozvrat-filter";
+import { VozvratStatusControl } from "./vozvrat-status-control";
 import type { LucideIcon } from "lucide-react";
 
 const PAGE_SIZE = 50;
@@ -229,11 +230,13 @@ export default async function VozvratPage({
                           {r.xodim_ism || "—"}
                         </TableCell>
 
-                        {/* Holat (Pill) */}
+                        {/* Holat — bosib o'zgartirish mumkin (bot API orqali) */}
                         <TableCell>
-                          <Pill tone={PILL_TONE[r.vozvrat_status ?? ""] ?? "muted"}>
-                            {VOZVRAT_STATUS_LABEL[r.vozvrat_status ?? ""] ?? (r.vozvrat_status ?? "—")}
-                          </Pill>
+                          <VozvratStatusControl
+                            id={r.id}
+                            currentStatus={r.vozvrat_status}
+                            currentFirmaJavob={r.firma_javob}
+                          />
                         </TableCell>
 
                         {/* Firma javobi */}
