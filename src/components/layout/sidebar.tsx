@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useId } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -36,15 +36,29 @@ type NavItem = {
   roles?: Role[]; // faqat shu rollar ko'radi (bo'sh = hammasi)
 };
 
-const NAV: NavItem[] = [
-  { href: "/dashboard",    label: "Dashboard",         icon: LayoutDashboard, roles: ["ADMIN", "VIEWER"] },
-  { href: "/dashboard-v2", label: "Dashboard v2",      icon: Sparkles },
-  { href: "/branches",     label: "Filiallar",          icon: Building2,       roles: ["ADMIN", "VIEWER"] },
-  { href: "/iyerarxiya",   label: "Iyerarxiya",         icon: Tag },
-  { href: "/report",       label: "Hisobot",            icon: Table2,          roles: ["ADMIN", "VIEWER"] },
-  { href: "/admin/upload", label: "Fayllar",            icon: Upload,          adminOnly: true },
-  { href: "/admin/plans",  label: "Normal Reja",        icon: Target,          adminOnly: true },
-  { href: "/admin/users",  label: "Foydalanuvchilar",   icon: Users,           adminOnly: true },
+type NavGroup = { label: string; items: NavItem[] };
+
+// Bo'limlar tartibi muhim — "Tizim" doim oxirida turadi.
+const NAV_GROUPS: NavGroup[] = [
+  {
+    label: "Analitika",
+    items: [
+      { href: "/dashboard",    label: "Dashboard",       icon: LayoutDashboard, roles: ["ADMIN", "VIEWER"] },
+      { href: "/dashboard-v2", label: "Dashboard v2",    icon: Sparkles },
+      { href: "/branches",     label: "Filiallar",        icon: Building2,       roles: ["ADMIN", "VIEWER"] },
+      { href: "/iyerarxiya",   label: "Iyerarxiya",       icon: Tag },
+      { href: "/report",       label: "Hisobot",          icon: Table2,          roles: ["ADMIN", "VIEWER"] },
+      { href: "/admin/upload", label: "Fayllar",          icon: Upload,          adminOnly: true },
+      { href: "/admin/plans",  label: "Normal Reja",      icon: Target,          adminOnly: true },
+    ],
+  },
+  // Keyinroq: { label: "Hisobdan chiqarish", items: [ ... ] },
+  {
+    label: "Tizim",
+    items: [
+      { href: "/admin/users", label: "Foydalanuvchilar", icon: Users, adminOnly: true },
+    ],
+  },
 ];
 
 function SidebarNav({
@@ -59,11 +73,15 @@ function SidebarNav({
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
-  const items = NAV.filter((i) => {
-    if (i.adminOnly && role !== "ADMIN") return false;
-    if (i.roles && !i.roles.includes(role)) return false;
-    return true;
-  });
+  const activeLayoutId = useId(); // har sidebar instansiyasi (desktop/mobil) uchun noyob
+  const visibleGroups = NAV_GROUPS.map((g) => ({
+    ...g,
+    items: g.items.filter((i) => {
+      if (i.adminOnly && role !== "ADMIN") return false;
+      if (i.roles && !i.roles.includes(role)) return false;
+      return true;
+    }),
+  })).filter((g) => g.items.length > 0);
 
   return (
     <>
@@ -101,53 +119,63 @@ function SidebarNav({
             }
           </button>
         )}
-
-        {/* Mobile: logo only, no toggle */}
-        {!onToggle && (
-          <Link href="/dashboard" onClick={onNavigate}>
-            <Image src="/logo.png" alt="BizBop" width={140} height={46} priority className="h-9 w-auto" />
-          </Link>
-        )}
       </div>
 
-      {/* Nav items */}
-      <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
-        {items.map((item) => {
-          const Icon = item.icon;
-          const active =
-            pathname === item.href || pathname.startsWith(item.href + "/");
-          return (
-            <motion.div
-              key={item.href}
-              whileHover={{ scale: 1.01 }}
-              whileTap={{ scale: 0.98 }}
-            >
-              <Link
-                href={item.href}
-                onClick={onNavigate}
-                title={collapsed ? item.label : undefined}
-                className={cn(
-                  "relative flex items-center rounded-xl text-sm font-medium transition-colors duration-150 overflow-hidden",
-                  collapsed ? "justify-center px-0 py-2.5" : "gap-3 px-3 py-2.5",
-                  active
-                    ? "text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                )}
-              >
-                {active && (
-                  <motion.span
-                    layoutId="nav-active"
-                    className="absolute inset-0 bg-primary rounded-xl"
-                    style={{ zIndex: -1 }}
-                    transition={{ duration: 0.2, ease: "easeOut" }}
-                  />
-                )}
-                <Icon className={cn("h-4 w-4 shrink-0", active ? "opacity-100" : "opacity-70")} />
-                {!collapsed && item.label}
-              </Link>
-            </motion.div>
-          );
-        })}
+      {/* Nav items — bo'limlarga guruhlangan */}
+      <nav className="flex-1 p-2 space-y-3 overflow-y-auto">
+        {visibleGroups.map((group, gi) => (
+          <div
+            key={group.label}
+            className={cn(
+              "space-y-0.5",
+              // yig'iq holatda guruhlar orasida nozik chiziq (birinchisidan tashqari)
+              collapsed && gi > 0 && "mt-3 border-t border-border/60 pt-3"
+            )}
+          >
+            {!collapsed && (
+              <div className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                {group.label}
+              </div>
+            )}
+            {group.items.map((item) => {
+              const Icon = item.icon;
+              const active =
+                pathname === item.href || pathname.startsWith(item.href + "/");
+              return (
+                <motion.div
+                  key={item.href}
+                  whileHover={{ scale: 1.01 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  <Link
+                    href={item.href}
+                    onClick={onNavigate}
+                    aria-current={active ? "page" : undefined}
+                    title={collapsed ? item.label : undefined}
+                    className={cn(
+                      "relative flex items-center rounded-xl text-sm font-medium transition-colors duration-150 overflow-hidden",
+                      collapsed ? "justify-center px-0 py-2.5" : "gap-3 px-3 py-2.5",
+                      active
+                        ? "text-primary-foreground shadow-sm"
+                        : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                    )}
+                  >
+                    {active && (
+                      <motion.span
+                        layoutId={activeLayoutId}
+                        className="absolute inset-0 bg-primary rounded-xl"
+                        style={{ zIndex: -1 }}
+                        transition={{ duration: 0.2, ease: "easeOut" }}
+                      />
+                    )}
+                    <Icon className={cn("h-4 w-4 shrink-0", active ? "opacity-100" : "opacity-70")} />
+                    {!collapsed && item.label}
+                  </Link>
+                </motion.div>
+              );
+            })}
+          </div>
+        ))}
       </nav>
 
       {/* Footer */}
