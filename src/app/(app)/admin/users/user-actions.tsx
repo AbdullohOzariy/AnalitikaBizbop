@@ -83,7 +83,7 @@ export function UserActions({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">
           <DropdownMenuItem
-            onSelect={() => { setPwOpen(true); setPassword(""); setShowPass(false); }}
+            onClick={() => { setPwOpen(true); setPassword(""); setShowPass(false); }}
             className="gap-2"
           >
             <KeyRound className="h-3.5 w-3.5" />
@@ -94,7 +94,7 @@ export function UserActions({
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                onSelect={() => setDelOpen(true)}
+                onClick={() => setDelOpen(true)}
                 variant="destructive"
                 className="gap-2"
               >
