@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { getDefaultRange } from "@/lib/analytics";
 import {
   botConfigured,
+  chiqimDefaultRange,
   chiqimSummary,
   chiqimByBranch,
   TUR_LABEL,
@@ -75,7 +75,7 @@ export default async function ChiqimStatistikaPage({
   }
 
   const sp = await searchParams;
-  const def = await getDefaultRange();
+  const def = chiqimDefaultRange();
   const startDate = parseDate(sp.start) ?? def.start;
   const endDate   = parseDate(sp.end)   ?? def.end;
   const range = { start: startDate, end: endDate };

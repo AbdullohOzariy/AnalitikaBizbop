@@ -53,19 +53,18 @@ export default function Step3Tasdiq({ tur, form, onBack, onDone }: Props) {
     try {
       let fileId: string | null = null
       if (form.photo) {
-        try {
-          const fd = new FormData()
-          fd.append('rasm', form.photo)
-          const res = await fetch('/api/rasm-yukla', {
-            method: 'POST',
-            headers: { 'x-telegram-init-data': initData },
-            body: fd,
-          })
-          const json = await res.json()
-          fileId = json.file_id ?? null
-        } catch {
-          // rasm yuklanmasa ham davom etamiz
+        const fd = new FormData()
+        fd.append('rasm', form.photo)
+        const res = await fetch('/api/rasm-yukla', {
+          method: 'POST',
+          headers: { 'x-telegram-init-data': initData },
+          body: fd,
+        })
+        const json = await res.json().catch(() => ({}))
+        if (!res.ok || !json.file_id) {
+          throw new Error(json.xato || 'Rasm yuklanmadi. Qaytadan urinib ko\'ring.')
         }
+        fileId = json.file_id
       }
 
       const tgUser = tg?.initDataUnsafe?.user

@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { getDefaultRange } from "@/lib/analytics";
 import {
   botConfigured,
+  chiqimDefaultRange,
   chiqimSummary,
   chiqimByBranch,
   chiqimRecords,
@@ -107,7 +107,7 @@ export default async function ChiqimPage({
   const sp = await searchParams;
   const page = Math.max(1, parseInt(sp.page ?? "1") || 1);
 
-  const def = await getDefaultRange();
+  const def = chiqimDefaultRange();
   const startDate = parseDate(sp.start) ?? def.start;
   const endDate   = parseDate(sp.end)   ?? def.end;
   const turFilter    = sp.tur    || undefined;
@@ -162,7 +162,7 @@ export default async function ChiqimPage({
       {/* StatCard qatori — turlar bo'yicha + jami */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         {allTurs.map((turKey) => {
-          const meta  = TUR_META[turKey] ?? { icon: PackageMinus, tone: "muted" as const };
+          const meta  = TUR_META[turKey] ?? { icon: PackageMinus, tone: "default" as const };
           const entry = summaryMap.get(turKey);
           return (
             <StatCard

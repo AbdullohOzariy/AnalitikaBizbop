@@ -1,11 +1,11 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { getDefaultRange } from "@/lib/analytics";
 import {
   botConfigured,
-  chiqimFilials,
+  aktivFilialNomlari,
   vozvratKanban,
   vozvratSummary,
+  chiqimDefaultRange,
   VOZVRAT_HOLATLAR,
   VOZVRAT_HOLAT_LABEL,
 } from "@/lib/spisaniya/db";
@@ -52,7 +52,7 @@ export default async function VozvratlarPage({
   }
 
   const sp = await searchParams;
-  const def = await getDefaultRange();
+  const def = chiqimDefaultRange();
   const startDate = parseDate(sp.start) ?? def.start;
   const endDate = parseDate(sp.end) ?? def.end;
   const range = { start: startDate, end: endDate };
@@ -61,7 +61,7 @@ export default async function VozvratlarPage({
   const [rows, summary, filials] = await Promise.all([
     vozvratKanban(range, filial),
     vozvratSummary(range, filial),
-    chiqimFilials(),
+    aktivFilialNomlari(),
   ]);
 
   const byStatus = new Map<string, typeof rows>();

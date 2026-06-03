@@ -46,6 +46,18 @@ function dayParams(range: ChiqimRange): [string, string] {
   return [range.start.toISOString().slice(0, 10), range.end.toISOString().slice(0, 10)];
 }
 
+/**
+ * Hisobdan chiqarish sahifalari uchun standart davr: JORIY OY boshidan BUGUNGACHA.
+ * (Asosiy sotuv bazasiga asoslangan getDefaultRange EMAS — u bizbop'ga mos kelmaydi,
+ * bugun qo'shilgan yozuv/vozvrat ko'rinmay qolardi.)
+ */
+export function chiqimDefaultRange(): ChiqimRange {
+  const now = new Date();
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  return { start, end };
+}
+
 /** Tur bo'yicha jami: soni + summa. */
 export async function chiqimSummary(
   range: ChiqimRange
@@ -602,7 +614,8 @@ export async function vozvratSummary(
   try {
     await ensureSozlamalarSchema();
     const [start, end] = dayParams(range);
-    const cond = ["vaqt::date >= $1::date", "vaqt::date <= $2::date"];
+    // Kanban bilan izchil: faqat ochiq (hisobdan chiqarishga o'tkazilmagan) vozvratlar.
+    const cond = ["vaqt::date >= $1::date", "vaqt::date <= $2::date", "chiqim_yozuv_id IS NULL"];
     const params: unknown[] = [start, end];
     if (filial) { params.push(filial); cond.push(`filial = $${params.length}`); }
     const { rows } = await p.query(
@@ -634,7 +647,7 @@ export async function vozvratHolatYangila(
   const { rows } = await p.query(
     `UPDATE vozvratlar
        SET status=$1,
-           qaytarilmadi_sabab = CASE WHEN $1='qaytarilmadi' THEN $2 ELSE qaytarilmadi_sabab END,
+           qaytarilmadi_sabab = CASE WHEN $1='qaytarilmadi' THEN $2 ELSE NULL END,
            yangilangan=NOW()
      WHERE id=$3 AND chiqim_yozuv_id IS NULL
      RETURNING ${VOZVRAT_COLS}`,
@@ -676,13 +689,13 @@ export async function vozvratChiqimgaOtkaz(
       ]
     );
     const yozuvId = yz[0].id as number;
-    await client.query(
-      `UPDATE vozvratlar SET chiqim_yozuv_id=$1, yangilangan=NOW() WHERE id=$2`,
+    const { rows: upd } = await client.query(
+      `UPDATE vozvratlar SET chiqim_yozuv_id=$1, yangilangan=NOW()
+       WHERE id=$2 RETURNING ${VOZVRAT_COLS}`,
       [yozuvId, id]
     );
     await client.query("COMMIT");
-    const vozvrat = await vozvratById(id);
-    return vozvrat ? { yozuvId, vozvrat } : { yozuvId, vozvrat: v as VozvratYozuv };
+    return { yozuvId, vozvrat: upd[0] as VozvratYozuv };
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
     throw err;
