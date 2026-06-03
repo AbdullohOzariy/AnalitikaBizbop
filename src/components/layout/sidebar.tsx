@@ -76,13 +76,13 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/chiqim",            label: "Chiqimlar",         icon: PackageMinus, roles: ["ADMIN", "CAT_MANAGER"] },
       { href: "/chiqim/statistika", label: "Statistika",        icon: ChartPie,     roles: ["ADMIN", "CAT_MANAGER"] },
       { href: "/chiqim/vozvrat",    label: "Vozvrat nazorati",  icon: Recycle,      roles: ["ADMIN", "CAT_MANAGER"] },
-      { href: "/chiqim/sozlamalar", label: "Sozlamalar",        icon: Settings,     roles: ["ADMIN", "CAT_MANAGER"] },
     ],
   },
   {
     label: "Tizim",
     items: [
-      { href: "/admin/users", label: "Foydalanuvchilar", icon: Users, adminOnly: true },
+      { href: "/admin/users",     label: "Foydalanuvchilar", icon: Users,    adminOnly: true },
+      { href: "/admin/sozlamalar", label: "Sozlamalar",      icon: Settings, adminOnly: true },
     ],
   },
 ];

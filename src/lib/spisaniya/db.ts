@@ -360,6 +360,11 @@ export async function getGroupChatId(): Promise<string | null> {
   return val;
 }
 
+/** GROUP_CHAT_ID keshini tozalaydi (sozlamalar yangilanganda chaqiriladi). */
+export function clearChatIdCache(): void {
+  _chatIdCache = null;
+}
+
 /** AI kategoriyalash uchun mavjud kategoriya nomlari. */
 export async function kategoriyaNomlari(): Promise<string[]> {
   const p = getPool();
@@ -413,4 +418,174 @@ export async function vozvratStatusYangila(
   if (!rows.length) return null;
   const { rows: t } = await p.query(`SELECT tovar, firma FROM yozuvlar WHERE id=$1`, [yozuvId]);
   return t.length ? { tovar: t[0].tovar as string, firma: (t[0].firma as string) ?? null } : { tovar: "", firma: null };
+}
+
+// ─── SOZLAMALAR boshqaruvi (eski admin panel → Hisobdan chiqarish) ─────────────
+
+/** Sozlamalar uchun kerakli jadval/ustunlar mavjudligini ta'minlaydi (bir marta). */
+let _schemaReady = false;
+export async function ensureSozlamalarSchema(): Promise<void> {
+  if (_schemaReady) return;
+  const p = requirePool();
+  await p.query(`CREATE TABLE IF NOT EXISTS sozlamalar (
+    kalit TEXT PRIMARY KEY, qiymat TEXT NOT NULL, yangilangan TIMESTAMPTZ DEFAULT NOW()
+  )`);
+  await p.query(`ALTER TABLE filialar ADD COLUMN IF NOT EXISTS topic_id BIGINT`).catch(() => {});
+  await p.query(`CREATE TABLE IF NOT EXISTS kategoriyalar (
+    id SERIAL PRIMARY KEY, nomi VARCHAR(100) NOT NULL UNIQUE, yaratilgan TIMESTAMPTZ DEFAULT NOW()
+  )`).catch(() => {});
+  _schemaReady = true;
+}
+
+export type FilialToliq = { id: number; nomi: string; aktiv: boolean; topic_id: string | null };
+
+/** Barcha filiallar (topic_id bilan, boshqaruv uchun). */
+export async function filialarToliq(): Promise<FilialToliq[]> {
+  const p = getPool();
+  if (!p) return [];
+  try {
+    await ensureSozlamalarSchema();
+    const { rows } = await p.query(
+      `SELECT id, nomi, aktiv, topic_id::text FROM filialar ORDER BY nomi`
+    );
+    return rows as FilialToliq[];
+  } catch {
+    return [];
+  }
+}
+
+/** Yangi filial qo'shadi. */
+export async function filialQoshish(nomi: string): Promise<FilialToliq> {
+  const p = requirePool();
+  await ensureSozlamalarSchema();
+  const { rows } = await p.query(
+    `INSERT INTO filialar (nomi, aktiv) VALUES ($1, true) RETURNING id, nomi, aktiv, topic_id::text`,
+    [nomi]
+  );
+  return rows[0] as FilialToliq;
+}
+
+/** Filialni yangilaydi (nomi / aktiv / topic_id). */
+export async function filialYangila(
+  id: number,
+  patch: { nomi?: string; aktiv?: boolean; topic_id?: string | null }
+): Promise<FilialToliq | null> {
+  const p = requirePool();
+  const sets: string[] = [];
+  const vals: unknown[] = [];
+  let i = 1;
+  if (patch.nomi !== undefined) { sets.push(`nomi=$${i++}`); vals.push(patch.nomi); }
+  if (patch.aktiv !== undefined) { sets.push(`aktiv=$${i++}`); vals.push(patch.aktiv); }
+  if (patch.topic_id !== undefined) { sets.push(`topic_id=$${i++}`); vals.push(patch.topic_id || null); }
+  if (!sets.length) return null;
+  vals.push(id);
+  const { rows } = await p.query(
+    `UPDATE filialar SET ${sets.join(",")} WHERE id=$${i} RETURNING id, nomi, aktiv, topic_id::text`,
+    vals
+  );
+  return (rows[0] as FilialToliq) ?? null;
+}
+
+/** Filialni o'chiradi (yozuvlari bo'lsa FK xatosi qaytadi). */
+export async function filialOchir(id: number): Promise<void> {
+  const p = requirePool();
+  await p.query(`DELETE FROM filialar WHERE id=$1`, [id]);
+}
+
+/** Guruh chat_id — sozlamalardan o'qiydi (env emas). */
+export async function guruhChatIdOl(): Promise<string> {
+  const p = getPool();
+  if (!p) return "";
+  try {
+    await ensureSozlamalarSchema();
+    const { rows } = await p.query(`SELECT qiymat FROM sozlamalar WHERE kalit='GROUP_CHAT_ID'`);
+    return rows[0]?.qiymat ?? "";
+  } catch {
+    return "";
+  }
+}
+
+/** Guruh chat_id'ni saqlaydi (sozlamalar) va keshni tozalaydi. */
+export async function guruhChatIdSaqla(chatId: string): Promise<void> {
+  const p = requirePool();
+  await ensureSozlamalarSchema();
+  await p.query(
+    `INSERT INTO sozlamalar (kalit, qiymat, yangilangan) VALUES ('GROUP_CHAT_ID', $1, NOW())
+     ON CONFLICT (kalit) DO UPDATE SET qiymat=$1, yangilangan=NOW()`,
+    [chatId]
+  );
+  clearChatIdCache();
+}
+
+export type KategoriyaSoni = { id: number; nomi: string; soni: number };
+
+/** Kategoriyalar + har biriga tegishli yozuvlar soni. */
+export async function kategoriyalarSoni(): Promise<KategoriyaSoni[]> {
+  const p = getPool();
+  if (!p) return [];
+  try {
+    await ensureSozlamalarSchema();
+    const { rows } = await p.query(
+      `SELECT k.id, k.nomi, COUNT(y.id)::int AS soni
+       FROM kategoriyalar k LEFT JOIN yozuvlar y ON y.kategoriya = k.nomi
+       GROUP BY k.id, k.nomi ORDER BY k.nomi`
+    );
+    return rows as KategoriyaSoni[];
+  } catch {
+    return [];
+  }
+}
+
+export async function kategoriyaQoshish(nomi: string): Promise<{ id: number; nomi: string }> {
+  const p = requirePool();
+  await ensureSozlamalarSchema();
+  const { rows } = await p.query(
+    `INSERT INTO kategoriyalar (nomi) VALUES ($1) RETURNING id, nomi`,
+    [nomi.slice(0, 100)]
+  );
+  return rows[0] as { id: number; nomi: string };
+}
+
+/** Kategoriya nomini o'zgartiradi + yozuvlardagi eski nomni ham yangilaydi. */
+export async function kategoriyaYangila(id: number, yangiNomi: string): Promise<{ id: number; nomi: string } | null> {
+  const p = requirePool();
+  const client: PoolClient = await p.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query(`SELECT nomi FROM kategoriyalar WHERE id=$1`, [id]);
+    if (!rows.length) { await client.query("ROLLBACK"); return null; }
+    const eski = rows[0].nomi as string;
+    const { rows: yangi } = await client.query(
+      `UPDATE kategoriyalar SET nomi=$1 WHERE id=$2 RETURNING id, nomi`,
+      [yangiNomi.slice(0, 100), id]
+    );
+    await client.query(`UPDATE yozuvlar SET kategoriya=$1 WHERE kategoriya=$2`, [yangi[0].nomi, eski]);
+    await client.query("COMMIT");
+    return yangi[0] as { id: number; nomi: string };
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/** Kategoriyani o'chiradi (yozuvlardagi kategoriyani bo'shatadi, yozuvlar o'chmaydi). */
+export async function kategoriyaOchir(id: number): Promise<void> {
+  const p = requirePool();
+  const client: PoolClient = await p.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query(`SELECT nomi FROM kategoriyalar WHERE id=$1`, [id]);
+    if (rows.length) {
+      await client.query(`UPDATE yozuvlar SET kategoriya=NULL WHERE kategoriya=$1`, [rows[0].nomi]);
+      await client.query(`DELETE FROM kategoriyalar WHERE id=$1`, [id]);
+    }
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
 }
