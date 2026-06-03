@@ -477,10 +477,11 @@ function parseProductLevel(
   if (n > 0) {
     for (const [alias, cols] of branchMetrics) {
       if (cols.salesIdx == null) continue;
-      const rootVal = parseAmount(data[0].r[cols.salesIdx]) ?? 0;
+      const sIdx: number = cols.salesIdx; // closure'larda narrowing saqlanishi uchun
+      const rootVal = parseAmount(data[0].r[sIdx]) ?? 0;
       let leafSum = 0;
       for (let i = 0; i < n; i++) {
-        if (!isGroup[i]) leafSum += parseAmount(data[i].r[cols.salesIdx]) ?? 0;
+        if (!isGroup[i]) leafSum += parseAmount(data[i].r[sIdx]) ?? 0;
       }
       const tol = Math.max(1, Math.abs(rootVal) * 0.0001);
       if (Math.abs(leafSum - rootVal) > tol) {
@@ -489,7 +490,7 @@ function parseProductLevel(
         // (guruh summasi SKU'dan ancha katta). Ularni ko'rsatamiz — admin Iyerarxiyaga qo'shadi.
         const farq = leafSum - rootVal;
         const nomzodlar = data
-          .map((d, i) => ({ d, i, total: parseAmount(d.r[cols.salesIdx]) ?? 0 }))
+          .map((d, i) => ({ d, i, total: parseAmount(d.r[sIdx]) ?? 0 }))
           .filter((x) => !isGroup[x.i] && x.total > 0) // SKU deb sanalgan, lekin ehtimol papka
           .sort((a, b) => b.total - a.total)
           .slice(0, 20)
