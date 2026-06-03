@@ -126,6 +126,14 @@ function SidebarNav({
     }),
   })).filter((g) => g.items.length > 0);
 
+  // Faqat ENG ANIQ (eng uzun) mos keladigan havola active bo'ladi.
+  // Aks holda "/chiqim" ham, "/chiqim/vozvratlar" ham bir vaqtda active bo'lib,
+  // bir xil layoutId bilan ikki "pill" animatsiya qilib, oq artefakt paydo bo'ladi.
+  const activeHref = visibleGroups
+    .flatMap((g) => g.items)
+    .filter((i) => pathname === i.href || pathname.startsWith(i.href + "/"))
+    .sort((a, b) => b.href.length - a.href.length)[0]?.href;
+
   return (
     <>
       {/* Logo / header */}
@@ -190,8 +198,7 @@ function SidebarNav({
             )}
             {(collapsed || !folded) && group.items.map((item) => {
               const Icon = item.icon;
-              const active =
-                pathname === item.href || pathname.startsWith(item.href + "/");
+              const active = item.href === activeHref;
               return (
                 <motion.div
                   key={item.href}
