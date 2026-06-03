@@ -171,85 +171,6 @@ export async function chiqimFilials(): Promise<string[]> {
   }
 }
 
-// ─── Vozvrat nazorati ─────────────────────────────────────────────────────────
-export const VOZVRAT_STATUS_LABEL: Record<string, string> = {
-  kutilmoqda: "Kutilmoqda",
-  jarayonda: "Jarayonda",
-  bajarildi: "Bajarildi",
-  rad_etildi: "Rad etildi",
-};
-
-export type VozvratRecord = {
-  id: number;
-  tovar: string;
-  miqdor: number;
-  birlik: string;
-  summa: number;
-  sabab: string | null;
-  filial: string;
-  firma: string | null;
-  xodim_ism: string;
-  vaqt: string;
-  vozvrat_status: string | null;
-  firma_javob: string | null;
-  muddat: string | null;
-};
-
-/** Vozvrat yozuvlari + nazorat holati (yozuvlar ⨝ vozvrat_nazorat). */
-export async function vozvratList(
-  range: ChiqimRange,
-  opts: { filial?: string; status?: string; page: number; pageSize: number }
-): Promise<{ rows: VozvratRecord[]; total: number }> {
-  const p = getPool();
-  if (!p) return { rows: [], total: 0 };
-  try {
-    const [start, end] = dayParams(range);
-    const cond: string[] = ["y.tur = 'vozvrat'", "y.vaqt::date >= $1::date", "y.vaqt::date <= $2::date"];
-    const params: unknown[] = [start, end];
-    if (opts.filial) { params.push(opts.filial); cond.push(`y.filial = $${params.length}`); }
-    if (opts.status) { params.push(opts.status); cond.push(`COALESCE(vn.status, 'kutilmoqda') = $${params.length}`); }
-    const where = cond.join(" AND ");
-    const join = `FROM yozuvlar y LEFT JOIN vozvrat_nazorat vn ON vn.yozuv_id = y.id WHERE ${where}`;
-
-    const totalRes = await p.query(`SELECT count(*)::int AS n ${join}`, params);
-    const total = (totalRes.rows[0]?.n as number) ?? 0;
-
-    const offset = (opts.page - 1) * opts.pageSize;
-    const { rows } = await p.query(
-      `SELECT y.id, y.tovar, y.miqdor::float8, y.birlik, y.summa::float8, y.sabab, y.filial,
-              y.firma, y.xodim_ism, y.vaqt::text,
-              COALESCE(vn.status, 'kutilmoqda') AS vozvrat_status, vn.firma_javob, vn.muddat::text
-       ${join}
-       ORDER BY y.vaqt DESC
-       LIMIT ${opts.pageSize} OFFSET ${offset}`,
-      params
-    );
-    return { rows: rows as VozvratRecord[], total };
-  } catch {
-    return { rows: [], total: 0 };
-  }
-}
-
-/** Vozvrat status bo'yicha soni (davr). */
-export async function vozvratStatusCounts(
-  range: ChiqimRange
-): Promise<{ status: string; count: number }[]> {
-  const p = getPool();
-  if (!p) return [];
-  try {
-    const { rows } = await p.query(
-      `SELECT COALESCE(vn.status, 'kutilmoqda') AS status, count(*)::int AS count
-       FROM yozuvlar y LEFT JOIN vozvrat_nazorat vn ON vn.yozuv_id = y.id
-       WHERE y.tur = 'vozvrat' AND y.vaqt::date >= $1::date AND y.vaqt::date <= $2::date
-       GROUP BY 1 ORDER BY count DESC`,
-      dayParams(range)
-    );
-    return rows as { status: string; count: number }[];
-  } catch {
-    return [];
-  }
-}
-
 // ─── Sozlamalar (read-only ko'rinish) ─────────────────────────────────────────
 export async function botFilialar(): Promise<{ id: number; nomi: string; aktiv: boolean }[]> {
   const p = getPool();
@@ -428,29 +349,6 @@ export async function kategoriyasizYozuvlar(limit: number): Promise<{ id: number
   return rows as { id: number; tovar: string }[];
 }
 
-/**
- * Vozvrat nazorati statusini yangilaydi (in-process — eski bot HTTP API o'rniga).
- * Topilsa yozuv (tovar, firma) ma'lumotini qaytaradi (Telegram xabari uchun), aks holda null.
- */
-export async function vozvratStatusYangila(
-  yozuvId: number,
-  status: string,
-  firmaJavob: string | null,
-  yangilaganIsm: string
-): Promise<{ tovar: string; firma: string | null } | null> {
-  const p = requirePool();
-  const { rows } = await p.query(
-    `UPDATE vozvrat_nazorat
-       SET status=$1, firma_javob=$2, yangilagan_id=NULL,
-           yangilagan_ism=$3, yangilangan_vaqt=NOW()
-     WHERE yozuv_id=$4
-     RETURNING yozuv_id`,
-    [status, firmaJavob, yangilaganIsm, yozuvId]
-  );
-  if (!rows.length) return null;
-  const { rows: t } = await p.query(`SELECT tovar, firma FROM yozuvlar WHERE id=$1`, [yozuvId]);
-  return t.length ? { tovar: t[0].tovar as string, firma: (t[0].firma as string) ?? null } : { tovar: "", firma: null };
-}
 
 // ─── SOZLAMALAR boshqaruvi (eski admin panel → Hisobdan chiqarish) ─────────────
 

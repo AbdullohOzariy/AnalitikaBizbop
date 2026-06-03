@@ -71,18 +71,6 @@ export async function guruhgaYuborish(d: YozuvKirim, yozuvId: number): Promise<v
   }
 }
 
-const STATUS_EMOJI: Record<string, string> = {
-  kutilmoqda: "⏳",
-  jarayonda: "🔄",
-  bajarildi: "✅",
-  rad_etildi: "❌",
-};
-const STATUS_UZ: Record<string, string> = {
-  kutilmoqda: "Kutilmoqda",
-  jarayonda: "Jarayonda",
-  bajarildi: "Bajarildi",
-  rad_etildi: "Rad etildi",
-};
 
 // ─── Yangi Vozvrat jarayoni xabarlari ─────────────────────────────────────────
 
@@ -156,27 +144,3 @@ export async function vozvratHolatGuruhXabar(
   }
 }
 
-/** Vozvrat holati o'zgarganda guruhga xabar. */
-export async function vozvratStatusXabar(
-  tovar: string,
-  firma: string | null,
-  status: string,
-  yangilaganIsm: string
-): Promise<void> {
-  const bot = getBot();
-  if (!bot) return;
-  const chatId = await getGroupChatId();
-  if (!chatId) return;
-  try {
-    await bot.telegram.sendMessage(
-      chatId,
-      `♻️ Qayta ishlash yangilandi\n` +
-        `Tovar: ${tovar}${firma ? ` (${firma})` : ""}\n` +
-        `Holat: ${STATUS_EMOJI[status] || ""} ${STATUS_UZ[status] || status}\n` +
-        `Yangiladi: ${yangilaganIsm}\n` +
-        `Vaqt: ${new Date().toLocaleString("uz-UZ")}`
-    );
-  } catch (err) {
-    console.error("[vozvrat-xabar] xato:", err instanceof Error ? err.message : err);
-  }
-}
