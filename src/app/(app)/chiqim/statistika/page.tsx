@@ -148,9 +148,9 @@ export default async function ChiqimStatistikaPage({
           tone="default"
         />
         <StatCard
-          label="Vozvrat jami"
+          label="Qayta ishlash jami"
           value={vozvratTotal.toLocaleString("uz-UZ")}
-          hint="tanlangan davrdagi vozvrat so'rovlar"
+          hint="tanlangan davrdagi qayta ishlash so'rovlar"
           icon={RotateCcw}
           tone="orange"
         />
@@ -244,10 +244,10 @@ export default async function ChiqimStatistikaPage({
         </SectionCard>
       )}
 
-      {/* Vozvrat status */}
+      {/* Qayta ishlash status */}
       {vozvratTotal > 0 && (
         <SectionCard
-          title="Vozvrat holati"
+          title="Qayta ishlash holati"
           description="Status bo'yicha taqsimot"
         >
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -266,7 +266,7 @@ export default async function ChiqimStatistikaPage({
                     {count.toLocaleString("uz-UZ")}
                   </div>
                   <div className="mt-0.5 text-xs text-muted-foreground">
-                    {pct.toFixed(1)}% jami vozvratdan
+                    {pct.toFixed(1)}% jami qayta ishlashdan
                   </div>
                 </div>
               );

@@ -19,7 +19,7 @@ import { Search, X } from "lucide-react";
 // lekin bu turg'un qiymat — prop oqimiga hojat yo'q).
 const TURS: [string, string][] = [
   ["spisaniya",   "Spisaniya"],
-  ["vozvrat",     "Vozvrat"],
+  ["vozvrat",     "Qayta ishlash"],
   ["kafe",        "Kafe"],
   ["ovqatlanish", "Ovqatlanish"],
 ];

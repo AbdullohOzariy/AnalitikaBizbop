@@ -88,8 +88,8 @@ export default async function VozvratPage({
       <div className="space-y-5">
         <PageHeader
           icon={Recycle}
-          title="Vozvrat nazorati"
-          description="Qaytarilgan mahsulotlar holati"
+          title="Qayta ishlash"
+          description="Qayta ishlangan mahsulotlar holati"
         />
         <EmptyState
           icon={WifiOff}
@@ -133,8 +133,8 @@ export default async function VozvratPage({
       {/* Sarlavha + filtr */}
       <PageHeader
         icon={Recycle}
-        title="Vozvrat nazorati"
-        description="Qaytarilgan mahsulotlar holati (read-only)"
+        title="Qayta ishlash"
+        description="Qayta ishlangan mahsulotlar nazorati"
       >
         <VozvratFilter
           filials={filials}
@@ -155,7 +155,7 @@ export default async function VozvratPage({
               key={st}
               label={VOZVRAT_STATUS_LABEL[st] ?? st}
               value={count.toLocaleString("uz-UZ")}
-              hint="ta vozvrat"
+              hint="ta yozuv"
               icon={meta.icon}
               tone={meta.statTone}
             />
@@ -169,7 +169,7 @@ export default async function VozvratPage({
           {rows.length === 0 ? (
             <EmptyState
               icon={Recycle}
-              title="Tanlangan davrda vozvrat yozuvlari yo'q"
+              title="Tanlangan davrda qayta ishlash yozuvlari yo'q"
               description="Boshqa davr yoki filtr tanlang."
             />
           ) : (

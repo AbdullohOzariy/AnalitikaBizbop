@@ -35,7 +35,7 @@ export type ChiqimTur = "spisaniya" | "vozvrat" | "kafe" | "ovqatlanish";
 
 export const TUR_LABEL: Record<string, string> = {
   spisaniya: "Spisaniya",
-  vozvrat: "Vozvrat",
+  vozvrat: "Qayta ishlash",
   kafe: "Kafe",
   ovqatlanish: "Ovqatlanish",
 };

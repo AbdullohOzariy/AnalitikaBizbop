@@ -69,7 +69,7 @@ export function VozvratStatusControl({
       <Dialog open={open} onOpenChange={(o) => { setOpen(o); }}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Vozvrat holati</DialogTitle>
+            <DialogTitle>Qayta ishlash holati</DialogTitle>
             <DialogDescription className="text-sm text-muted-foreground">
               Holatni yangilang — bot Telegram guruhiga xabar yuboradi.
             </DialogDescription>
