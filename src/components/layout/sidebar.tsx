@@ -223,7 +223,7 @@ function SidebarNav({
                     {active && (
                       <motion.span
                         layoutId={activeLayoutId}
-                        className="absolute inset-0 bg-primary rounded-xl"
+                        className="absolute inset-0 bg-brand-gradient shadow-brand rounded-xl"
                         style={{ zIndex: -1 }}
                         transition={{ duration: 0.2, ease: "easeOut" }}
                       />

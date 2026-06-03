@@ -18,7 +18,7 @@ export function Header({ user }: { user: Session["user"] }) {
     .slice(0, 2);
 
   return (
-    <header className="h-16 border-b border-border bg-card px-4 sm:px-6 flex items-center justify-between gap-2 shadow-sm">
+    <header className="sticky top-0 z-30 h-16 border-b border-border bg-card/85 px-4 sm:px-6 flex items-center justify-between gap-2 shadow-sm backdrop-blur-xl">
       <MobileSidebarTrigger role={user.role} />
 
       <div className="flex items-center gap-2 sm:gap-3 ml-auto">
