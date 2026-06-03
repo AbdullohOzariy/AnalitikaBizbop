@@ -391,11 +391,21 @@ export async function kategoriyaNomlari(): Promise<string[]> {
   }
 }
 
-/** Kategoriyani yozuvga yozadi (mavjud bo'lmasa kategoriyalar jadvaliga qo'shadi). */
+/** Kategoriyani yozuvga yozadi (mavjud bo'lmasa kategoriyalar jadvaliga qo'shadi) — atomik. */
 export async function yozuvKategoriyaSaqla(yozuvId: number, kategoriya: string): Promise<void> {
   const p = requirePool();
-  await p.query(`INSERT INTO kategoriyalar (nomi) VALUES ($1) ON CONFLICT (nomi) DO NOTHING`, [kategoriya]);
-  await p.query(`UPDATE yozuvlar SET kategoriya=$1 WHERE id=$2`, [kategoriya, yozuvId]);
+  const client: PoolClient = await p.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(`INSERT INTO kategoriyalar (nomi) VALUES ($1) ON CONFLICT (nomi) DO NOTHING`, [kategoriya]);
+    await client.query(`UPDATE yozuvlar SET kategoriya=$1 WHERE id=$2`, [kategoriya, yozuvId]);
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 /** Kategoriyasi yo'q yozuvlar (backfill uchun). */
@@ -445,12 +455,17 @@ export async function ensureSozlamalarSchema(): Promise<void> {
     kalit TEXT PRIMARY KEY, qiymat TEXT NOT NULL, yangilangan TIMESTAMPTZ DEFAULT NOW()
   )`);
   await p.query(`ALTER TABLE filialar ADD COLUMN IF NOT EXISTS topic_id BIGINT`).catch(() => {});
-  // yozuvlar.tur CHECK — yangi 'ichki_sotuv' turini qo'shamiz.
-  await p.query(`ALTER TABLE yozuvlar DROP CONSTRAINT IF EXISTS yozuvlar_tur_check`).catch(() => {});
-  await p.query(
-    `ALTER TABLE yozuvlar ADD CONSTRAINT yozuvlar_tur_check
-       CHECK (tur IN ('spisaniya','vozvrat','kafe','ovqatlanish','ichki_sotuv'))`
-  ).catch(() => {});
+  // yozuvlar.tur CHECK — 'ichki_sotuv' qo'shamiz. DROP+ADD bitta DO-blokda (atomik):
+  // ADD muvaffaqiyatsiz bo'lsa DROP ham qaytariladi, jadval constraintsiz qolmaydi.
+  await p.query(`
+    DO $$ BEGIN
+      ALTER TABLE yozuvlar DROP CONSTRAINT IF EXISTS yozuvlar_tur_check;
+      ALTER TABLE yozuvlar ADD CONSTRAINT yozuvlar_tur_check
+        CHECK (tur IN ('spisaniya','vozvrat','kafe','ovqatlanish','ichki_sotuv'));
+    EXCEPTION WHEN others THEN
+      RAISE WARNING 'yozuvlar_tur_check yangilanmadi: %', SQLERRM;
+    END $$;
+  `).catch((e) => console.error("[ensureSchema] tur_check:", e instanceof Error ? e.message : e));
   await p.query(`CREATE TABLE IF NOT EXISTS kategoriyalar (
     id SERIAL PRIMARY KEY, nomi VARCHAR(100) NOT NULL UNIQUE, yaratilgan TIMESTAMPTZ DEFAULT NOW()
   )`).catch(() => {});
@@ -875,7 +890,7 @@ export async function kategoriyaYangila(id: number, yangiNomi: string): Promise<
   const client: PoolClient = await p.connect();
   try {
     await client.query("BEGIN");
-    const { rows } = await client.query(`SELECT nomi FROM kategoriyalar WHERE id=$1`, [id]);
+    const { rows } = await client.query(`SELECT nomi FROM kategoriyalar WHERE id=$1 FOR UPDATE`, [id]);
     if (!rows.length) { await client.query("ROLLBACK"); return null; }
     const eski = rows[0].nomi as string;
     const { rows: yangi } = await client.query(

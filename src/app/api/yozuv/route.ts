@@ -4,13 +4,26 @@
  * Saqlangach guruhga xabar + AI kategoriya FONDA ishlaydi (javobni kechiktirmaydi).
  */
 import { NextResponse } from "next/server";
-import { insertYozuv, ruxsatBormi, type YozuvKirim } from "@/lib/spisaniya/db";
+import { z } from "zod";
+import { insertYozuv, ruxsatBormi } from "@/lib/spisaniya/db";
 import { guruhgaYuborish } from "@/lib/spisaniya/notify";
 import { kategoriyalashtirish } from "@/lib/spisaniya/kategoriya";
 import { verifyInitData } from "@/lib/spisaniya/telegram-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const schema = z.object({
+  tur: z.enum(["spisaniya", "vozvrat", "kafe", "ovqatlanish", "ichki_sotuv"]),
+  tovar: z.string().trim().min(1).max(255),
+  miqdor: z.coerce.number().positive().max(1_000_000_000),
+  birlik: z.string().trim().max(20).optional().nullable(),
+  summa: z.coerce.number().nonnegative().max(1_000_000_000_000),
+  sabab: z.string().trim().max(255).optional().nullable(),
+  filial: z.string().trim().min(1).max(100),
+  rasm_file_id: z.string().max(500).optional().nullable(),
+  firma: z.string().trim().max(255).optional().nullable(),
+});
 
 export async function POST(req: Request) {
   // Telegram WebApp imzosini tekshiramiz — xodim_id soxtalashtirilmasin.
@@ -25,21 +38,24 @@ export async function POST(req: Request) {
     );
   }
 
-  let d: YozuvKirim;
+  let raw: unknown;
   try {
-    d = (await req.json()) as YozuvKirim;
+    raw = await req.json();
   } catch {
     return NextResponse.json({ xato: "Noto'g'ri JSON" }, { status: 400 });
   }
-
-  if (!d.tovar || !d.miqdor || !d.summa || !d.filial || !d.tur) {
-    return NextResponse.json({ xato: "Majburiy maydonlar to'ldirilmagan" }, { status: 400 });
+  const parsed = schema.safeParse(raw);
+  if (!parsed.success) {
+    return NextResponse.json({ xato: "Ma'lumotlar noto'g'ri yoki to'liq emas." }, { status: 400 });
   }
 
   // Xodim ma'lumotini imzolangan user'dan olamiz (client payload'iga ishonmaymiz).
-  d.xodim_id = user.id;
-  d.xodim_ism = [user.first_name, user.last_name].filter(Boolean).join(" ") || "Noma'lum";
-  d.xodim_username = user.username ?? null;
+  const d = {
+    ...parsed.data,
+    xodim_id: user.id,
+    xodim_ism: [user.first_name, user.last_name].filter(Boolean).join(" ") || "Noma'lum",
+    xodim_username: user.username ?? null,
+  };
 
   try {
     const yozuvId = await insertYozuv(d);

@@ -23,6 +23,12 @@ export async function POST(req: Request) {
     if (!(file instanceof File)) {
       return NextResponse.json({ xato: "Rasm topilmadi" }, { status: 400 });
     }
+    if (file.size > 10 * 1024 * 1024) {
+      return NextResponse.json({ xato: "Rasm 10MB dan oshmasligi kerak" }, { status: 413 });
+    }
+    if (file.type && !/^image\//.test(file.type)) {
+      return NextResponse.json({ xato: "Faqat rasm fayli qabul qilinadi" }, { status: 415 });
+    }
 
     const bot = getBot();
     if (!bot) return NextResponse.json({ xato: "Bot sozlanmagan" }, { status: 503 });

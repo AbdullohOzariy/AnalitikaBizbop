@@ -8,8 +8,12 @@ import { kategoriyaNomlari, yozuvKategoriyaSaqla, kategoriyasizYozuvlar } from "
 
 const MODEL = "claude-haiku-4-5";
 
+let _client: Anthropic | null | undefined;
 function getClient(): Anthropic | null {
-  return process.env.ANTHROPIC_API_KEY ? new Anthropic() : null;
+  if (_client === undefined) {
+    _client = process.env.ANTHROPIC_API_KEY ? new Anthropic() : null;
+  }
+  return _client;
 }
 
 const SYSTEM_PROMPT = `Sen oziq-ovqat va chakana savdo do'koni uchun mahsulotlarni
