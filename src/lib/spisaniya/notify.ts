@@ -10,12 +10,14 @@ const TUR_EMOJI: Record<string, string> = {
   vozvrat: "↩️",
   kafe: "☕",
   ovqatlanish: "🍽",
+  ichki_sotuv: "🏷",
 };
 const TUR_UZ: Record<string, string> = {
   spisaniya: "SPISANIYA",
   vozvrat: "QAYTA ISHLASH",
   kafe: "KAFE",
   ovqatlanish: "OVQATLANISH",
+  ichki_sotuv: "ICHKI SOTUV",
 };
 
 /** Yangi yozuvni guruhga (filial topic'iga) yuboradi va message_id'ni saqlaydi. */

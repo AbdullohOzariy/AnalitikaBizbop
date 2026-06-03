@@ -15,6 +15,7 @@ import {
   RotateCcw,
   Coffee,
   Utensils,
+  ShoppingCart,
   Layers,
   Building2,
   WifiOff,
@@ -54,7 +55,7 @@ function fmtDate(d: Date): string {
 // Tur uchun ikonka va rang
 type TurMeta = {
   icon: LucideIcon;
-  tone: "red" | "orange" | "blue" | "green";
+  tone: "red" | "orange" | "blue" | "green" | "violet";
 };
 
 const TUR_META: Record<string, TurMeta> = {
@@ -62,13 +63,15 @@ const TUR_META: Record<string, TurMeta> = {
   vozvrat:     { icon: RotateCcw,    tone: "orange" },
   kafe:        { icon: Coffee,       tone: "blue" },
   ovqatlanish: { icon: Utensils,     tone: "green" },
+  ichki_sotuv: { icon: ShoppingCart, tone: "violet" },
 };
 
-const TUR_PILL_TONE: Record<string, "red" | "orange" | "blue" | "green" | "muted"> = {
+const TUR_PILL_TONE: Record<string, "red" | "orange" | "blue" | "green" | "violet" | "muted"> = {
   spisaniya:   "red",
   vozvrat:     "orange",
   kafe:        "blue",
   ovqatlanish: "green",
+  ichki_sotuv: "violet",
 };
 
 export default async function ChiqimPage({

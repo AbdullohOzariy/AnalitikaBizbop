@@ -1,13 +1,14 @@
 import { ChevronLeft } from 'lucide-react'
 import { cn } from '../lib/utils'
 
-type Tur = 'vozvrat' | 'kafe' | 'ovqatlanish' | 'spisaniya'
+type Tur = 'vozvrat' | 'kafe' | 'ovqatlanish' | 'spisaniya' | 'ichki_sotuv'
 
 const TUR_DOT: Record<Tur | 'tasdiq', string> = {
   vozvrat:     '#3B82F6',
   kafe:        '#F59E0B',
   ovqatlanish: '#10B981',
   spisaniya:   '#EF4444',
+  ichki_sotuv: '#8B5CF6',
   tasdiq:      '#10B981',
 }
 
@@ -16,6 +17,7 @@ const TUR_LABEL: Record<Tur | 'tasdiq', string> = {
   kafe:        'Kafe',
   ovqatlanish: 'Ovqatlanish',
   spisaniya:   'Spisaniya',
+  ichki_sotuv: 'Ichki sotuv',
   tasdiq:      'Tekshirish',
 }
 

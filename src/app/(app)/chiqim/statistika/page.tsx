@@ -15,6 +15,7 @@ import {
   RotateCcw,
   Coffee,
   Utensils,
+  ShoppingCart,
   Building2,
   WifiOff,
   ChartPie,
@@ -44,12 +45,13 @@ function fmtDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-type TurMeta = { icon: LucideIcon; tone: "red" | "orange" | "blue" | "green" | "default" };
+type TurMeta = { icon: LucideIcon; tone: "red" | "orange" | "blue" | "green" | "violet" | "default" };
 const TUR_META: Record<string, TurMeta> = {
   spisaniya:   { icon: PackageMinus, tone: "red" },
   vozvrat:     { icon: RotateCcw,    tone: "orange" },
   kafe:        { icon: Coffee,       tone: "blue" },
   ovqatlanish: { icon: Utensils,     tone: "green" },
+  ichki_sotuv: { icon: ShoppingCart, tone: "violet" },
 };
 
 type VozvratStatusMeta = {

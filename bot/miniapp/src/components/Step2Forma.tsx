@@ -7,7 +7,7 @@ import PhotoUpload from './PhotoUpload'
 import StepHeader from './StepHeader'
 import { Button } from './ui/Button'
 
-type Tur = 'vozvrat' | 'kafe' | 'ovqatlanish' | 'spisaniya'
+type Tur = 'vozvrat' | 'kafe' | 'ovqatlanish' | 'spisaniya' | 'ichki_sotuv'
 
 export interface FormData {
   photo: File | null

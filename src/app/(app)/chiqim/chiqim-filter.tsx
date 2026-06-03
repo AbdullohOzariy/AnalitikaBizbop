@@ -22,6 +22,7 @@ const TURS: [string, string][] = [
   ["vozvrat",     "Qayta ishlash"],
   ["kafe",        "Kafe"],
   ["ovqatlanish", "Ovqatlanish"],
+  ["ichki_sotuv", "Ichki sotuv"],
 ];
 
 export function ChiqimFilter({

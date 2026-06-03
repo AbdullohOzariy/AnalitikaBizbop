@@ -31,13 +31,14 @@ export function botConfigured(): boolean {
 }
 
 export type ChiqimRange = { start: Date; end: Date };
-export type ChiqimTur = "spisaniya" | "vozvrat" | "kafe" | "ovqatlanish";
+export type ChiqimTur = "spisaniya" | "vozvrat" | "kafe" | "ovqatlanish" | "ichki_sotuv";
 
 export const TUR_LABEL: Record<string, string> = {
   spisaniya: "Spisaniya",
   vozvrat: "Qayta ishlash",
   kafe: "Kafe",
   ovqatlanish: "Ovqatlanish",
+  ichki_sotuv: "Ichki sotuv",
 };
 
 // sana paramlari (YYYY-MM-DD) — vaqt::date oralig'i bo'yicha filtrlash
@@ -276,6 +277,7 @@ export type YozuvKirim = {
  */
 export async function insertYozuv(d: YozuvKirim): Promise<number> {
   const p = requirePool();
+  await ensureSozlamalarSchema(); // 'ichki_sotuv' constraint tayyor bo'lsin
   const client: PoolClient = await p.connect();
   try {
     await client.query("BEGIN");
@@ -431,6 +433,12 @@ export async function ensureSozlamalarSchema(): Promise<void> {
     kalit TEXT PRIMARY KEY, qiymat TEXT NOT NULL, yangilangan TIMESTAMPTZ DEFAULT NOW()
   )`);
   await p.query(`ALTER TABLE filialar ADD COLUMN IF NOT EXISTS topic_id BIGINT`).catch(() => {});
+  // yozuvlar.tur CHECK — yangi 'ichki_sotuv' turini qo'shamiz.
+  await p.query(`ALTER TABLE yozuvlar DROP CONSTRAINT IF EXISTS yozuvlar_tur_check`).catch(() => {});
+  await p.query(
+    `ALTER TABLE yozuvlar ADD CONSTRAINT yozuvlar_tur_check
+       CHECK (tur IN ('spisaniya','vozvrat','kafe','ovqatlanish','ichki_sotuv'))`
+  ).catch(() => {});
   await p.query(`CREATE TABLE IF NOT EXISTS kategoriyalar (
     id SERIAL PRIMARY KEY, nomi VARCHAR(100) NOT NULL UNIQUE, yaratilgan TIMESTAMPTZ DEFAULT NOW()
   )`).catch(() => {});

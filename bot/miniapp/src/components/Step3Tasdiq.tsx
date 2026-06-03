@@ -7,7 +7,7 @@ import StepHeader from './StepHeader'
 import { Button } from './ui/Button'
 import type { FormData } from './Step2Forma'
 
-type Tur = 'vozvrat' | 'kafe' | 'ovqatlanish' | 'spisaniya'
+type Tur = 'vozvrat' | 'kafe' | 'ovqatlanish' | 'spisaniya' | 'ichki_sotuv'
 
 interface Props {
   tur: Tur
@@ -21,6 +21,7 @@ const TUR_LABELS: Record<Tur, string> = {
   kafe:        'Kafe xarajati',
   ovqatlanish: 'Umumiy ovqatlanish',
   spisaniya:   'Spisaniya',
+  ichki_sotuv: 'Ichki sotuv',
 }
 
 const item = {
