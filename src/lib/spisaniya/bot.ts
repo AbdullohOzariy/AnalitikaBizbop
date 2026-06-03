@@ -6,6 +6,7 @@
  * BOT_TOKEN yo'q bo'lsa getBot() null qaytaradi — chaqiruvchi jim o'tkazib yuboradi.
  */
 import { Telegraf, Markup } from "telegraf";
+import { ruxsatBormi } from "./db";
 
 type G = typeof globalThis & { __spisaniyaBot?: Telegraf | null };
 const g = globalThis as G;
@@ -21,12 +22,24 @@ function buildBot(): Telegraf | null {
 
   const bot = new Telegraf(token);
 
-  bot.start((ctx) => {
+  bot.start(async (ctx) => {
     const ism = ctx.from?.first_name || "Xodim";
-    const url = miniAppUrl();
+    const id = ctx.from?.id;
+
+    const allowed = id ? await ruxsatBormi(id) : false;
+    if (allowed) {
+      const url = miniAppUrl();
+      return ctx.reply(
+        `Salom, ${ism}!\n🆔 Sizning ID: ${id}\n\nYangi yozuv qo'shish uchun tugmani bosing.`,
+        Markup.inlineKeyboard([[Markup.button.webApp("📝 Yangi yozuv", url)]])
+      );
+    }
+
+    // Ruxsat yo'q — foydalanuvchi ID'sini xabar qilamiz (adminga yuborish uchun).
     return ctx.reply(
-      `Salom, ${ism}!\nYangi yozuv qo'shish uchun tugmani bosing.`,
-      Markup.inlineKeyboard([[Markup.button.webApp("📝 Yangi yozuv", url)]])
+      `Salom, ${ism}!\n🆔 Sizning ID: <code>${id}</code>\n\n` +
+        `Botdan foydalanish uchun ruxsat kerak. Iltimos, shu ID'ni adminga yuborib, ruxsat oling.`,
+      { parse_mode: "HTML" }
     );
   });
 

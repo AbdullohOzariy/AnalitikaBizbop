@@ -11,6 +11,9 @@ import {
   kategoriyaQoshish,
   kategoriyaYangila,
   kategoriyaOchir,
+  ruxsatQoshish,
+  ruxsatToggle,
+  ruxsatOchir,
 } from "@/lib/spisaniya/db";
 
 type Result = { ok: true } | { ok: false; error: string };
@@ -108,6 +111,38 @@ export async function kategoriyaOchirAction(id: number): Promise<Result> {
   try {
     await requireAdmin();
     await kategoriyaOchir(z.coerce.number().int().positive().parse(id));
+    revalidatePath(RP);
+    return { ok: true };
+  } catch (err) { return xato(err); }
+}
+
+// ─── Bot foydalanuvchilari (whitelist) ────────────────────────────────────────
+const tgIdSchema = z.string().trim().regex(/^\d{5,15}$/, "Telegram ID — 5-15 raqam");
+
+export async function ruxsatQoshishAction(input: { telegramId: string; ism?: string }): Promise<Result> {
+  try {
+    const admin = await requireAdmin();
+    const telegramId = tgIdSchema.parse(input.telegramId);
+    const ism = (input.ism ?? "").trim().slice(0, 100) || null;
+    await ruxsatQoshish(telegramId, ism, admin.name?.trim() || admin.email || "admin");
+    revalidatePath(RP);
+    return { ok: true };
+  } catch (err) { return xato(err); }
+}
+
+export async function ruxsatToggleAction(telegramId: string, aktiv: boolean): Promise<Result> {
+  try {
+    await requireAdmin();
+    await ruxsatToggle(tgIdSchema.parse(telegramId), aktiv);
+    revalidatePath(RP);
+    return { ok: true };
+  } catch (err) { return xato(err); }
+}
+
+export async function ruxsatOchirAction(telegramId: string): Promise<Result> {
+  try {
+    await requireAdmin();
+    await ruxsatOchir(tgIdSchema.parse(telegramId));
     revalidatePath(RP);
     return { ok: true };
   } catch (err) { return xato(err); }

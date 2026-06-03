@@ -20,6 +20,7 @@ export const authConfig = {
         pathname.startsWith("/api/yozuv") ||
         pathname.startsWith("/api/filialar") ||
         pathname.startsWith("/api/rasm-yukla") ||
+        pathname.startsWith("/api/ruxsat") ||
         pathname.startsWith("/miniapp");
       if (isPublic) return true;
 

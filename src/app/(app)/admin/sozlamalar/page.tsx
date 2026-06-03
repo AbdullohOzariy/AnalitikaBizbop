@@ -5,12 +5,14 @@ import {
   filialarToliq,
   kategoriyalarSoni,
   guruhChatIdOl,
+  ruxsatList,
 } from "@/lib/spisaniya/db";
-import { Settings, WifiOff, Building2, Tag, Send, MessageSquare } from "lucide-react";
+import { Settings, WifiOff, Building2, Tag, Send, MessageSquare, Users } from "lucide-react";
 import { PageHeader, SectionCard, EmptyState } from "@/components/common/page";
 import { GuruhEditor } from "./guruh-editor";
 import { FilialarEditor } from "./filialar-editor";
 import { KategoriyalarEditor } from "./kategoriyalar-editor";
+import { RuxsatEditor } from "./ruxsat-editor";
 
 export default async function SozlamalarPage() {
   const session = await auth();
@@ -47,14 +49,23 @@ export default async function SozlamalarPage() {
 }
 
 async function SettingsBody() {
-  const [filialar, kategoriyalar, chatId] = await Promise.all([
+  const [filialar, kategoriyalar, chatId, ruxsatlar] = await Promise.all([
     filialarToliq(),
     kategoriyalarSoni(),
     guruhChatIdOl(),
+    ruxsatList(),
   ]);
 
   return (
     <div className="space-y-5">
+      <SectionCard
+        title="Bot foydalanuvchilari"
+        description={`${ruxsatlar.length} ta · faqat ruxsat berilganlar botdan foydalanadi`}
+        actions={<Users className="h-4 w-4 text-muted-foreground" />}
+      >
+        <RuxsatEditor ruxsatlar={ruxsatlar} />
+      </SectionCard>
+
       <SectionCard
         title="Telegram guruh"
         description="Yangi yozuvlar yuboriladigan guruh"

@@ -29,7 +29,7 @@ const item = {
 }
 
 export default function Step3Tasdiq({ tur, form, onBack, onDone }: Props) {
-  const { tg, haptic } = useTelegram()
+  const { tg, haptic, initData } = useTelegram()
   const [loading, setLoading] = useState(false)
   const [xato, setXato] = useState<string | null>(null)
 
@@ -43,7 +43,11 @@ export default function Step3Tasdiq({ tur, form, onBack, onDone }: Props) {
         try {
           const fd = new FormData()
           fd.append('rasm', form.photo)
-          const res = await fetch('/api/rasm-yukla', { method: 'POST', body: fd })
+          const res = await fetch('/api/rasm-yukla', {
+            method: 'POST',
+            headers: { 'x-telegram-init-data': initData },
+            body: fd,
+          })
           const json = await res.json()
           fileId = json.file_id ?? null
         } catch {
@@ -69,7 +73,10 @@ export default function Step3Tasdiq({ tur, form, onBack, onDone }: Props) {
 
       const r = await fetch('/api/yozuv', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-telegram-init-data': initData,
+        },
         body: JSON.stringify(payload),
       })
       if (!r.ok) {

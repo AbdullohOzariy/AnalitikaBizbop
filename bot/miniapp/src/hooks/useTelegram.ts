@@ -4,6 +4,7 @@ export function useTelegram() {
   return {
     tg,
     user: tg?.initDataUnsafe?.user,
+    initData: tg?.initData ?? '',
     haptic: tg?.HapticFeedback,
   }
 }

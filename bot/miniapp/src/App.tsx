@@ -1,13 +1,16 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
+import { ShieldAlert, Loader2 } from 'lucide-react'
 import Step1Kategoriya from './components/Step1Kategoriya'
 import Step2Forma from './components/Step2Forma'
 import Step3Tasdiq from './components/Step3Tasdiq'
 import Step4Muvaffaqiyat from './components/Step4Muvaffaqiyat'
 import type { FormData } from './components/Step2Forma'
+import { useTelegram } from './hooks/useTelegram'
 
 type Tur = 'vozvrat' | 'kafe' | 'ovqatlanish' | 'spisaniya'
 type Step = 1 | 2 | 3 | 4
+type Gate = 'checking' | 'allowed' | 'denied'
 
 const slideVariants = {
   enter: (dir: number) => ({ x: dir > 0 ? '100%' : '-100%', opacity: 0 }),
@@ -18,10 +21,53 @@ const slideVariants = {
 const transition = { type: 'spring' as const, stiffness: 320, damping: 32, mass: 0.9 }
 
 export default function App() {
+  const { initData, user } = useTelegram()
+  const [gate, setGate] = useState<Gate>('checking')
   const [step, setStep] = useState<Step>(1)
   const [dir, setDir] = useState(1)
   const [tur, setTur] = useState<Tur>('spisaniya')
   const [formData, setFormData] = useState<FormData | null>(null)
+
+  // Ochilishda ruxsatni tekshiramiz (Telegram imzosi orqali server tomonda).
+  useEffect(() => {
+    let bekor = false
+    fetch('/api/ruxsat', { method: 'POST', headers: { 'x-telegram-init-data': initData } })
+      .then((r) => r.json())
+      .then((d) => { if (!bekor) setGate(d?.allowed ? 'allowed' : 'denied') })
+      .catch(() => { if (!bekor) setGate('denied') })
+    return () => { bekor = true }
+  }, [initData])
+
+  if (gate === 'checking') {
+    return (
+      <div className="min-h-screen bg-tg-bg flex items-center justify-center text-tg-hint">
+        <Loader2 className="w-6 h-6 animate-spin" />
+      </div>
+    )
+  }
+
+  if (gate === 'denied') {
+    return (
+      <div className="min-h-screen bg-tg-bg flex flex-col items-center justify-center gap-4 px-8 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-red-50 flex items-center justify-center">
+          <ShieldAlert className="w-8 h-8 text-red-500" />
+        </div>
+        <div className="space-y-1.5">
+          <h1 className="text-[17px] font-bold text-tg-text">Ruxsat yo&apos;q</h1>
+          <p className="text-[14px] text-tg-hint leading-relaxed">
+            Botdan foydalanish uchun admindan ruxsat oling.
+          </p>
+        </div>
+        {user?.id != null && (
+          <div className="bg-tg-bg2 border border-black/[.05] rounded-xl px-4 py-2.5">
+            <span className="text-[12px] text-tg-hint">Sizning ID: </span>
+            <span className="text-[14px] font-semibold text-tg-text font-mono select-all">{user.id}</span>
+          </div>
+        )}
+        <p className="text-[12px] text-tg-hint">Shu ID&apos;ni adminga yuboring.</p>
+      </div>
+    )
+  }
 
   function goTo(next: Step) {
     setDir(next > step ? 1 : -1)

@@ -5,12 +5,18 @@
  */
 import { NextResponse } from "next/server";
 import { getBot } from "@/lib/spisaniya/bot";
-import { getGroupChatId } from "@/lib/spisaniya/db";
+import { getGroupChatId, ruxsatBormi } from "@/lib/spisaniya/db";
+import { verifyInitData } from "@/lib/spisaniya/telegram-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
+  const user = verifyInitData(req.headers.get("x-telegram-init-data") || "");
+  if (!user) return NextResponse.json({ xato: "Telegram orqali oching." }, { status: 401 });
+  if (!(await ruxsatBormi(user.id))) {
+    return NextResponse.json({ xato: "Ruxsat yo'q. Admindan ruxsat oling." }, { status: 403 });
+  }
   try {
     const form = await req.formData();
     const file = form.get("rasm");

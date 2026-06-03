@@ -434,7 +434,71 @@ export async function ensureSozlamalarSchema(): Promise<void> {
   await p.query(`CREATE TABLE IF NOT EXISTS kategoriyalar (
     id SERIAL PRIMARY KEY, nomi VARCHAR(100) NOT NULL UNIQUE, yaratilgan TIMESTAMPTZ DEFAULT NOW()
   )`).catch(() => {});
+  // Botdan foydalanishga ruxsati bor xodimlar (whitelist).
+  await p.query(`CREATE TABLE IF NOT EXISTS bot_ruxsat (
+    telegram_id BIGINT PRIMARY KEY,
+    ism         TEXT,
+    aktiv       BOOLEAN DEFAULT true,
+    qoshgan     TEXT,
+    vaqt        TIMESTAMPTZ DEFAULT NOW()
+  )`).catch(() => {});
   _schemaReady = true;
+}
+
+// ─── Bot ruxsati (whitelist) ──────────────────────────────────────────────────
+export type BotRuxsat = { telegram_id: string; ism: string | null; aktiv: boolean; qoshgan: string | null; vaqt: string };
+
+/** Ruxsat berilgan foydalanuvchilar ro'yxati. */
+export async function ruxsatList(): Promise<BotRuxsat[]> {
+  const p = getPool();
+  if (!p) return [];
+  try {
+    await ensureSozlamalarSchema();
+    const { rows } = await p.query(
+      `SELECT telegram_id::text, ism, aktiv, qoshgan, vaqt::text FROM bot_ruxsat ORDER BY vaqt DESC`
+    );
+    return rows as BotRuxsat[];
+  } catch {
+    return [];
+  }
+}
+
+/** Telegram ID botdan foydalana oladimi (aktiv whitelist'da bormi). */
+export async function ruxsatBormi(telegramId: number | string): Promise<boolean> {
+  const p = getPool();
+  if (!p) return false;
+  try {
+    await ensureSozlamalarSchema();
+    const { rows } = await p.query(
+      `SELECT 1 FROM bot_ruxsat WHERE telegram_id=$1 AND aktiv=true LIMIT 1`,
+      [String(telegramId)]
+    );
+    return rows.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+export async function ruxsatQoshish(telegramId: string, ism: string | null, qoshgan: string): Promise<BotRuxsat> {
+  const p = requirePool();
+  await ensureSozlamalarSchema();
+  const { rows } = await p.query(
+    `INSERT INTO bot_ruxsat (telegram_id, ism, qoshgan) VALUES ($1,$2,$3)
+     ON CONFLICT (telegram_id) DO UPDATE SET ism=EXCLUDED.ism, aktiv=true
+     RETURNING telegram_id::text, ism, aktiv, qoshgan, vaqt::text`,
+    [telegramId, ism, qoshgan]
+  );
+  return rows[0] as BotRuxsat;
+}
+
+export async function ruxsatToggle(telegramId: string, aktiv: boolean): Promise<void> {
+  const p = requirePool();
+  await p.query(`UPDATE bot_ruxsat SET aktiv=$1 WHERE telegram_id=$2`, [aktiv, telegramId]);
+}
+
+export async function ruxsatOchir(telegramId: string): Promise<void> {
+  const p = requirePool();
+  await p.query(`DELETE FROM bot_ruxsat WHERE telegram_id=$1`, [telegramId]);
 }
 
 export type FilialToliq = { id: number; nomi: string; aktiv: boolean; topic_id: string | null };

@@ -7,6 +7,7 @@ interface TelegramWebAppUser {
 }
 
 interface TelegramWebApp {
+  initData: string
   initDataUnsafe: { user?: TelegramWebAppUser }
   expand(): void
   close(): void

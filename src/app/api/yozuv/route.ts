@@ -4,14 +4,27 @@
  * Saqlangach guruhga xabar + AI kategoriya FONDA ishlaydi (javobni kechiktirmaydi).
  */
 import { NextResponse } from "next/server";
-import { insertYozuv, type YozuvKirim } from "@/lib/spisaniya/db";
+import { insertYozuv, ruxsatBormi, type YozuvKirim } from "@/lib/spisaniya/db";
 import { guruhgaYuborish } from "@/lib/spisaniya/notify";
 import { kategoriyalashtirish } from "@/lib/spisaniya/kategoriya";
+import { verifyInitData } from "@/lib/spisaniya/telegram-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
+  // Telegram WebApp imzosini tekshiramiz — xodim_id soxtalashtirilmasin.
+  const user = verifyInitData(req.headers.get("x-telegram-init-data") || "");
+  if (!user) {
+    return NextResponse.json({ xato: "Telegram orqali oching." }, { status: 401 });
+  }
+  if (!(await ruxsatBormi(user.id))) {
+    return NextResponse.json(
+      { xato: "Ruxsat yo'q. Iltimos, admindan ruxsat oling." },
+      { status: 403 }
+    );
+  }
+
   let d: YozuvKirim;
   try {
     d = (await req.json()) as YozuvKirim;
@@ -22,6 +35,11 @@ export async function POST(req: Request) {
   if (!d.tovar || !d.miqdor || !d.summa || !d.filial || !d.tur) {
     return NextResponse.json({ xato: "Majburiy maydonlar to'ldirilmagan" }, { status: 400 });
   }
+
+  // Xodim ma'lumotini imzolangan user'dan olamiz (client payload'iga ishonmaymiz).
+  d.xodim_id = user.id;
+  d.xodim_ism = [user.first_name, user.last_name].filter(Boolean).join(" ") || "Noma'lum";
+  d.xodim_username = user.username ?? null;
 
   try {
     const yozuvId = await insertYozuv(d);
