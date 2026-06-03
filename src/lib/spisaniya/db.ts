@@ -450,7 +450,245 @@ export async function ensureSozlamalarSchema(): Promise<void> {
     qoshgan     TEXT,
     vaqt        TIMESTAMPTZ DEFAULT NOW()
   )`).catch(() => {});
+  // Vozvratlar (firmaga/asosiy filialga qaytarish) — alohida jarayon (kanban).
+  await p.query(`CREATE TABLE IF NOT EXISTS vozvratlar (
+    id                SERIAL PRIMARY KEY,
+    tovar             VARCHAR(255) NOT NULL,
+    miqdor            DECIMAL(10,3) NOT NULL,
+    birlik            VARCHAR(20) NOT NULL DEFAULT 'dona',
+    summa             DECIMAL(15,2) NOT NULL,
+    sabab             VARCHAR(255),
+    filial            VARCHAR(100) NOT NULL,
+    yonalish          VARCHAR(20) NOT NULL DEFAULT 'asosiy_filial',
+    taminotchi        VARCHAR(255),
+    rasm_file_id      VARCHAR(500),
+    xodim_ism         VARCHAR(255),
+    xodim_username    VARCHAR(255),
+    xodim_id          BIGINT,
+    status            VARCHAR(30) NOT NULL DEFAULT 'xabar_berildi',
+    qaytarilmadi_sabab TEXT,
+    chiqim_yozuv_id   INTEGER,
+    guruh_message_id  BIGINT,
+    vaqt              TIMESTAMP DEFAULT NOW(),
+    yangilangan       TIMESTAMPTZ DEFAULT NOW()
+  )`).catch(() => {});
   _schemaReady = true;
+}
+
+// ─── VOZVRATLAR (yangi qaytarish jarayoni) ────────────────────────────────────
+export const VOZVRAT_HOLATLAR = ["xabar_berildi", "yuborildi", "qaytarildi", "qaytarilmadi"] as const;
+export type VozvratHolat = (typeof VOZVRAT_HOLATLAR)[number];
+
+export const VOZVRAT_HOLAT_LABEL: Record<string, string> = {
+  xabar_berildi: "Xabar berildi",
+  yuborildi: "Yuborildi",
+  qaytarildi: "Qabul qilindi: qaytarildi",
+  qaytarilmadi: "Qabul qilindi: qaytarilmadi",
+};
+
+export const VOZVRAT_YONALISH_LABEL: Record<string, string> = {
+  asosiy_filial: "Asosiy filialga",
+  taminotchi: "Ta'minotchiga",
+};
+
+export type VozvratKirim = {
+  tovar: string;
+  miqdor: number | string;
+  birlik?: string | null;
+  summa: number | string;
+  sabab?: string | null;
+  filial: string;
+  yonalish: string;
+  taminotchi?: string | null;
+  rasm_file_id?: string | null;
+  xodim_ism: string;
+  xodim_username?: string | null;
+  xodim_id: number | string;
+  status?: string;
+  qaytarilmadi_sabab?: string | null;
+};
+
+export type VozvratYozuv = {
+  id: number;
+  tovar: string;
+  miqdor: number;
+  birlik: string;
+  summa: number;
+  sabab: string | null;
+  filial: string;
+  yonalish: string;
+  taminotchi: string | null;
+  rasm_file_id: string | null;
+  xodim_ism: string | null;
+  status: string;
+  qaytarilmadi_sabab: string | null;
+  chiqim_yozuv_id: number | null;
+  vaqt: string;
+};
+
+const VOZVRAT_COLS = `id, tovar, miqdor::float8, birlik, summa::float8, sabab, filial,
+  yonalish, taminotchi, rasm_file_id, xodim_ism, status, qaytarilmadi_sabab,
+  chiqim_yozuv_id, vaqt::text`;
+
+/** Yangi vozvrat yaratadi (status xodim tomonidan tanlanadi). id qaytaradi. */
+export async function vozvratYarat(d: VozvratKirim): Promise<number> {
+  const p = requirePool();
+  await ensureSozlamalarSchema();
+  const status = VOZVRAT_HOLATLAR.includes(d.status as VozvratHolat) ? d.status : "xabar_berildi";
+  const yonalish = d.yonalish === "taminotchi" ? "taminotchi" : "asosiy_filial";
+  const { rows } = await p.query(
+    `INSERT INTO vozvratlar
+       (tovar, miqdor, birlik, summa, sabab, filial, yonalish, taminotchi,
+        rasm_file_id, xodim_ism, xodim_username, xodim_id, status, qaytarilmadi_sabab)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+     RETURNING id`,
+    [
+      d.tovar, d.miqdor, d.birlik || "dona", d.summa, d.sabab || null, d.filial,
+      yonalish, yonalish === "taminotchi" ? d.taminotchi || null : null,
+      d.rasm_file_id || null, d.xodim_ism, d.xodim_username || null, d.xodim_id,
+      status, status === "qaytarilmadi" ? d.qaytarilmadi_sabab || null : null,
+    ]
+  );
+  return rows[0].id as number;
+}
+
+export async function vozvratSetGuruhMessageId(id: number, messageId: number): Promise<void> {
+  const p = getPool();
+  if (!p) return;
+  await p.query(`UPDATE vozvratlar SET guruh_message_id=$1 WHERE id=$2`, [messageId, id]).catch(() => {});
+}
+
+export async function vozvratById(id: number): Promise<VozvratYozuv | null> {
+  const p = getPool();
+  if (!p) return null;
+  try {
+    const { rows } = await p.query(`SELECT ${VOZVRAT_COLS} FROM vozvratlar WHERE id=$1`, [id]);
+    return (rows[0] as VozvratYozuv) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Kanban uchun: konvertatsiya qilinmagan (ochiq) vozvratlar — davr + filial filtri. */
+export async function vozvratKanban(
+  range: ChiqimRange,
+  filial?: string
+): Promise<VozvratYozuv[]> {
+  const p = getPool();
+  if (!p) return [];
+  try {
+    await ensureSozlamalarSchema();
+    const [start, end] = dayParams(range);
+    const cond = ["vaqt::date >= $1::date", "vaqt::date <= $2::date", "chiqim_yozuv_id IS NULL"];
+    const params: unknown[] = [start, end];
+    if (filial) { params.push(filial); cond.push(`filial = $${params.length}`); }
+    const { rows } = await p.query(
+      `SELECT ${VOZVRAT_COLS} FROM vozvratlar WHERE ${cond.join(" AND ")} ORDER BY vaqt DESC`,
+      params
+    );
+    return rows as VozvratYozuv[];
+  } catch {
+    return [];
+  }
+}
+
+/** Yuqori summary: qaytarilgan va qaytarilmagan summa (davr bo'yicha). */
+export async function vozvratSummary(
+  range: ChiqimRange,
+  filial?: string
+): Promise<{ qaytarildiSumma: number; qaytarilmadiSumma: number; jamiSoni: number }> {
+  const p = getPool();
+  if (!p) return { qaytarildiSumma: 0, qaytarilmadiSumma: 0, jamiSoni: 0 };
+  try {
+    await ensureSozlamalarSchema();
+    const [start, end] = dayParams(range);
+    const cond = ["vaqt::date >= $1::date", "vaqt::date <= $2::date"];
+    const params: unknown[] = [start, end];
+    if (filial) { params.push(filial); cond.push(`filial = $${params.length}`); }
+    const { rows } = await p.query(
+      `SELECT
+         COALESCE(SUM(summa) FILTER (WHERE status='qaytarildi'), 0)::float8    AS qaytarildi,
+         COALESCE(SUM(summa) FILTER (WHERE status='qaytarilmadi'), 0)::float8  AS qaytarilmadi,
+         COUNT(*)::int AS jami
+       FROM vozvratlar WHERE ${cond.join(" AND ")}`,
+      params
+    );
+    return {
+      qaytarildiSumma: rows[0].qaytarildi as number,
+      qaytarilmadiSumma: rows[0].qaytarilmadi as number,
+      jamiSoni: rows[0].jami as number,
+    };
+  } catch {
+    return { qaytarildiSumma: 0, qaytarilmadiSumma: 0, jamiSoni: 0 };
+  }
+}
+
+/** Vozvrat statusini yangilaydi. Yangilangan yozuvni qaytaradi (guruh xabari uchun). */
+export async function vozvratHolatYangila(
+  id: number,
+  status: string,
+  qaytarilmadiSabab: string | null
+): Promise<VozvratYozuv | null> {
+  if (!VOZVRAT_HOLATLAR.includes(status as VozvratHolat)) throw new Error("Noto'g'ri status");
+  const p = requirePool();
+  const { rows } = await p.query(
+    `UPDATE vozvratlar
+       SET status=$1,
+           qaytarilmadi_sabab = CASE WHEN $1='qaytarilmadi' THEN $2 ELSE qaytarilmadi_sabab END,
+           yangilangan=NOW()
+     WHERE id=$3 AND chiqim_yozuv_id IS NULL
+     RETURNING ${VOZVRAT_COLS}`,
+    [status, qaytarilmadiSabab, id]
+  );
+  return (rows[0] as VozvratYozuv) ?? null;
+}
+
+/**
+ * Vozvratni hisobdan chiqarish turiga o'tkazadi (qaytarilmadi → spisaniya/kafe/...).
+ * yozuvlar'ga yozuv yaratadi va vozvrat.chiqim_yozuv_id'ni biriktiradi (kanbandan chiqadi).
+ */
+export async function vozvratChiqimgaOtkaz(
+  id: number,
+  tur: string,
+  sabab: string | null
+): Promise<{ yozuvId: number; vozvrat: VozvratYozuv } | null> {
+  const p = requirePool();
+  await ensureSozlamalarSchema();
+  const client: PoolClient = await p.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows: vr } = await client.query(
+      `SELECT * FROM vozvratlar WHERE id=$1 AND chiqim_yozuv_id IS NULL FOR UPDATE`,
+      [id]
+    );
+    if (!vr.length) { await client.query("ROLLBACK"); return null; }
+    const v = vr[0];
+    const { rows: yz } = await client.query(
+      `INSERT INTO yozuvlar
+         (tur, tovar, miqdor, birlik, summa, sabab, filial,
+          xodim_ism, xodim_username, xodim_id, rasm_file_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+       RETURNING id`,
+      [
+        tur, v.tovar, v.miqdor, v.birlik, v.summa,
+        sabab || v.qaytarilmadi_sabab || v.sabab || null, v.filial,
+        v.xodim_ism, v.xodim_username, v.xodim_id || 0, v.rasm_file_id,
+      ]
+    );
+    const yozuvId = yz[0].id as number;
+    await client.query(
+      `UPDATE vozvratlar SET chiqim_yozuv_id=$1, yangilangan=NOW() WHERE id=$2`,
+      [yozuvId, id]
+    );
+    await client.query("COMMIT");
+    const vozvrat = await vozvratById(id);
+    return vozvrat ? { yozuvId, vozvrat } : { yozuvId, vozvrat: v as VozvratYozuv };
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 // ─── Bot ruxsati (whitelist) ──────────────────────────────────────────────────

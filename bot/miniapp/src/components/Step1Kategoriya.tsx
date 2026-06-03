@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion'
 import { useTelegram } from '../hooks/useTelegram'
 
-type Tur = 'vozvrat' | 'kafe' | 'ovqatlanish' | 'spisaniya' | 'ichki_sotuv'
+type Tur = 'vozvrat' | 'kafe' | 'ovqatlanish' | 'spisaniya' | 'ichki_sotuv' | 'qaytarish'
 
 interface Props {
   onTanla: (tur: Tur) => void
@@ -52,6 +52,14 @@ const KATEGORIYALAR: {
     nomi: 'Ichki sotuv',
     tavsif: 'Ichki sotuvga chiqarilgan mahsulot',
     color: '#8B5CF6',
+    full: true,
+  },
+  {
+    tur: 'qaytarish',
+    emoji: '🔁',
+    nomi: 'Vozvrat',
+    tavsif: 'Firma yoki asosiy filialga qaytarish',
+    color: '#06B6D4',
     full: true,
   },
 ]

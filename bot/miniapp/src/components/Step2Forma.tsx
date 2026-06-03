@@ -7,7 +7,9 @@ import PhotoUpload from './PhotoUpload'
 import StepHeader from './StepHeader'
 import { Button } from './ui/Button'
 
-type Tur = 'vozvrat' | 'kafe' | 'ovqatlanish' | 'spisaniya' | 'ichki_sotuv'
+type Tur = 'vozvrat' | 'kafe' | 'ovqatlanish' | 'spisaniya' | 'ichki_sotuv' | 'qaytarish'
+type Yonalish = 'asosiy_filial' | 'taminotchi'
+type VozvratHolat = 'xabar_berildi' | 'yuborildi' | 'qaytarildi' | 'qaytarilmadi'
 
 export interface FormData {
   photo: File | null
@@ -21,7 +23,18 @@ export interface FormData {
   filial: string
   firmaNomi: string
   kafeNomi: string
+  yonalish: Yonalish
+  taminotchi: string
+  vozvratStatus: VozvratHolat
+  qaytarilmadiSabab: string
 }
+
+const VOZVRAT_HOLAT: { value: VozvratHolat; label: string }[] = [
+  { value: 'xabar_berildi', label: 'Xabar berildi' },
+  { value: 'yuborildi',     label: 'Yuborildi' },
+  { value: 'qaytarildi',    label: 'Qabul qilindi: qaytarildi' },
+  { value: 'qaytarilmadi',  label: 'Qabul qilindi: qaytarilmadi' },
+]
 
 interface FieldProps {
   label: string
@@ -65,6 +78,7 @@ export default function Step2Forma({ tur, onBack, onNext }: Props) {
     photo: null, photoBase64: null, photoSize: 0,
     tovarNomi: '', miqdor: '', birlik: 'dona', summa: '', sabab: '',
     filial: '', firmaNomi: '', kafeNomi: '',
+    yonalish: 'asosiy_filial', taminotchi: '', vozvratStatus: 'xabar_berildi', qaytarilmadiSabab: '',
   })
 
   function set<K extends keyof FormData>(k: K, v: FormData[K]) {
@@ -78,13 +92,18 @@ export default function Step2Forma({ tur, onBack, onNext }: Props) {
     set('photoSize', file.size)
   }
 
+  const vozvratOk =
+    tur !== 'qaytarish' ||
+    (form.vozvratStatus !== 'qaytarilmadi' || form.qaytarilmadiSabab.trim().length > 0)
+
   const isValid = Boolean(
     form.photoBase64 &&
     form.tovarNomi.trim() &&
     form.miqdor.trim() &&
     form.summa.trim() &&
     form.sabab.trim() &&
-    form.filial
+    form.filial &&
+    vozvratOk
   )
 
   return (
@@ -271,6 +290,69 @@ export default function Step2Forma({ tur, onBack, onNext }: Props) {
               className="w-full bg-transparent text-[15px] text-tg-text placeholder:text-tg-hint/60 outline-none"
             />
           </Field>
+        )}
+
+        {/* Vozvrat: yo'nalish + holat */}
+        {tur === 'qaytarish' && (
+          <>
+            <Field label="Qayerga" icon={<Building2 className="w-3.5 h-3.5" />} delay={0.26} required>
+              <div className="flex gap-2">
+                {([['asosiy_filial', 'Asosiy filialga'], ['taminotchi', 'Ta\'minotchiga']] as const).map(([val, lbl]) => (
+                  <button
+                    key={val}
+                    onClick={() => set('yonalish', val)}
+                    className={cn(
+                      'flex-1 px-3 py-2 rounded-xl text-[13px] font-semibold transition-all active:scale-95',
+                      form.yonalish === val ? 'bg-tg-btn text-tg-btn-txt' : 'bg-tg-bg text-tg-hint border border-black/[.06]'
+                    )}
+                  >
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+            </Field>
+
+            {form.yonalish === 'taminotchi' && (
+              <Field label="Ta'minotchi nomi (ixtiyoriy)" icon={<Building2 className="w-3.5 h-3.5" />} delay={0.28}>
+                <input
+                  type="text"
+                  value={form.taminotchi}
+                  onChange={e => set('taminotchi', e.target.value)}
+                  placeholder="Masalan: Nestlé Uzbekistan"
+                  className="w-full bg-transparent text-[15px] text-tg-text placeholder:text-tg-hint/60 outline-none"
+                />
+              </Field>
+            )}
+
+            <Field label="Holat" icon={<AlignLeft className="w-3.5 h-3.5" />} delay={0.3} required>
+              <div className="flex flex-col gap-1.5">
+                {VOZVRAT_HOLAT.map(h => (
+                  <button
+                    key={h.value}
+                    onClick={() => set('vozvratStatus', h.value)}
+                    className={cn(
+                      'w-full px-3 py-2 rounded-xl text-[13px] font-semibold text-left transition-all active:scale-[.98]',
+                      form.vozvratStatus === h.value ? 'bg-tg-btn text-tg-btn-txt' : 'bg-tg-bg text-tg-hint border border-black/[.06]'
+                    )}
+                  >
+                    {h.label}
+                  </button>
+                ))}
+              </div>
+            </Field>
+
+            {form.vozvratStatus === 'qaytarilmadi' && (
+              <Field label="Qaytarilmadi sababi" icon={<AlignLeft className="w-3.5 h-3.5" />} delay={0.32} required>
+                <input
+                  type="text"
+                  value={form.qaytarilmadiSabab}
+                  onChange={e => set('qaytarilmadiSabab', e.target.value)}
+                  placeholder="Nega qaytarilmadi?"
+                  className="w-full bg-transparent text-[15px] text-tg-text placeholder:text-tg-hint/60 outline-none"
+                />
+              </Field>
+            )}
+          </>
         )}
       </div>
 

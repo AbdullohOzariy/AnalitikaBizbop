@@ -3,7 +3,17 @@
  * Hammasi fonda (await qilinmasa ham) ishlatilishi mumkin: xato bo'lsa faqat log.
  */
 import { getBot } from "./bot";
-import { getGroupChatId, filialTopicId, setGuruhMessageId, type YozuvKirim } from "./db";
+import {
+  getGroupChatId,
+  filialTopicId,
+  setGuruhMessageId,
+  vozvratSetGuruhMessageId,
+  VOZVRAT_HOLAT_LABEL,
+  VOZVRAT_YONALISH_LABEL,
+  type YozuvKirim,
+  type VozvratKirim,
+  type VozvratYozuv,
+} from "./db";
 
 const TUR_EMOJI: Record<string, string> = {
   spisaniya: "🗑",
@@ -73,6 +83,78 @@ const STATUS_UZ: Record<string, string> = {
   bajarildi: "Bajarildi",
   rad_etildi: "Rad etildi",
 };
+
+// ─── Yangi Vozvrat jarayoni xabarlari ─────────────────────────────────────────
+
+const VOZVRAT_HOLAT_EMOJI: Record<string, string> = {
+  xabar_berildi: "📣",
+  yuborildi: "📤",
+  qaytarildi: "✅",
+  qaytarilmadi: "⚠️",
+};
+
+/** Yangi vozvrat yaratilganda guruhga (filial topigiga) yuboradi. */
+export async function vozvratGuruhgaYuborish(v: VozvratKirim, vozvratId: number): Promise<void> {
+  const bot = getBot();
+  if (!bot) return;
+  const chatId = await getGroupChatId();
+  if (!chatId) return;
+
+  const threadId = await filialTopicId(v.filial);
+  const holat = v.status || "xabar_berildi";
+
+  let matn =
+    `🔁 <b>VOZVRAT</b>\n\n` +
+    `📦 <b>Tovar:</b> ${v.tovar}\n` +
+    `📏 <b>Miqdor:</b> ${v.miqdor} ${v.birlik || "dona"}\n` +
+    `💰 <b>Summa:</b> ${Number(v.summa).toLocaleString("uz-UZ")} so'm\n`;
+  if (v.sabab) matn += `📝 <b>Sabab:</b> ${v.sabab}\n`;
+  matn += `➡️ <b>Yo'nalish:</b> ${VOZVRAT_YONALISH_LABEL[v.yonalish] || v.yonalish}`;
+  if (v.yonalish === "taminotchi" && v.taminotchi) matn += ` (${v.taminotchi})`;
+  matn += `\n`;
+  matn += `📊 <b>Holat:</b> ${VOZVRAT_HOLAT_EMOJI[holat] || ""} ${VOZVRAT_HOLAT_LABEL[holat] || holat}\n`;
+  if (holat === "qaytarilmadi" && v.qaytarilmadi_sabab)
+    matn += `❗ <b>Qaytarilmadi sababi:</b> ${v.qaytarilmadi_sabab}\n`;
+  matn +=
+    `📍 <b>Filial:</b> ${v.filial}\n` +
+    `👤 <b>Xodim:</b> ${v.xodim_ism}${v.xodim_username ? ` (@${v.xodim_username})` : ""}\n` +
+    `🕐 <b>Vaqt:</b> ${new Date().toLocaleString("uz-UZ")}`;
+
+  const opts = { parse_mode: "HTML" as const, ...(threadId ? { message_thread_id: threadId } : {}) };
+  try {
+    const msg = v.rasm_file_id
+      ? await bot.telegram.sendPhoto(chatId, v.rasm_file_id, { caption: matn, ...opts })
+      : await bot.telegram.sendMessage(chatId, matn, opts);
+    await vozvratSetGuruhMessageId(vozvratId, msg.message_id);
+  } catch (err) {
+    console.error(`[vozvrat-guruh] #${vozvratId}:`, err instanceof Error ? err.message : err);
+  }
+}
+
+/** Vozvrat holati o'zgarganda / chiqimga o'tkazilganda guruhga xabar (filial topigiga). */
+export async function vozvratHolatGuruhXabar(
+  v: VozvratYozuv,
+  yangilaganIsm: string,
+  qoshimcha?: string
+): Promise<void> {
+  const bot = getBot();
+  if (!bot) return;
+  const chatId = await getGroupChatId();
+  if (!chatId) return;
+  const threadId = await filialTopicId(v.filial);
+  const opts = { parse_mode: "HTML" as const, ...(threadId ? { message_thread_id: threadId } : {}) };
+  let matn =
+    `🔁 <b>Vozvrat yangilandi</b>\n` +
+    `📦 ${v.tovar} — ${Number(v.summa).toLocaleString("uz-UZ")} so'm\n` +
+    `📊 Holat: ${VOZVRAT_HOLAT_EMOJI[v.status] || ""} ${VOZVRAT_HOLAT_LABEL[v.status] || v.status}\n`;
+  if (qoshimcha) matn += `${qoshimcha}\n`;
+  matn += `👤 ${yangilaganIsm} · ${new Date().toLocaleString("uz-UZ")}`;
+  try {
+    await bot.telegram.sendMessage(chatId, matn, opts);
+  } catch (err) {
+    console.error("[vozvrat-holat-xabar]:", err instanceof Error ? err.message : err);
+  }
+}
 
 /** Vozvrat holati o'zgarganda guruhga xabar. */
 export async function vozvratStatusXabar(

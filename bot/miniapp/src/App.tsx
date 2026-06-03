@@ -8,7 +8,7 @@ import Step4Muvaffaqiyat from './components/Step4Muvaffaqiyat'
 import type { FormData } from './components/Step2Forma'
 import { useTelegram } from './hooks/useTelegram'
 
-type Tur = 'vozvrat' | 'kafe' | 'ovqatlanish' | 'spisaniya' | 'ichki_sotuv'
+type Tur = 'vozvrat' | 'kafe' | 'ovqatlanish' | 'spisaniya' | 'ichki_sotuv' | 'qaytarish'
 type Step = 1 | 2 | 3 | 4
 type Gate = 'checking' | 'allowed' | 'denied'
 

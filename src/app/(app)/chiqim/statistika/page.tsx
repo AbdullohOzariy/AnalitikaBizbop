@@ -5,9 +5,7 @@ import {
   botConfigured,
   chiqimSummary,
   chiqimByBranch,
-  vozvratStatusCounts,
   TUR_LABEL,
-  VOZVRAT_STATUS_LABEL,
 } from "@/lib/spisaniya/db";
 import { formatUZS } from "@/lib/format";
 import {
@@ -20,17 +18,12 @@ import {
   WifiOff,
   ChartPie,
   Layers,
-  Clock,
-  CheckCircle2,
-  XCircle,
-  Loader2,
 } from "lucide-react";
 import {
   PageHeader,
   StatCard,
   SectionCard,
   EmptyState,
-  Pill,
 } from "@/components/common/page";
 import { ChiqimFilter } from "../chiqim-filter";
 import type { LucideIcon } from "lucide-react";
@@ -52,18 +45,6 @@ const TUR_META: Record<string, TurMeta> = {
   kafe:        { icon: Coffee,       tone: "blue" },
   ovqatlanish: { icon: Utensils,     tone: "green" },
   ichki_sotuv: { icon: ShoppingCart, tone: "violet" },
-};
-
-type VozvratStatusMeta = {
-  icon: LucideIcon;
-  tone: "amber" | "blue" | "green" | "red";
-  pillTone: "amber" | "blue" | "green" | "red";
-};
-const VOZVRAT_META: Record<string, VozvratStatusMeta> = {
-  kutilmoqda: { icon: Clock,         tone: "amber", pillTone: "amber" },
-  jarayonda:  { icon: Loader2,       tone: "blue",  pillTone: "blue" },
-  bajarildi:  { icon: CheckCircle2,  tone: "green", pillTone: "green" },
-  rad_etildi: { icon: XCircle,       tone: "red",   pillTone: "red" },
 };
 
 export default async function ChiqimStatistikaPage({
@@ -99,22 +80,17 @@ export default async function ChiqimStatistikaPage({
   const endDate   = parseDate(sp.end)   ?? def.end;
   const range = { start: startDate, end: endDate };
 
-  const [summary, byBranch, vozvratCounts] = await Promise.all([
+  const [summary, byBranch] = await Promise.all([
     chiqimSummary(range),
     chiqimByBranch(range),
-    vozvratStatusCounts(range),
   ]);
 
   const totalSumma = summary.reduce((acc, r) => acc + r.summa, 0);
   const totalCount = summary.reduce((acc, r) => acc + r.count, 0);
   const branchTotal = byBranch.reduce((acc, r) => acc + r.summa, 0);
-  const vozvratTotal = vozvratCounts.reduce((acc, r) => acc + r.count, 0);
-  const vozvratMap = new Map(vozvratCounts.map((r) => [r.status, r.count]));
 
   const allTurs = Object.keys(TUR_LABEL);
   const summaryMap = new Map(summary.map((r) => [r.tur, r]));
-
-  const allVozvratStatuses = Object.keys(VOZVRAT_STATUS_LABEL);
 
   return (
     <div className="space-y-5">
@@ -134,7 +110,7 @@ export default async function ChiqimStatistikaPage({
       </PageHeader>
 
       {/* Jami */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         <StatCard
           label="Jami chiqim"
           value={formatUZS(totalSumma, { compact: true })}
@@ -148,13 +124,6 @@ export default async function ChiqimStatistikaPage({
           hint="chiqim mavjud filiallar soni"
           icon={Building2}
           tone="default"
-        />
-        <StatCard
-          label="Qayta ishlash jami"
-          value={vozvratTotal.toLocaleString("uz-UZ")}
-          hint="tanlangan davrdagi qayta ishlash so'rovlar"
-          icon={RotateCcw}
-          tone="orange"
         />
       </div>
 
@@ -246,36 +215,6 @@ export default async function ChiqimStatistikaPage({
         </SectionCard>
       )}
 
-      {/* Qayta ishlash status */}
-      {vozvratTotal > 0 && (
-        <SectionCard
-          title="Qayta ishlash holati"
-          description="Status bo'yicha taqsimot"
-        >
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {allVozvratStatuses.map((st) => {
-              const meta = VOZVRAT_META[st];
-              const count = vozvratMap.get(st) ?? 0;
-              const pct = vozvratTotal > 0 ? (count / vozvratTotal) * 100 : 0;
-              return (
-                <div key={st} className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-                  <div className="flex items-center justify-between gap-2">
-                    <Pill tone={meta.pillTone}>
-                      {VOZVRAT_STATUS_LABEL[st] ?? st}
-                    </Pill>
-                  </div>
-                  <div className="mt-3 text-2xl font-bold tabular-nums tracking-tight">
-                    {count.toLocaleString("uz-UZ")}
-                  </div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">
-                    {pct.toFixed(1)}% jami qayta ishlashdan
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </SectionCard>
-      )}
     </div>
   );
 }

@@ -7,7 +7,7 @@ import StepHeader from './StepHeader'
 import { Button } from './ui/Button'
 import type { FormData } from './Step2Forma'
 
-type Tur = 'vozvrat' | 'kafe' | 'ovqatlanish' | 'spisaniya' | 'ichki_sotuv'
+type Tur = 'vozvrat' | 'kafe' | 'ovqatlanish' | 'spisaniya' | 'ichki_sotuv' | 'qaytarish'
 
 interface Props {
   tur: Tur
@@ -22,6 +22,18 @@ const TUR_LABELS: Record<Tur, string> = {
   ovqatlanish: 'Umumiy ovqatlanish',
   spisaniya:   'Spisaniya',
   ichki_sotuv: 'Ichki sotuv',
+  qaytarish:   'Vozvrat',
+}
+
+const YONALISH_LABEL: Record<string, string> = {
+  asosiy_filial: 'Asosiy filialga',
+  taminotchi:    'Ta\'minotchiga',
+}
+const VOZVRAT_HOLAT_LABEL: Record<string, string> = {
+  xabar_berildi: 'Xabar berildi',
+  yuborildi:     'Yuborildi',
+  qaytarildi:    'Qabul qilindi: qaytarildi',
+  qaytarilmadi:  'Qabul qilindi: qaytarilmadi',
 }
 
 const item = {
@@ -57,22 +69,46 @@ export default function Step3Tasdiq({ tur, form, onBack, onDone }: Props) {
       }
 
       const tgUser = tg?.initDataUnsafe?.user
-      const payload: Record<string, unknown> = {
-        tur,
-        tovar: form.tovarNomi,
-        miqdor: Number(form.miqdor.replace(',', '.')) || 1,
-        birlik: form.birlik,
-        summa: Number(form.summa) || 0,
-        sabab: form.sabab,
-        filial: form.filial,
-        rasm_file_id: fileId,
-        xodim_id: tgUser?.id ?? 0,
-        xodim_ism: tgUser ? `${tgUser.first_name}${tgUser.last_name ? ' ' + tgUser.last_name : ''}` : 'Nomalum',
-        xodim_username: tgUser?.username ?? null,
-      }
-      if (tur === 'vozvrat') payload.firma = form.firmaNomi
+      const miqdor = Number(form.miqdor.replace(',', '.')) || 1
+      const summa = Number(form.summa) || 0
 
-      const r = await fetch('/api/yozuv', {
+      let endpoint = '/api/yozuv'
+      let payload: Record<string, unknown>
+
+      if (tur === 'qaytarish') {
+        // Yangi Vozvrat jarayoni — alohida endpoint/jadval.
+        endpoint = '/api/vozvrat'
+        payload = {
+          tovar: form.tovarNomi,
+          miqdor,
+          birlik: form.birlik,
+          summa,
+          sabab: form.sabab,
+          filial: form.filial,
+          yonalish: form.yonalish,
+          taminotchi: form.yonalish === 'taminotchi' ? (form.taminotchi || null) : null,
+          status: form.vozvratStatus,
+          qaytarilmadi_sabab: form.vozvratStatus === 'qaytarilmadi' ? form.qaytarilmadiSabab : null,
+          rasm_file_id: fileId,
+        }
+      } else {
+        payload = {
+          tur,
+          tovar: form.tovarNomi,
+          miqdor,
+          birlik: form.birlik,
+          summa,
+          sabab: form.sabab,
+          filial: form.filial,
+          rasm_file_id: fileId,
+          xodim_id: tgUser?.id ?? 0,
+          xodim_ism: tgUser ? `${tgUser.first_name}${tgUser.last_name ? ' ' + tgUser.last_name : ''}` : 'Nomalum',
+          xodim_username: tgUser?.username ?? null,
+        }
+        if (tur === 'vozvrat') payload.firma = form.firmaNomi
+      }
+
+      const r = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -103,6 +139,15 @@ export default function Step3Tasdiq({ tur, form, onBack, onDone }: Props) {
     { icon: <MapPin className="w-3.5 h-3.5" />,     label: 'Filial', value: form.filial },
     ...(tur === 'vozvrat' && form.firmaNomi
       ? [{ icon: <Building2 className="w-3.5 h-3.5" />, label: 'Firma', value: form.firmaNomi }]
+      : []),
+    ...(tur === 'qaytarish'
+      ? [
+          { icon: <Building2 className="w-3.5 h-3.5" />, label: 'Qayerga', value: YONALISH_LABEL[form.yonalish] + (form.yonalish === 'taminotchi' && form.taminotchi ? ` (${form.taminotchi})` : '') },
+          { icon: <Tag className="w-3.5 h-3.5" />, label: 'Holat', value: VOZVRAT_HOLAT_LABEL[form.vozvratStatus] },
+          ...(form.vozvratStatus === 'qaytarilmadi' && form.qaytarilmadiSabab
+            ? [{ icon: <AlignLeft className="w-3.5 h-3.5" />, label: 'Qaytarilmadi', value: form.qaytarilmadiSabab }]
+            : []),
+        ]
       : []),
   ]
 

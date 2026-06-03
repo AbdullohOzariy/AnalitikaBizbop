@@ -75,7 +75,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/chiqim",            label: "Chiqimlar",         icon: PackageMinus, roles: ["ADMIN", "CAT_MANAGER"] },
       { href: "/chiqim/statistika", label: "Statistika",        icon: ChartPie,     roles: ["ADMIN", "CAT_MANAGER"] },
-      { href: "/chiqim/vozvrat",    label: "Qayta ishlash",     icon: Recycle,      roles: ["ADMIN", "CAT_MANAGER"] },
+      { href: "/chiqim/vozvratlar", label: "Vozvratlar",        icon: Recycle,      roles: ["ADMIN", "CAT_MANAGER"] },
     ],
   },
   {

@@ -18,6 +18,7 @@ export const authConfig = {
         pathname.startsWith("/api/auth") ||
         pathname.startsWith("/api/tg") ||
         pathname.startsWith("/api/yozuv") ||
+        pathname.startsWith("/api/vozvrat") ||
         pathname.startsWith("/api/filialar") ||
         pathname.startsWith("/api/rasm-yukla") ||
         pathname.startsWith("/api/ruxsat") ||
