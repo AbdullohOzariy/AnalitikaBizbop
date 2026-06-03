@@ -9,11 +9,21 @@ export const authConfig = {
   providers: [],
   callbacks: {
     authorized: ({ auth, request: { nextUrl } }) => {
+      const { pathname } = nextUrl;
       const isLoggedIn = !!auth?.user;
-      const isOnLogin = nextUrl.pathname.startsWith("/login");
-      const isOnAuthApi = nextUrl.pathname.startsWith("/api/auth");
 
-      if (isOnAuthApi) return true;
+      // Public (auth shart emas): NextAuth, Telegram webhook, miniapp (static + API).
+      // Bular Telegram tomonidan / sessiyasiz chaqiriladi — login'ga yo'naltirib bo'lmaydi.
+      const isPublic =
+        pathname.startsWith("/api/auth") ||
+        pathname.startsWith("/api/tg") ||
+        pathname.startsWith("/api/yozuv") ||
+        pathname.startsWith("/api/filialar") ||
+        pathname.startsWith("/api/rasm-yukla") ||
+        pathname.startsWith("/miniapp");
+      if (isPublic) return true;
+
+      const isOnLogin = pathname.startsWith("/login");
       if (isOnLogin) {
         if (isLoggedIn) {
           const role = (auth as { user?: { role?: string } })?.user?.role;
