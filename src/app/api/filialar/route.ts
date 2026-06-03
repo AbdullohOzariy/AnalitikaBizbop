@@ -3,11 +3,15 @@
  */
 import { NextResponse } from "next/server";
 import { aktivFilialNomlari } from "@/lib/spisaniya/db";
+import { rateLimit, clientIp } from "@/lib/spisaniya/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: Request) {
+  if (!rateLimit(`filialar:${clientIp(req)}`, 60, 60_000)) {
+    return NextResponse.json({ xato: "Juda ko'p so'rov" }, { status: 429 });
+  }
   try {
     const filialar = await aktivFilialNomlari();
     return NextResponse.json(filialar, {

@@ -6,11 +6,15 @@
 import { NextResponse } from "next/server";
 import { ruxsatBormi } from "@/lib/spisaniya/db";
 import { verifyInitData } from "@/lib/spisaniya/telegram-auth";
+import { rateLimit, clientIp } from "@/lib/spisaniya/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
+  if (!rateLimit(`ruxsat:${clientIp(req)}`, 60, 60_000)) {
+    return NextResponse.json({ allowed: false, user: null }, { status: 429 });
+  }
   const initData = req.headers.get("x-telegram-init-data") || "";
   const user = verifyInitData(initData);
   if (!user) {

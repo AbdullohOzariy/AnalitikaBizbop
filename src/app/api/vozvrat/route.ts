@@ -7,6 +7,7 @@ import { z } from "zod";
 import { vozvratYarat, ruxsatBormi } from "@/lib/spisaniya/db";
 import { vozvratGuruhgaYuborish } from "@/lib/spisaniya/notify";
 import { verifyInitData } from "@/lib/spisaniya/telegram-auth";
+import { rateLimit } from "@/lib/spisaniya/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,6 +33,9 @@ const schema = z
 export async function POST(req: Request) {
   const user = verifyInitData(req.headers.get("x-telegram-init-data") || "");
   if (!user) return NextResponse.json({ xato: "Telegram orqali oching." }, { status: 401 });
+  if (!rateLimit(`vozvrat:${user.id}`, 30, 60_000)) {
+    return NextResponse.json({ xato: "Juda ko'p so'rov. Birozdan keyin urinib ko'ring." }, { status: 429 });
+  }
   if (!(await ruxsatBormi(user.id))) {
     return NextResponse.json({ xato: "Ruxsat yo'q. Admindan ruxsat oling." }, { status: 403 });
   }
