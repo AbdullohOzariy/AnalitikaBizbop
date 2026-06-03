@@ -23,11 +23,18 @@ export const CHIQIM_OTKAZ_TURLAR: { value: string; label: string }[] = [
   { value: "ichki_sotuv", label: TUR_LABEL.ichki_sotuv },
 ];
 
-export const VOZVRAT_HOLATLAR = ["xabar_berildi", "yuborildi", "qaytarildi", "qaytarilmadi"] as const;
+export const VOZVRAT_HOLATLAR = [
+  "xabar_berildi",
+  "saqlash_xonasida",
+  "yuborildi",
+  "qaytarildi",
+  "qaytarilmadi",
+] as const;
 export type VozvratHolat = (typeof VOZVRAT_HOLATLAR)[number];
 
 export const VOZVRAT_HOLAT_LABEL: Record<string, string> = {
   xabar_berildi: "Xabar berildi",
+  saqlash_xonasida: "Saqlash xonasida",
   yuborildi: "Yuborildi",
   qaytarildi: "Qabul qilindi: qaytarildi",
   qaytarilmadi: "Qabul qilindi: qaytarilmadi",

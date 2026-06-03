@@ -76,6 +76,7 @@ export async function guruhgaYuborish(d: YozuvKirim, yozuvId: number): Promise<v
 
 const VOZVRAT_HOLAT_EMOJI: Record<string, string> = {
   xabar_berildi: "📣",
+  saqlash_xonasida: "🏬",
   yuborildi: "📤",
   qaytarildi: "✅",
   qaytarilmadi: "⚠️",

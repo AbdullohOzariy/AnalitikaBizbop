@@ -21,7 +21,7 @@ function xato(err: unknown): Result {
 
 const holatSchema = z.object({
   id: z.coerce.number().int().positive(),
-  status: z.enum(["xabar_berildi", "yuborildi", "qaytarildi", "qaytarilmadi"]),
+  status: z.enum(["xabar_berildi", "saqlash_xonasida", "yuborildi", "qaytarildi", "qaytarilmadi"]),
   qaytarilmadiSabab: z.string().trim().max(500).optional(),
 });
 

@@ -22,7 +22,7 @@ const schema = z
     filial: z.string().trim().min(1).max(100),
     yonalish: z.enum(["asosiy_filial", "taminotchi"]),
     taminotchi: z.string().trim().max(255).optional().nullable(),
-    status: z.enum(["xabar_berildi", "yuborildi", "qaytarildi", "qaytarilmadi"]).optional(),
+    status: z.enum(["xabar_berildi", "saqlash_xonasida", "yuborildi", "qaytarildi", "qaytarilmadi"]).optional(),
     qaytarilmadi_sabab: z.string().trim().max(500).optional().nullable(),
     rasm_file_id: z.string().max(500).optional().nullable(),
   })

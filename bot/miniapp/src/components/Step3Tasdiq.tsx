@@ -30,10 +30,11 @@ const YONALISH_LABEL: Record<string, string> = {
   taminotchi:    'Ta\'minotchiga',
 }
 const VOZVRAT_HOLAT_LABEL: Record<string, string> = {
-  xabar_berildi: 'Xabar berildi',
-  yuborildi:     'Yuborildi',
-  qaytarildi:    'Qabul qilindi: qaytarildi',
-  qaytarilmadi:  'Qabul qilindi: qaytarilmadi',
+  xabar_berildi:    'Xabar berildi',
+  saqlash_xonasida: 'Saqlash xonasida',
+  yuborildi:        'Yuborildi',
+  qaytarildi:       'Qabul qilindi: qaytarildi',
+  qaytarilmadi:     'Qabul qilindi: qaytarilmadi',
 }
 
 const item = {

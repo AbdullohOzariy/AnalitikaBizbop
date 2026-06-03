@@ -9,7 +9,7 @@ import { Button } from './ui/Button'
 
 type Tur = 'vozvrat' | 'kafe' | 'ovqatlanish' | 'spisaniya' | 'ichki_sotuv' | 'qaytarish'
 type Yonalish = 'asosiy_filial' | 'taminotchi'
-type VozvratHolat = 'xabar_berildi' | 'yuborildi' | 'qaytarildi' | 'qaytarilmadi'
+type VozvratHolat = 'xabar_berildi' | 'saqlash_xonasida' | 'yuborildi' | 'qaytarildi' | 'qaytarilmadi'
 
 export interface FormData {
   photo: File | null
@@ -30,10 +30,11 @@ export interface FormData {
 }
 
 const VOZVRAT_HOLAT: { value: VozvratHolat; label: string }[] = [
-  { value: 'xabar_berildi', label: 'Xabar berildi' },
-  { value: 'yuborildi',     label: 'Yuborildi' },
-  { value: 'qaytarildi',    label: 'Qabul qilindi: qaytarildi' },
-  { value: 'qaytarilmadi',  label: 'Qabul qilindi: qaytarilmadi' },
+  { value: 'xabar_berildi',    label: 'Xabar berildi' },
+  { value: 'saqlash_xonasida', label: 'Saqlash xonasida' },
+  { value: 'yuborildi',        label: 'Yuborildi' },
+  { value: 'qaytarildi',       label: 'Qabul qilindi: qaytarildi' },
+  { value: 'qaytarilmadi',     label: 'Qabul qilindi: qaytarilmadi' },
 ]
 
 interface FieldProps {
