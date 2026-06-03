@@ -23,6 +23,7 @@ import {
   Footprints,
   CalendarDays,
   PackageMinus,
+  PackageX,
   ChartPie,
   Recycle,
   Settings,
@@ -54,6 +55,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/dashboard",    label: "Dashboard",       icon: LayoutDashboard, roles: ["ADMIN", "VIEWER"] },
       { href: "/dashboard-v2", label: "Dashboard v2",    icon: Sparkles },
+      { href: "/oos",          label: "OOS — Mavjudlik", icon: PackageX,        roles: ["ADMIN", "CAT_MANAGER"] },
       { href: "/branches",     label: "Filiallar",        icon: Building2,       roles: ["ADMIN", "VIEWER"] },
       { href: "/iyerarxiya",   label: "Iyerarxiya",       icon: Tag },
       { href: "/report",       label: "Hisobot",          icon: Table2,          roles: ["ADMIN", "VIEWER"] },
