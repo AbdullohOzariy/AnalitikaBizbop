@@ -32,31 +32,29 @@ interface Props {
 export default function StepHeader({ onBack, step, tur }: Props) {
   const color = TUR_DOT[tur]
   return (
-    <div className="sticky top-0 z-10 bg-tg-bg/90 backdrop-blur-md border-b border-black/[.05] px-4 h-14 flex items-center gap-3">
+    <div className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-line bg-tg-bg/85 px-4 backdrop-blur-xl">
       <button
         onClick={onBack}
-        className="w-8 h-8 rounded-xl bg-tg-bg2 flex items-center justify-center active:scale-95 transition-transform flex-shrink-0 border border-black/[.05]"
+        className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-line bg-tg-bg2 transition-transform active:scale-95"
       >
-        <ChevronLeft className="w-4 h-4 text-tg-text" strokeWidth={2.5} />
+        <ChevronLeft className="h-4 w-4 text-tg-text" strokeWidth={2.5} />
       </button>
 
       {/* Progress dots */}
-      <div className="flex items-center gap-1.5 flex-1">
+      <div className="flex flex-1 items-center gap-1.5">
         {[1, 2, 3].map((n) => (
-          <div key={n} className="flex items-center gap-1.5 flex-1 last:flex-none">
+          <div key={n} className="flex flex-1 items-center gap-1.5 last:flex-none">
             <div
               className={cn(
-                'h-1.5 rounded-full transition-all duration-300 flex-shrink-0',
-                n <= step ? 'w-4' : 'w-1.5 bg-black/10'
+                'h-1.5 flex-shrink-0 rounded-full transition-all duration-300',
+                n <= step ? 'w-5' : 'w-1.5 bg-tg-hint/25'
               )}
               style={n <= step ? { backgroundColor: color } : {}}
             />
             {n < 3 && (
-              <div className={cn(
-                'flex-1 h-[2px] rounded-full transition-colors duration-300',
-                n < step ? 'opacity-100' : 'bg-black/8 opacity-100'
-              )}
-              style={n < step ? { backgroundColor: color + '40' } : {}}
+              <div
+                className={cn('h-[2px] flex-1 rounded-full transition-colors duration-300', n >= step && 'bg-tg-hint/20')}
+                style={n < step ? { backgroundColor: color + '50' } : {}}
               />
             )}
           </div>
@@ -64,10 +62,10 @@ export default function StepHeader({ onBack, step, tur }: Props) {
       </div>
 
       <div
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[12px] font-semibold flex-shrink-0"
-        style={{ backgroundColor: color + '15', color }}
+        className="flex flex-shrink-0 items-center gap-1.5 rounded-xl px-3 py-1.5 text-[12px] font-bold"
+        style={{ backgroundColor: color + '1A', color }}
       >
-        <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: color }} />
+        <div className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: color }} />
         {TUR_LABEL[tur]}
       </div>
     </div>

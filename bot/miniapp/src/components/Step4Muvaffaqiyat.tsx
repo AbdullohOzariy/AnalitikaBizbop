@@ -21,7 +21,7 @@ export default function Step4Muvaffaqiyat({ onYangi }: Props) {
       {/* Icon */}
       <div className="relative mb-7">
         <motion.div
-          className="absolute inset-0 rounded-full bg-[#10B981]/15"
+          className="absolute inset-0 rounded-full bg-brand/15"
           animate={{ scale: [1, 1.6, 1], opacity: [0.5, 0, 0.5] }}
           transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
         />
@@ -29,9 +29,9 @@ export default function Step4Muvaffaqiyat({ onYangi }: Props) {
           initial={{ scale: 0.4, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ type: 'spring' as const, stiffness: 260, damping: 20 }}
-          className="relative w-20 h-20 rounded-full bg-[#10B981] flex items-center justify-center shadow-[0_8px_30px_rgba(16,185,129,.30)]"
+          className="relative flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-b from-brand-400 to-brand-600 shadow-brand-lg"
         >
-          <Check className="w-9 h-9 text-white" strokeWidth={2.5} />
+          <Check className="h-9 w-9 text-white" strokeWidth={2.5} />
         </motion.div>
       </div>
 
@@ -39,7 +39,7 @@ export default function Step4Muvaffaqiyat({ onYangi }: Props) {
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
-        className="text-[22px] font-bold tracking-[-0.3px] text-tg-text mb-2"
+        className="mb-2 font-display text-[23px] font-extrabold tracking-[-0.4px] text-tg-text"
       >
         Muvaffaqiyatli yuborildi
       </motion.h1>

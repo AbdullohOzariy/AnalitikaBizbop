@@ -25,7 +25,7 @@ export default function PhotoUpload({ base64, fileSize, loading, onFile, onClear
         <motion.div
           key="loading"
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          className="h-[120px] rounded-2xl bg-tg-bg2 border border-black/[.05] flex items-center justify-center gap-3 text-tg-hint"
+          className="h-[120px] rounded-2xl bg-tg-bg2 border border-line flex items-center justify-center gap-3 text-tg-hint"
         >
           <Loader2 className="animate-spin w-5 h-5" />
           <span className="text-[14px] font-medium">Rasm tayyorlanmoqda...</span>
@@ -34,7 +34,7 @@ export default function PhotoUpload({ base64, fileSize, loading, onFile, onClear
         <motion.div
           key="preview"
           initial={{ opacity: 0, scale: .97 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
-          className="relative rounded-2xl overflow-hidden border border-black/[.05]"
+          className="relative rounded-2xl overflow-hidden border border-line"
         >
           <img src={base64} alt="Tovar rasmi" className="w-full max-h-[220px] object-cover block" />
           <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" />
@@ -53,16 +53,16 @@ export default function PhotoUpload({ base64, fileSize, loading, onFile, onClear
         <motion.div
           key="empty"
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          className="rounded-2xl border-2 border-dashed border-black/[.10] bg-tg-bg2 flex flex-col items-center gap-3 py-7"
+          className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-line bg-tg-bg2 py-7"
         >
-          <div className="w-12 h-12 rounded-2xl bg-tg-btn/10 flex items-center justify-center">
-            <ImageIcon className="w-5 h-5 text-tg-btn" />
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand/12">
+            <ImageIcon className="h-5 w-5 text-brand" />
           </div>
           <div className="text-center">
-            <p className="text-[14px] font-semibold text-tg-text">Tovar rasmini qo'shing</p>
-            <p className="text-[12px] text-tg-hint mt-0.5">Galereyadan tanlang</p>
+            <p className="text-[14px] font-semibold text-tg-text">Tovar rasmini qo&apos;shing</p>
+            <p className="mt-0.5 text-[12px] text-tg-hint">Galereya yoki kameradan</p>
           </div>
-          <label className="flex items-center gap-1.5 bg-tg-btn text-tg-btn-txt text-[13px] font-semibold px-5 py-2 rounded-xl cursor-pointer active:opacity-80 transition-opacity">
+          <label className="flex cursor-pointer items-center gap-1.5 rounded-xl bg-gradient-to-b from-brand-400 to-brand-600 px-5 py-2 text-[13px] font-semibold text-white shadow-brand transition-transform active:scale-95">
             <ImageIcon className="w-3.5 h-3.5" />
             Rasm tanlash
             <input type="file" accept="image/*" onChange={handleFile} className="hidden" />

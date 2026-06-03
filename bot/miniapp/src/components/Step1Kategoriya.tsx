@@ -7,69 +7,18 @@ interface Props {
   onTanla: (tur: Tur) => void
 }
 
-const KATEGORIYALAR: {
-  tur: Tur
-  emoji: string
-  nomi: string
-  tavsif: string
-  color: string
-  full?: boolean
-  disabled?: boolean
-}[] = [
-  {
-    tur: 'vozvrat',
-    emoji: '♻️',
-    nomi: 'Qayta ishlash',
-    tavsif: 'Qayta ishlab sotuvga chiqarilgan mahsulot',
-    color: '#3B82F6',
-  },
-  {
-    tur: 'kafe',
-    emoji: '☕',
-    nomi: 'Kafe',
-    tavsif: 'Kafe uchun sarflangan mahsulot',
-    color: '#F59E0B',
-  },
-  {
-    tur: 'ovqatlanish',
-    emoji: '🍽️',
-    nomi: 'Ovqatlanish',
-    tavsif: 'Xodimlar ovqatlanishi uchun',
-    color: '#10B981',
-    full: true,
-  },
-  {
-    tur: 'spisaniya',
-    emoji: '🗑️',
-    nomi: 'Spisaniya',
-    tavsif: 'Yaroqsiz tovar hisobdan chiqarish',
-    color: '#EF4444',
-    full: true,
-  },
-  {
-    tur: 'ichki_sotuv',
-    emoji: '🏷️',
-    nomi: 'Ichki sotuv',
-    tavsif: 'Ichki sotuvga chiqarilgan mahsulot',
-    color: '#8B5CF6',
-    full: true,
-  },
-  {
-    tur: 'qaytarish',
-    emoji: '🔁',
-    nomi: 'Vozvrat',
-    tavsif: 'Firma yoki asosiy filialga qaytarish',
-    color: '#06B6D4',
-    full: true,
-  },
+const KATEGORIYALAR: { tur: Tur; emoji: string; nomi: string; tavsif: string; color: string }[] = [
+  { tur: 'spisaniya',   emoji: '🗑️', nomi: 'Spisaniya',     tavsif: 'Yaroqsiz tovar', color: '#EF4444' },
+  { tur: 'qaytarish',   emoji: '🔁', nomi: 'Vozvrat',       tavsif: 'Firma / asosiy filialga', color: '#06B6D4' },
+  { tur: 'vozvrat',     emoji: '♻️', nomi: 'Qayta ishlash', tavsif: 'Qayta sotuvga', color: '#3B82F6' },
+  { tur: 'ichki_sotuv', emoji: '🏷️', nomi: 'Ichki sotuv',   tavsif: 'Ichki sotuvga', color: '#8B5CF6' },
+  { tur: 'kafe',        emoji: '☕', nomi: 'Kafe',          tavsif: 'Kafe xarajati', color: '#F59E0B' },
+  { tur: 'ovqatlanish', emoji: '🍽️', nomi: 'Ovqatlanish',   tavsif: 'Xodimlar ovqati', color: '#10B981' },
 ]
 
-const container = {
-  hidden: {},
-  show: { transition: { staggerChildren: 0.06 } },
-}
+const container = { hidden: {}, show: { transition: { staggerChildren: 0.05 } } }
 const item = {
-  hidden: { opacity: 0, y: 18 },
+  hidden: { opacity: 0, y: 16 },
   show: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 340, damping: 28 } },
 }
 
@@ -82,98 +31,69 @@ export default function Step1Kategoriya({ onTanla }: Props) {
   }
 
   return (
-    <div className="flex flex-col min-h-screen px-4 pt-8 pb-6 bg-tg-bg">
+    <div className="flex min-h-screen flex-col bg-tg-bg px-4 pb-6 pt-7">
+      {/* Brend bar */}
       <motion.div
-        className="mb-8"
-        initial={{ opacity: 0, y: -8 }}
+        initial={{ opacity: 0, y: -6 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
+        className="mb-7 flex items-center gap-2"
       >
-        <p className="text-[13px] font-medium text-tg-hint mb-1.5">
-          Salom, {user?.first_name ?? 'xodim'} 👋
-        </p>
-        <h1 className="text-[26px] font-bold leading-tight tracking-[-0.5px] text-tg-text">
-          Qanday yozuv<br />qo'shmoqchisiz?
-        </h1>
+        <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-gradient-to-br from-brand-400 to-brand-600 shadow-brand">
+          <span className="text-[14px]">🛒</span>
+        </div>
+        <span className="font-display text-[15px] font-extrabold tracking-[-0.3px] text-tg-text">BizBop</span>
+        <span className="ml-auto text-[12px] font-medium text-tg-hint">
+          {user?.first_name ?? 'Xodim'}
+        </span>
       </motion.div>
 
+      {/* Sarlavha */}
       <motion.div
-        className="grid grid-cols-2 gap-3 flex-1"
-        variants={container}
-        initial="hidden"
-        animate="show"
+        initial={{ opacity: 0, y: -4 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, delay: 0.05 }}
+        className="mb-6"
       >
+        <h1 className="font-display text-[27px] font-extrabold leading-[1.1] tracking-[-0.8px] text-tg-text">
+          Qanday yozuv<br />qo&apos;shmoqchisiz?
+        </h1>
+        <p className="mt-2 text-[13.5px] leading-relaxed text-tg-hint">
+          Hisobdan chiqarish turini tanlang
+        </p>
+      </motion.div>
+
+      {/* Tiles */}
+      <motion.div className="grid flex-1 grid-cols-2 gap-3" variants={container} initial="hidden" animate="show">
         {KATEGORIYALAR.map((k) => (
           <motion.button
             key={k.tur}
             variants={item}
-            whileTap={k.disabled ? {} : { scale: 0.96 }}
-            onClick={() => !k.disabled && handleTanla(k.tur)}
-            disabled={k.disabled}
-            className={[
-              'relative rounded-3xl p-4 text-left border',
-              'flex shadow-sm transition-shadow duration-150',
-              k.full
-                ? 'col-span-2 flex-row items-center gap-4 py-4'
-                : 'flex-col justify-between min-h-[148px]',
-              k.disabled ? 'opacity-40 cursor-not-allowed' : 'active:shadow-none',
-            ].join(' ')}
-            style={{
-              background: `linear-gradient(135deg, ${k.color}12 0%, ${k.color}06 100%)`,
-              borderColor: k.color + '22',
-            }}
+            whileTap={{ scale: 0.96 }}
+            onClick={() => handleTanla(k.tur)}
+            className="group relative flex min-h-[126px] flex-col justify-between overflow-hidden rounded-3xl border border-line p-3.5 text-left shadow-card transition-shadow active:shadow-none"
+            style={{ background: `linear-gradient(150deg, ${k.color}14 0%, ${k.color}07 60%, transparent 100%)` }}
           >
-            {k.full ? (
-              <>
-                <div
-                  className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0"
-                  style={{ backgroundColor: k.color + '18' }}
-                >
-                  <span className="text-[22px] leading-none">{k.emoji}</span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <span className="block text-[15px] font-bold text-tg-text leading-tight">{k.nomi}</span>
-                  <span className="block text-[12px] text-tg-hint mt-0.5 leading-snug">{k.tavsif}</span>
-                </div>
-                <div
-                  className="w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0"
-                  style={{ backgroundColor: k.color + '15' }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                    <path d="M3 7h8M8 4l3 3-3 3" stroke={k.color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="flex items-start justify-between">
-                  <div
-                    className="w-11 h-11 rounded-2xl flex items-center justify-center"
-                    style={{ backgroundColor: k.color + '18' }}
-                  >
-                    <span className="text-[22px] leading-none">{k.emoji}</span>
-                  </div>
-                  {k.disabled ? (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-black/8 text-tg-hint">
-                      Tez kunda
-                    </span>
-                  ) : (
-                  <div
-                    className="w-7 h-7 rounded-xl flex items-center justify-center"
-                    style={{ backgroundColor: k.color + '15' }}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                      <path d="M3 7h8M8 4l3 3-3 3" stroke={k.color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </div>
-                  )}
-                </div>
-                <div>
-                  <span className="block text-[15px] font-bold text-tg-text leading-tight">{k.nomi}</span>
-                  <span className="block text-[12px] text-tg-hint mt-1 leading-snug">{k.tavsif}</span>
-                </div>
-              </>
-            )}
+            <div className="flex items-start justify-between">
+              <div
+                className="flex h-12 w-12 items-center justify-center rounded-2xl shadow-sm"
+                style={{ backgroundColor: k.color + '22' }}
+              >
+                <span className="text-[24px] leading-none">{k.emoji}</span>
+              </div>
+              <div
+                className="flex h-7 w-7 items-center justify-center rounded-xl transition-transform group-active:translate-x-0.5"
+                style={{ backgroundColor: k.color + '1A' }}
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path d="M3 7h8M8 4l3 3-3 3" stroke={k.color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+            </div>
+            <div>
+              <span className="block font-display text-[15.5px] font-bold leading-tight text-tg-text">{k.nomi}</span>
+              <span className="mt-0.5 block text-[12px] leading-snug text-tg-hint">{k.tavsif}</span>
+            </div>
           </motion.button>
         ))}
       </motion.div>

@@ -3,6 +3,11 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    /* Light/dark ikkalasida ham ko'rinadigan nozik chiziq (brendsiz, kulrang-alpha) */
+    --hairline: rgba(130, 130, 140, 0.16);
+  }
+
   *, *::before, *::after {
     box-sizing: border-box;
   }
@@ -13,13 +18,18 @@
     padding: 0;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
 
   body {
     background-color: var(--tg-theme-bg-color, #F2F3F7);
-    color: var(--tg-theme-text-color, #111111);
+    color: var(--tg-theme-text-color, #0B0B0F);
     font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
     overscroll-behavior: none;
+  }
+
+  ::selection {
+    background: rgba(31, 191, 92, 0.25);
   }
 
   input[type='number']::-webkit-outer-spin-button,
@@ -32,5 +42,18 @@
   select option {
     background-color: var(--tg-theme-bg-color, #fff);
     color: var(--tg-theme-text-color, #111);
+  }
+}
+
+@layer utilities {
+  /* Skeleton shimmer */
+  .skeleton {
+    background: linear-gradient(
+      100deg,
+      var(--tg-theme-secondary-bg-color, #fff) 30%,
+      rgba(130, 130, 140, 0.12) 50%,
+      var(--tg-theme-secondary-bg-color, #fff) 70%
+    );
+    background-size: 200% 100%;
   }
 }

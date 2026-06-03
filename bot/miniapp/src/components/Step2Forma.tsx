@@ -51,7 +51,7 @@ function Field({ label, icon, delay, required, children }: FieldProps) {
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay, type: 'spring' as const, stiffness: 340, damping: 30 }}
-      className="bg-tg-bg2 rounded-2xl border border-black/[.05] px-4 pt-3 pb-3"
+      className="bg-tg-bg2 rounded-2xl border border-line shadow-sm px-4 pt-3 pb-3"
     >
       <div className="flex items-center gap-2 mb-2">
         <span className="text-tg-hint">{icon}</span>
@@ -144,7 +144,7 @@ export default function Step2Forma({ tur, onBack, onNext }: Props) {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.10, type: 'spring' as const, stiffness: 340, damping: 30 }}
-          className="bg-tg-bg2 rounded-2xl border border-black/[.05] px-4 pt-3 pb-3"
+          className="bg-tg-bg2 rounded-2xl border border-line shadow-sm px-4 pt-3 pb-3"
         >
           <div className="flex items-center gap-2 mb-2">
             <Hash className="w-3.5 h-3.5 text-tg-hint" />
@@ -171,8 +171,8 @@ export default function Step2Forma({ tur, onBack, onNext }: Props) {
                   className={cn(
                     'px-2.5 py-1 rounded-lg text-[12px] font-bold transition-all duration-150 active:scale-95',
                     form.birlik === b
-                      ? 'bg-tg-btn text-tg-btn-txt'
-                      : 'bg-tg-bg text-tg-hint border border-black/[.06]'
+                      ? 'bg-gradient-to-b from-brand-400 to-brand-600 text-white shadow-sm'
+                      : 'bg-tg-bg text-tg-hint border border-line'
                   )}
                 >
                   {b}
@@ -187,7 +187,7 @@ export default function Step2Forma({ tur, onBack, onNext }: Props) {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.14, type: 'spring' as const, stiffness: 340, damping: 30 }}
-          className="bg-tg-bg2 rounded-2xl border border-black/[.05] px-4 pt-3 pb-3"
+          className="bg-tg-bg2 rounded-2xl border border-line shadow-sm px-4 pt-3 pb-3"
         >
           <div className="flex items-center gap-2 mb-2">
             <DollarSign className="w-3.5 h-3.5 text-tg-hint" />
@@ -226,7 +226,7 @@ export default function Step2Forma({ tur, onBack, onNext }: Props) {
           className="relative"
         >
           <div
-            className="bg-tg-bg2 rounded-2xl border border-black/[.05] px-4 pt-3 pb-3 cursor-pointer active:opacity-80 transition-opacity"
+            className="bg-tg-bg2 rounded-2xl border border-line shadow-sm px-4 pt-3 pb-3 cursor-pointer active:opacity-80 transition-opacity"
             onClick={() => setFilialOpen(v => !v)}
           >
             <div className="flex items-center gap-2 mb-2">
@@ -253,7 +253,7 @@ export default function Step2Forma({ tur, onBack, onNext }: Props) {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -6, scale: 0.98 }}
                 transition={{ type: 'spring' as const, stiffness: 400, damping: 32 }}
-                className="absolute left-0 right-0 top-full mt-1.5 bg-tg-bg2 rounded-2xl shadow-lg overflow-hidden z-20 border border-black/[.06]"
+                className="absolute left-0 right-0 top-full mt-1.5 bg-tg-bg2 rounded-2xl shadow-lg overflow-hidden z-20 border border-line"
               >
                 {filialar.length === 0 ? (
                   <p className="px-4 py-3 text-[14px] text-tg-hint">Yuklanmoqda...</p>
@@ -263,7 +263,7 @@ export default function Step2Forma({ tur, onBack, onNext }: Props) {
                     onClick={() => { set('filial', f); setFilialOpen(false) }}
                     className={cn(
                       'w-full px-4 py-3 text-left text-[15px] transition-colors active:bg-black/[.04] flex items-center justify-between',
-                      i > 0 && 'border-t border-black/[.04]',
+                      i > 0 && 'border-t border-line',
                       form.filial === f ? 'text-tg-btn font-semibold' : 'text-tg-text'
                     )}
                   >
@@ -304,7 +304,7 @@ export default function Step2Forma({ tur, onBack, onNext }: Props) {
                     onClick={() => set('yonalish', val)}
                     className={cn(
                       'flex-1 px-3 py-2 rounded-xl text-[13px] font-semibold transition-all active:scale-95',
-                      form.yonalish === val ? 'bg-tg-btn text-tg-btn-txt' : 'bg-tg-bg text-tg-hint border border-black/[.06]'
+                      form.yonalish === val ? 'bg-gradient-to-b from-brand-400 to-brand-600 text-white shadow-sm' : 'bg-tg-bg text-tg-hint border border-line'
                     )}
                   >
                     {lbl}
@@ -333,7 +333,7 @@ export default function Step2Forma({ tur, onBack, onNext }: Props) {
                     onClick={() => set('vozvratStatus', h.value)}
                     className={cn(
                       'w-full px-3 py-2 rounded-xl text-[13px] font-semibold text-left transition-all active:scale-[.98]',
-                      form.vozvratStatus === h.value ? 'bg-tg-btn text-tg-btn-txt' : 'bg-tg-bg text-tg-hint border border-black/[.06]'
+                      form.vozvratStatus === h.value ? 'bg-gradient-to-b from-brand-400 to-brand-600 text-white shadow-sm' : 'bg-tg-bg text-tg-hint border border-line'
                     )}
                   >
                     {h.label}
@@ -358,7 +358,7 @@ export default function Step2Forma({ tur, onBack, onNext }: Props) {
       </div>
 
       {/* Footer */}
-      <div className="flex-shrink-0 px-4 py-3 pb-[max(12px,env(safe-area-inset-bottom))] bg-tg-bg border-t border-black/[.05]">
+      <div className="flex-shrink-0 px-4 py-3 pb-[max(12px,env(safe-area-inset-bottom))] bg-tg-bg border-t border-line">
         <Button disabled={!isValid} onClick={() => isValid && onNext(form)}>
           Davom etish
         </Button>

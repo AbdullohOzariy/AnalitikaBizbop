@@ -40,8 +40,8 @@ export default function App() {
 
   if (gate === 'checking') {
     return (
-      <div className="min-h-screen bg-tg-bg flex items-center justify-center text-tg-hint">
-        <Loader2 className="w-6 h-6 animate-spin" />
+      <div className="flex min-h-screen items-center justify-center bg-tg-bg text-brand">
+        <Loader2 className="h-7 w-7 animate-spin" />
       </div>
     )
   }
@@ -53,13 +53,13 @@ export default function App() {
           <ShieldAlert className="w-8 h-8 text-red-500" />
         </div>
         <div className="space-y-1.5">
-          <h1 className="text-[17px] font-bold text-tg-text">Ruxsat yo&apos;q</h1>
-          <p className="text-[14px] text-tg-hint leading-relaxed">
+          <h1 className="font-display text-[19px] font-extrabold tracking-[-0.3px] text-tg-text">Ruxsat yo&apos;q</h1>
+          <p className="text-[14px] leading-relaxed text-tg-hint">
             Botdan foydalanish uchun admindan ruxsat oling.
           </p>
         </div>
         {user?.id != null && (
-          <div className="bg-tg-bg2 border border-black/[.05] rounded-xl px-4 py-2.5">
+          <div className="bg-tg-bg2 border border-line rounded-xl px-4 py-2.5">
             <span className="text-[12px] text-tg-hint">Sizning ID: </span>
             <span className="text-[14px] font-semibold text-tg-text font-mono select-all">{user.id}</span>
           </div>

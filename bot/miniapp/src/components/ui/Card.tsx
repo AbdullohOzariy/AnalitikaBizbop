@@ -8,11 +8,11 @@ interface CardProps extends HTMLAttributes<HTMLDivElement> {
 export function Card({ className, label, children, ...props }: CardProps) {
   return (
     <div
-      className={cn('bg-tg-bg2 rounded-2xl p-[14px]', className)}
+      className={cn('bg-tg-bg2 rounded-2xl border border-line p-[14px] shadow-card', className)}
       {...props}
     >
       {label && (
-        <p className="text-[11px] font-bold uppercase tracking-[0.5px] text-tg-hint mb-2">
+        <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.6px] text-tg-hint">
           {label}
         </p>
       )}

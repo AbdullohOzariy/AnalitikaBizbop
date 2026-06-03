@@ -162,7 +162,7 @@ export default function Step3Tasdiq({ tur, form, onBack, onDone }: Props) {
           <motion.div
             initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="rounded-2xl overflow-hidden border border-black/[.05]"
+            className="rounded-2xl overflow-hidden border border-line"
           >
             <img src={form.photoBase64} alt="Tovar rasmi" className="w-full max-h-[200px] object-cover block" />
           </motion.div>
@@ -170,7 +170,7 @@ export default function Step3Tasdiq({ tur, form, onBack, onDone }: Props) {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="rounded-2xl bg-tg-bg2 border border-black/[.05] h-[72px] flex items-center justify-center gap-2 text-tg-hint"
+            className="rounded-2xl bg-tg-bg2 border border-line h-[72px] flex items-center justify-center gap-2 text-tg-hint"
           >
             <ImageIcon className="w-4 h-4" />
             <span className="text-[13px]">Rasm yo'q</span>
@@ -182,7 +182,7 @@ export default function Step3Tasdiq({ tur, form, onBack, onDone }: Props) {
           initial="hidden"
           animate="show"
           variants={{ show: { transition: { staggerChildren: 0.05 } } }}
-          className="bg-tg-bg2 rounded-2xl border border-black/[.05] overflow-hidden"
+          className="bg-tg-bg2 rounded-2xl border border-line overflow-hidden"
         >
           {rows.map((row, i) => (
             <motion.div
@@ -190,7 +190,7 @@ export default function Step3Tasdiq({ tur, form, onBack, onDone }: Props) {
               variants={item}
               className={[
                 'flex items-center gap-3 px-4 py-3',
-                i > 0 ? 'border-t border-black/[.04]' : '',
+                i > 0 ? 'border-t border-line' : '',
               ].join(' ')}
             >
               <span className="text-tg-hint flex-shrink-0">{row.icon}</span>
@@ -212,7 +212,7 @@ export default function Step3Tasdiq({ tur, form, onBack, onDone }: Props) {
       </div>
 
       {/* Footer */}
-      <div className="flex-shrink-0 px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] bg-tg-bg border-t border-black/[.05] space-y-2">
+      <div className="flex-shrink-0 px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] bg-tg-bg border-t border-line space-y-2">
         {xato && (
           <motion.div
             initial={{ opacity: 0, y: 4 }}
