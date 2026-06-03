@@ -68,15 +68,18 @@ export function FilialarEditor({ filialar }: { filialar: FilialToliq[] }) {
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-1.5">
-                <button onClick={() => toggleAktiv(f)} disabled={isPending} title="Holatni almashtirish">
+                <button onClick={() => toggleAktiv(f)} disabled={isPending}
+                  aria-label={`${f.nomi}: holatni almashtirish`} title="Holatni almashtirish">
                   <Pill tone={f.aktiv ? "green" : "muted"}>{f.aktiv ? "Aktiv" : "Nofaol"}</Pill>
                 </button>
                 <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" disabled={isPending}
-                  onClick={() => setEdit({ id: f.id, nomi: f.nomi, topic_id: f.topic_id ?? "" })} title="Tahrirlash">
+                  onClick={() => setEdit({ id: f.id, nomi: f.nomi, topic_id: f.topic_id ?? "" })}
+                  aria-label={`${f.nomi} filialini tahrirlash`} title="Tahrirlash">
                   <Pencil className="h-3.5 w-3.5" />
                 </Button>
                 <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-destructive hover:text-destructive"
-                  disabled={isPending} onClick={() => setOchir(f)} title="O'chirish">
+                  disabled={isPending} onClick={() => setOchir(f)}
+                  aria-label={`${f.nomi} filialini o'chirish`} title="O'chirish">
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>
               </div>

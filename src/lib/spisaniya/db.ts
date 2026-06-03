@@ -7,6 +7,24 @@
  * (sahifa "ulanmagan" holatini ko'rsatadi, crash bo'lmaydi).
  */
 import { Pool, type PoolClient } from "pg";
+import {
+  TUR_LABEL,
+  VOZVRAT_HOLATLAR,
+  VOZVRAT_HOLAT_LABEL,
+  VOZVRAT_YONALISH_LABEL,
+  type ChiqimTur,
+  type VozvratHolat,
+} from "./labels";
+
+// Yorliqlarni shu modul orqali ham eksport qilamiz (mavjud importlar buzilmasin).
+export {
+  TUR_LABEL,
+  VOZVRAT_HOLATLAR,
+  VOZVRAT_HOLAT_LABEL,
+  VOZVRAT_YONALISH_LABEL,
+  type ChiqimTur,
+  type VozvratHolat,
+};
 
 let _pool: Pool | null = null;
 
@@ -31,16 +49,6 @@ export function botConfigured(): boolean {
 }
 
 export type ChiqimRange = { start: Date; end: Date };
-export type ChiqimTur = "spisaniya" | "vozvrat" | "kafe" | "ovqatlanish" | "ichki_sotuv";
-
-export const TUR_LABEL: Record<string, string> = {
-  spisaniya: "Spisaniya",
-  vozvrat: "Qayta ishlash",
-  kafe: "Kafe",
-  ovqatlanish: "Ovqatlanish",
-  ichki_sotuv: "Ichki sotuv",
-};
-
 // sana paramlari (YYYY-MM-DD) — vaqt::date oralig'i bo'yicha filtrlash
 function dayParams(range: ChiqimRange): [string, string] {
   return [range.start.toISOString().slice(0, 10), range.end.toISOString().slice(0, 10)];
@@ -503,21 +511,6 @@ export async function ensureSozlamalarSchema(): Promise<void> {
 }
 
 // ─── VOZVRATLAR (yangi qaytarish jarayoni) ────────────────────────────────────
-export const VOZVRAT_HOLATLAR = ["xabar_berildi", "yuborildi", "qaytarildi", "qaytarilmadi"] as const;
-export type VozvratHolat = (typeof VOZVRAT_HOLATLAR)[number];
-
-export const VOZVRAT_HOLAT_LABEL: Record<string, string> = {
-  xabar_berildi: "Xabar berildi",
-  yuborildi: "Yuborildi",
-  qaytarildi: "Qabul qilindi: qaytarildi",
-  qaytarilmadi: "Qabul qilindi: qaytarilmadi",
-};
-
-export const VOZVRAT_YONALISH_LABEL: Record<string, string> = {
-  asosiy_filial: "Asosiy filialga",
-  taminotchi: "Ta'minotchiga",
-};
-
 export type VozvratKirim = {
   tovar: string;
   miqdor: number | string;

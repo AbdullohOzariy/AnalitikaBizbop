@@ -61,7 +61,8 @@ export function RuxsatEditor({ ruxsatlar }: { ruxsatlar: BotRuxsat[] }) {
                   <Pill tone={r.aktiv ? "green" : "muted"}>{r.aktiv ? "Faol" : "Bloklangan"}</Pill>
                 </button>
                 <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-destructive hover:text-destructive"
-                  disabled={isPending} onClick={() => setOchir(r)} title="O'chirish">
+                  disabled={isPending} onClick={() => setOchir(r)}
+                  aria-label={`${r.ism || r.telegram_id} ruxsatini o'chirish`} title="O'chirish">
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>
               </div>

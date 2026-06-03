@@ -14,6 +14,12 @@ import {
 import { Loader2, ArrowRightLeft, PackageMinus, Image as ImageIcon, Building2 } from "lucide-react";
 import { toast } from "sonner";
 import { formatUZS } from "@/lib/format";
+import {
+  VOZVRAT_HOLATLAR as HOLATLAR,
+  VOZVRAT_HOLAT_LABEL as HOLAT_LABEL,
+  VOZVRAT_YONALISH_LABEL as YONALISH_LABEL,
+  CHIQIM_OTKAZ_TURLAR as CHIQIM_TURLAR,
+} from "@/lib/spisaniya/labels";
 import { vozvratHolatAction, vozvratOtkazAction } from "./actions";
 
 export type VozvratCardData = {
@@ -32,24 +38,6 @@ export type VozvratCardData = {
   qaytarilmadi_sabab: string | null;
   vaqt: string;
 };
-
-const HOLATLAR = ["xabar_berildi", "yuborildi", "qaytarildi", "qaytarilmadi"] as const;
-const HOLAT_LABEL: Record<string, string> = {
-  xabar_berildi: "Xabar berildi",
-  yuborildi: "Yuborildi",
-  qaytarildi: "Qabul qilindi: qaytarildi",
-  qaytarilmadi: "Qabul qilindi: qaytarilmadi",
-};
-const YONALISH_LABEL: Record<string, string> = {
-  asosiy_filial: "Asosiy filialga",
-  taminotchi: "Ta'minotchiga",
-};
-const CHIQIM_TURLAR: { value: string; label: string }[] = [
-  { value: "spisaniya", label: "Spisaniya" },
-  { value: "kafe", label: "Kafe" },
-  { value: "ovqatlanish", label: "Ovqatlanish" },
-  { value: "ichki_sotuv", label: "Ichki sotuv" },
-];
 
 function fmtDateTime(s: string) {
   return s.slice(0, 16).replace("T", " ");

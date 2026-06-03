@@ -53,11 +53,13 @@ export function KategoriyalarEditor({ kategoriyalar }: { kategoriyalar: Kategori
               </div>
               <div className="flex shrink-0 items-center gap-1.5">
                 <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" disabled={isPending}
-                  onClick={() => setEdit({ id: k.id, nomi: k.nomi })} title="Tahrirlash">
+                  onClick={() => setEdit({ id: k.id, nomi: k.nomi })}
+                  aria-label={`${k.nomi} kategoriyasini tahrirlash`} title="Tahrirlash">
                   <Pencil className="h-3.5 w-3.5" />
                 </Button>
                 <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-destructive hover:text-destructive"
-                  disabled={isPending} onClick={() => setOchir(k)} title="O'chirish">
+                  disabled={isPending} onClick={() => setOchir(k)}
+                  aria-label={`${k.nomi} kategoriyasini o'chirish`} title="O'chirish">
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>
               </div>
