@@ -1,0 +1,2 @@
+-- Yangi rol: CEO
+ALTER TYPE "Role" ADD VALUE IF NOT EXISTS 'CEO';

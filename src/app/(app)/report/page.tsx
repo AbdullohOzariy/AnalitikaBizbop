@@ -21,6 +21,7 @@ export default async function ReportPage({
 }) {
   const session = await auth();
   if (!session) redirect("/login");
+  if (session.user.role !== "ADMIN") redirect("/dashboard-v2");
 
   const defaultRange = await getDefaultRange();
   const sp = await searchParams;

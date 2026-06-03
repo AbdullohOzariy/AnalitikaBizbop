@@ -1,4 +1,6 @@
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import {
   computeKPI,
@@ -404,6 +406,11 @@ export default async function DashboardPage({
     compare?: string; cstart?: string; cend?: string;
   }>;
 }) {
+  const session = await auth();
+  if (!session) redirect("/login");
+  // Dashboard V1 — faqat ADMIN va CEO (Kategoriya menejeri V2 ko'radi).
+  if (session.user.role !== "ADMIN" && session.user.role !== "CEO") redirect("/dashboard-v2");
+
   const sp  = await searchParams;
   const def = await getDefaultRange();
   const start    = parseDate(sp.start, def.start);

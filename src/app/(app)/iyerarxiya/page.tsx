@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { unstable_cache } from "next/cache";
@@ -29,7 +30,8 @@ const getHierarchy = unstable_cache(
 
 export default async function IyerarxiyaPage() {
   const session = await auth();
-  const isAdmin = session?.user.role === "ADMIN";
+  if (!session?.user || session.user.role !== "ADMIN") redirect("/dashboard-v2");
+  const isAdmin = true;
   const groups = await getHierarchy();
 
   const data: HGroup[] = groups.map((g) => ({

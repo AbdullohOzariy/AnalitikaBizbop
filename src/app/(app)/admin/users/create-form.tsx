@@ -43,15 +43,15 @@ function InputField({
 }
 
 const ROLE_OPTIONS = [
-  { value: "VIEWER",      label: "Ko'ruvchi",           desc: "Faqat ko'rish huquqi" },
-  { value: "CAT_MANAGER", label: "Kategoriya menejeri", desc: "Kategoriya boshqarish" },
+  { value: "CAT_MANAGER", label: "Kategoriya menejeri", desc: "Dashboard V2, Spisaniya, OOS — faqat ko'rish" },
+  { value: "CEO",         label: "CEO",                 desc: "Dashboard V1+V2, Spisaniya, OOS — faqat ko'rish" },
   { value: "ADMIN",       label: "Admin",               desc: "To'liq huquq" },
 ] as const;
 
 // ── Forma ─────────────────────────────────────────────────────────────────────
 export function CreateUserForm() {
   const formRef = useRef<HTMLFormElement>(null);
-  const [role, setRole]           = useState<"VIEWER" | "CAT_MANAGER" | "ADMIN">("VIEWER");
+  const [role, setRole]           = useState<"CAT_MANAGER" | "CEO" | "ADMIN">("CAT_MANAGER");
   const [showPass, setShowPass]   = useState(false);
   const [isPending, start]        = useTransition();
 
@@ -68,7 +68,7 @@ export function CreateUserForm() {
       if (res.ok) {
         toast.success("Foydalanuvchi qo'shildi.");
         formRef.current?.reset();
-        setRole("VIEWER");
+        setRole("CAT_MANAGER");
         setShowPass(false);
       } else {
         toast.error(res.error);
@@ -135,7 +135,7 @@ export function CreateUserForm() {
         </Label>
         <Select
           value={role}
-          onValueChange={(v) => setRole((v as typeof role) ?? "VIEWER")}
+          onValueChange={(v) => setRole((v as typeof role) ?? "CAT_MANAGER")}
           disabled={isPending}
         >
           <SelectTrigger className="h-11 rounded-xl">

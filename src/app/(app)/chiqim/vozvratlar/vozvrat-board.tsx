@@ -23,7 +23,7 @@ const COLUMN_ACCENT: Record<string, string> = {
   qaytarilmadi: "border-t-destructive",
 };
 
-export function VozvratBoard({ vozvratlar }: { vozvratlar: VozvratCardData[] }) {
+export function VozvratBoard({ vozvratlar, canEdit }: { vozvratlar: VozvratCardData[]; canEdit: boolean }) {
   const router = useRouter();
   const [isPending, start] = useTransition();
 
@@ -60,7 +60,7 @@ export function VozvratBoard({ vozvratlar }: { vozvratlar: VozvratCardData[] }) 
     const id = dragId;
     setDragId(null);
     setOverCol(null);
-    if (id == null) return;
+    if (!canEdit || id == null) return;
     const card = items.find((i) => i.id === id);
     if (!card || card.status === status) return;
     if (status === "qaytarilmadi") {
@@ -74,10 +74,14 @@ export function VozvratBoard({ vozvratlar }: { vozvratlar: VozvratCardData[] }) 
 
   return (
     <>
-      <p className="text-xs text-muted-foreground">
-        Kartani ustundan ustunga <strong>sudrab</strong> holatini o&apos;zgartiring (yoki kartadagi
-        «Holat» tugmasidan). Mobil qurilmada «Holat» tugmasidan foydalaning.
-      </p>
+      {canEdit ? (
+        <p className="text-xs text-muted-foreground">
+          Kartani ustundan ustunga <strong>sudrab</strong> holatini o&apos;zgartiring (yoki kartadagi
+          «Holat» tugmasidan). Mobil qurilmada «Holat» tugmasidan foydalaning.
+        </p>
+      ) : (
+        <p className="text-xs text-muted-foreground">Faqat ko&apos;rish rejimi.</p>
+      )}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {HOLATLAR.map((st) => {
@@ -110,16 +114,19 @@ export function VozvratBoard({ vozvratlar }: { vozvratlar: VozvratCardData[] }) 
                   colItems.map((v) => (
                     <div
                       key={v.id}
-                      draggable={!isPending}
-                      onDragStart={(e) => { setDragId(v.id); e.dataTransfer.effectAllowed = "move"; }}
+                      draggable={canEdit && !isPending}
+                      onDragStart={(e) => { if (!canEdit) return; setDragId(v.id); e.dataTransfer.effectAllowed = "move"; }}
                       onDragEnd={() => { setDragId(null); setOverCol(null); }}
                       className={cn(
-                        "group relative cursor-grab active:cursor-grabbing",
+                        "group relative",
+                        canEdit && "cursor-grab active:cursor-grabbing",
                         dragId === v.id && "opacity-50"
                       )}
                     >
-                      <GripVertical className="pointer-events-none absolute right-1.5 top-1.5 z-10 h-3.5 w-3.5 text-muted-foreground/40 opacity-0 transition-opacity group-hover:opacity-100" />
-                      <VozvratCard v={v} />
+                      {canEdit && (
+                        <GripVertical className="pointer-events-none absolute right-1.5 top-1.5 z-10 h-3.5 w-3.5 text-muted-foreground/40 opacity-0 transition-opacity group-hover:opacity-100" />
+                      )}
+                      <VozvratCard v={v} canEdit={canEdit} />
                     </div>
                   ))
                 )}

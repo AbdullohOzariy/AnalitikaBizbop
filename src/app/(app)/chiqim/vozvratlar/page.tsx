@@ -30,7 +30,7 @@ export default async function VozvratlarPage({
   const session = await auth();
   if (!session) redirect("/login");
   const role = session.user.role;
-  if (role !== "ADMIN" && role !== "CAT_MANAGER") redirect("/dashboard");
+  if (role !== "ADMIN" && role !== "CAT_MANAGER" && role !== "CEO") redirect("/dashboard-v2");
 
   if (!botConfigured()) {
     return (
@@ -93,8 +93,8 @@ export default async function VozvratlarPage({
         />
       </div>
 
-      {/* Kanban (drag-and-drop) */}
-      <VozvratBoard vozvratlar={rows} />
+      {/* Kanban (drag-and-drop) — faqat admin tahrirlaydi */}
+      <VozvratBoard vozvratlar={rows} canEdit={role === "ADMIN"} />
     </div>
   );
 }

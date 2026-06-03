@@ -12,8 +12,9 @@ datasource db {
 
 enum Role {
   ADMIN
-  VIEWER
+  VIEWER // eskirgan — ishlatilmaydi (migratsiyada CAT_MANAGER'ga o'tkazilgan). UI'da yo'q.
   CAT_MANAGER
+  CEO
 }
 
 enum FileType {

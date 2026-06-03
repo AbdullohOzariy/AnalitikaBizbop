@@ -55,7 +55,7 @@ export default async function ChiqimStatistikaPage({
   const session = await auth();
   if (!session) redirect("/login");
   const role = session.user.role;
-  if (role !== "ADMIN" && role !== "CAT_MANAGER") redirect("/dashboard");
+  if (role !== "ADMIN" && role !== "CAT_MANAGER" && role !== "CEO") redirect("/dashboard-v2");
 
   if (!botConfigured()) {
     return (

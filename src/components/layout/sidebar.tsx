@@ -53,12 +53,12 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "Analitika",
     items: [
-      { href: "/dashboard",    label: "Dashboard",       icon: LayoutDashboard, roles: ["ADMIN", "VIEWER"] },
-      { href: "/dashboard-v2", label: "Dashboard v2",    icon: Sparkles },
-      { href: "/oos",          label: "OOS — Mavjudlik", icon: PackageX,        roles: ["ADMIN", "CAT_MANAGER"] },
-      { href: "/branches",     label: "Filiallar",        icon: Building2,       roles: ["ADMIN", "VIEWER"] },
-      { href: "/iyerarxiya",   label: "Iyerarxiya",       icon: Tag },
-      { href: "/report",       label: "Hisobot",          icon: Table2,          roles: ["ADMIN", "VIEWER"] },
+      { href: "/dashboard",    label: "Dashboard",       icon: LayoutDashboard, roles: ["ADMIN", "CEO"] },
+      { href: "/dashboard-v2", label: "Dashboard v2",    icon: Sparkles,        roles: ["ADMIN", "CAT_MANAGER", "CEO"] },
+      { href: "/oos",          label: "OOS",             icon: PackageX,        roles: ["ADMIN", "CAT_MANAGER", "CEO"] },
+      { href: "/branches",     label: "Filiallar",        icon: Building2,       roles: ["ADMIN"] },
+      { href: "/iyerarxiya",   label: "Iyerarxiya",       icon: Tag,             roles: ["ADMIN"] },
+      { href: "/report",       label: "Hisobot",          icon: Table2,          roles: ["ADMIN"] },
       { href: "/admin/upload", label: "Fayllar",          icon: Upload,          adminOnly: true },
       { href: "/admin/plans",  label: "Normal Reja",      icon: Target,          adminOnly: true },
     ],
@@ -66,18 +66,18 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "Baza",
     items: [
-      { href: "/baza/sotuv",   label: "Sotuv",      icon: Database,     roles: ["ADMIN", "CAT_MANAGER"] },
-      { href: "/baza/metrika", label: "Metrikalar",  icon: BarChart2,    roles: ["ADMIN", "CAT_MANAGER"] },
-      { href: "/baza/tashrif", label: "Tashriflar",  icon: Footprints,   roles: ["ADMIN", "CAT_MANAGER"] },
-      { href: "/baza/reja",    label: "Rejalar",     icon: CalendarDays, roles: ["ADMIN", "CAT_MANAGER"] },
+      { href: "/baza/sotuv",   label: "Sotuv",      icon: Database,     roles: ["ADMIN"] },
+      { href: "/baza/metrika", label: "Metrikalar",  icon: BarChart2,    roles: ["ADMIN"] },
+      { href: "/baza/tashrif", label: "Tashriflar",  icon: Footprints,   roles: ["ADMIN"] },
+      { href: "/baza/reja",    label: "Rejalar",     icon: CalendarDays, roles: ["ADMIN"] },
     ],
   },
   {
     label: "Hisobdan chiqarish",
     items: [
-      { href: "/chiqim",            label: "Chiqimlar",         icon: PackageMinus, roles: ["ADMIN", "CAT_MANAGER"] },
-      { href: "/chiqim/statistika", label: "Statistika",        icon: ChartPie,     roles: ["ADMIN", "CAT_MANAGER"] },
-      { href: "/chiqim/vozvratlar", label: "Vozvratlar",        icon: Recycle,      roles: ["ADMIN", "CAT_MANAGER"] },
+      { href: "/chiqim",            label: "Chiqimlar",         icon: PackageMinus, roles: ["ADMIN", "CAT_MANAGER", "CEO"] },
+      { href: "/chiqim/statistika", label: "Statistika",        icon: ChartPie,     roles: ["ADMIN", "CAT_MANAGER", "CEO"] },
+      { href: "/chiqim/vozvratlar", label: "Vozvratlar",        icon: Recycle,      roles: ["ADMIN", "CAT_MANAGER", "CEO"] },
     ],
   },
   {
@@ -244,7 +244,7 @@ function SidebarNav({
           <div className="h-2 w-2 rounded-full shrink-0 bg-primary" />
           {!collapsed && (
             <span className="text-xs text-muted-foreground font-medium truncate">
-              {role === "ADMIN" ? "Administrator" : role === "CAT_MANAGER" ? "Kategoriya menejeri" : "Ko'ruvchi"} · v0.1
+              {role === "ADMIN" ? "Administrator" : role === "CAT_MANAGER" ? "Kategoriya menejeri" : role === "CEO" ? "CEO" : "Ko'ruvchi"} · v0.1
             </span>
           )}
         </div>

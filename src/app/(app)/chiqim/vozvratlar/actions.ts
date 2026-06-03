@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireCatManagerOrAdmin } from "@/lib/auth-helpers";
+import { requireAdmin } from "@/lib/auth-helpers";
 import {
   vozvratHolatYangila,
   vozvratChiqimgaOtkaz,
@@ -31,7 +31,7 @@ export async function vozvratHolatAction(input: {
   qaytarilmadiSabab?: string;
 }): Promise<Result> {
   try {
-    await requireCatManagerOrAdmin();
+    await requireAdmin();
     const p = holatSchema.parse(input);
     if (p.status === "qaytarilmadi" && !p.qaytarilmadiSabab?.trim())
       return { ok: false, error: "Qaytarilmadi sababi kiritilishi shart." };
@@ -59,7 +59,7 @@ export async function vozvratOtkazAction(input: {
   sabab?: string;
 }): Promise<Result> {
   try {
-    const user = await requireCatManagerOrAdmin();
+    const user = await requireAdmin();
     const p = otkazSchema.parse(input);
     const res = await vozvratChiqimgaOtkaz(p.id, p.tur, p.sabab ?? null);
     if (!res) return { ok: false, error: "Vozvrat topilmadi yoki allaqachon o'tkazilgan." };

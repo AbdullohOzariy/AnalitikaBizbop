@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { unstable_cache } from "next/cache";
@@ -39,7 +40,8 @@ const getBranches = unstable_cache(
 
 export default async function BranchesPage() {
   const session = await auth();
-  const isAdmin = session?.user.role === "ADMIN";
+  if (!session?.user || session.user.role !== "ADMIN") redirect("/dashboard-v2");
+  const isAdmin = true;
   const branches = await getBranches();
   const totalAliases = branches.reduce((s, b) => s + b.aliases.length, 0);
 

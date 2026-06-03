@@ -15,7 +15,7 @@ export async function GET(
 ) {
   const session = await auth();
   const role = session?.user?.role;
-  if (!session || (role !== "ADMIN" && role !== "CAT_MANAGER")) {
+  if (!session || (role !== "ADMIN" && role !== "CAT_MANAGER" && role !== "CEO")) {
     return new NextResponse("Ruxsat yo'q", { status: 403 });
   }
 

@@ -44,7 +44,7 @@ export default async function BazaMetrikaPage({
   const session = await auth();
   if (!session) redirect("/login");
   const role = session.user.role;
-  if (role !== "ADMIN" && role !== "CAT_MANAGER") redirect("/dashboard");
+  if (role !== "ADMIN") redirect("/dashboard-v2");
 
   const sp = await searchParams;
   const page = Math.max(1, parseInt(sp.page ?? "1") || 1);

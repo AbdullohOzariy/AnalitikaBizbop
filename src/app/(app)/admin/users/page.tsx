@@ -21,6 +21,7 @@ const ROLE_CONFIG: Record<
   { label: string; tone: "green" | "blue" | "muted"; icon: string }
 > = {
   ADMIN:       { label: "Admin",               tone: "green",  icon: "A" },
+  CEO:         { label: "CEO",                  tone: "blue",   icon: "C" },
   CAT_MANAGER: { label: "Kategoriya menejeri", tone: "blue",   icon: "K" },
   VIEWER:      { label: "Ko'ruvchi",           tone: "muted",  icon: "V" },
 };
@@ -57,7 +58,7 @@ export default async function UsersPage() {
 
   const totalAdmin      = users.filter((u) => u.role === "ADMIN").length;
   const totalCatManager = users.filter((u) => u.role === "CAT_MANAGER").length;
-  const totalViewer     = users.filter((u) => u.role === "VIEWER").length;
+  const totalViewer     = users.filter((u) => u.role === "CEO").length;
 
   return (
     <div className="space-y-6">
@@ -88,7 +89,7 @@ export default async function UsersPage() {
           tone="blue"
         />
         <StatCard
-          label="Ko'ruvchilar"
+          label="CEO"
           value={totalViewer}
           icon={Eye}
           tone="default"

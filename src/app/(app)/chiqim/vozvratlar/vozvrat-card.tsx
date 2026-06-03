@@ -43,7 +43,7 @@ function fmtDateTime(s: string) {
   return s.slice(0, 16).replace("T", " ");
 }
 
-export function VozvratCard({ v }: { v: VozvratCardData }) {
+export function VozvratCard({ v, canEdit = true }: { v: VozvratCardData; canEdit?: boolean }) {
   const router = useRouter();
   const [isPending, start] = useTransition();
   const [holatOpen, setHolatOpen] = useState(false);
@@ -113,18 +113,20 @@ export function VozvratCard({ v }: { v: VozvratCardData }) {
         </div>
       </div>
 
-      <div className="mt-2.5 flex gap-1.5">
-        <Button variant="outline" size="sm" className="h-8 flex-1 rounded-lg text-xs" disabled={isPending}
-          onClick={() => { setStatus(v.status); setSabab(v.qaytarilmadi_sabab ?? ""); setHolatOpen(true); }}>
-          <ArrowRightLeft className="mr-1 h-3 w-3" /> Holat
-        </Button>
-        {v.status === "qaytarilmadi" && (
-          <Button size="sm" className="h-8 flex-1 rounded-lg text-xs" disabled={isPending}
-            onClick={() => { setTur("spisaniya"); setOtkazSabab(""); setOtkazOpen(true); }}>
-            <PackageMinus className="mr-1 h-3 w-3" /> Chiqimga
+      {canEdit && (
+        <div className="mt-2.5 flex gap-1.5">
+          <Button variant="outline" size="sm" className="h-8 flex-1 rounded-lg text-xs" disabled={isPending}
+            onClick={() => { setStatus(v.status); setSabab(v.qaytarilmadi_sabab ?? ""); setHolatOpen(true); }}>
+            <ArrowRightLeft className="mr-1 h-3 w-3" /> Holat
           </Button>
-        )}
-      </div>
+          {v.status === "qaytarilmadi" && (
+            <Button size="sm" className="h-8 flex-1 rounded-lg text-xs" disabled={isPending}
+              onClick={() => { setTur("spisaniya"); setOtkazSabab(""); setOtkazOpen(true); }}>
+              <PackageMinus className="mr-1 h-3 w-3" /> Chiqimga
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* Holatni o'zgartirish */}
       <Dialog open={holatOpen} onOpenChange={(o) => !o && setHolatOpen(false)}>

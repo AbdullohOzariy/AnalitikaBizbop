@@ -54,7 +54,7 @@ export default async function OosPage({
   const session = await auth();
   if (!session) redirect("/login");
   const role = session.user.role;
-  if (role !== "ADMIN" && role !== "CAT_MANAGER") redirect("/dashboard");
+  if (role !== "ADMIN" && role !== "CAT_MANAGER" && role !== "CEO") redirect("/dashboard");
 
   const sp = await searchParams;
   const view: View = sp.view === "low" || sp.view === "dead" ? sp.view : "oos";
@@ -158,7 +158,7 @@ export default async function OosPage({
     <div className="space-y-5">
       <PageHeader
         icon={PackageX}
-        title="OOS — Mavjudlik"
+        title="OOS"
         description="Qoldiq (Остаток) asosida tugagan, tugash xavfi va o'lik qoldiq tovarlar"
       >
         <BazaFilter
