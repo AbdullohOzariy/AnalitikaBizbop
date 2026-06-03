@@ -14,15 +14,20 @@ export const authConfig = {
 
       // Public (auth shart emas): NextAuth, Telegram webhook, miniapp (static + API).
       // Bular Telegram tomonidan / sessiyasiz chaqiriladi — login'ga yo'naltirib bo'lmaydi.
-      const isPublic =
-        pathname.startsWith("/api/auth") ||
-        pathname.startsWith("/api/tg") ||
-        pathname.startsWith("/api/yozuv") ||
-        pathname.startsWith("/api/vozvrat") ||
-        pathname.startsWith("/api/filialar") ||
-        pathname.startsWith("/api/rasm-yukla") ||
-        pathname.startsWith("/api/ruxsat") ||
-        pathname.startsWith("/miniapp");
+      // Aniq segment moslik: faqat o'zi yoki "<prefix>/..." (masalan /api/yozuvlar OCHILMAYDI).
+      const PUBLIC_PREFIXES = [
+        "/api/auth",
+        "/api/tg",
+        "/api/yozuv",
+        "/api/vozvrat",
+        "/api/filialar",
+        "/api/rasm-yukla",
+        "/api/ruxsat",
+        "/miniapp",
+      ];
+      const isPublic = PUBLIC_PREFIXES.some(
+        (p) => pathname === p || pathname.startsWith(p + "/")
+      );
       if (isPublic) return true;
 
       const isOnLogin = pathname.startsWith("/login");

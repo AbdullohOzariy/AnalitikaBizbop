@@ -5,8 +5,19 @@
  * Singleton: globalThis orqali (dev HMR / qayta yuklashda dublikat bo'lmasin).
  * BOT_TOKEN yo'q bo'lsa getBot() null qaytaradi — chaqiruvchi jim o'tkazib yuboradi.
  */
+import crypto from "crypto";
 import { Telegraf, Markup } from "telegraf";
 import { ruxsatBormi } from "./db";
+
+/**
+ * Telegram webhook `secret_token` — BOT_TOKEN'dan hosil qilingan barqaror qiymat
+ * (tokenning o'zi EMAS). setWebhook'da o'rnatiladi, har update'da header orqali tekshiriladi.
+ * Shu tufayli BOT_TOKEN webhook URL'ida turmaydi (loglarga sizmaydi).
+ */
+export function webhookSecret(): string | null {
+  const t = process.env.BOT_TOKEN;
+  return t ? crypto.createHash("sha256").update(t).digest("hex") : null;
+}
 
 type G = typeof globalThis & { __spisaniyaBot?: Telegraf | null };
 const g = globalThis as G;

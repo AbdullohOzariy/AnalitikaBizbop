@@ -14,12 +14,14 @@ export async function register() {
   }
 
   try {
-    const { getBot } = await import("@/lib/spisaniya/bot");
+    const { getBot, webhookSecret } = await import("@/lib/spisaniya/bot");
     const bot = getBot();
-    if (!bot) return;
-    const url = `${base}/api/tg/${token}`;
-    await bot.telegram.setWebhook(url);
-    console.log(`[instrumentation] Webhook o'rnatildi: ${base}/api/tg/***`);
+    const secret = webhookSecret();
+    if (!bot || !secret) return;
+    // Token URL'da emas — secret_token header orqali tasdiqlanadi.
+    const url = `${base}/api/tg`;
+    await bot.telegram.setWebhook(url, { secret_token: secret });
+    console.log(`[instrumentation] Webhook o'rnatildi: ${url} (secret_token bilan)`);
   } catch (err) {
     console.error("[instrumentation] Webhook xatosi:", err instanceof Error ? err.message : err);
   }

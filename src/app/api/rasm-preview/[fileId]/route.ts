@@ -22,5 +22,19 @@ export async function GET(
   const { fileId } = await params;
   const url = await telegramFileUrl(fileId);
   if (!url) return new NextResponse("Rasm topilmadi", { status: 404 });
-  return NextResponse.redirect(url);
+
+  // Redirect QILMAYMIZ — aks holda BOT_TOKEN'li Telegram URL brauzerga (Network/log)
+  // chiqib ketadi. Buning o'rniga faylni server tomonda proxy qilamiz.
+  try {
+    const upstream = await fetch(url, { cache: "no-store" });
+    if (!upstream.ok || !upstream.body) return new NextResponse("Rasm topilmadi", { status: 404 });
+    return new NextResponse(upstream.body, {
+      headers: {
+        "Content-Type": upstream.headers.get("content-type") ?? "image/jpeg",
+        "Cache-Control": "private, max-age=300",
+      },
+    });
+  } catch {
+    return new NextResponse("Rasm topilmadi", { status: 404 });
+  }
 }

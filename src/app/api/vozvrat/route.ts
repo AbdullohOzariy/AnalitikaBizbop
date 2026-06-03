@@ -41,8 +41,7 @@ export async function POST(req: Request) {
     void vozvratGuruhgaYuborish(d, id).catch((e) => console.error("[vozvrat→guruh]", e));
     return NextResponse.json({ ok: true, id });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Server xatosi";
-    console.error("[api/vozvrat]", msg);
-    return NextResponse.json({ xato: msg }, { status: 500 });
+    console.error("[api/vozvrat]", err);
+    return NextResponse.json({ xato: "Vozvrat saqlanmadi. Qaytadan urinib ko'ring." }, { status: 500 });
   }
 }

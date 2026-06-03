@@ -50,8 +50,8 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true, id: yozuvId });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Server xatosi";
-    console.error("[api/yozuv] DB xato:", msg);
-    return NextResponse.json({ xato: msg }, { status: 500 });
+    // Ichki xato detallarini (jadval/constraint nomlari) mijozga oshkor qilmaymiz.
+    console.error("[api/yozuv] DB xato:", err);
+    return NextResponse.json({ xato: "Yozuv saqlanmadi. Qaytadan urinib ko'ring." }, { status: 500 });
   }
 }

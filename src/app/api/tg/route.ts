@@ -1,23 +1,27 @@
 /**
- * Telegram webhook qabul qiluvchi. Telegram bu URL'ga update POST qiladi:
- *   {WEBHOOK_URL}/api/tg/{BOT_TOKEN}
- * Token URL'da — faqat to'g'ri token bilan kelgan so'rovni qabul qilamiz.
+ * Telegram webhook qabul qiluvchi (token URL'da EMAS — xavfsizroq).
+ * Telegram `X-Telegram-Bot-Api-Secret-Token` header'ini yuboradi; uni
+ * BOT_TOKEN'dan hosil qilingan secret bilan (doimiy vaqtli) solishtiramiz.
  */
 import { NextResponse } from "next/server";
+import crypto from "crypto";
 import type { Update } from "telegraf/types";
-import { getBot } from "@/lib/spisaniya/bot";
+import { getBot, webhookSecret } from "@/lib/spisaniya/bot";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST(
-  req: Request,
-  { params }: { params: Promise<{ token: string }> }
-) {
-  const { token } = await params;
-  if (!process.env.BOT_TOKEN || token !== process.env.BOT_TOKEN) {
+export async function POST(req: Request) {
+  const secret = webhookSecret();
+  const got = req.headers.get("x-telegram-bot-api-secret-token") || "";
+  if (
+    !secret ||
+    got.length !== secret.length ||
+    !crypto.timingSafeEqual(Buffer.from(got), Buffer.from(secret))
+  ) {
     return new NextResponse("Not found", { status: 404 });
   }
+
   const bot = getBot();
   if (!bot) return new NextResponse("Bot not configured", { status: 503 });
 
@@ -28,8 +32,7 @@ export async function POST(
     return new NextResponse("Bad request", { status: 400 });
   }
 
-  // Update'ni qayta ishlaymiz; xato bo'lsa ham Telegram'ga 200 qaytaramiz
-  // (aks holda Telegram qayta-qayta yuboraveradi).
+  // Xato bo'lsa ham 200 qaytaramiz (Telegram qayta-qayta yubormasin).
   try {
     await bot.handleUpdate(update);
   } catch (err) {

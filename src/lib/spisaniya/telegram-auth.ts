@@ -17,7 +17,7 @@ export type TelegramUser = {
  * initData'ni tekshiradi. To'g'ri imzo bo'lsa foydalanuvchini, aks holda null qaytaradi.
  * @param maxAgeSec — auth_date eskirgan bo'lsa rad etiladi (default 24 soat).
  */
-export function verifyInitData(initData: string, maxAgeSec = 86400): TelegramUser | null {
+export function verifyInitData(initData: string, maxAgeSec = 21600): TelegramUser | null {
   const token = process.env.BOT_TOKEN;
   if (!token || !initData) return null;
 
@@ -29,7 +29,7 @@ export function verifyInitData(initData: string, maxAgeSec = 86400): TelegramUse
   }
 
   const hash = params.get("hash");
-  if (!hash) return null;
+  if (!hash || !/^[0-9a-f]{64}$/i.test(hash)) return null;
 
   // data_check_string: 'hash'dan tashqari barcha kalit=qiymat, alifbo tartibida, \n bilan.
   const pairs: string[] = [];
@@ -48,12 +48,10 @@ export function verifyInitData(initData: string, maxAgeSec = 86400): TelegramUse
   const b = Buffer.from(hash, "hex");
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
 
-  // Eskirganini tekshirish
+  // Eskirganini tekshirish — auth_date majburiy (yo'q yoki 0 bo'lsa rad etamiz).
   const authDate = Number(params.get("auth_date") || 0);
-  if (authDate && maxAgeSec > 0) {
-    const ageSec = Date.now() / 1000 - authDate;
-    if (ageSec > maxAgeSec) return null;
-  }
+  if (!authDate || !Number.isFinite(authDate)) return null;
+  if (maxAgeSec > 0 && Date.now() / 1000 - authDate > maxAgeSec) return null;
 
   try {
     const userRaw = params.get("user");
