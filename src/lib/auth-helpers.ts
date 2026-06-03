@@ -1,4 +1,5 @@
 import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
 
 export class AuthorizationError extends Error {
   constructor(message = "Ruxsat yo'q") {
@@ -13,6 +14,24 @@ export async function requireAdmin() {
     throw new AuthorizationError();
   }
   return session.user;
+}
+
+/**
+ * Admin + sessiyadagi foydalanuvchi BAZADA haqiqatan mavjudligini tasdiqlaydi.
+ * Eskirgan JWT (foydalanuvchi o'chirilgan/qayta yaratilgan, baza qayta seed qilingan)
+ * holatida FK xatosi (UploadedFile_uploadedById_fkey) o'rniga tushunarli xabar beradi.
+ * Yozuv yaratishda uploadedById uchun shu funksiya qaytargan user.id ishlatilsin.
+ */
+export async function requireAdminUser() {
+  const sessionUser = await requireAdmin();
+  const id = Number(sessionUser.id);
+  const dbUser = Number.isInteger(id)
+    ? await prisma.user.findUnique({ where: { id } })
+    : null;
+  if (!dbUser) {
+    throw new AuthorizationError("Sessiyangiz eskirgan. Tizimdan chiqib, qaytadan kiring.");
+  }
+  return dbUser;
 }
 
 export async function requireUser() {

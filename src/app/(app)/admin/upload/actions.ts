@@ -5,7 +5,7 @@ import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
 import { FileType, AliasSource, UploadStatus } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin } from "@/lib/auth-helpers";
+import { requireAdminUser } from "@/lib/auth-helpers";
 import { ANALYTICS_CACHE_TAG } from "@/lib/analytics";
 import { sha256 } from "@/lib/parsers/utils";
 import { parseSalesWorkbook } from "@/lib/parsers/sales";
@@ -145,7 +145,7 @@ const salesInputSchema = z.object({
 
 export async function uploadSalesAction(formData: FormData): Promise<UploadResult> {
   try {
-    const user = await requireAdmin();
+    const user = await requireAdminUser();
     const file = formData.get("file");
     if (!(file instanceof File) || file.size === 0) {
       return { ok: false, error: "Fayl tanlanmagan." };
@@ -507,7 +507,7 @@ const metricsInputSchema = z.object({
 
 export async function uploadMetricsAction(formData: FormData): Promise<UploadResult> {
   try {
-    const user = await requireAdmin();
+    const user = await requireAdminUser();
     const file = formData.get("file");
     if (!(file instanceof File) || file.size === 0) {
       return { ok: false, error: "Fayl tanlanmagan." };
@@ -586,7 +586,7 @@ const visitsInputSchema = z.object({
 
 export async function uploadVisitsAction(formData: FormData): Promise<UploadResult> {
   try {
-    const user = await requireAdmin();
+    const user = await requireAdminUser();
     const file = formData.get("file");
     if (!(file instanceof File) || file.size === 0) {
       return { ok: false, error: "Fayl tanlanmagan." };
@@ -673,7 +673,7 @@ const dailyPlansInputSchema = z.object({
 
 export async function uploadDailyPlansAction(formData: FormData): Promise<UploadResult> {
   try {
-    const user = await requireAdmin();
+    const user = await requireAdminUser();
     const file = formData.get("file");
     if (!(file instanceof File) || file.size === 0) {
       return { ok: false, error: "Fayl tanlanmagan." };
