@@ -31,7 +31,7 @@ export async function vozvratHolatAction(input: {
   qaytarilmadiSabab?: string;
 }): Promise<Result> {
   try {
-    const user = await requireCatManagerOrAdmin();
+    await requireCatManagerOrAdmin();
     const p = holatSchema.parse(input);
     if (p.status === "qaytarilmadi" && !p.qaytarilmadiSabab?.trim())
       return { ok: false, error: "Qaytarilmadi sababi kiritilishi shart." };
@@ -39,8 +39,7 @@ export async function vozvratHolatAction(input: {
     const updated = await vozvratHolatYangila(p.id, p.status, p.qaytarilmadiSabab ?? null);
     if (!updated) return { ok: false, error: "Vozvrat topilmadi yoki allaqachon o'tkazilgan." };
 
-    const ism = user.name?.trim() || user.email || "Admin";
-    void vozvratHolatGuruhXabar(updated, ism).catch(() => {});
+    // Status o'zgarganda guruhga xabar YUBORILMAYDI (faqat yangi vozvrat yaratilganda).
     revalidatePath(RP);
     return { ok: true };
   } catch (err) {
