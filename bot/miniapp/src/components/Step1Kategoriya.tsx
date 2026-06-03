@@ -22,7 +22,6 @@ const KATEGORIYALAR: {
     nomi: 'Qayta ishlash',
     tavsif: 'Qayta ishlab sotuvga chiqarilgan mahsulot',
     color: '#3B82F6',
-    disabled: true,
   },
   {
     tur: 'kafe',
