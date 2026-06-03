@@ -484,10 +484,22 @@ function parseProductLevel(
       }
       const tol = Math.max(1, Math.abs(rootVal) * 0.0001);
       if (Math.abs(leafSum - rootVal) > tol) {
+        // Diagnostika: SKU deb sanalgan, lekin iyerarxiyada YO'Q kodlar — eng kattalari
+        // deyarli har doim ro'yxatga olinmagan GURUH/KATEGORIYA papkalaridir
+        // (guruh summasi SKU'dan ancha katta). Ularni ko'rsatamiz — admin Iyerarxiyaga qo'shadi.
+        const farq = leafSum - rootVal;
+        const nomzodlar = data
+          .map((d, i) => ({ d, i, total: parseAmount(d.r[cols.salesIdx]) ?? 0 }))
+          .filter((x) => !isGroup[x.i] && x.total > 0) // SKU deb sanalgan, lekin ehtimol papka
+          .sort((a, b) => b.total - a.total)
+          .slice(0, 20)
+          .map((x) => `  • ${x.d.code} — ${x.d.name} (${x.total.toLocaleString("ru-RU")})`)
+          .join("\n");
         throw new Error(
           `Validatsiya xato: "${alias}" bo'yicha SKU yig'indisi (${leafSum.toFixed(2)}) ` +
-            `fayl umumiy totaliga (${rootVal.toFixed(2)}) teng emas. ` +
-            `Shablon tuzilishi o'zgargan bo'lishi mumkin — parser tekshirilsin.`
+            `fayl totaliga (${rootVal.toFixed(2)}) teng emas — farq ${farq.toFixed(2)} (qo'sh hisob).\n\n` +
+            `Sabab: quyidagi kodlar iyerarxiyada YO'Q, shuning uchun guruh papkasi SKU deb sanalmoqda. ` +
+            `Ularni Iyerarxiyaga (guruh/kategoriya/subkategoriya) kodlari sifatida qo'shing:\n${nomzodlar}`
         );
       }
     }
