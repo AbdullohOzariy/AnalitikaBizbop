@@ -552,8 +552,8 @@ export async function vozvratHolatYangila(
   const p = requirePool();
   const { rows } = await p.query(
     `UPDATE vozvratlar
-       SET status=$1,
-           qaytarilmadi_sabab = CASE WHEN $1='qaytarilmadi' THEN $2 ELSE NULL END,
+       SET status=$1::text,
+           qaytarilmadi_sabab = CASE WHEN $1::text='qaytarilmadi' THEN $2 ELSE NULL END,
            yangilangan=NOW()
      WHERE id=$3 AND chiqim_yozuv_id IS NULL
      RETURNING ${VOZVRAT_COLS}`,
