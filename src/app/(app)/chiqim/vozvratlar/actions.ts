@@ -6,6 +6,8 @@ import { requireAdmin } from "@/lib/auth-helpers";
 import {
   vozvratHolatYangila,
   vozvratChiqimgaOtkaz,
+  vozvratYangila,
+  vozvratOchir,
   TUR_LABEL,
 } from "@/lib/spisaniya/db";
 import { vozvratHolatGuruhXabar } from "@/lib/spisaniya/notify";
@@ -72,6 +74,84 @@ export async function vozvratOtkazAction(input: {
     ).catch(() => {});
     revalidatePath(RP);
     revalidatePath("/chiqim");
+    return { ok: true };
+  } catch (err) {
+    return xato(err);
+  }
+}
+
+// ─── To'liq tahrirlash / o'chirish (ro'yxat ko'rinishi, faqat admin) ───────────
+const yangilaSchema = z.object({
+  id: z.coerce.number().int().positive(),
+  tovar: z.string().trim().min(1, "Tovar nomi kerak").max(255).optional(),
+  miqdor: z.coerce.number().nonnegative().optional(),
+  birlik: z.string().trim().max(20).optional(),
+  summa: z.coerce.number().nonnegative().optional(),
+  sabab: z.string().trim().max(255).optional(),
+  filial: z.string().trim().min(1).max(100).optional(),
+  yonalish: z.enum(["asosiy_filial", "taminotchi"]).optional(),
+  taminotchi: z.string().trim().max(255).optional(),
+  status: z.enum(["xabar_berildi", "saqlash_xonasida", "yuborildi", "qaytarildi", "qaytarilmadi"]).optional(),
+  qaytarilmadiSabab: z.string().trim().max(500).optional(),
+});
+
+export async function vozvratYangilaAction(input: {
+  id: number;
+  tovar?: string;
+  miqdor?: number;
+  birlik?: string;
+  summa?: number;
+  sabab?: string;
+  filial?: string;
+  yonalish?: string;
+  taminotchi?: string;
+  status?: string;
+  qaytarilmadiSabab?: string;
+}): Promise<Result> {
+  try {
+    await requireAdmin();
+    const p = yangilaSchema.parse(input);
+    if (p.status === "qaytarilmadi" && p.qaytarilmadiSabab !== undefined && !p.qaytarilmadiSabab.trim())
+      return { ok: false, error: "Qaytarilmadi sababi kiritilishi shart." };
+
+    const updated = await vozvratYangila(p.id, {
+      tovar: p.tovar,
+      miqdor: p.miqdor,
+      birlik: p.birlik,
+      summa: p.summa,
+      sabab: p.sabab === undefined ? undefined : p.sabab || null,
+      filial: p.filial,
+      yonalish: p.yonalish,
+      // asosiy_filialga o'tkazilsa ta'minotchi tozalanadi
+      taminotchi:
+        p.yonalish === "asosiy_filial"
+          ? null
+          : p.taminotchi === undefined
+            ? undefined
+            : p.taminotchi || null,
+      status: p.status,
+      // status berilganda: qaytarilmadi bo'lsa sabab, aks holda null
+      qaytarilmadi_sabab:
+        p.status === undefined
+          ? undefined
+          : p.status === "qaytarilmadi"
+            ? p.qaytarilmadiSabab?.trim() || null
+            : null,
+    });
+    if (!updated) return { ok: false, error: "Vozvrat topilmadi yoki allaqachon o'tkazilgan." };
+
+    revalidatePath(RP);
+    return { ok: true };
+  } catch (err) {
+    return xato(err);
+  }
+}
+
+export async function vozvratOchirAction(id: number): Promise<Result> {
+  try {
+    await requireAdmin();
+    await vozvratOchir(z.coerce.number().int().positive().parse(id));
+    revalidatePath(RP);
     return { ok: true };
   } catch (err) {
     return xato(err);

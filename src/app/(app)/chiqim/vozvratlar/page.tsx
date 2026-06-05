@@ -11,7 +11,7 @@ import { formatUZS } from "@/lib/format";
 import { Recycle, WifiOff, CheckCircle2, AlertTriangle, Layers } from "lucide-react";
 import { PageHeader, StatCard, EmptyState } from "@/components/common/page";
 import { ChiqimFilter } from "../chiqim-filter";
-import { VozvratBoard } from "./vozvrat-board";
+import { VozvratViews } from "./vozvrat-views";
 
 function parseDate(s: string | undefined): Date | undefined {
   if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return undefined;
@@ -57,7 +57,7 @@ export default async function VozvratlarPage({
 
   return (
     <div className="space-y-5">
-      <PageHeader icon={Recycle} title="Vozvratlar" description="Qaytarish jarayoni — kanban">
+      <PageHeader icon={Recycle} title="Vozvratlar" description="Qaytarish jarayoni — kanban yoki ro'yxat">
         <ChiqimFilter
           filials={filials}
           defaultStart={sp.start ?? fmtDate(def.start)}
@@ -93,8 +93,8 @@ export default async function VozvratlarPage({
         />
       </div>
 
-      {/* Kanban (drag-and-drop) — faqat admin tahrirlaydi */}
-      <VozvratBoard vozvratlar={rows} canEdit={role === "ADMIN"} />
+      {/* Kanban yoki Ro'yxat ko'rinishi — faqat admin tahrirlaydi */}
+      <VozvratViews vozvratlar={rows} canEdit={role === "ADMIN"} filials={filials} />
     </div>
   );
 }

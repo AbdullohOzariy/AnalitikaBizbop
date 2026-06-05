@@ -610,6 +610,55 @@ export async function vozvratChiqimgaOtkaz(
   }
 }
 
+/** Vozvrat maydonlarini tahrirlaydi (admin). Faqat ochiq (chiqimga o'tkazilmagan) vozvratlar. */
+export async function vozvratYangila(
+  id: number,
+  patch: {
+    tovar?: string;
+    miqdor?: number;
+    birlik?: string;
+    summa?: number;
+    sabab?: string | null;
+    filial?: string;
+    yonalish?: string;
+    taminotchi?: string | null;
+    status?: string;
+    qaytarilmadi_sabab?: string | null;
+  }
+): Promise<VozvratYozuv | null> {
+  if (patch.status !== undefined && !VOZVRAT_HOLATLAR.includes(patch.status as VozvratHolat))
+    throw new Error("Noto'g'ri status");
+  const p = requirePool();
+  const sets: string[] = [];
+  const vals: unknown[] = [];
+  let i = 1;
+  const add = (col: string, val: unknown) => { sets.push(`${col}=$${i++}`); vals.push(val); };
+  if (patch.tovar !== undefined) add("tovar", patch.tovar);
+  if (patch.miqdor !== undefined) add("miqdor", patch.miqdor);
+  if (patch.birlik !== undefined) add("birlik", patch.birlik);
+  if (patch.summa !== undefined) add("summa", patch.summa);
+  if (patch.sabab !== undefined) add("sabab", patch.sabab);
+  if (patch.filial !== undefined) add("filial", patch.filial);
+  if (patch.yonalish !== undefined) add("yonalish", patch.yonalish);
+  if (patch.taminotchi !== undefined) add("taminotchi", patch.taminotchi);
+  if (patch.status !== undefined) add("status", patch.status);
+  if (patch.qaytarilmadi_sabab !== undefined) add("qaytarilmadi_sabab", patch.qaytarilmadi_sabab);
+  if (!sets.length) return null;
+  sets.push("yangilangan=NOW()");
+  vals.push(id);
+  const { rows } = await p.query(
+    `UPDATE vozvratlar SET ${sets.join(",")} WHERE id=$${i} AND chiqim_yozuv_id IS NULL RETURNING ${VOZVRAT_COLS}`,
+    vals
+  );
+  return (rows[0] as VozvratYozuv) ?? null;
+}
+
+/** Vozvratni o'chiradi (faqat ochiq — chiqimga o'tkazilmagan). */
+export async function vozvratOchir(id: number): Promise<void> {
+  const p = requirePool();
+  await p.query(`DELETE FROM vozvratlar WHERE id=$1 AND chiqim_yozuv_id IS NULL`, [id]);
+}
+
 // ─── Bot ruxsati (whitelist) ──────────────────────────────────────────────────
 export type BotRuxsat = { telegram_id: string; ism: string | null; aktiv: boolean; qoshgan: string | null; vaqt: string };
 
