@@ -7,6 +7,7 @@ import {
   chiqimByBranch,
   chiqimRecords,
   chiqimFilials,
+  botKategoriyalar,
   TUR_LABEL,
 } from "@/lib/spisaniya/db";
 import { formatUZS } from "@/lib/format";
@@ -38,6 +39,8 @@ import {
 } from "@/components/ui/table";
 import { BazaPagination } from "../baza/baza-pagination";
 import { ChiqimFilter } from "./chiqim-filter";
+import { ChiqimExportButton } from "./chiqim-export-button";
+import { ChiqimRowActions } from "./chiqim-row-actions";
 import type { LucideIcon } from "lucide-react";
 
 const PAGE_SIZE = 50;
@@ -116,7 +119,7 @@ export default async function ChiqimPage({
   const range = { start: startDate, end: endDate };
 
   // Parallel data fetch
-  const [summary, byBranch, records, filials] = await Promise.all([
+  const [summary, byBranch, records, filials, kategoriyalarRaw] = await Promise.all([
     chiqimSummary(range),
     chiqimByBranch(range),
     chiqimRecords(range, {
@@ -126,7 +129,10 @@ export default async function ChiqimPage({
       pageSize: PAGE_SIZE,
     }),
     chiqimFilials(),
+    botKategoriyalar(),
   ]);
+
+  const katNomlari = kategoriyalarRaw.map((k) => k.nomi);
 
   const { rows, total } = records;
   const totalPages = Math.ceil(total / PAGE_SIZE);
@@ -148,7 +154,7 @@ export default async function ChiqimPage({
       <PageHeader
         icon={PackageMinus}
         title="Hisobdan chiqarish"
-        description="BotBizBopSPS dan chiqim yozuvlari (read-only ko'rinish)"
+        description="BotBizBopSPS dan chiqim yozuvlari"
       >
         <ChiqimFilter
           filials={filials}
@@ -157,6 +163,7 @@ export default async function ChiqimPage({
           defaultTur={sp.tur}
           defaultFilial={sp.filial}
         />
+        <ChiqimExportButton params={sp} />
       </PageHeader>
 
       {/* StatCard qatori — turlar bo'yicha + jami */}
@@ -252,6 +259,9 @@ export default async function ChiqimPage({
                       <TableHead className="w-[120px]">Kategoriya</TableHead>
                       <TableHead>Sabab</TableHead>
                       <TableHead className="w-[120px]">Xodim</TableHead>
+                      {role === "ADMIN" && (
+                        <TableHead className="w-[80px] text-right">Amallar</TableHead>
+                      )}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -305,6 +315,17 @@ export default async function ChiqimPage({
                         <TableCell className="text-xs max-w-[120px] truncate" title={r.xodim_ism}>
                           {r.xodim_ism || "—"}
                         </TableCell>
+
+                        {/* Amallar — faqat ADMIN */}
+                        {role === "ADMIN" && (
+                          <TableCell className="text-right">
+                            <ChiqimRowActions
+                              record={r}
+                              filials={filials}
+                              kategoriyalar={katNomlari}
+                            />
+                          </TableCell>
+                        )}
                       </TableRow>
                     ))}
                   </TableBody>

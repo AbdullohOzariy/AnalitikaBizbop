@@ -818,3 +818,126 @@ export async function kategoriyaOchir(id: number): Promise<void> {
     client.release();
   }
 }
+
+// ─── Admin: yozuv tahrirlash / o'chirish ─────────────────────────────────────
+
+/**
+ * Mavjud yozuvni qisman yangilaydi (faqat berilgan maydonlar SET qilinadi).
+ * Hech narsa berilmasa null qaytaradi; topilmasa ham null qaytaradi.
+ */
+export async function yozuvYangila(
+  id: number,
+  patch: {
+    tur?: string;
+    tovar?: string;
+    miqdor?: number;
+    birlik?: string;
+    summa?: number;
+    sabab?: string | null;
+    filial?: string;
+    kategoriya?: string | null;
+  }
+): Promise<ChiqimRecord | null> {
+  const p = requirePool();
+  const sets: string[] = [];
+  const vals: unknown[] = [];
+  let i = 1;
+  if (patch.tur !== undefined)       { sets.push(`tur=$${i++}`);       vals.push(patch.tur); }
+  if (patch.tovar !== undefined)     { sets.push(`tovar=$${i++}`);     vals.push(patch.tovar); }
+  if (patch.miqdor !== undefined)    { sets.push(`miqdor=$${i++}`);    vals.push(patch.miqdor); }
+  if (patch.birlik !== undefined)    { sets.push(`birlik=$${i++}`);    vals.push(patch.birlik); }
+  if (patch.summa !== undefined)     { sets.push(`summa=$${i++}`);     vals.push(patch.summa); }
+  if (patch.sabab !== undefined)     { sets.push(`sabab=$${i++}`);     vals.push(patch.sabab); }
+  if (patch.filial !== undefined)    { sets.push(`filial=$${i++}`);    vals.push(patch.filial); }
+  if (patch.kategoriya !== undefined){ sets.push(`kategoriya=$${i++}`); vals.push(patch.kategoriya); }
+  if (!sets.length) return null;
+  vals.push(id);
+  const { rows } = await p.query(
+    `UPDATE yozuvlar SET ${sets.join(", ")} WHERE id=$${i}
+     RETURNING id, tur, tovar, miqdor::float8, birlik, summa::float8, sabab,
+               filial, firma, kafe_nomi, xodim_ism, kategoriya, vaqt::text, status`,
+    vals
+  );
+  return (rows[0] as ChiqimRecord) ?? null;
+}
+
+/**
+ * Yozuvni tranzaksiyada o'chiradi.
+ * vozvratlar.chiqim_yozuv_id → NULL (FK buzilmasin).
+ * vozvrat_nazorat.yozuv_id   → DELETE (jadval bo'lmasligi mumkin — .catch bilan o'tadi).
+ * Keyin yozuvlar jadvalidan DELETE.
+ */
+export async function yozuvOchir(id: number): Promise<void> {
+  const p = requirePool();
+  const client: PoolClient = await p.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      `UPDATE vozvratlar SET chiqim_yozuv_id=NULL WHERE chiqim_yozuv_id=$1`,
+      [id]
+    );
+    await client.query(
+      `DELETE FROM vozvrat_nazorat WHERE yozuv_id=$1`,
+      [id]
+    ).catch(() => {/* vozvrat_nazorat jadvali bo'lmasligi mumkin */});
+    await client.query(`DELETE FROM yozuvlar WHERE id=$1`, [id]);
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/** Kategoriya bo'yicha agregatsiya — davr filtri. */
+export async function chiqimByKategoriya(
+  range: ChiqimRange
+): Promise<{ kategoriya: string; count: number; summa: number }[]> {
+  const p = getPool();
+  if (!p) return [];
+  try {
+    const { rows } = await p.query(
+      `SELECT COALESCE(NULLIF(kategoriya, ''), '—') AS kategoriya,
+              count(*)::int AS count,
+              COALESCE(sum(summa), 0)::float8 AS summa
+       FROM yozuvlar
+       WHERE vaqt::date >= $1::date AND vaqt::date <= $2::date
+       GROUP BY 1 ORDER BY summa DESC`,
+      dayParams(range)
+    );
+    return rows as { kategoriya: string; count: number; summa: number }[];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Excel eksport uchun yozuvlar (sahifalashsiz, LIMIT 50000).
+ * tur va filial optional filtrlar.
+ */
+export async function chiqimExportRows(
+  range: ChiqimRange,
+  opts: { tur?: string; filial?: string }
+): Promise<ChiqimRecord[]> {
+  const p = getPool();
+  if (!p) return [];
+  try {
+    const [start, end] = dayParams(range);
+    const cond: string[] = ["vaqt::date >= $1::date", "vaqt::date <= $2::date"];
+    const params: unknown[] = [start, end];
+    if (opts.tur)    { params.push(opts.tur);    cond.push(`tur = $${params.length}`); }
+    if (opts.filial) { params.push(opts.filial); cond.push(`filial = $${params.length}`); }
+    const where = cond.join(" AND ");
+    const { rows } = await p.query(
+      `SELECT id, tur, tovar, miqdor::float8, birlik, summa::float8, sabab, filial, firma,
+              kafe_nomi, xodim_ism, kategoriya, vaqt::text, status
+       FROM yozuvlar WHERE ${where}
+       ORDER BY vaqt DESC LIMIT 50000`,
+      params
+    );
+    return rows as ChiqimRecord[];
+  } catch {
+    return [];
+  }
+}
