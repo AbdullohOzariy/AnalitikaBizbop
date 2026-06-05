@@ -125,15 +125,28 @@ async function _planCompletion(range: DateRange, branchId?: number): Promise<Pla
   // Aggregations
   const [branches, categories] = await Promise.all([
     prisma.branch.findMany({ orderBy: { sortOrder: "asc" } }),
-    prisma.category.findMany({ where: { parentId: null }, orderBy: { sortOrder: "asc" } }),
+    // sortOrder > 0 — faqat ko'rinadigan kategoriyalar (VISIBLE_CAT_FILTER bilan izchil)
+    prisma.category.findMany({ where: { parentId: null, sortOrder: { gt: 0 } }, orderBy: { sortOrder: "asc" } }),
   ]);
+
+  // Ko'rinadigan kategoriya ID to'plami — plan tomoni ham shu set orqali filtrlash.
+  // effectivePlanMap ko'rinmas kategoriyalarni o'z ichiga olishi mumkin (sortOrder=0
+  // bo'lgan kategoriyalar DailyPlan/MonthlyPlan'da plan sifatida yozilgan bo'lsa).
+  // actualMap VISIBLE_CAT_FILTER tufayli faqat ko'rinadigan kategoriyalarni o'z ichiga oladi.
+  // allKeys ikkalasidan union emas — faqat ko'rinadigan kategoriyalar uchun hisob olinadi.
+  const visibleCatIds = new Set(categories.map((c) => c.id));
 
   let totalPlan = 0;
   let totalActual = 0;
   const byBranchAgg = new Map<number, { plan: number; actual: number }>();
   const byCatAgg    = new Map<number, { plan: number; actual: number }>();
 
-  const allKeys = new Set([...effectivePlanMap.keys(), ...actualMap.keys()]);
+  // Ko'rinmas kategoriyalar plan tomondan ham olib tashlanadi
+  const allKeys = new Set([...actualMap.keys()]);
+  for (const k of effectivePlanMap.keys()) {
+    const cid = Number(k.split("-")[1]);
+    if (visibleCatIds.has(cid)) allKeys.add(k);
+  }
   for (const key of allKeys) {
     const [bid, cid] = key.split("-").map(Number);
     const plan   = effectivePlanMap.get(key) ?? 0;

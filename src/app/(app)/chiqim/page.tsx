@@ -247,7 +247,7 @@ export default async function ChiqimPage({
           ) : (
             <>
               <div className="overflow-x-auto">
-                <Table>
+                <Table className="min-w-[860px]">
                   <TableHeader>
                     <TableRow className="bg-muted/40 hover:bg-muted/40">
                       <TableHead className="w-[130px]">Vaqt</TableHead>

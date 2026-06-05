@@ -41,19 +41,16 @@ export async function savePlansAction(
       `;
     }
 
-    for (const p of zero) {
-      await prisma.monthlyPlan
-        .delete({
-          where: {
-            branchId_year_month_categoryId: {
-              branchId: parsed.branchId,
-              year: parsed.year,
-              month: parsed.month,
-              categoryId: p.categoryId,
-            },
-          },
-        })
-        .catch(() => null);
+    // N+1 o'rniga bitta deleteMany — loop'dagi har bir p uchun alohida query yo'q
+    if (zero.length > 0) {
+      await prisma.monthlyPlan.deleteMany({
+        where: {
+          branchId: parsed.branchId,
+          year: parsed.year,
+          month: parsed.month,
+          categoryId: { in: zero.map((p) => p.categoryId) },
+        },
+      });
     }
 
     revalidatePath("/admin/plans");

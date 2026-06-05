@@ -14,7 +14,17 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // bot/ — alohida loyiha (BotBizBopSPS), web lint/build'iga kirmaydi
     "bot/**",
+    // miniapp Vite build artefaktlari (minified) — lint shovqinini bermasin
+    "public/miniapp/assets/**",
+    // bir martalik tahlil/test skriptlari (CommonJS)
+    "scripts/**",
   ]),
+  {
+    rules: {
+      // O'zbekcha UI matnida apostrof (') normal — &apos; ga aylantirish shovqin.
+      "react/no-unescaped-entities": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;

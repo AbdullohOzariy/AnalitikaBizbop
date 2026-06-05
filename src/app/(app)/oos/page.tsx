@@ -188,13 +188,16 @@ export default async function OosPage({
       </div>
 
       {/* View tabs */}
-      <div className="flex flex-wrap gap-2">
+      <div role="tablist" className="flex flex-wrap gap-2">
         {(Object.keys(VIEW_META) as View[]).map((v) => {
           const m = VIEW_META[v];
           const active = v === view;
           const Icon = m.icon;
           return (
             <Link key={v} href={tabHref(v)} scroll={false}
+              role="tab"
+              aria-selected={active}
+              aria-current={active ? "page" : undefined}
               className={cn(
                 "inline-flex items-center gap-2 rounded-xl border px-3.5 py-2 text-sm font-medium transition-colors",
                 active ? "border-primary bg-primary text-primary-foreground shadow-sm"

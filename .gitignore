@@ -37,8 +37,12 @@ yarn-error.log*
 # vercel
 .vercel
 
-# Maxfiy biznes ma'lumotlari (test Excel fayllar)
+# Maxfiy biznes ma'lumotlari (Excel fayllar — repoga tushmasin)
 /samples/
+*.xlsx
+
+# Bir martalik test artefaktlari
+_ptest.out
 
 # typescript
 *.tsbuildinfo

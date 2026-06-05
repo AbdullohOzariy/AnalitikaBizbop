@@ -11,8 +11,8 @@ export default function DashboardLoading() {
         <Skeleton className="h-9 w-32" />
       </div>
       <Skeleton className="h-[72px] w-full" />
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[...Array(4)].map((_, i) => (
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+        {[...Array(5)].map((_, i) => (
           <div key={i} className="bg-card rounded-xl border border-border/60 overflow-hidden">
             <div className="h-1 w-full bg-muted/50" />
             <div className="p-5 space-y-3">

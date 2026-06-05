@@ -55,6 +55,7 @@ export function Header({ user }: { user: Session["user"] }) {
             variant="ghost"
             size="icon"
             title="Chiqish"
+            aria-label="Chiqish"
             className="text-muted-foreground hover:text-destructive"
           >
             <LogOut className="h-4 w-4" />

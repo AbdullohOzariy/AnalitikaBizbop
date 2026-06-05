@@ -155,12 +155,17 @@ export async function chiqimRecords(
 
     const limit = opts.pageSize;
     const offset = (opts.page - 1) * opts.pageSize;
+    // SQLi defence-in-depth: limit/offset ham $N placeholder orqali — xom interpolatsiya yo'q
+    params.push(limit);
+    const limitIdx = params.length;
+    params.push(offset);
+    const offsetIdx = params.length;
     const { rows } = await p.query(
       `SELECT id, tur, tovar, miqdor::float8, birlik, summa::float8, sabab, filial, firma,
               kafe_nomi, xodim_ism, kategoriya, vaqt::text, status
        FROM yozuvlar WHERE ${where}
        ORDER BY vaqt DESC
-       LIMIT ${limit} OFFSET ${offset}`,
+       LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
       params
     );
     return { rows: rows as ChiqimRecord[], total };
@@ -353,12 +358,16 @@ export async function yozuvKategoriyaSaqla(yozuvId: number, kategoriya: string):
 export async function kategoriyasizYozuvlar(limit: number): Promise<{ id: number; tovar: string }[]> {
   const p = getPool();
   if (!p) return [];
-  const { rows } = await p.query(
-    `SELECT id, tovar FROM yozuvlar WHERE kategoriya IS NULL OR kategoriya=''
-     ORDER BY vaqt DESC LIMIT $1`,
-    [limit]
-  );
-  return rows as { id: number; tovar: string }[];
+  try {
+    const { rows } = await p.query(
+      `SELECT id, tovar FROM yozuvlar WHERE kategoriya IS NULL OR kategoriya=''
+       ORDER BY vaqt DESC LIMIT $1`,
+      [limit]
+    );
+    return rows as { id: number; tovar: string }[];
+  } catch {
+    return [];
+  }
 }
 
 

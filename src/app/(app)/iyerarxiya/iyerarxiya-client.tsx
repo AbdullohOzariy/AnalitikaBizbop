@@ -137,7 +137,7 @@ export function IyerarxiyaClient({
             className="h-9 pl-8 pr-8"
           />
           {query && (
-            <button onClick={() => setQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+            <button onClick={() => setQuery("")} aria-label="Tozalash" className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
               <X className="h-3.5 w-3.5" />
             </button>
           )}
@@ -178,6 +178,7 @@ export function IyerarxiyaClient({
               <div key={group.id} className="rounded-xl border border-border bg-card">
                 <button
                   onClick={() => toggleGroup(group.id)}
+                  aria-expanded={gOpen}
                   className="flex w-full items-center gap-3 px-4 py-3 text-left"
                 >
                   <ChevronRight className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${gOpen ? "rotate-90" : ""}`} />
@@ -197,6 +198,7 @@ export function IyerarxiyaClient({
                         <div key={cat.id}>
                           <button
                             onClick={() => toggleCat(cat.id)}
+                            aria-expanded={cOpen}
                             className="flex w-full items-start gap-2 px-4 py-2.5 text-left hover:bg-muted/40 transition-colors"
                           >
                             <ChevronRight className={`mt-0.5 ml-6 h-3.5 w-3.5 shrink-0 text-muted-foreground/60 transition-transform ${cOpen ? "rotate-90" : ""}`} />

@@ -165,6 +165,7 @@ function SidebarNav({
               collapsed && "mx-auto"
             )}
             title={collapsed ? "Kengaytirish" : "Qisqartirish"}
+            aria-label={collapsed ? "Kengaytirish" : "Qisqartirish"}
           >
             {collapsed
               ? <PanelLeftOpen  className="h-4 w-4" />

@@ -33,13 +33,19 @@ export async function signInAction(input: {
     return { error: "Juda ko'p urinish. 15 daqiqadan so'ng qayta urinib ko'ring." };
   }
 
+  // Open-redirect himoyasi: faqat ichki (nisbiy) yo'lga ruxsat.
+  // "//evil.com" yoki "https://evil.com" kabi tashqi manzillar rad etiladi.
+  const cb = input.callbackUrl;
+  const safeRedirect =
+    cb && cb.startsWith("/") && !cb.startsWith("//") ? cb : "/dashboard";
+
   try {
     await signIn("credentials", {
       email: input.login,
       password: input.password,
       redirect: false,
     });
-    return { redirectTo: input.callbackUrl ?? "/dashboard" };
+    return { redirectTo: safeRedirect };
   } catch (error) {
     if (error instanceof AuthError) {
       if (error.type === "CredentialsSignin") {

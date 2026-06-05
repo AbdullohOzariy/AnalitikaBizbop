@@ -204,20 +204,24 @@ async function _planByCategory(
 ): Promise<Map<number, number>> {
   const branchSql = branchId ? Prisma.sql`AND "branchId" = ${branchId}` : Prisma.empty;
 
-  // 1. DailyPlan — kategoriya bo'yicha jami (barcha filiallar yoki bitta filial)
+  // 1. DailyPlan — kategoriya bo'yicha jami (barcha filiallar yoki bitta filial).
+  // Ko'rinmas kategoriyalar (sortOrder=0) plan tomondan ham chiqarib tashlanadi —
+  // fakt (CategorySales) VISIBLE_CAT_FILTER ishlatadi, plan tomoni ham bir xil bo'lishi kerak.
   const dailyRows = await prisma.$queryRaw<
     { categoryId: number; total: number | null }[]
   >`
-    SELECT "categoryId", COALESCE(SUM("planAmount"::numeric), 0)::float8 AS total
-    FROM "DailyPlan"
-    WHERE date BETWEEN ${range.start}::date AND ${range.end}::date
+    SELECT dp."categoryId", COALESCE(SUM(dp."planAmount"::numeric), 0)::float8 AS total
+    FROM "DailyPlan" dp
+    JOIN "Category" _c ON _c.id = dp."categoryId" AND _c."sortOrder" > 0
+    WHERE dp.date BETWEEN ${range.start}::date AND ${range.end}::date
       ${branchSql}
-    GROUP BY "categoryId"
+    GROUP BY dp."categoryId"
   `;
   const dailyMap = new Map<number, number>();
   for (const r of dailyRows) dailyMap.set(r.categoryId, Number(r.total ?? 0));
 
-  // 2. MonthlyPlan — pro-rated (fallback)
+  // 2. MonthlyPlan — pro-rated (fallback).
+  // Ko'rinmas kategoriyalar bu yerda ham JOIN orqali filtrlangan.
   const months = monthsInRange(range);
   const monthlyMap = new Map<number, number>();
   if (months.length > 0) {
@@ -225,12 +229,13 @@ async function _planByCategory(
     const rows = await prisma.$queryRaw<
       { categoryId: number; year: number; month: number; total: number | null }[]
     >`
-      SELECT "categoryId", "year", "month",
-             COALESCE(SUM("planAmount"::numeric), 0)::float8 AS total
-      FROM "MonthlyPlan"
-      WHERE ("year", "month") IN (${ymPairs})
+      SELECT mp."categoryId", mp."year", mp."month",
+             COALESCE(SUM(mp."planAmount"::numeric), 0)::float8 AS total
+      FROM "MonthlyPlan" mp
+      JOIN "Category" _c ON _c.id = mp."categoryId" AND _c."sortOrder" > 0
+      WHERE (mp."year", mp."month") IN (${ymPairs})
         ${branchSql}
-      GROUP BY "categoryId", "year", "month"
+      GROUP BY mp."categoryId", mp."year", mp."month"
     `;
     const monthMeta = new Map(months.map((m) => [`${m.year}-${m.month}`, m]));
     for (const r of rows) {
@@ -252,19 +257,23 @@ async function _planByCategory(
  * DailyPlan mavjud filiallar uchun MonthlyPlan ni almashtiradi.
  */
 async function _planByBranch(range: DateRange): Promise<Map<number, number>> {
-  // 1. DailyPlan — filial bo'yicha jami
+  // 1. DailyPlan — filial bo'yicha jami.
+  // Ko'rinmas kategoriyalar (sortOrder=0) plan tomondan ham chiqariladi —
+  // _salesByBranch VISIBLE_CAT_FILTER ishlatadi, plan tomoni ham izchil bo'lishi kerak.
   const dailyRows = await prisma.$queryRaw<
     { branchId: number; total: number | null }[]
   >`
-    SELECT "branchId", COALESCE(SUM("planAmount"::numeric), 0)::float8 AS total
-    FROM "DailyPlan"
-    WHERE date BETWEEN ${range.start}::date AND ${range.end}::date
-    GROUP BY "branchId"
+    SELECT dp."branchId", COALESCE(SUM(dp."planAmount"::numeric), 0)::float8 AS total
+    FROM "DailyPlan" dp
+    JOIN "Category" _c ON _c.id = dp."categoryId" AND _c."sortOrder" > 0
+    WHERE dp.date BETWEEN ${range.start}::date AND ${range.end}::date
+    GROUP BY dp."branchId"
   `;
   const dailyMap = new Map<number, number>();
   for (const r of dailyRows) dailyMap.set(r.branchId, Number(r.total ?? 0));
 
-  // 2. MonthlyPlan — pro-rated (fallback)
+  // 2. MonthlyPlan — pro-rated (fallback).
+  // Ko'rinmas kategoriyalar bu yerda ham JOIN orqali filtrlangan.
   const months = monthsInRange(range);
   const monthlyMap = new Map<number, number>();
   if (months.length > 0) {
@@ -272,11 +281,12 @@ async function _planByBranch(range: DateRange): Promise<Map<number, number>> {
     const rows = await prisma.$queryRaw<
       { branchId: number; year: number; month: number; total: number | null }[]
     >`
-      SELECT "branchId", "year", "month",
-             COALESCE(SUM("planAmount"::numeric), 0)::float8 AS total
-      FROM "MonthlyPlan"
-      WHERE ("year", "month") IN (${ymPairs})
-      GROUP BY "branchId", "year", "month"
+      SELECT mp."branchId", mp."year", mp."month",
+             COALESCE(SUM(mp."planAmount"::numeric), 0)::float8 AS total
+      FROM "MonthlyPlan" mp
+      JOIN "Category" _c ON _c.id = mp."categoryId" AND _c."sortOrder" > 0
+      WHERE (mp."year", mp."month") IN (${ymPairs})
+      GROUP BY mp."branchId", mp."year", mp."month"
     `;
     const monthMeta = new Map(months.map((m) => [`${m.year}-${m.month}`, m]));
     for (const r of rows) {
@@ -554,7 +564,9 @@ async function _branchPerformance(range: DateRange): Promise<BranchPerformanceRo
     const m = metricsMap.get(b.id) ?? { receipts: 0, receiptTotal: 0 };
     const visits = visitsMap.get(b.id) ?? 0;
     const plan = planMap.get(b.id) ?? 0;
-    const avgReceipt = m.receipts > 0 ? sales / m.receipts : 0;
+    // To'g'ri formula: DailyMetrics.receiptTotal / receiptCount (_branchReport bilan izchil).
+    // Avvalgi `sales / m.receipts` xato edi — CategorySales summasini POS chek soniga bo'lardi.
+    const avgReceipt = m.receipts > 0 ? m.receiptTotal / m.receipts : 0;
     const conversion = visits > 0 ? (m.receipts / visits) * 100 : 0;
     return {
       branchId: b.id,
@@ -859,7 +871,9 @@ async function _dailyPlanVsActual(
   `;
   const planMap = new Map(planRows.map((r) => [isoDay(r.d), Number(r.total) ?? 0]));
 
-  // 2. CategorySales — pro-rated kunlarga bo'linadi
+  // 2. CategorySales — pro-rated kunlarga bo'linadi.
+  // VISIBLE_CAT_FILTER qo'shildi: boshqa funksiyalar (topCategories, branchReport) bilan
+  // izchillik — ko'rinmas kategoriyalar (sortOrder=0) fakt tomonga ham kirmasin.
   const salesRanges = await prisma.$queryRaw<{ ps: Date; pe: Date; total: number | null }[]>`
     SELECT "periodStart" AS ps, "periodEnd" AS pe,
            COALESCE(SUM(amount),0)::float AS total
@@ -867,6 +881,7 @@ async function _dailyPlanVsActual(
     WHERE "periodEnd"   >= ${range.start}
       AND "periodStart" <= ${range.end}
     ${branchFilter}
+    ${VISIBLE_CAT_FILTER}
     GROUP BY "periodStart", "periodEnd"
   `;
   const dayMs = 86_400_000;
