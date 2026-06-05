@@ -6,6 +6,7 @@ import {
   chiqimSummary,
   chiqimByBranch,
   chiqimByKategoriya,
+  chiqimFilials,
   TUR_LABEL,
 } from "@/lib/spisaniya/db";
 import { formatUZS } from "@/lib/format";
@@ -81,11 +82,13 @@ export default async function ChiqimStatistikaPage({
   const startDate = parseDate(sp.start) ?? def.start;
   const endDate   = parseDate(sp.end)   ?? def.end;
   const range = { start: startDate, end: endDate };
+  const filialFilter = sp.filial || undefined;
 
-  const [summary, byBranch, byKategoriya] = await Promise.all([
-    chiqimSummary(range),
-    chiqimByBranch(range),
-    chiqimByKategoriya(range),
+  const [summary, byBranch, byKategoriya, filials] = await Promise.all([
+    chiqimSummary(range, filialFilter),
+    chiqimByBranch(range, filialFilter),
+    chiqimByKategoriya(range, filialFilter),
+    chiqimFilials(),
   ]);
 
   const totalSumma = summary.reduce((acc, r) => acc + r.summa, 0);
@@ -107,11 +110,11 @@ export default async function ChiqimStatistikaPage({
         description="Tanlangan davr bo'yicha umumiy statistika"
       >
         <ChiqimFilter
-          filials={[]}
+          filials={filials}
           defaultStart={sp.start ?? fmtDate(def.start)}
           defaultEnd={sp.end ?? fmtDate(def.end)}
+          defaultFilial={sp.filial}
           hideTur
-          hideFilial
           basePath="/chiqim/statistika"
         />
       </PageHeader>

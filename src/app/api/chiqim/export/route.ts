@@ -38,9 +38,9 @@ export async function GET(req: NextRequest) {
   const filial = sp.get("filial") ?? undefined;
 
   const [summary, byBranch, byKategoriya, rows] = await Promise.all([
-    chiqimSummary(range),
-    chiqimByBranch(range),
-    chiqimByKategoriya(range),
+    chiqimSummary(range, filial),
+    chiqimByBranch(range, filial),
+    chiqimByKategoriya(range, filial),
     chiqimExportRows(range, { tur, filial }),
   ]);
 
