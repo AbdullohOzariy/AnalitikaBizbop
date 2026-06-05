@@ -76,9 +76,8 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Hisobdan chiqarish",
     items: [
       { href: "/chiqim",            label: "Chiqimlar",         icon: PackageMinus, roles: ["ADMIN", "CAT_MANAGER", "CEO"] },
-      { href: "/chiqim/statistika",    label: "Statistika",   icon: ChartPie,     roles: ["ADMIN", "CAT_MANAGER", "CEO"] },
-      { href: "/chiqim/kategoriyalar", label: "Kategoriyalar", icon: Tag,          roles: ["ADMIN", "CAT_MANAGER", "CEO"] },
-      { href: "/chiqim/vozvratlar",    label: "Vozvratlar",    icon: Recycle,      roles: ["ADMIN", "CAT_MANAGER", "CEO"] },
+      { href: "/chiqim/statistika", label: "Statistika",        icon: ChartPie,     roles: ["ADMIN", "CAT_MANAGER", "CEO"] },
+      { href: "/chiqim/vozvratlar", label: "Vozvratlar",        icon: Recycle,      roles: ["ADMIN", "CAT_MANAGER", "CEO"] },
     ],
   },
   {

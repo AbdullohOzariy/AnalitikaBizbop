@@ -5,6 +5,7 @@ import {
   chiqimDefaultRange,
   chiqimSummary,
   chiqimByBranch,
+  chiqimByKategoriya,
   TUR_LABEL,
 } from "@/lib/spisaniya/db";
 import { formatUZS } from "@/lib/format";
@@ -18,6 +19,7 @@ import {
   WifiOff,
   ChartPie,
   Layers,
+  Tag,
 } from "lucide-react";
 import {
   PageHeader,
@@ -80,14 +82,19 @@ export default async function ChiqimStatistikaPage({
   const endDate   = parseDate(sp.end)   ?? def.end;
   const range = { start: startDate, end: endDate };
 
-  const [summary, byBranch] = await Promise.all([
+  const [summary, byBranch, byKategoriya] = await Promise.all([
     chiqimSummary(range),
     chiqimByBranch(range),
+    chiqimByKategoriya(range),
   ]);
 
   const totalSumma = summary.reduce((acc, r) => acc + r.summa, 0);
   const totalCount = summary.reduce((acc, r) => acc + r.count, 0);
   const branchTotal = byBranch.reduce((acc, r) => acc + r.summa, 0);
+
+  // Kategoriya breakdown — summa bo'yicha kamayish tartibida
+  const katSorted = [...byKategoriya].sort((a, b) => b.summa - a.summa);
+  const katTotal = katSorted.reduce((acc, r) => acc + r.summa, 0);
 
   const allTurs = Object.keys(TUR_LABEL);
   const summaryMap = new Map(summary.map((r) => [r.tur, r]));
@@ -192,6 +199,46 @@ export default async function ChiqimStatistikaPage({
                   <Building2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                   <span className="w-44 shrink-0 truncate text-xs font-medium" title={row.filial}>
                     {row.filial}
+                  </span>
+                  <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="absolute inset-y-0 left-0 rounded-full bg-primary/60"
+                      style={{ width: `${Math.min(pct, 100)}%` }}
+                    />
+                  </div>
+                  <span className="w-28 shrink-0 text-right tabular-nums text-xs">
+                    {formatUZS(row.summa, { compact: true })}
+                  </span>
+                  <span className="w-10 shrink-0 text-right tabular-nums text-xs text-muted-foreground">
+                    {pct.toFixed(1)}%
+                  </span>
+                  <span className="w-14 shrink-0 text-right tabular-nums text-xs text-muted-foreground">
+                    {row.count.toLocaleString("uz-UZ")} ta
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </SectionCard>
+      )}
+
+      {/* Kategoriya bo'yicha */}
+      {katSorted.length > 0 && (
+        <SectionCard
+          title="Kategoriya bo'yicha"
+          description="Tanlangan davr bo'yicha kategoriya tahlili"
+          actions={
+            <span className="text-xs text-muted-foreground">{katSorted.length} ta kategoriya</span>
+          }
+        >
+          <div className="space-y-2.5">
+            {katSorted.map((row) => {
+              const pct = katTotal > 0 ? (row.summa / katTotal) * 100 : 0;
+              return (
+                <div key={row.kategoriya} className="flex items-center gap-3">
+                  <Tag className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <span className="w-44 shrink-0 truncate text-xs font-medium" title={row.kategoriya}>
+                    {row.kategoriya}
                   </span>
                   <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-muted">
                     <div

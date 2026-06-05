@@ -19,7 +19,7 @@ function xato(err: unknown): Result {
 }
 
 // revalidate qilinadigan yo'llar
-const PATHS = ["/chiqim", "/chiqim/statistika", "/chiqim/kategoriyalar"] as const;
+const PATHS = ["/chiqim", "/chiqim/statistika"] as const;
 
 const yangilaSchema = z.object({
   id: z.coerce.number().int().positive(),
