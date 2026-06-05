@@ -120,8 +120,8 @@ export default async function ChiqimPage({
 
   // Parallel data fetch
   const [summary, byBranch, records, filials, kategoriyalarRaw] = await Promise.all([
-    chiqimSummary(range),
-    chiqimByBranch(range),
+    chiqimSummary(range, filialFilter),
+    chiqimByBranch(range, filialFilter),
     chiqimRecords(range, {
       tur:      turFilter,
       filial:   filialFilter,
