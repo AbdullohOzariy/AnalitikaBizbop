@@ -66,10 +66,11 @@ export function chiqimDefaultRange(): ChiqimRange {
   return { start, end };
 }
 
-/** Tur bo'yicha jami: soni + summa (ixtiyoriy filial filtri). */
+/** Tur bo'yicha jami: soni + summa (ixtiyoriy filial + tur filtri). */
 export async function chiqimSummary(
   range: ChiqimRange,
-  filial?: string
+  filial?: string,
+  tur?: string
 ): Promise<{ tur: string; count: number; summa: number }[]> {
   const p = getPool();
   if (!p) return [];
@@ -77,6 +78,7 @@ export async function chiqimSummary(
     const params: unknown[] = [...dayParams(range)];
     const cond = ["vaqt::date >= $1::date", "vaqt::date <= $2::date"];
     if (filial) { params.push(filial); cond.push(`filial = $${params.length}`); }
+    if (tur)    { params.push(tur);    cond.push(`tur = $${params.length}`); }
     const { rows } = await p.query(
       `SELECT tur, count(*)::int AS count, COALESCE(sum(summa), 0)::float8 AS summa
        FROM yozuvlar
@@ -90,10 +92,11 @@ export async function chiqimSummary(
   }
 }
 
-/** Filial bo'yicha jami summa + soni (ixtiyoriy filial filtri). */
+/** Filial bo'yicha jami summa + soni (ixtiyoriy filial + tur filtri). */
 export async function chiqimByBranch(
   range: ChiqimRange,
-  filial?: string
+  filial?: string,
+  tur?: string
 ): Promise<{ filial: string; count: number; summa: number }[]> {
   const p = getPool();
   if (!p) return [];
@@ -101,6 +104,7 @@ export async function chiqimByBranch(
     const params: unknown[] = [...dayParams(range)];
     const cond = ["vaqt::date >= $1::date", "vaqt::date <= $2::date"];
     if (filial) { params.push(filial); cond.push(`filial = $${params.length}`); }
+    if (tur)    { params.push(tur);    cond.push(`tur = $${params.length}`); }
     const { rows } = await p.query(
       `SELECT COALESCE(filial, '—') AS filial, count(*)::int AS count, COALESCE(sum(summa), 0)::float8 AS summa
        FROM yozuvlar
