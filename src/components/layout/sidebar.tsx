@@ -28,6 +28,7 @@ import {
   Recycle,
   Settings,
   Truck,
+  PackageSearch,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -105,6 +106,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/baza/reja",           label: "Rejalar",      icon: CalendarDays, roles: ["ADMIN"] },
       { href: "/iyerarxiya",          label: "Iyerarxiya",   icon: Tag,          roles: ["ADMIN"] },
       { href: "/baza/taminotchilar",  label: "Ta'minotchilar", icon: Truck,      roles: ["ADMIN"] },
+      { href: "/baza/moslanmagan",    label: "Moslanmagan",  icon: PackageSearch, roles: ["ADMIN"] },
     ],
   },
   {

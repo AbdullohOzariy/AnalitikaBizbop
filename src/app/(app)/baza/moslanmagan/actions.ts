@@ -1,0 +1,41 @@
+"use server";
+
+import { revalidatePath, revalidateTag } from "next/cache";
+import { z } from "zod";
+import { prisma } from "@/lib/prisma";
+import { requireAdmin } from "@/lib/auth-helpers";
+import { actionError } from "@/lib/action-error";
+
+type Result = { ok: true } | { ok: false; error: string };
+
+/** Moslanmagan mahsulotga subkategoriya tayinlaydi (iyerarxiyaga joylashtiradi). */
+export async function assignProductSubcatAction(productId: number, subId: number): Promise<Result> {
+  try {
+    await requireAdmin();
+    const pid = z.coerce.number().int().positive().parse(productId);
+    const sid = z.coerce.number().int().positive().parse(subId);
+    // sid haqiqatan subkategoriya (parentId bor) ekanini tekshiramiz
+    const sub = await prisma.category.findUnique({ where: { id: sid }, select: { parentId: true } });
+    if (!sub || sub.parentId == null) return { ok: false, error: "Faqat subkategoriya tanlanishi mumkin." };
+    await prisma.product.update({ where: { id: pid }, data: { categoryId: sid } });
+    revalidatePath("/baza/moslanmagan");
+    revalidateTag("iyerarxiya", "max");
+    return { ok: true };
+  } catch (err) {
+    return actionError(err, "assignProductSubcat");
+  }
+}
+
+/** Mahsulot nomini tuzatadi. */
+export async function renameProductAction(productId: number, name: string): Promise<Result> {
+  try {
+    await requireAdmin();
+    const pid = z.coerce.number().int().positive().parse(productId);
+    const nm = z.string().trim().min(1, "Nom kerak").max(255).parse(name);
+    await prisma.product.update({ where: { id: pid }, data: { name: nm } });
+    revalidatePath("/baza/moslanmagan");
+    return { ok: true };
+  } catch (err) {
+    return actionError(err, "renameProduct");
+  }
+}
