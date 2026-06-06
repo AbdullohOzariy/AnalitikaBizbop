@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { PackageSearch } from "lucide-react";
 import { PageHeader } from "@/components/common/page";
-import { MoslanmaganClient, type UnmatchedProduct, type SubOption } from "./moslanmagan-client";
+import { MoslanmaganClient, type UnmatchedProduct, type SubOption, type NameMismatch } from "./moslanmagan-client";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +20,7 @@ export default async function MoslanmaganPage({
   const sp = await searchParams;
   const page = Math.max(1, parseInt(sp.page ?? "1") || 1);
 
-  const [total, rows, subRows] = await Promise.all([
+  const [total, rows, subRows, nameRows, nameTotal] = await Promise.all([
     prisma.product.count({ where: { categoryId: null } }),
     prisma.product.findMany({
       where: { categoryId: null },
@@ -39,6 +39,12 @@ export default async function MoslanmaganPage({
       },
       orderBy: { name: "asc" },
     }),
+    prisma.productNameMismatch.findMany({
+      select: { fileName: true, product: { select: { id: true, code: true, name: true } } },
+      orderBy: { createdAt: "desc" },
+      take: 500,
+    }),
+    prisma.productNameMismatch.count(),
   ]);
 
   const products: UnmatchedProduct[] = rows.map((p) => ({
@@ -53,13 +59,19 @@ export default async function MoslanmaganPage({
     cat: s.parent?.name ?? "—",
     group: s.group?.name ?? null,
   }));
+  const mismatches: NameMismatch[] = nameRows.map((m) => ({
+    productId: m.product.id,
+    code: m.product.code,
+    masterName: m.product.name,
+    fileName: m.fileName,
+  }));
 
   return (
     <div className="space-y-4">
       <PageHeader
         icon={PackageSearch}
         title="Moslanmagan"
-        description="Iyerarxiyaga joylashtirilmagan (kategoriyasiz) SKU — subkategoriya tayinlang"
+        description="Kategoriyasiz SKU va nom farqlarini ko'rib chiqib tuzating"
       />
       <MoslanmaganClient
         products={products}
@@ -67,6 +79,8 @@ export default async function MoslanmaganPage({
         total={total}
         page={page}
         pageSize={PAGE_SIZE}
+        mismatches={mismatches}
+        nameTotal={nameTotal}
       />
     </div>
   );

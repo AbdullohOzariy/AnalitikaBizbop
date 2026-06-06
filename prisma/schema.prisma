@@ -262,12 +262,25 @@ model Product {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  category Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  supplier Supplier?      @relation(fields: [supplierId], references: [id], onDelete: SetNull)
-  sales    ProductSales[]
+  category     Category?            @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  supplier     Supplier?            @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  sales        ProductSales[]
+  nameMismatch ProductNameMismatch?
 
   @@index([categoryId])
   @@index([supplierId])
+}
+
+// Kunlik sotuv faylidagi nom master nomidan farq qilsa — review uchun saqlanadi.
+// Admin Moslanmagan → "Nom farqi" tabida: yangilaydi yoki master nomini saqlaydi.
+model ProductNameMismatch {
+  id             Int      @id @default(autoincrement())
+  productId      Int      @unique
+  fileName       String // sotuv faylidagi nom
+  uploadedFileId Int?
+  createdAt      DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 }
 
 // Ta'minotchi (POSTAVSHIK) — sku.xlsx'dagi yetkazib beruvchi. Mahsulotga 1:N.

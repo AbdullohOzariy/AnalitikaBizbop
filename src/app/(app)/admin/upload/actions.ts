@@ -408,6 +408,23 @@ async function uploadV3(
       `;
     }
 
+    // 3b. Nom farqlari → ProductNameMismatch (review uchun). Mos kelganlar tozalanadi.
+    const mismatchData = nameChanges.map((p) => ({
+      productId: existingByCode.get(p.code)!.id,
+      fileName: p.name,
+      uploadedFileId: fileRecord.id,
+    }));
+    const matchedPids = fileProducts
+      .filter((p) => { const e = existingByCode.get(p.code); return !!e && e.name === p.name; })
+      .map((p) => existingByCode.get(p.code)!.id);
+    const touchedPids = [...mismatchData.map((m) => m.productId), ...matchedPids];
+    if (touchedPids.length > 0) {
+      await prisma.productNameMismatch.deleteMany({ where: { productId: { in: touchedPids } } });
+    }
+    if (mismatchData.length > 0) {
+      await prisma.productNameMismatch.createMany({ data: mismatchData });
+    }
+
     // 4. Product code → DB id mapping (mavjud + yangi)
     const dbProducts = await prisma.product.findMany({
       where: { code: { in: fileProducts.map((p) => p.code) } },
@@ -474,7 +491,7 @@ async function uploadV3(
     review.push(`🆕 Yangi SKU: ${newSkuCount} ta — kategoriyasiz qo'shildi (Moslanmagan ro'yxatida subkategoriya tayinlang). Kodlar: ${newSkuSample}${newSkuCount > 5 ? "…" : ""}`);
   }
   if (nameDiffCount > 0) {
-    review.push(`✏️ Nom farqi: ${nameDiffCount} ta — master nomi saqlandi (o'zgartirilmadi).`);
+    review.push(`✏️ Nom farqi: ${nameDiffCount} ta — master saqlandi. Moslanmagan → "Nom farqi" tabида ko'rib chiqing.`);
   }
 
   return {

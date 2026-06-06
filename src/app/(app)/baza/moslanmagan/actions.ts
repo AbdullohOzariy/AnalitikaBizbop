@@ -39,3 +39,35 @@ export async function renameProductAction(productId: number, name: string): Prom
     return actionError(err, "renameProduct");
   }
 }
+
+/** Nom farqi: fayldagi nomni master'ga qabul qiladi (yangilaydi) + farqni yopadi. */
+export async function applyNameAction(productId: number): Promise<Result> {
+  try {
+    await requireAdmin();
+    const pid = z.coerce.number().int().positive().parse(productId);
+    const mm = await prisma.productNameMismatch.findUnique({ where: { productId: pid }, select: { fileName: true } });
+    if (!mm) return { ok: false, error: "Farq topilmadi (allaqachon hal qilingan)." };
+    await prisma.$transaction([
+      prisma.product.update({ where: { id: pid }, data: { name: mm.fileName } }),
+      prisma.productNameMismatch.delete({ where: { productId: pid } }),
+    ]);
+    revalidatePath("/baza/moslanmagan");
+    revalidateTag("iyerarxiya", "max");
+    return { ok: true };
+  } catch (err) {
+    return actionError(err, "applyName");
+  }
+}
+
+/** Nom farqi: master nomini saqlab qoladi, farqni yopadi (e'tiborsiz qoldiradi). */
+export async function dismissNameAction(productId: number): Promise<Result> {
+  try {
+    await requireAdmin();
+    const pid = z.coerce.number().int().positive().parse(productId);
+    await prisma.productNameMismatch.deleteMany({ where: { productId: pid } });
+    revalidatePath("/baza/moslanmagan");
+    return { ok: true };
+  } catch (err) {
+    return actionError(err, "dismissName");
+  }
+}

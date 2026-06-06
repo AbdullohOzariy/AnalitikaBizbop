@@ -8,37 +8,77 @@ import { Input } from "@/components/ui/input";
 import {
   Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { StatCard, EmptyState } from "@/components/common/page";
-import { Search, X, Loader2, Pencil, Check, PackageSearch, Truck, CheckCircle2 } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { EmptyState } from "@/components/common/page";
+import { Search, X, Loader2, Pencil, Check, Truck, CheckCircle2 } from "lucide-react";
 import { BazaPagination } from "../baza-pagination";
-import { assignProductSubcatAction, renameProductAction } from "./actions";
+import { assignProductSubcatAction, renameProductAction, applyNameAction, dismissNameAction } from "./actions";
 
 export type UnmatchedProduct = { id: number; code: number; name: string; supplier: string | null };
 export type SubOption = { id: number; name: string; cat: string; group: string | null };
+export type NameMismatch = { productId: number; code: number; masterName: string; fileName: string };
 type GroupedSubs = { cat: string; group: string | null; subs: { id: number; name: string }[] }[];
 
 export function MoslanmaganClient({
-  products, subs, total, page, pageSize,
+  products, subs, total, page, pageSize, mismatches, nameTotal,
 }: {
   products: UnmatchedProduct[];
   subs: SubOption[];
   total: number;
   page: number;
   pageSize: number;
+  mismatches: NameMismatch[];
+  nameTotal: number;
 }) {
-  const [query, setQuery] = useState("");
-  const q = query.trim().toUpperCase();
-
   const grouped: GroupedSubs = useMemo(() => {
     const byCat = new Map<string, { group: string | null; subs: { id: number; name: string }[] }>();
     for (const s of subs) {
-      const key = s.cat;
-      if (!byCat.has(key)) byCat.set(key, { group: s.group, subs: [] });
-      byCat.get(key)!.subs.push({ id: s.id, name: s.name });
+      if (!byCat.has(s.cat)) byCat.set(s.cat, { group: s.group, subs: [] });
+      byCat.get(s.cat)!.subs.push({ id: s.id, name: s.name });
     }
     return [...byCat.entries()].map(([cat, v]) => ({ cat, group: v.group, subs: v.subs }));
   }, [subs]);
 
+  if (total === 0 && nameTotal === 0) {
+    return (
+      <EmptyState
+        icon={CheckCircle2}
+        title="Hammasi moslangan"
+        description="Kategoriyasiz SKU va nom farqi yo'q. Yangi sotuv yuklanganda muammoli SKU'lar shu yerda paydo bo'ladi."
+      />
+    );
+  }
+
+  return (
+    <Tabs defaultValue={total > 0 ? "cat" : "name"} className="w-full">
+      <TabsList>
+        <TabsTrigger value="cat">Kategoriyasiz · {total.toLocaleString("uz-UZ")}</TabsTrigger>
+        <TabsTrigger value="name">Nom farqi · {nameTotal.toLocaleString("uz-UZ")}</TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="cat" className="pt-3">
+        <CategorylessTab products={products} grouped={grouped} total={total} page={page} pageSize={pageSize} />
+      </TabsContent>
+
+      <TabsContent value="name" className="pt-3">
+        <NameMismatchTab mismatches={mismatches} nameTotal={nameTotal} />
+      </TabsContent>
+    </Tabs>
+  );
+}
+
+// ─── Tab 1: kategoriyasiz SKU ──────────────────────────────────────────────────
+function CategorylessTab({
+  products, grouped, total, page, pageSize,
+}: {
+  products: UnmatchedProduct[];
+  grouped: GroupedSubs;
+  total: number;
+  page: number;
+  pageSize: number;
+}) {
+  const [query, setQuery] = useState("");
+  const q = query.trim().toUpperCase();
   const filtered = useMemo(
     () => (q ? products.filter((p) => p.name.toUpperCase().includes(q) || String(p.code).includes(q)) : products),
     [products, q]
@@ -46,23 +86,11 @@ export function MoslanmaganClient({
   const totalPages = Math.ceil(total / pageSize);
 
   if (total === 0) {
-    return (
-      <EmptyState
-        icon={CheckCircle2}
-        title="Hammasi moslangan"
-        description="Kategoriyasiz (moslanmagan) SKU yo'q. Yangi sotuv yuklanganda, master'da bo'lmagan SKU'lar shu yerda paydo bo'ladi."
-      />
-    );
+    return <EmptyState icon={CheckCircle2} title="Kategoriyasiz SKU yo'q" description="Barcha mahsulotlar iyerarxiyaga joylashtirilgan." />;
   }
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <StatCard label="Moslanmagan SKU" value={total.toLocaleString("uz-UZ")} icon={PackageSearch} tone="red" />
-        <StatCard label="Subkategoriyalar" value={subs.length} icon={Search} />
-        <StatCard label="Sahifa" value={`${page} / ${totalPages || 1}`} icon={PackageSearch} hint={`${pageSize} tadan`} />
-      </div>
-
+    <div className="space-y-3">
       <div className="relative">
         <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
         <Input value={query} onChange={(e) => setQuery(e.target.value)}
@@ -74,17 +102,13 @@ export function MoslanmaganClient({
           </button>
         )}
       </div>
-
       {filtered.length === 0 ? (
         <EmptyState icon={Search} title="Bu sahifada topilmadi" description="Boshqa nom/kod yoki keyingi sahifa." />
       ) : (
         <div className="space-y-1.5">
-          {filtered.map((p) => (
-            <MoslanmaganRow key={p.id} product={p} grouped={grouped} />
-          ))}
+          {filtered.map((p) => <CategorylessRow key={p.id} product={p} grouped={grouped} />)}
         </div>
       )}
-
       {totalPages > 1 && (
         <div className="flex justify-center pt-2">
           <BazaPagination page={page} totalPages={totalPages} basePath="/baza/moslanmagan" />
@@ -94,7 +118,7 @@ export function MoslanmaganClient({
   );
 }
 
-function MoslanmaganRow({ product, grouped }: { product: UnmatchedProduct; grouped: GroupedSubs }) {
+function CategorylessRow({ product, grouped }: { product: UnmatchedProduct; grouped: GroupedSubs }) {
   const router = useRouter();
   const [isPending, start] = useTransition();
   const [subId, setSubId] = useState("");
@@ -105,19 +129,16 @@ function MoslanmaganRow({ product, grouped }: { product: UnmatchedProduct; group
     if (!subId) { toast.error("Subkategoriya tanlang."); return; }
     start(async () => {
       const res = await assignProductSubcatAction(product.id, Number(subId));
-      if (res.ok) { toast.success("Joylashtirildi."); router.refresh(); }
-      else toast.error(res.error);
+      if (res.ok) { toast.success("Joylashtirildi."); router.refresh(); } else toast.error(res.error);
     });
   };
-
   const saveName = () => {
     const nm = name.trim();
     if (!nm) { toast.error("Nom kerak."); return; }
     if (nm === product.name) { setEditing(false); return; }
     start(async () => {
       const res = await renameProductAction(product.id, nm);
-      if (res.ok) { toast.success("Nom yangilandi."); setEditing(false); router.refresh(); }
-      else toast.error(res.error);
+      if (res.ok) { toast.success("Nom yangilandi."); setEditing(false); router.refresh(); } else toast.error(res.error);
     });
   };
 
@@ -127,8 +148,7 @@ function MoslanmaganRow({ product, grouped }: { product: UnmatchedProduct; group
       {editing ? (
         <span className="flex items-center gap-1">
           <Input value={name} autoFocus disabled={isPending} className="h-8 w-56 text-xs"
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && saveName()} />
+            onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && saveName()} />
           <Button size="icon" className="h-8 w-8" disabled={isPending} onClick={saveName} aria-label="Saqlash">
             {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
           </Button>
@@ -156,15 +176,89 @@ function MoslanmaganRow({ product, grouped }: { product: UnmatchedProduct; group
             {grouped.map((g) => (
               <SelectGroup key={g.cat}>
                 <SelectLabel>{g.group ? `${g.group} › ${g.cat}` : g.cat}</SelectLabel>
-                {g.subs.map((s) => (
-                  <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
-                ))}
+                {g.subs.map((s) => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}
               </SelectGroup>
             ))}
           </SelectContent>
         </Select>
         <Button size="sm" className="h-8" disabled={isPending || !subId} onClick={assign}>
           {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Tayinlash"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Tab 2: nom farqi ──────────────────────────────────────────────────────────
+function NameMismatchTab({ mismatches, nameTotal }: { mismatches: NameMismatch[]; nameTotal: number }) {
+  const [query, setQuery] = useState("");
+  const q = query.trim().toUpperCase();
+  const filtered = useMemo(
+    () => (q ? mismatches.filter((m) => m.masterName.toUpperCase().includes(q) || m.fileName.toUpperCase().includes(q) || String(m.code).includes(q)) : mismatches),
+    [mismatches, q]
+  );
+
+  if (nameTotal === 0) {
+    return <EmptyState icon={CheckCircle2} title="Nom farqi yo'q" description="Sotuv fayllaridagi nomlar master bilan mos." />;
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="relative">
+        <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+        <Input value={query} onChange={(e) => setQuery(e.target.value)}
+          placeholder="Qidirish — nom yoki kod..." className="h-9 pl-8 pr-8" />
+        {query && (
+          <button onClick={() => setQuery("")} aria-label="Tozalash"
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+      {nameTotal > mismatches.length && (
+        <p className="text-[11px] text-muted-foreground">Ko&apos;rsatilgan {mismatches.length} / jami {nameTotal}.</p>
+      )}
+      {filtered.length === 0 ? (
+        <EmptyState icon={Search} title="Topilmadi" description="Boshqa nom/kod kiriting." />
+      ) : (
+        <div className="space-y-1.5">
+          {filtered.map((m) => <NameMismatchRow key={m.productId} m={m} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NameMismatchRow({ m }: { m: NameMismatch }) {
+  const router = useRouter();
+  const [isPending, start] = useTransition();
+  const run = (fn: () => Promise<{ ok: boolean; error?: string }>, ok: string) =>
+    start(async () => {
+      const res = await fn();
+      if (res.ok) { toast.success(ok); router.refresh(); } else toast.error(res.error ?? "Xato.");
+    });
+
+  return (
+    <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card px-3 py-2">
+      <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">{m.code}</span>
+      <div className="min-w-0 flex-1 space-y-0.5">
+        <div className="flex items-center gap-1.5 text-xs">
+          <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">Master</span>
+          <span className="truncate font-medium" title={m.masterName}>{m.masterName}</span>
+        </div>
+        <div className="flex items-center gap-1.5 text-xs">
+          <span className="shrink-0 text-[10px] uppercase tracking-wide text-amber-600 dark:text-amber-400">Fayl</span>
+          <span className="truncate text-amber-700 dark:text-amber-300" title={m.fileName}>{m.fileName}</span>
+        </div>
+      </div>
+      <div className="ml-auto flex items-center gap-1.5">
+        <Button size="sm" className="h-8" disabled={isPending}
+          onClick={() => run(() => applyNameAction(m.productId), "Nom yangilandi.")}>
+          {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Fayl nomiga yangilash"}
+        </Button>
+        <Button size="sm" variant="outline" className="h-8" disabled={isPending}
+          onClick={() => run(() => dismissNameAction(m.productId), "Master nomi saqlandi.")}>
+          Master&apos;ni saqlash
         </Button>
       </div>
     </div>
