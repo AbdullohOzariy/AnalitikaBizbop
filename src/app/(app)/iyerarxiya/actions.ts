@@ -14,6 +14,8 @@ const addSchema = z.object({
 
 export type SubProduct = { code: number; name: string };
 
+const SUB_PRODUCTS_LIMIT = 250; // ko'rsatiladigan maksimal — qolganini qidiruv orqali topiladi
+
 /** Subkategoriya (yoki kategoriya) ostidagi SKU mahsulotlarni lazy yuklaydi. */
 export async function subProductsAction(
   subId: number
@@ -26,13 +28,71 @@ export async function subProductsAction(
         where: { categoryId: id },
         select: { code: true, name: true },
         orderBy: { name: "asc" },
-        take: 2000, // bitta subkategoriyada eng ko'pi ~800 — xavfsiz cheklov
+        take: SUB_PRODUCTS_LIMIT,
       }),
       prisma.product.count({ where: { categoryId: id } }),
     ]);
     return { ok: true, products, total };
   } catch (err) {
     return actionError(err, "subProducts");
+  }
+}
+
+export type SkuSearchResult = {
+  code: number;
+  name: string;
+  sub: string | null;
+  cat: string | null;
+  group: string | null;
+};
+
+/** Butun katalog bo'yicha SKU qidiruvi (nom yoki 1C kod). Eng ko'pi 50 natija. */
+export async function searchSkuAction(
+  query: string
+): Promise<{ ok: true; results: SkuSearchResult[]; total: number } | { ok: false; error: string }> {
+  try {
+    await requireAdmin();
+    const q = z.string().trim().min(2).max(100).parse(query);
+    const num = /^\d+$/.test(q) ? parseInt(q, 10) : undefined;
+    const where = {
+      OR: [
+        { name: { contains: q, mode: "insensitive" as const } },
+        ...(num !== undefined ? [{ code: num }] : []),
+      ],
+    };
+    const [rows, total] = await Promise.all([
+      prisma.product.findMany({
+        where,
+        select: {
+          code: true,
+          name: true,
+          category: {
+            select: {
+              name: true,
+              group: { select: { name: true } },
+              parent: { select: { name: true, group: { select: { name: true } } } },
+            },
+          },
+        },
+        orderBy: { name: "asc" },
+        take: 50,
+      }),
+      prisma.product.count({ where }),
+    ]);
+    const results: SkuSearchResult[] = rows.map((r) => {
+      const c = r.category;
+      const isSub = !!c?.parent; // categoryId subkategoriyaga ishora qiladi (parent = kategoriya)
+      return {
+        code: r.code,
+        name: r.name,
+        sub: isSub ? c!.name : null,
+        cat: isSub ? c!.parent!.name : (c?.name ?? null),
+        group: c?.group?.name ?? c?.parent?.group?.name ?? null,
+      };
+    });
+    return { ok: true, results, total };
+  } catch (err) {
+    return actionError(err, "searchSku");
   }
 }
 

@@ -1,13 +1,14 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { StatCard, EmptyState } from "@/components/common/page";
 import {
-  Search, ChevronRight, Eye, Pencil, FoldVertical, UnfoldVertical, X, Loader2, Package,
+  Search, ChevronRight, Eye, Pencil, FoldVertical, UnfoldVertical, X, Loader2, Package, Layers, Tag, AlertTriangle,
 } from "lucide-react";
 import { HierarchyEditor } from "./hierarchy-editor";
-import { subProductsAction, type SubProduct } from "./actions";
+import { subProductsAction, searchSkuAction, type SubProduct, type SkuSearchResult } from "./actions";
 
 export type HSub = { id: number; name: string; code: number | null; salesCount: number; skuCount: number };
 export type HCat = {
@@ -53,6 +54,23 @@ export function IyerarxiyaClient({
   // Subkategoriya SKU'lari lazy yuklanadi (25k ni birdan emas)
   const [subData, setSubData] = useState<Map<number, { products: SubProduct[]; total: number } | "loading" | "error">>(new Map());
   const [, startLoad] = useTransition();
+
+  // SKU server-qidiruvi (butun katalog bo'yicha — nom/kod)
+  const [skuResults, setSkuResults] = useState<{ results: SkuSearchResult[]; total: number } | "loading" | null>(null);
+  const searchDebounce = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const onQuery = (v: string) => {
+    setQuery(v);
+    clearTimeout(searchDebounce.current);
+    const qq = v.trim();
+    if (qq.length < 2) { setSkuResults(null); return; }
+    setSkuResults("loading");
+    searchDebounce.current = setTimeout(() => {
+      startLoad(async () => {
+        const res = await searchSkuAction(qq);
+        setSkuResults(res.ok ? { results: res.results, total: res.total } : null);
+      });
+    }, 300);
+  };
 
   const toggleSub = (sub: HSub) => {
     const willOpen = !openSubs.has(sub.id);
@@ -125,12 +143,12 @@ export function IyerarxiyaClient({
   return (
     <div className="space-y-4">
       {/* ── Statistika paneli ── */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-        <StatCard label="Guruh" value={stats.groups} />
-        <StatCard label="Kategoriya" value={stats.cats} />
-        <StatCard label="Subkategoriya" value={stats.subs} />
-        <StatCard label="SKU (mahsulot)" value={stats.sku} />
-        <StatCard label="Kodsiz" value={stats.noCode} warn={stats.noCode > 0} />
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <StatCard label="Guruh" value={stats.groups} icon={Layers} />
+        <StatCard label="Kategoriya" value={stats.cats} icon={Tag} />
+        <StatCard label="Subkategoriya" value={stats.subs} icon={Tag} />
+        <StatCard label="SKU (mahsulot)" value={stats.sku.toLocaleString("uz-UZ")} icon={Package} tone="blue" />
+        <StatCard label="Kodsiz" value={stats.noCode} icon={AlertTriangle} tone={stats.noCode > 0 ? "red" : "default"} />
       </div>
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
         {groups.map((g) => {
@@ -151,22 +169,22 @@ export function IyerarxiyaClient({
           <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Qidirish — nom yoki 1C kod..."
+            onChange={(e) => onQuery(e.target.value)}
+            placeholder="Qidirish — guruh/kategoriya yoki SKU nomi/kodi..."
             className="h-9 pl-8 pr-8"
           />
           {query && (
-            <button onClick={() => setQuery("")} aria-label="Tozalash" className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+            <button onClick={() => onQuery("")} aria-label="Tozalash" className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
               <X className="h-3.5 w-3.5" />
             </button>
           )}
         </div>
         {mode === "view" && !searching && (
           <div className="flex gap-1">
-            <Button size="sm" variant="outline" className="h-9" onClick={expandAll} title="Hammasini och">
+            <Button size="sm" variant="outline" className="h-9" onClick={expandAll} title="Hammasini och" aria-label="Hammasini och">
               <UnfoldVertical className="h-3.5 w-3.5" />
             </Button>
-            <Button size="sm" variant="outline" className="h-9" onClick={collapseAll} title="Hammasini yig'">
+            <Button size="sm" variant="outline" className="h-9" onClick={collapseAll} title="Hammasini yig'" aria-label="Hammasini yig'">
               <FoldVertical className="h-3.5 w-3.5" />
             </Button>
           </div>
@@ -183,11 +201,59 @@ export function IyerarxiyaClient({
         )}
       </div>
 
+      {/* ── SKU qidiruv natijalari (butun katalog) ── */}
+      {mode === "view" && q.length >= 2 && (
+        <div className="rounded-xl border border-border bg-card">
+          <div className="flex items-center justify-between gap-2 border-b border-border/60 px-4 py-2.5">
+            <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <Package className="h-3.5 w-3.5" /> Mahsulot natijalari (SKU)
+            </span>
+            {skuResults && skuResults !== "loading" && (
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {skuResults.total > skuResults.results.length
+                  ? `${skuResults.results.length} / ${skuResults.total} ta`
+                  : `${skuResults.results.length} ta`}
+              </span>
+            )}
+          </div>
+          <div className="p-3">
+            {skuResults === null || skuResults === "loading" ? (
+              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Qidirilmoqda…
+              </p>
+            ) : skuResults.results.length === 0 ? (
+              <p className="text-xs text-muted-foreground">SKU topilmadi.</p>
+            ) : (
+              <div className="space-y-1">
+                {skuResults.results.map((r) => (
+                  <div key={r.code} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs">
+                    <span className="shrink-0 rounded bg-muted px-1 font-mono text-[10px] text-muted-foreground">{r.code}</span>
+                    <span className="font-medium">{r.name}</span>
+                    <span className="text-[11px] text-muted-foreground">
+                      {[r.group, r.cat, r.sub].filter(Boolean).join(" › ")}
+                    </span>
+                  </div>
+                ))}
+                {skuResults.total > skuResults.results.length && (
+                  <p className="pt-1 text-[11px] text-muted-foreground">
+                    Aniqroq qidiring — {skuResults.total} tadan {skuResults.results.length} tasi ko&apos;rsatildi.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── Tana ── */}
       {mode === "edit" ? (
         <HierarchyEditor groups={groups} query={q} />
       ) : filtered.length === 0 ? (
-        <p className="py-8 text-center text-sm text-muted-foreground">Hech narsa topilmadi.</p>
+        <EmptyState
+          icon={Search}
+          title="Kategoriya topilmadi"
+          description={q.length >= 2 ? "Mahsulot bo'lsa yuqorida SKU natijalarida ko'ring, yoki boshqa nom/kod kiriting." : "Boshqa nom yoki 1C kod kiriting."}
+        />
       ) : (
         <div className="space-y-2.5">
           {filtered.map((group) => {
@@ -232,7 +298,7 @@ export function IyerarxiyaClient({
                           </button>
 
                           {cOpen && (
-                            <div className="px-4 pb-3 pt-1 ml-14 space-y-1.5">
+                            <div className="px-4 pb-3 pt-1 ml-8 sm:ml-14 space-y-1.5">
                               {cat.children.length === 0 ? (
                                 <p className="text-xs text-muted-foreground italic">Subkategoriya yo&apos;q</p>
                               ) : (
@@ -305,11 +371,3 @@ export function IyerarxiyaClient({
   );
 }
 
-function StatCard({ label, value, warn }: { label: string; value: number; warn?: boolean }) {
-  return (
-    <div className={`rounded-xl border bg-card px-3 py-2 ${warn ? "border-amber-500/40" : "border-border"}`}>
-      <div className={`text-xl font-bold ${warn ? "text-amber-600 dark:text-amber-400" : ""}`}>{value}</div>
-      <div className="text-xs text-muted-foreground">{label}</div>
-    </div>
-  );
-}
