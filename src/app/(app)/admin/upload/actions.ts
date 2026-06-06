@@ -141,7 +141,17 @@ async function getCategoryAliasNameMap(): Promise<Map<string, string>> {
 
 const salesInputSchema = z.object({
   label: labelSchema,
+  // Kunlik sotuv sanasi (qo'lda). Berilsa fayl sarlavhasi o'rniga ishlatiladi.
+  period: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "Sana YYYY-MM-DD").optional(),
 });
+
+/** "YYYY-MM-DD" → { start, end } (kunlik: start=end=o'sha kun). */
+function periodFromInput(s: string | undefined): { start: Date; end: Date } | undefined {
+  if (!s) return undefined;
+  const [y, m, d] = s.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return Number.isNaN(dt.getTime()) ? undefined : { start: dt, end: dt };
+}
 
 export async function uploadSalesAction(formData: FormData): Promise<UploadResult> {
   try {
@@ -152,7 +162,9 @@ export async function uploadSalesAction(formData: FormData): Promise<UploadResul
     }
     const parsed = salesInputSchema.parse({
       label: formData.get("label"),
+      period: formData.get("period") || undefined,
     });
+    const periodOverride = periodFromInput(parsed.period);
 
     const buf = await readBuffer(file);
     const hash = sha256(buf);
@@ -181,7 +193,7 @@ export async function uploadSalesAction(formData: FormData): Promise<UploadResul
     );
 
     // 1. Birinchi parse — aniq mosliklar bilan (v3 uchun categoryCodes ham uzatiladi)
-    const firstParse = parseSalesWorkbook(buf, catNames, undefined, categoryCodes);
+    const firstParse = parseSalesWorkbook(buf, catNames, undefined, categoryCodes, periodOverride);
 
     if (firstParse.version === "v3") {
       // ── v3: mahsulot (SKU) darajasi ──────────────────────────────────────
@@ -213,7 +225,7 @@ export async function uploadSalesAction(formData: FormData): Promise<UploadResul
       ).catch(() => new Map<string, string>());
 
       if (categoryMapping.size > 0) {
-        const reParsed = parseSalesWorkbook(buf, catNames, categoryMapping, categoryCodes);
+        const reParsed = parseSalesWorkbook(buf, catNames, categoryMapping, categoryCodes, periodOverride);
         if (reParsed.version !== "v3") {
           legacyResult = reParsed;
         }

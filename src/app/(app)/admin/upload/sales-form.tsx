@@ -55,6 +55,20 @@ export function SalesUploadForm() {
             />
           </div>
           <div className="space-y-2">
+            <Label htmlFor="sales-period">Sotuv sanasi (kunlik fayl uchun)</Label>
+            <Input
+              id="sales-period"
+              name="period"
+              type="date"
+              disabled={isPending}
+              className="w-44"
+            />
+            <p className="text-xs text-muted-foreground">
+              Kunlik faylда sanani shu yerда kiriting — fayl shu kun ma&apos;lumoti deb saqlanadi.
+              Faylда &quot;за период с … по …&quot; sarlavhasi bo&apos;lsa, bo&apos;sh qoldirsangiz ham bo&apos;ladi.
+            </p>
+          </div>
+          <div className="space-y-2">
             <Label htmlFor="sales-file">Excel fayl (.xlsx)</Label>
             <Input
               id="sales-file"

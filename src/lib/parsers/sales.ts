@@ -192,7 +192,9 @@ export function parseSalesWorkbook(
   allowedCategoryNames: string[],
   categoryMapping?: Map<string, string>,
   /** v3 uchun: DB'dan olingan Category.code to'plami */
-  categoryCodes?: Set<number>
+  categoryCodes?: Set<number>,
+  /** Davrni qo'lda berish (kunlik fayl) — berilsa, fayl sarlavhasi qidirilmaydi. */
+  periodOverride?: { start: Date; end: Date }
 ): ParsedSalesResult {
   const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
   const sheetName = wb.SheetNames[0];
@@ -206,21 +208,23 @@ export function parseSalesWorkbook(
     blankrows: true,
   });
 
-  // ── 1. Period sarlavhadan topish ──────────────────────────────────────────
-  let period: { start: Date; end: Date } | null = null;
-  for (let i = 0; i < Math.min(rows.length, 10); i++) {
-    for (const cell of rows[i] ?? []) {
-      const p = parseRussianPeriod(cell);
-      if (p) {
-        period = p;
-        break;
+  // ── 1. Period: qo'lda berilsa o'shani, aks holda fayl sarlavhasidan ──────────
+  let period: { start: Date; end: Date } | null = periodOverride ?? null;
+  if (!period) {
+    for (let i = 0; i < Math.min(rows.length, 10); i++) {
+      for (const cell of rows[i] ?? []) {
+        const p = parseRussianPeriod(cell);
+        if (p) {
+          period = p;
+          break;
+        }
       }
+      if (period) break;
     }
-    if (period) break;
   }
   if (!period) {
     throw new Error(
-      'Sotuv faylida period sarlavhasi topilmadi ("Продажи товаров за период с ... по ...").'
+      'Sotuv sanasi aniqlanmadi. Yuklashda sanani qo\'lda kiriting (yoki faylда "за период с … по …" sarlavhasi bo\'lsin).'
     );
   }
 
