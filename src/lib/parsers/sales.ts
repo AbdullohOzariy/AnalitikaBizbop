@@ -114,8 +114,10 @@ function buildColumnMapping(
     // Agar bu ustunda filial nomi bo'lsa — yangi filial bloki boshlanadi
     if (isBranchName(branchVal)) {
       const alias = (branchVal as string).trim();
-      // "Итого" tashlanadi
-      if (alias.toLowerCase() === "итого") {
+      // "Итого" (grand total) va sana-dublikat ustunlari ("30.05.2026" —
+      // bir kunlik davr uchun 1C filial ustunini takrorlaydi) filial EMAS — tashlanadi.
+      const isDateHeader = /^\d{1,2}\.\d{1,2}\.\d{2,4}$/.test(alias);
+      if (alias.toLowerCase() === "итого" || isDateHeader) {
         currentBranch = null;
       } else {
         currentBranch = alias;
@@ -417,28 +419,29 @@ function parseProductLevel(
 
   type DataRow = { r: (unknown | null)[]; code: number; name: string; total: number };
   const data: DataRow[] = [];
+  // Pastdagi "Итого" (grand total) qatori — validatsiya uchun (leaf emas).
+  let totalRow: (unknown | null)[] | null = null;
   for (let i = dataStartIdx; i < rows.length; i++) {
     const r = rows[i];
     if (!r) continue;
     const code = r[0];
     const name = r[1];
+    if (typeof code === "string" && code.trim().toLowerCase() === "итого") {
+      totalRow = r;
+      continue;
+    }
     if (typeof code !== "number" || typeof name !== "string") continue;
     data.push({ r, code, name: name.trim(), total: totalOf(r) });
   }
 
   const n = data.length;
   const isGroup = new Array<boolean>(n).fill(false);
-  const EPS = 1; // summalar 2 kasrda, 4 filial — yaxlitlash < 0.05, EPS=1 xavfsiz
 
-  // Toza 3-pog'onali 1C eksporti: ierarxiya qatori = kodi DB'da ma'lum
-  // (guruh ∪ kategoriya ∪ subkategoriya — `categoryCodes`). Root (MARKET) = umumiy
-  // jami qatori (totali = grand total) — u ham guruh sifatida o'tkaziladi.
-  // Qolgan barcha kodli qatorlar = SKU (leaf). Subtotal-rekonstruksiya kerak emas.
-  const rootTotal = n > 0 ? data[0].total : 0;
+  // GROUP (papka/subtotal) = kodi DB iyerarxiyasida bor (guruh∪kategoriya∪subkat).
+  // ShablonSotuv faqat SKU bo'ladi (papka yo'q) → hech biri group emas, hammasi leaf.
+  // Kategoriya har SKU uchun master'dan (Product.categoryId) olinadi — fayldan emas.
   for (let i = 0; i < n; i++) {
-    if (categoryCodes.has(data[i].code) || Math.abs(data[i].total - rootTotal) <= EPS) {
-      isGroup[i] = true;
-    }
+    if (categoryCodes.has(data[i].code)) isGroup[i] = true;
   }
 
   // ── Leaf (SKU) lardan ProductSales qatorlari + kategoriya biriktirish ───────
@@ -476,35 +479,34 @@ function parseProductLevel(
     }
   }
 
-  // ── VALIDATSIYA (fail-safe): leaf yig'indisi == root (MARKET) — har filial ──
-  // data[0] = tepa root (MARKET) — uning per-filial Продажиси umumiy total bo'lishi kerak.
-  if (n > 0) {
+  // ── VALIDATSIYA: leaf (SKU) yig'indisi == fayldagi "Итого" qatori — har filial ──
+  // Faqat fayl "Итого" (grand total) qatorini bersa tekshiramiz. ShablonSotuv leaf-only
+  // bo'lgani uchun bu yig'indi Итого bilan deyarli aniq mos kelishi kerak; katta farq —
+  // qo'sh hisob (papka qatori SKU deb sanalgan) belgisidir.
+  if (totalRow) {
     for (const [alias, cols] of branchMetrics) {
       if (cols.salesIdx == null) continue;
-      const sIdx: number = cols.salesIdx; // closure'larda narrowing saqlanishi uchun
-      const rootVal = parseAmount(data[0].r[sIdx]) ?? 0;
+      const sIdx: number = cols.salesIdx;
+      const expected = parseAmount(totalRow[sIdx]) ?? 0;
+      if (expected <= 0) continue;
       let leafSum = 0;
       for (let i = 0; i < n; i++) {
         if (!isGroup[i]) leafSum += parseAmount(data[i].r[sIdx]) ?? 0;
       }
-      const tol = Math.max(1, Math.abs(rootVal) * 0.0001);
-      if (Math.abs(leafSum - rootVal) > tol) {
-        // Diagnostika: SKU deb sanalgan, lekin iyerarxiyada YO'Q kodlar — eng kattalari
-        // deyarli har doim ro'yxatga olinmagan GURUH/KATEGORIYA papkalaridir
-        // (guruh summasi SKU'dan ancha katta). Ularni ko'rsatamiz — admin Iyerarxiyaga qo'shadi.
-        const farq = leafSum - rootVal;
+      const tol = Math.max(1, Math.abs(expected) * 0.001); // 0.1% — 1C yaxlitlashiga bardosh
+      if (Math.abs(leafSum - expected) > tol) {
+        const farq = leafSum - expected;
         const nomzodlar = data
           .map((d, i) => ({ d, i, total: parseAmount(d.r[sIdx]) ?? 0 }))
-          .filter((x) => !isGroup[x.i] && x.total > 0) // SKU deb sanalgan, lekin ehtimol papka
+          .filter((x) => !isGroup[x.i] && x.total > 0)
           .sort((a, b) => b.total - a.total)
-          .slice(0, 20)
+          .slice(0, 15)
           .map((x) => `  • ${x.d.code} — ${x.d.name} (${x.total.toLocaleString("ru-RU")})`)
           .join("\n");
         throw new Error(
-          `Validatsiya xato: "${alias}" bo'yicha SKU yig'indisi (${leafSum.toFixed(2)}) ` +
-            `fayl totaliga (${rootVal.toFixed(2)}) teng emas — farq ${farq.toFixed(2)} (qo'sh hisob).\n\n` +
-            `Sabab: quyidagi kodlar iyerarxiyada YO'Q, shuning uchun guruh papkasi SKU deb sanalmoqda. ` +
-            `Ularni Iyerarxiyaga (guruh/kategoriya/subkategoriya) kodlari sifatida qo'shing:\n${nomzodlar}`
+          `Validatsiya xato: "${alias}" SKU yig'indisi (${leafSum.toFixed(2)}) ` +
+            `fayldagi "Итого" (${expected.toFixed(2)}) bilan teng emas — farq ${farq.toFixed(2)}.\n\n` +
+            `Eng katta SKU qatorlari (tekshiring):\n${nomzodlar}`
         );
       }
     }
