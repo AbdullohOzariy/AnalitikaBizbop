@@ -331,9 +331,16 @@ async function uploadV3(
     },
   });
 
+  // Master farqlari hisoboti (try ichida to'ldiriladi, keyin ishlatiladi)
+  let newSkuCount = 0;
+  let newSkuSample = "";
+  let nameDiffCount = 0;
+
   try {
-    // 3. Product upsert — bulk, 500 ta lik batch
-    // Unique mahsulot kodlari bo'yicha deduplicate (bir kod bir qatorni beradi)
+    // 3. Mahsulotlarni master bilan solishtirish.
+    // MUHIM: master (iyerarxiya/sku.xlsx) ASOSIY — mavjud mahsulotning nomi/categoryId
+    // QAYTA YOZILMAYDI. Faqat yangi kodlar qo'shiladi; nom farqlari HISOBOT qilinadi
+    // (qaror — keyin interaktiv review'da yoki Iyerarxiya editor'da).
     const uniqueProducts = new Map<
       number,
       { code: number; name: string; categoryId: number | null }
@@ -351,27 +358,45 @@ async function uploadV3(
         });
       }
     }
+    const fileProducts = [...uniqueProducts.values()];
 
-    const productList = [...uniqueProducts.values()];
+    // Mavjud mahsulotlar (kod bo'yicha) — master holati
+    const existingRows = await prisma.product.findMany({
+      where: { code: { in: fileProducts.map((p) => p.code) } },
+      select: { id: true, code: true, name: true },
+    });
+    const existingByCode = new Map(existingRows.map((p) => [p.code, p]));
+
+    // Yangi (master'da yo'q) va nom-farqli (master saqlanadi) mahsulotlar
+    const newProducts = fileProducts.filter((p) => !existingByCode.has(p.code));
+    const nameChanges = fileProducts.filter((p) => {
+      const e = existingByCode.get(p.code);
+      return e && e.name !== p.name;
+    });
+    // Hisobot uchun (try'dan tashqarida ishlatiladi)
+    newSkuCount = newProducts.length;
+    newSkuSample = newProducts.slice(0, 5).map((p) => p.code).join(", ");
+    nameDiffCount = nameChanges.length;
+
+    // FAQAT yangi mahsulotlar qo'shiladi (mavjud master tegilmaydi).
+    // Yangi SKU categoryId = NULL → "Moslanmagan" ro'yxatiga tushadi, admin keyin
+    // to'g'ri subkategoriyani tayinlaydi (sotuv faylidagi taxminga ishonmaymiz).
     const BATCH = 500;
-    for (let i = 0; i < productList.length; i += BATCH) {
-      const chunk = productList.slice(i, i + BATCH);
+    for (let i = 0; i < newProducts.length; i += BATCH) {
+      const chunk = newProducts.slice(i, i + BATCH);
       const vals = chunk.map((p) =>
-        Prisma.sql`(${p.code}, ${p.name}, ${p.categoryId})`
+        Prisma.sql`(${p.code}, ${p.name}, ${null})`
       );
       await prisma.$executeRaw`
         INSERT INTO "Product" ("code", "name", "categoryId")
         VALUES ${Prisma.join(vals)}
-        ON CONFLICT ("code") DO UPDATE SET
-          "name"       = EXCLUDED."name",
-          "categoryId" = EXCLUDED."categoryId",
-          "updatedAt"  = now()
+        ON CONFLICT ("code") DO NOTHING
       `;
     }
 
-    // 4. Product code → DB id mapping ni olish
+    // 4. Product code → DB id mapping (mavjud + yangi)
     const dbProducts = await prisma.product.findMany({
-      where: { code: { in: productList.map((p) => p.code) } },
+      where: { code: { in: fileProducts.map((p) => p.code) } },
       select: { id: true, code: true },
     });
     const productCodeToId = new Map<number, number>(
@@ -428,11 +453,21 @@ async function uploadV3(
   revalidateTag(ANALYTICS_CACHE_TAG, "max");
 
   const uniqueProdCount = new Set(result.productRows.map((r) => r.productCode)).size;
+
+  // Master bilan farqlar — hisobot (master O'ZGARTIRILMADI)
+  const review: string[] = [];
+  if (newSkuCount > 0) {
+    review.push(`🆕 Yangi SKU: ${newSkuCount} ta — kategoriyasiz qo'shildi (Moslanmagan ro'yxatida subkategoriya tayinlang). Kodlar: ${newSkuSample}${newSkuCount > 5 ? "…" : ""}`);
+  }
+  if (nameDiffCount > 0) {
+    review.push(`✏️ Nom farqi: ${nameDiffCount} ta — master nomi saqlandi (o'zgartirilmadi).`);
+  }
+
   return {
     ok: true,
     fileId: fileRecord.id,
-    aiCorrections: aiCorrections.length > 0 ? aiCorrections : undefined,
-    summary: `Saqlandi (v3): ${uniqueProdCount} mahsulot × ${uniqueAliases.length} filial = ${result.productRows.length} qator, period ${result.periodStart.toISOString().slice(0, 10)} → ${result.periodEnd.toISOString().slice(0, 10)}. Kategoriya saleslar derive qilindi.`,
+    aiCorrections: review.length > 0 ? [...aiCorrections, ...review] : (aiCorrections.length > 0 ? aiCorrections : undefined),
+    summary: `Saqlandi (v3): ${uniqueProdCount} mahsulot × ${uniqueAliases.length} filial = ${result.productRows.length} qator, period ${result.periodStart.toISOString().slice(0, 10)} → ${result.periodEnd.toISOString().slice(0, 10)}. Master tegilmadi${newSkuCount ? `, ${newSkuCount} yangi SKU` : ""}${nameDiffCount ? `, ${nameDiffCount} nom farqi` : ""}.`,
   };
 }
 
