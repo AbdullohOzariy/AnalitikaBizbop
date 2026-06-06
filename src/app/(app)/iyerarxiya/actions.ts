@@ -1,11 +1,113 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { z } from "zod";
+import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { actionError } from "@/lib/action-error";
 import { normalizeName } from "@/lib/parsers/utils";
+
+export type SkuRow = {
+  id: number;
+  code: number;
+  name: string;
+  group: string | null;
+  cat: string | null;
+  sub: string | null;
+  subId: number | null;
+};
+
+const SKU_PAGE = 50;
+
+/** SKU ro'yxati — qidiruv (nom/kod) + filtr (guruh/kategoriya/subkat) + pagination. */
+export async function searchSkusAction(input: {
+  q?: string;
+  groupId?: number;
+  catId?: number;
+  subId?: number;
+  page?: number;
+}): Promise<{ ok: true; rows: SkuRow[]; total: number; page: number; pageSize: number } | { ok: false; error: string }> {
+  try {
+    await requireAdmin();
+    const q = (input.q ?? "").trim();
+    const page = Math.max(1, Math.floor(input.page ?? 1));
+    const where: Prisma.ProductWhereInput = {};
+    if (q) {
+      const num = /^\d+$/.test(q) ? parseInt(q, 10) : undefined;
+      where.OR = [
+        { name: { contains: q, mode: "insensitive" } },
+        ...(num !== undefined ? [{ code: num }] : []),
+      ];
+    }
+    // Filtr — eng aniqdan: subkat > kategoriya > guruh
+    if (input.subId) where.categoryId = input.subId;
+    else if (input.catId) where.category = { parentId: input.catId };
+    else if (input.groupId) where.category = { groupId: input.groupId };
+
+    const [rows, total] = await Promise.all([
+      prisma.product.findMany({
+        where,
+        select: {
+          id: true, code: true, name: true,
+          category: {
+            select: {
+              id: true, name: true,
+              parent: { select: { name: true } },
+              group: { select: { name: true } },
+            },
+          },
+        },
+        orderBy: { code: "asc" },
+        skip: (page - 1) * SKU_PAGE,
+        take: SKU_PAGE,
+      }),
+      prisma.product.count({ where }),
+    ]);
+    const out: SkuRow[] = rows.map((r) => {
+      const c = r.category;
+      return {
+        id: r.id, code: r.code, name: r.name,
+        group: c?.group?.name ?? null,
+        cat: c?.parent?.name ?? null,
+        sub: c?.name ?? null,
+        subId: c?.id ?? null,
+      };
+    });
+    return { ok: true, rows: out, total, page, pageSize: SKU_PAGE };
+  } catch (err) {
+    return actionError(err, "searchSkus");
+  }
+}
+
+/** SKU tahrirlash — nom va/yoki subkategoriya. */
+export async function updateProductAction(input: {
+  productId: number;
+  name?: string;
+  subId?: number;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    await requireAdmin();
+    const pid = z.coerce.number().int().positive().parse(input.productId);
+    const data: Prisma.ProductUpdateInput = {};
+    if (input.name !== undefined) {
+      data.name = z.string().trim().min(1, "Nom kerak").max(255).parse(input.name);
+    }
+    if (input.subId !== undefined) {
+      const sid = z.coerce.number().int().positive().parse(input.subId);
+      const sub = await prisma.category.findUnique({ where: { id: sid }, select: { parentId: true } });
+      if (!sub || sub.parentId == null) return { ok: false, error: "Faqat subkategoriya tanlanishi mumkin." };
+      data.category = { connect: { id: sid } };
+    }
+    if (Object.keys(data).length === 0) return { ok: false, error: "O'zgarish yo'q." };
+    await prisma.product.update({ where: { id: pid }, data });
+    revalidatePath("/iyerarxiya");
+    revalidateTag("iyerarxiya", "max");
+    return { ok: true };
+  } catch (err) {
+    return actionError(err, "updateProduct");
+  }
+}
 
 const addSchema = z.object({
   categoryId: z.coerce.number().int().positive(),

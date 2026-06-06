@@ -4,7 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { unstable_cache } from "next/cache";
 import { Tag } from "lucide-react";
 import { PageHeader } from "@/components/common/page";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { IyerarxiyaClient, type HGroup } from "./iyerarxiya-client";
+import { SkuList } from "./sku-list";
 
 const getHierarchy = unstable_cache(
   () =>
@@ -58,9 +60,20 @@ export default async function IyerarxiyaPage() {
       <PageHeader
         icon={Tag}
         title="Iyerarxiya"
-        description="Bo'lim → kategoriya → subkategoriya · har biri 1C KOD bilan"
+        description="Bo'lim → kategoriya → subkategoriya → SKU · har biri 1C KOD bilan"
       />
-      <IyerarxiyaClient groups={data} isAdmin={isAdmin} />
+      <Tabs defaultValue="tree" className="w-full">
+        <TabsList>
+          <TabsTrigger value="tree">Daraxt</TabsTrigger>
+          <TabsTrigger value="list">Ro&apos;yxat (SKU)</TabsTrigger>
+        </TabsList>
+        <TabsContent value="tree" className="pt-3">
+          <IyerarxiyaClient groups={data} isAdmin={isAdmin} />
+        </TabsContent>
+        <TabsContent value="list" className="pt-3">
+          <SkuList groups={data} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
