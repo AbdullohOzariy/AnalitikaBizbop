@@ -6,6 +6,7 @@ import bcrypt from "bcryptjs";
 import { Role } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth-helpers";
+import { actionError } from "@/lib/action-error";
 
 const createSchema = z.object({
   name: z.string().trim().min(1).max(100),
@@ -35,7 +36,7 @@ export async function createUserAction(
     revalidatePath("/admin/users");
     return { ok: true };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "Xato." };
+    return actionError(err, "users");
   }
 }
 
@@ -57,7 +58,7 @@ export async function deleteUserAction(
     revalidatePath("/admin/users");
     return { ok: true };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "Xato." };
+    return actionError(err, "users");
   }
 }
 
@@ -79,6 +80,6 @@ export async function resetPasswordAction(
     });
     return { ok: true };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "Xato." };
+    return actionError(err, "users");
   }
 }

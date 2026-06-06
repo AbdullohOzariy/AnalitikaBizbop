@@ -3,6 +3,7 @@
 import { revalidatePath, revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth-helpers";
+import { actionError } from "@/lib/action-error";
 import { ANALYTICS_CACHE_TAG } from "@/lib/analytics";
 
 export async function deleteFileAction(
@@ -16,6 +17,6 @@ export async function deleteFileAction(
     revalidateTag(ANALYTICS_CACHE_TAG, "max");
     return { ok: true };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "Noma'lum xato." };
+    return actionError(err, "files");
   }
 }

@@ -5,6 +5,7 @@ import { z } from "zod";
 import { AliasSource } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth-helpers";
+import { actionError } from "@/lib/action-error";
 
 const addSchema = z.object({
   branchId: z.coerce.number().int().positive(),
@@ -43,6 +44,6 @@ export async function deleteAliasAction(
     revalidatePath("/branches");
     return { ok: true };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "Xato." };
+    return actionError(err, "branches");
   }
 }

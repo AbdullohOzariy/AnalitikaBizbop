@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth-helpers";
+import { actionError } from "@/lib/action-error";
 import { normalizeName } from "@/lib/parsers/utils";
 
 const addSchema = z.object({
@@ -41,7 +42,7 @@ export async function deleteCategoryAliasAction(
     revalidatePath("/iyerarxiya");
     return { ok: true };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "Xato." };
+    return actionError(err, "iyerarxiya");
   }
 }
 

@@ -5,6 +5,7 @@ import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth-helpers";
+import { actionError } from "@/lib/action-error";
 import { ANALYTICS_CACHE_TAG } from "@/lib/analytics";
 
 const schema = z.object({
@@ -58,7 +59,7 @@ export async function savePlansAction(
     revalidateTag(ANALYTICS_CACHE_TAG, "max");
     return { ok: true, saved: nonZero.length };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "Xato." };
+    return actionError(err, "plans");
   }
 }
 
@@ -79,6 +80,6 @@ export async function loadPrevMonthPlansAction(
       data: plans.map((p) => ({ categoryId: p.categoryId, amount: Number(p.planAmount) })),
     };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "Xato." };
+    return actionError(err, "plans");
   }
 }
