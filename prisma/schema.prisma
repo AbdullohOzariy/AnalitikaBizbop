@@ -135,6 +135,7 @@ model CategorySales {
   @@index([periodStart, periodEnd])
   @@index([branchId, periodStart, periodEnd])
   @@index([categoryId, periodStart, periodEnd])
+  @@index([uploadedFileId])
 }
 
 // sr.xlsx fayllaridan — kunlik chek metrikalari (filial majburiy).
@@ -156,6 +157,7 @@ model DailyMetrics {
   @@unique([branchId, date])
   @@index([date])
   @@index([branchId, date])
+  @@index([uploadedFileId])
 }
 
 // export (1).xlsx — kunlik tashriflar (4 filialdan biri har qatorga).
@@ -172,6 +174,7 @@ model DailyVisits {
   @@unique([branchId, date])
   @@index([date])
   @@index([branchId, date])
+  @@index([uploadedFileId])
 }
 
 // Admin qo'lda kiritadigan oylik "Normal Reja" — filial × oy × kategoriya × summa.
@@ -212,6 +215,7 @@ model DailyPlan {
   @@index([date])
   @@index([branchId, date])
   @@index([branchId, categoryId, date])
+  @@index([uploadedFileId])
 }
 
 // Yuklangan har bir fayl audit + dublikat oldini olish uchun saqlanadi.
@@ -284,4 +288,5 @@ model ProductSales {
   @@index([periodStart, periodEnd])
   @@index([branchId, periodStart, periodEnd])
   @@index([productId, periodStart, periodEnd])
+  @@index([uploadedFileId])
 }
