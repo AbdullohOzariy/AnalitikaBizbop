@@ -4,13 +4,17 @@ import { useMemo, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Pencil, Trash2, Plus, Check, X } from "lucide-react";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import { Pencil, Trash2, Plus, Check, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   saveGroupAction, deleteGroupAction, saveCategoryAction, deleteCategoryAction,
 } from "./actions";
+import { GROUP_COLORS, norm } from "./colors";
 
 export type EditorSub = { id: number; name: string; code: number | null; salesCount: number };
 export type EditorCat = {
@@ -18,11 +22,7 @@ export type EditorCat = {
 };
 export type EditorGroup = { id: number; name: string; code: number | null; categories: EditorCat[] };
 
-const GROUP_COLORS: Record<string, string> = {
-  FRESH: "bg-emerald-500", FOOD: "bg-amber-500", "NON-FOOD": "bg-blue-500",
-};
 const onlyDigits = (v: string) => v.replace(/[^\d]/g, "");
-const norm = (s: string) => s.toUpperCase();
 
 /** Nom + kod (+ ixtiyoriy ko'chirish Select) inline tahrir qatori. */
 function EditRow({
@@ -73,8 +73,14 @@ export function HierarchyEditor({ groups, query = "" }: { groups: EditorGroup[];
   const [moveTo, setMoveTo] = useState<string>(""); // ko'chirish maqsadi (group yoki parent id)
 
   const allGroups = useMemo(() => groups.map((g) => ({ id: g.id, name: g.name })), [groups]);
-  const allCats = useMemo(
-    () => groups.flatMap((g) => g.categories.map((c) => ({ id: c.id, name: c.name }))), [groups]);
+  // Subkategoriya ko'chirish Select'i uchun — guruh bo'yicha guruhlangan kategoriyalar
+  const catsByGroup = useMemo(
+    () => groups
+      .map((g) => ({ group: g.name, cats: g.categories.map((c) => ({ id: c.id, name: c.name })) }))
+      .filter((x) => x.cats.length > 0),
+    [groups]);
+  // O'chirishni tasdiqlash dialogi
+  const [confirmDel, setConfirmDel] = useState<{ title: string; body: string; act: () => void } | null>(null);
 
   // qidiruv filtri (view bilan bir xil mantiq)
   const shown = useMemo(() => {
@@ -128,7 +134,7 @@ export function HierarchyEditor({ groups, query = "" }: { groups: EditorGroup[];
         <div key={group.id} className="rounded-xl border border-border bg-card">
           {/* GURUH */}
           <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border/60">
-            <span className={`h-2 w-2 rounded-full ${GROUP_COLORS[group.name] ?? "bg-muted-foreground"}`} />
+            <span className={`h-2 w-2 rounded-full ${GROUP_COLORS[group.name]?.dot ?? "bg-muted-foreground"}`} />
             {editing === `g:${group.id}` ? (
               <EditRow initialName={group.name} initialCode={group.code} onCancel={() => setEditing(null)}
                 onSave={(name, code) => run(() => saveGroupAction({ id: group.id, name, code }), "Saqlandi.")} />
@@ -141,7 +147,7 @@ export function HierarchyEditor({ groups, query = "" }: { groups: EditorGroup[];
                   <IconBtn title="Tahrirlash" onClick={() => setEditing(`g:${group.id}`)}><Pencil className="h-3.5 w-3.5" /></IconBtn>
                   <IconBtn title="Kategoriya qo'shish" onClick={() => setAdding(`g:${group.id}`)}><Plus className="h-3.5 w-3.5" /></IconBtn>
                   <IconBtn title="O'chirish" danger disabled={isPending}
-                    onClick={() => { if (confirm(`"${group.name}" guruhini o'chirasizmi?`)) run(() => deleteGroupAction(group.id), "O'chirildi."); }}>
+                    onClick={() => setConfirmDel({ title: "Guruhni o'chirish", body: `"${group.name}" guruhi o'chiriladi.`, act: () => run(() => deleteGroupAction(group.id), "O'chirildi.") })}>
                     <Trash2 className="h-3.5 w-3.5" />
                   </IconBtn>
                 </div>
@@ -186,7 +192,7 @@ export function HierarchyEditor({ groups, query = "" }: { groups: EditorGroup[];
                         <IconBtn title="Tahrirlash" onClick={() => startEdit(`c:${cat.id}`, group.id)}><Pencil className="h-3 w-3" /></IconBtn>
                         <IconBtn title="Subkategoriya qo'shish" onClick={() => setAdding(`c:${cat.id}`)}><Plus className="h-3 w-3" /></IconBtn>
                         <IconBtn title="O'chirish" danger disabled={isPending}
-                          onClick={() => { if (confirm(`"${cat.name}" kategoriyasini o'chirasizmi?`)) run(() => deleteCategoryAction(cat.id), "O'chirildi."); }}>
+                          onClick={() => setConfirmDel({ title: "Kategoriyani o'chirish", body: `"${cat.name}" kategoriyasi o'chiriladi.`, act: () => run(() => deleteCategoryAction(cat.id), "O'chirildi.") })}>
                           <Trash2 className="h-3 w-3" />
                         </IconBtn>
                       </div>
@@ -211,8 +217,13 @@ export function HierarchyEditor({ groups, query = "" }: { groups: EditorGroup[];
                               <Select value={moveTo} onValueChange={(v) => setMoveTo(v ?? "")}>
                                 <SelectTrigger className="h-8 w-44 text-xs"><SelectValue /></SelectTrigger>
                                 <SelectContent>
-                                  {allCats.map((c) => (
-                                    <SelectItem key={c.id} value={String(c.id)}>→ {c.name}</SelectItem>
+                                  {catsByGroup.map((grp) => (
+                                    <SelectGroup key={grp.group}>
+                                      <SelectLabel>{grp.group}</SelectLabel>
+                                      {grp.cats.map((c) => (
+                                        <SelectItem key={c.id} value={String(c.id)}>→ {c.name}</SelectItem>
+                                      ))}
+                                    </SelectGroup>
                                   ))}
                                 </SelectContent>
                               </Select>
@@ -228,7 +239,7 @@ export function HierarchyEditor({ groups, query = "" }: { groups: EditorGroup[];
                             <div className="ml-auto flex items-center gap-1">
                               <IconBtn title="Tahrirlash" onClick={() => startEdit(`s:${sub.id}`, cat.id)}><Pencil className="h-3 w-3" /></IconBtn>
                               <IconBtn title="O'chirish" danger disabled={isPending}
-                                onClick={() => { if (confirm(`"${sub.name}" subkategoriyasini o'chirasizmi?`)) run(() => deleteCategoryAction(sub.id), "O'chirildi."); }}>
+                                onClick={() => setConfirmDel({ title: "Subkategoriyani o'chirish", body: `"${sub.name}" subkategoriyasi o'chiriladi.`, act: () => run(() => deleteCategoryAction(sub.id), "O'chirildi.") })}>
                                 <Trash2 className="h-3 w-3" />
                               </IconBtn>
                             </div>
@@ -243,6 +254,25 @@ export function HierarchyEditor({ groups, query = "" }: { groups: EditorGroup[];
           </div>
         </div>
       ))}
+
+      {/* O'chirishni tasdiqlash */}
+      <Dialog open={!!confirmDel} onOpenChange={(o) => !o && setConfirmDel(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{confirmDel?.title}</DialogTitle>
+            <DialogDescription className="text-sm text-muted-foreground">
+              {confirmDel?.body} Bu amalni ortga qaytarib bo&apos;lmaydi.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" className="rounded-xl" disabled={isPending} onClick={() => setConfirmDel(null)}>Bekor</Button>
+            <Button variant="destructive" className="rounded-xl" disabled={isPending}
+              onClick={() => { confirmDel?.act(); setConfirmDel(null); }}>
+              {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "O'chirish"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

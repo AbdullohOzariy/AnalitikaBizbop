@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { HierarchyEditor } from "./hierarchy-editor";
 import { subProductsAction, searchSkuAction, type SubProduct, type SkuSearchResult } from "./actions";
+import { GROUP_COLORS, norm } from "./colors";
 
 export type HSub = { id: number; name: string; code: number | null; salesCount: number; skuCount: number };
 export type HCat = {
@@ -19,14 +20,6 @@ export type HCat = {
   children: HSub[];
 };
 export type HGroup = { id: number; name: string; code: number | null; categories: HCat[] };
-
-const GROUP_COLORS: Record<string, { dot: string; badge: string }> = {
-  FRESH: { dot: "bg-emerald-500", badge: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20" },
-  FOOD: { dot: "bg-amber-500", badge: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20" },
-  "NON-FOOD": { dot: "bg-blue-500", badge: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20" },
-};
-
-const norm = (s: string) => s.toUpperCase();
 
 /** 1C KOD badge — kodsiz bo'lsa amber ogohlantirish. */
 function CodeBadge({ code }: { code: number | null }) {
@@ -264,6 +257,7 @@ export function IyerarxiyaClient({
                 <button
                   onClick={() => toggleGroup(group.id)}
                   aria-expanded={gOpen}
+                  aria-label={`${group.name} guruhi, ${group.categories.length} ta kategoriya`}
                   className="flex w-full items-center gap-3 px-4 py-3 text-left"
                 >
                   <ChevronRight className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${gOpen ? "rotate-90" : ""}`} />
@@ -284,6 +278,7 @@ export function IyerarxiyaClient({
                           <button
                             onClick={() => toggleCat(cat.id)}
                             aria-expanded={cOpen}
+                            aria-label={`${cat.name} kategoriyasi, ${cat.children.length} ta subkategoriya`}
                             className="flex w-full items-start gap-2 px-4 py-2.5 text-left hover:bg-muted/40 transition-colors"
                           >
                             <ChevronRight className={`mt-0.5 ml-6 h-3.5 w-3.5 shrink-0 text-muted-foreground/60 transition-transform ${cOpen ? "rotate-90" : ""}`} />
@@ -310,6 +305,7 @@ export function IyerarxiyaClient({
                                       <button
                                         onClick={() => toggleSub(sub)}
                                         aria-expanded={sOpen}
+                                        aria-label={`${sub.name}, ${sub.skuCount} ta SKU`}
                                         className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left hover:bg-muted/50 transition-colors"
                                       >
                                         <ChevronRight className={`h-3 w-3 shrink-0 text-muted-foreground/60 transition-transform ${sOpen ? "rotate-90" : ""}`} />
