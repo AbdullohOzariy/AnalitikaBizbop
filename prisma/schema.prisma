@@ -258,13 +258,24 @@ model Product {
   code       Int      @unique // 1C mahsulot kodi
   name       String
   categoryId Int? // tegishli kategoriya/subkategoriya (iyerarxiyadagi joyi)
+  supplierId Int? // ta'minotchi (POSTAVSHIK)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
   category Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  supplier Supplier?      @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   sales    ProductSales[]
 
   @@index([categoryId])
+  @@index([supplierId])
+}
+
+// Ta'minotchi (POSTAVSHIK) — sku.xlsx'dagi yetkazib beruvchi. Mahsulotga 1:N.
+model Supplier {
+  id        Int       @id @default(autoincrement())
+  name      String    @unique // masalan "2-O'RIKZOR BOZOR"
+  sortOrder Int       @default(0)
+  products  Product[]
 }
 
 // Master sotuv fakti — SKU × filial × davr. Qayta yuklashda upsert (ustiga yoziladi).

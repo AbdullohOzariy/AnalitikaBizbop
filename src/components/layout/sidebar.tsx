@@ -27,6 +27,7 @@ import {
   ChartPie,
   Recycle,
   Settings,
+  Truck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -96,25 +97,26 @@ function getFoldedSnapshot(): Set<string> {
 // Bo'limlar tartibi muhim — "Tizim" doim oxirida turadi.
 const NAV_GROUPS: NavGroup[] = [
   {
+    label: "Baza",
+    items: [
+      { href: "/baza/sotuv",          label: "Sotuv",        icon: Database,     roles: ["ADMIN"] },
+      { href: "/baza/metrika",        label: "Metrikalar",   icon: BarChart2,    roles: ["ADMIN"] },
+      { href: "/baza/tashrif",        label: "Tashriflar",   icon: Footprints,   roles: ["ADMIN"] },
+      { href: "/baza/reja",           label: "Rejalar",      icon: CalendarDays, roles: ["ADMIN"] },
+      { href: "/iyerarxiya",          label: "Iyerarxiya",   icon: Tag,          roles: ["ADMIN"] },
+      { href: "/baza/taminotchilar",  label: "Ta'minotchilar", icon: Truck,      roles: ["ADMIN"] },
+    ],
+  },
+  {
     label: "Analitika",
     items: [
       { href: "/dashboard",    label: "Dashboard",       icon: LayoutDashboard, roles: ["ADMIN", "CEO"] },
       { href: "/dashboard-v2", label: "Dashboard v2",    icon: Sparkles,        roles: ["ADMIN", "CAT_MANAGER", "CEO"] },
       { href: "/oos",          label: "OOS",             icon: PackageX,        roles: ["ADMIN", "CAT_MANAGER", "CEO"] },
       { href: "/branches",     label: "Filiallar",        icon: Building2,       roles: ["ADMIN"] },
-      { href: "/iyerarxiya",   label: "Iyerarxiya",       icon: Tag,             roles: ["ADMIN"] },
       { href: "/report",       label: "Hisobot",          icon: Table2,          roles: ["ADMIN"] },
       { href: "/admin/upload", label: "Fayllar",          icon: Upload,          adminOnly: true },
       { href: "/admin/plans",  label: "Normal Reja",      icon: Target,          adminOnly: true },
-    ],
-  },
-  {
-    label: "Baza",
-    items: [
-      { href: "/baza/sotuv",   label: "Sotuv",      icon: Database,     roles: ["ADMIN"] },
-      { href: "/baza/metrika", label: "Metrikalar",  icon: BarChart2,    roles: ["ADMIN"] },
-      { href: "/baza/tashrif", label: "Tashriflar",  icon: Footprints,   roles: ["ADMIN"] },
-      { href: "/baza/reja",    label: "Rejalar",     icon: CalendarDays, roles: ["ADMIN"] },
     ],
   },
   {

@@ -26,8 +26,9 @@ const prisma = new PrismaClient({
 type Group = { code: number; name: string; sortOrder: number };
 type Cat = { code: number; name: string; groupCode: number; sortOrder: number };
 type Sub = { code: number; name: string; categoryCode: number; sortOrder: number };
-type Prod = { code: number; name: string; parentCode: number; parentIsSub: boolean; sortOrder: number };
-type Data = { meta: Record<string, unknown>; groups: Group[]; categories: Cat[]; subcategories: Sub[]; products: Prod[] };
+type Supplier = { name: string; sortOrder: number };
+type Prod = { code: number; name: string; parentCode: number; supplier: string | null };
+type Data = { meta: Record<string, unknown>; groups: Group[]; categories: Cat[]; subcategories: Sub[]; suppliers: Supplier[]; products: Prod[] };
 
 const CHUNK = 5000; // Postgres parametr cheklovi (~65535) uchun mahsulotlarni bo'lib yozamiz
 
@@ -41,6 +42,7 @@ async function main() {
   await prisma.productSales.deleteMany({});
   await prisma.categorySales.deleteMany({});
   await prisma.product.deleteMany({});
+  await prisma.supplier.deleteMany({});
   await prisma.categoryAlias.deleteMany({});
   await prisma.category.deleteMany({});
   await prisma.categoryGroup.deleteMany({});
@@ -85,13 +87,22 @@ async function main() {
   const allCatRows = await prisma.category.findMany({ select: { id: true, code: true } });
   const anyCatIdByCode = new Map(allCatRows.map((r) => [r.code!, r.id]));
 
-  // ── 5. MAHSULOTLAR (SKU) — bo'lib yozamiz ───────────────────────────────────
+  // ── 5. TA'MINOTCHILAR (POSTAVSHIK) ──────────────────────────────────────────
+  await prisma.supplier.createMany({
+    data: data.suppliers.map((s) => ({ name: s.name, sortOrder: s.sortOrder })),
+  });
+  const supRows = await prisma.supplier.findMany({ select: { id: true, name: true } });
+  const supIdByName = new Map(supRows.map((r) => [r.name, r.id]));
+  console.log(`✅ Ta'minotchi: ${supRows.length}`);
+
+  // ── 6. MAHSULOTLAR (SKU) — bo'lib yozamiz ───────────────────────────────────
   let inserted = 0;
   for (let i = 0; i < data.products.length; i += CHUNK) {
     const batch = data.products.slice(i, i + CHUNK).map((p) => ({
       code: p.code,
       name: p.name,
       categoryId: anyCatIdByCode.get(p.parentCode) ?? null,
+      supplierId: p.supplier ? (supIdByName.get(p.supplier) ?? null) : null,
     }));
     const res = await prisma.product.createMany({ data: batch });
     inserted += res.count;
@@ -99,9 +110,9 @@ async function main() {
   }
   console.log(`✅ Mahsulot (SKU): ${inserted}`);
 
-  // ── 6. Yakuniy tekshiruv ────────────────────────────────────────────────────
+  // ── 7. Yakuniy tekshiruv ────────────────────────────────────────────────────
   const orphan = await prisma.product.count({ where: { categoryId: null } });
-  console.log(`\n🎉 Tugadi. Guruh=${groupRows.length}, Kategoriya=${data.categories.length}, Subkategoriya=${data.subcategories.length}, SKU=${inserted}`);
+  console.log(`\n🎉 Tugadi. Guruh=${groupRows.length}, Kategoriya=${data.categories.length}, Subkategoriya=${data.subcategories.length}, Ta'minotchi=${supRows.length}, SKU=${inserted}`);
   if (orphan > 0) console.warn(`⚠️  Kategoriyasiz mahsulot: ${orphan} (parentCode topilmagan)`);
 }
 
