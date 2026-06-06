@@ -6,6 +6,7 @@ import { Maximize2, X } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useMounted } from "@/lib/use-mounted";
 
 export function ExpandableCard({
   title,
@@ -21,11 +22,7 @@ export function ExpandableCard({
   contentClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const mounted = useMounted();
 
   useEffect(() => {
     if (!open) return;

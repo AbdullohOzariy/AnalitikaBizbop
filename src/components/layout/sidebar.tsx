@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useId } from "react";
+import { useState, useId, useSyncExternalStore } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -47,6 +47,39 @@ type NavItem = {
 };
 
 type NavGroup = { label: string; items: NavItem[] };
+
+// ─── localStorage UI sozlamalari (set-state-in-effect'siz, SSR-xavfsiz) ────────
+// useSyncExternalStore — SSR'da getServerSnapshot, hydration'dan keyin getSnapshot.
+const PREF_EVENT = "sidebar-pref";
+function subscribePref(cb: () => void) {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener(PREF_EVENT, cb);
+  window.addEventListener("storage", cb); // boshqa tab'dagi o'zgarish ham aks etsin
+  return () => {
+    window.removeEventListener(PREF_EVENT, cb);
+    window.removeEventListener("storage", cb);
+  };
+}
+function emitPref() {
+  window.dispatchEvent(new Event(PREF_EVENT));
+}
+function getCollapsedSnapshot() {
+  return localStorage.getItem("sidebar-collapsed") === "true";
+}
+// foldedGroups — Set bo'lgani uchun getSnapshot STABIL havola qaytarishi shart
+// (aks holda useSyncExternalStore cheksiz render qiladi) — shu sabab keshlaymiz.
+const EMPTY_FOLDED = new Set<string>();
+let foldedCache: { raw: string | null; set: Set<string> } = { raw: null, set: EMPTY_FOLDED };
+function getFoldedSnapshot(): Set<string> {
+  const raw = localStorage.getItem("sidebar-folded-groups");
+  if (raw === foldedCache.raw) return foldedCache.set;
+  let set: Set<string> = EMPTY_FOLDED;
+  if (raw) {
+    try { set = new Set(JSON.parse(raw) as string[]); } catch { set = EMPTY_FOLDED; }
+  }
+  foldedCache = { raw, set };
+  return set;
+}
 
 // Bo'limlar tartibi muhim — "Tizim" doim oxirida turadi.
 const NAV_GROUPS: NavGroup[] = [
@@ -104,20 +137,13 @@ function SidebarNav({
   const activeLayoutId = useId(); // har sidebar instansiyasi (desktop/mobil) uchun noyob
 
   // Yig'ilgan (svernut) parent bo'limlar — localStorage'da saqlanadi
-  const [foldedGroups, setFoldedGroups] = useState<Set<string>>(new Set());
-  useEffect(() => {
-    const saved = localStorage.getItem("sidebar-folded-groups");
-    if (saved) {
-      try { setFoldedGroups(new Set(JSON.parse(saved) as string[])); } catch {}
-    }
-  }, []);
-  const toggleGroup = (label: string) =>
-    setFoldedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(label)) next.delete(label); else next.add(label);
-      localStorage.setItem("sidebar-folded-groups", JSON.stringify([...next]));
-      return next;
-    });
+  const foldedGroups = useSyncExternalStore(subscribePref, getFoldedSnapshot, () => EMPTY_FOLDED);
+  const toggleGroup = (label: string) => {
+    const next = new Set(foldedGroups);
+    if (next.has(label)) next.delete(label); else next.add(label);
+    localStorage.setItem("sidebar-folded-groups", JSON.stringify([...next]));
+    emitPref();
+  };
 
   const visibleGroups = NAV_GROUPS.map((g) => ({
     ...g,
@@ -255,18 +281,12 @@ function SidebarNav({
 }
 
 export function Sidebar({ role }: { role: Role }) {
-  const [collapsed, setCollapsed] = useState(false);
+  const collapsed = useSyncExternalStore(subscribePref, getCollapsedSnapshot, () => false);
 
-  useEffect(() => {
-    const saved = localStorage.getItem("sidebar-collapsed");
-    if (saved === "true") setCollapsed(true);
-  }, []);
-
-  const toggle = () =>
-    setCollapsed((prev) => {
-      localStorage.setItem("sidebar-collapsed", String(!prev));
-      return !prev;
-    });
+  const toggle = () => {
+    localStorage.setItem("sidebar-collapsed", String(!collapsed));
+    emitPref();
+  };
 
   return (
     <aside

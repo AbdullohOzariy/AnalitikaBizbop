@@ -103,6 +103,9 @@ export function PlansEditor({
     }
   };
 
+  // savedBaseline (ref) — saqlangan "toza" holat; uni `values` (state) bilan solishtiramiz.
+  // Render paytida o'qiymiz, lekin re-render'ni `values` boshqaradi, shu sabab xavfsiz.
+  // eslint-disable-next-line react-hooks/refs
   const isDirty = categories.some((c) => {
     return toNum(values.get(c.id) ?? "") !== (savedBaseline.current.get(c.id) ?? 0);
   });
