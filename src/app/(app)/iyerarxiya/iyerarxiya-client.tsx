@@ -1,14 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Search, ChevronRight, Eye, Pencil, FoldVertical, UnfoldVertical, X,
+  Search, ChevronRight, Eye, Pencil, FoldVertical, UnfoldVertical, X, Loader2, Package,
 } from "lucide-react";
 import { HierarchyEditor } from "./hierarchy-editor";
+import { subProductsAction, type SubProduct } from "./actions";
 
-export type HSub = { id: number; name: string; code: number | null; salesCount: number };
+export type HSub = { id: number; name: string; code: number | null; salesCount: number; skuCount: number };
 export type HCat = {
   id: number;
   name: string;
@@ -48,13 +49,29 @@ export function IyerarxiyaClient({
   const [query, setQuery] = useState("");
   const [openGroups, setOpenGroups] = useState<Set<number>>(new Set());
   const [openCats, setOpenCats] = useState<Set<number>>(new Set());
+  const [openSubs, setOpenSubs] = useState<Set<number>>(new Set());
+  // Subkategoriya SKU'lari lazy yuklanadi (25k ni birdan emas)
+  const [subData, setSubData] = useState<Map<number, { products: SubProduct[]; total: number } | "loading" | "error">>(new Map());
+  const [, startLoad] = useTransition();
+
+  const toggleSub = (sub: HSub) => {
+    const willOpen = !openSubs.has(sub.id);
+    setOpenSubs((p) => { const n = new Set(p); if (n.has(sub.id)) n.delete(sub.id); else n.add(sub.id); return n; });
+    if (willOpen && !subData.has(sub.id) && sub.skuCount > 0) {
+      setSubData((m) => new Map(m).set(sub.id, "loading"));
+      startLoad(async () => {
+        const res = await subProductsAction(sub.id);
+        setSubData((m) => new Map(m).set(sub.id, res.ok ? { products: res.products, total: res.total } : "error"));
+      });
+    }
+  };
 
   const q = query.trim();
   const searching = q.length > 0;
 
   // ── Statistika ──
   const stats = useMemo(() => {
-    let cats = 0, subs = 0, noCode = 0, withSales = 0;
+    let cats = 0, subs = 0, noCode = 0, withSales = 0, sku = 0;
     for (const g of groups) {
       cats += g.categories.length;
       for (const c of g.categories) {
@@ -64,10 +81,11 @@ export function IyerarxiyaClient({
         for (const s of c.children) {
           if (s.code == null) noCode++;
           if (s.salesCount > 0) withSales++;
+          sku += s.skuCount;
         }
       }
     }
-    return { groups: groups.length, cats, subs, noCode, withSales };
+    return { groups: groups.length, cats, subs, noCode, withSales, sku };
   }, [groups]);
 
   // ── Qidiruv filtri ──
@@ -107,10 +125,11 @@ export function IyerarxiyaClient({
   return (
     <div className="space-y-4">
       {/* ── Statistika paneli ── */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
         <StatCard label="Guruh" value={stats.groups} />
         <StatCard label="Kategoriya" value={stats.cats} />
         <StatCard label="Subkategoriya" value={stats.subs} />
+        <StatCard label="SKU (mahsulot)" value={stats.sku} />
         <StatCard label="Kodsiz" value={stats.noCode} warn={stats.noCode > 0} />
       </div>
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -213,22 +232,62 @@ export function IyerarxiyaClient({
                           </button>
 
                           {cOpen && (
-                            <div className="px-4 pb-3 pt-1 ml-14 space-y-3">
-                              {cat.children.length > 0 && (
-                                <div>
-                                  <p className="text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wide">Subkategoriyalar</p>
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {cat.children.map((sub) => (
-                                      <span key={sub.id} className="inline-flex items-center gap-1.5 rounded-md bg-muted/60 border border-border/50 px-2 py-0.5 text-xs">
-                                        {sub.name}
-                                        <CodeBadge code={sub.code} />
-                                      </span>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                              {cat.children.length === 0 && (
+                            <div className="px-4 pb-3 pt-1 ml-14 space-y-1.5">
+                              {cat.children.length === 0 ? (
                                 <p className="text-xs text-muted-foreground italic">Subkategoriya yo&apos;q</p>
+                              ) : (
+                                cat.children.map((sub) => {
+                                  const sOpen = openSubs.has(sub.id);
+                                  const d = subData.get(sub.id);
+                                  return (
+                                    <div key={sub.id} className="rounded-lg border border-border/50 bg-muted/30">
+                                      <button
+                                        onClick={() => toggleSub(sub)}
+                                        aria-expanded={sOpen}
+                                        className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left hover:bg-muted/50 transition-colors"
+                                      >
+                                        <ChevronRight className={`h-3 w-3 shrink-0 text-muted-foreground/60 transition-transform ${sOpen ? "rotate-90" : ""}`} />
+                                        <span className="text-xs font-medium">{sub.name}</span>
+                                        <CodeBadge code={sub.code} />
+                                        {sub.salesCount > 0 && (
+                                          <span className="text-[11px] text-muted-foreground">{sub.salesCount} sotuv</span>
+                                        )}
+                                        <span className="ml-auto inline-flex items-center gap-1 text-[11px] text-muted-foreground tabular-nums">
+                                          <Package className="h-3 w-3" /> {sub.skuCount}
+                                        </span>
+                                      </button>
+                                      {sOpen && (
+                                        <div className="border-t border-border/40 px-2.5 py-2">
+                                          {sub.skuCount === 0 ? (
+                                            <p className="text-[11px] text-muted-foreground italic">SKU yo&apos;q</p>
+                                          ) : d === "error" ? (
+                                            <p className="text-[11px] text-destructive">Yuklab bo&apos;lmadi.</p>
+                                          ) : d === undefined || d === "loading" ? (
+                                            <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                                              <Loader2 className="h-3 w-3 animate-spin" /> Yuklanmoqda…
+                                            </p>
+                                          ) : (
+                                            <>
+                                              <div className="grid gap-x-4 gap-y-0.5 sm:grid-cols-2 lg:grid-cols-3">
+                                                {d.products.map((p) => (
+                                                  <div key={p.code} className="flex items-center gap-1.5 text-[11px] min-w-0">
+                                                    <span className="shrink-0 rounded bg-background px-1 font-mono text-[10px] text-muted-foreground">{p.code}</span>
+                                                    <span className="truncate" title={p.name}>{p.name}</span>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                              {d.total > d.products.length && (
+                                                <p className="mt-1.5 text-[11px] text-muted-foreground">
+                                                  Ko&apos;rsatilgan {d.products.length} / jami {d.total}
+                                                </p>
+                                              )}
+                                            </>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })
                               )}
                             </div>
                           )}

@@ -12,6 +12,30 @@ const addSchema = z.object({
   alias: z.string().trim().min(1).max(120),
 });
 
+export type SubProduct = { code: number; name: string };
+
+/** Subkategoriya (yoki kategoriya) ostidagi SKU mahsulotlarni lazy yuklaydi. */
+export async function subProductsAction(
+  subId: number
+): Promise<{ ok: true; products: SubProduct[]; total: number } | { ok: false; error: string }> {
+  try {
+    await requireAdmin();
+    const id = z.coerce.number().int().positive().parse(subId);
+    const [products, total] = await Promise.all([
+      prisma.product.findMany({
+        where: { categoryId: id },
+        select: { code: true, name: true },
+        orderBy: { name: "asc" },
+        take: 2000, // bitta subkategoriyada eng ko'pi ~800 — xavfsiz cheklov
+      }),
+      prisma.product.count({ where: { categoryId: id } }),
+    ]);
+    return { ok: true, products, total };
+  } catch (err) {
+    return actionError(err, "subProducts");
+  }
+}
+
 export async function addCategoryAliasAction(
   input: { categoryId: number; alias: string }
 ): Promise<{ ok: true } | { ok: false; error: string }> {

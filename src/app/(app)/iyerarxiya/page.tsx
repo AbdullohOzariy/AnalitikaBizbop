@@ -17,7 +17,7 @@ const getHierarchy = unstable_cache(
           include: {
             children: {
               orderBy: { sortOrder: "asc" },
-              include: { _count: { select: { sales: true } } },
+              include: { _count: { select: { sales: true, products: true } } },
             },
             _count: { select: { sales: true, plans: true, dailyPlans: true } },
           },
@@ -48,6 +48,7 @@ export default async function IyerarxiyaPage() {
         name: s.name,
         code: s.code,
         salesCount: s._count.sales,
+        skuCount: s._count.products,
       })),
     })),
   }));
