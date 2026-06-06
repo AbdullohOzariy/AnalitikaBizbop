@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useId } from "react";
 import { createPortal } from "react-dom";
 import { Maximize2, X } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,6 +23,9 @@ export function ExpandableCard({
 }) {
   const [open, setOpen] = useState(false);
   const mounted = useMounted();
+  const titleId = useId();
+  const closeBtnRef = useRef<HTMLButtonElement>(null);
+  const lastFocusedRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -31,6 +34,16 @@ export function ExpandableCard({
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  // Fokus boshqaruvi: ochilganda yopish tugmasiga, yopilganda ochgan elementga qaytadi.
+  useEffect(() => {
+    if (open) {
+      lastFocusedRef.current = document.activeElement as HTMLElement | null;
+      closeBtnRef.current?.focus();
+    } else {
+      lastFocusedRef.current?.focus?.();
+    }
   }, [open]);
 
   // Ochiq bo'lganda body scroll'ini bloklash
@@ -70,6 +83,7 @@ export function ExpandableCard({
       {mounted &&
         createPortal(
           <div
+            aria-hidden={!open}
             className={cn(
               "fixed inset-0 z-[100] transition-all duration-200",
               open ? "pointer-events-auto" : "pointer-events-none"
@@ -86,6 +100,9 @@ export function ExpandableCard({
 
             {/* Panel */}
             <div
+              role="dialog"
+              aria-modal={open || undefined}
+              aria-labelledby={titleId}
               className={cn(
                 "absolute inset-4 flex flex-col rounded-2xl bg-popover ring-1 ring-foreground/10 shadow-2xl overflow-hidden transition-all duration-200",
                 open
@@ -95,12 +112,14 @@ export function ExpandableCard({
             >
               {/* Header */}
               <div className="flex items-center justify-between gap-4 border-b border-border/60 px-6 py-4 shrink-0">
-                <span className="text-lg font-semibold">{title}</span>
+                <span id={titleId} className="text-lg font-semibold">{title}</span>
                 <Button
+                  ref={closeBtnRef}
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8 shrink-0"
                   onClick={() => setOpen(false)}
+                  aria-label="Yopish"
                 >
                   <X className="h-4 w-4" />
                 </Button>

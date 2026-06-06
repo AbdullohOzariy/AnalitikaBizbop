@@ -169,7 +169,7 @@ export function ReportTable({
                         transition={{ duration: 0.2, ease: "easeOut" }}
                         className="bg-muted/20 hover:bg-muted/30"
                       >
-                        <TableCell className="pl-10 sticky left-0 bg-[oklch(0.972_0.016_145/0.6)] z-10">
+                        <TableCell className="pl-10 sticky left-0 bg-muted/40 z-10">
                           <span className="text-sm text-muted-foreground">{c.categoryName}</span>
                         </TableCell>
                         <TableCell className="text-right tabular-nums text-sm">

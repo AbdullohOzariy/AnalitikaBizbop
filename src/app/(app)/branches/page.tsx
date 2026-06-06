@@ -41,7 +41,7 @@ const getBranches = unstable_cache(
 export default async function BranchesPage() {
   const session = await auth();
   if (!session?.user || session.user.role !== "ADMIN") redirect("/dashboard-v2");
-  const isAdmin = true;
+  // Bu sahifa faqat ADMIN uchun (yuqorida redirect) — barcha tahrir amallari ochiq.
   const branches = await getBranches();
   const totalAliases = branches.reduce((s, b) => s + b.aliases.length, 0);
 
@@ -123,7 +123,7 @@ export default async function BranchesPage() {
                           {items.map((a) => (
                             <span key={a.id} className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-1 text-xs font-mono">
                               {a.alias}
-                              {isAdmin && <AliasDeleteButton id={a.id} alias={a.alias} />}
+                              <AliasDeleteButton id={a.id} alias={a.alias} />
                             </span>
                           ))}
                         </div>
@@ -132,7 +132,7 @@ export default async function BranchesPage() {
                   </div>
                 )}
 
-                {isAdmin && <AliasAddForm branchId={b.id} />}
+                <AliasAddForm branchId={b.id} />
               </div>
             </div>
           );
