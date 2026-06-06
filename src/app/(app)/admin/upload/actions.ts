@@ -396,11 +396,13 @@ async function uploadV3(
     const BATCH = 500;
     for (let i = 0; i < newProducts.length; i += BATCH) {
       const chunk = newProducts.slice(i, i + BATCH);
+      // updatedAt — @updatedAt DB default'siz (Prisma klient to'ldiradi); xom SQL'da
+      // qo'lda now() beramiz, aks holda NOT NULL buzilishi (23502).
       const vals = chunk.map((p) =>
-        Prisma.sql`(${p.code}, ${p.name}, ${null})`
+        Prisma.sql`(${p.code}, ${p.name}, ${null}, now(), now())`
       );
       await prisma.$executeRaw`
-        INSERT INTO "Product" ("code", "name", "categoryId")
+        INSERT INTO "Product" ("code", "name", "categoryId", "createdAt", "updatedAt")
         VALUES ${Prisma.join(vals)}
         ON CONFLICT ("code") DO NOTHING
       `;
