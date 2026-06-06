@@ -92,6 +92,8 @@ export function parseRussianPeriod(
   const start = parseDate(m[1]);
   const end = parseDate(m[2]);
   if (!start || !end) return null;
+  // Teskari oraliq (start > end) — pro-rate 0 summa berib, xato jim o'tib ketardi.
+  if (start.getTime() > end.getTime()) return null;
   return { start, end };
 }
 

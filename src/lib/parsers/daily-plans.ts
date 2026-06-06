@@ -91,7 +91,9 @@ function findLayoutInBlock(
 
   if (categoryCols.length === 0) return null;
 
-  const dataStartIdx = headerIdx + (hasSubHeader ? 2 : 2);
+  // Sarlavhadan keyin 2 qator o'tkazamiz (sarlavha + sub-header/bo'sh qator).
+  // Aniq boshlanish quyidagi while-sikl orqali topiladi (sana ustuni mavjudligiga ko'ra).
+  const dataStartIdx = headerIdx + 2;
   // hasSubHeader=false bo'lganda ham, sub-header qatorida "Normal" so'zlari bo'lsa o'tkazib yuboramiz
   let realDataStart = dataStartIdx;
   while (realDataStart < rows.length) {
