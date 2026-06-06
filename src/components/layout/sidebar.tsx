@@ -69,12 +69,24 @@ function getCollapsedSnapshot() {
 // foldedGroups — Set bo'lgani uchun getSnapshot STABIL havola qaytarishi shart
 // (aks holda useSyncExternalStore cheksiz render qiladi) — shu sabab keshlaymiz.
 const EMPTY_FOLDED = new Set<string>();
+// Birinchi kirish (saqlangan sozlama yo'q) uchun standart: barcha parent guruhlar yig'ilgan.
+// NAV_GROUPS pastda e'lon qilingani sabab lazy (chaqiruv paytida tayyor) + keshlangan.
+let _allFolded: Set<string> | null = null;
+function getAllFolded(): Set<string> {
+  if (!_allFolded) _allFolded = new Set(NAV_GROUPS.map((g) => g.label));
+  return _allFolded;
+}
 let foldedCache: { raw: string | null; set: Set<string> } = { raw: null, set: EMPTY_FOLDED };
 function getFoldedSnapshot(): Set<string> {
   const raw = localStorage.getItem("sidebar-folded-groups");
   if (raw === foldedCache.raw) return foldedCache.set;
-  let set: Set<string> = EMPTY_FOLDED;
-  if (raw) {
+  // raw === null — hech qachon o'zgartirilmagan → standart: hammasi yig'ilgan.
+  // raw === "[]" — foydalanuvchi ataylab hammasini ochgan (bo'sh to'plam saqlangan).
+  let set: Set<string>;
+  if (raw === null) {
+    set = getAllFolded();
+  } else {
+    set = EMPTY_FOLDED;
     try { set = new Set(JSON.parse(raw) as string[]); } catch { set = EMPTY_FOLDED; }
   }
   foldedCache = { raw, set };
@@ -137,7 +149,7 @@ function SidebarNav({
   const activeLayoutId = useId(); // har sidebar instansiyasi (desktop/mobil) uchun noyob
 
   // Yig'ilgan (svernut) parent bo'limlar — localStorage'da saqlanadi
-  const foldedGroups = useSyncExternalStore(subscribePref, getFoldedSnapshot, () => EMPTY_FOLDED);
+  const foldedGroups = useSyncExternalStore(subscribePref, getFoldedSnapshot, getAllFolded);
   const toggleGroup = (label: string) => {
     const next = new Set(foldedGroups);
     if (next.has(label)) next.delete(label); else next.add(label);
