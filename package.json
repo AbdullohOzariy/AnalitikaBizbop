@@ -8,6 +8,7 @@
     "start": "next start",
     "migrate-deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
+    "db:seed-sku": "tsx prisma/seed-sku.ts",
     "postinstall": "prisma generate",
     "lint": "eslint"
   },
