@@ -14,9 +14,8 @@ export async function GET(req: Request) {
   }
   try {
     const filialar = await aktivFilialNomlari();
-    return NextResponse.json(filialar, {
-      headers: { "Access-Control-Allow-Origin": "*" },
-    });
+    // Miniapp shu host'dan (WEBHOOK_URL) ochiladi — so'rov same-origin, wildcard CORS shart emas.
+    return NextResponse.json(filialar);
   } catch (err) {
     console.error("[api/filialar]", err instanceof Error ? err.message : err);
     return NextResponse.json({ xato: "Server xatosi" }, { status: 500 });

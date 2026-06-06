@@ -24,9 +24,18 @@ export function rateLimit(key: string, limit: number, windowMs: number): boolean
   return true;
 }
 
-/** So'rovdan mijoz IP'sini oladi (proxy header'lari orqali). */
+/**
+ * So'rovdan mijoz IP'sini oladi (proxy header'lari orqali).
+ * MUHIM: XFF zanjirining ENG O'NG (oxirgi) qiymatini olamiz — uni ishonchli proxy
+ * (Railway edge) qo'shadi. Chap qiymatlar mijoz tomonidan soxtalashtirilishi mumkin,
+ * shuning uchun ularga ishonmaymiz (rate-limit'ni aylanib o'tishning oldi olinadi).
+ */
 export function clientIp(req: Request): string {
   const xff = req.headers.get("x-forwarded-for");
-  if (xff) return xff.split(",")[0].trim();
+  if (xff) {
+    const parts = xff.split(",");
+    const last = parts[parts.length - 1].trim();
+    if (last) return last;
+  }
   return req.headers.get("x-real-ip") || "unknown";
 }

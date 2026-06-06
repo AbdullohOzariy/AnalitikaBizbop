@@ -27,7 +27,9 @@ export async function signInAction(input: {
   callbackUrl?: string;
 }): Promise<{ error?: string; redirectTo?: string }> {
   const hdrs = await headers();
-  const ip = hdrs.get("x-forwarded-for")?.split(",")[0].trim() ?? "unknown";
+  // XFF eng o'ng (ishonchli proxy qo'shgan) qiymati — chap qiymatlar spoof qilinishi mumkin.
+  const xff = hdrs.get("x-forwarded-for");
+  const ip = xff?.split(",").pop()?.trim() || hdrs.get("x-real-ip") || "unknown";
 
   if (!checkRateLimit(ip)) {
     return { error: "Juda ko'p urinish. 15 daqiqadan so'ng qayta urinib ko'ring." };

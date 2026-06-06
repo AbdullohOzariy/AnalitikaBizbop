@@ -15,9 +15,10 @@ export type TelegramUser = {
 
 /**
  * initData'ni tekshiradi. To'g'ri imzo bo'lsa foydalanuvchini, aks holda null qaytaradi.
- * @param maxAgeSec — auth_date eskirgan bo'lsa rad etiladi (default 24 soat).
+ * @param maxAgeSec — auth_date eskirgan bo'lsa rad etiladi (default 1 soat).
+ *   Replay oynasini qisqa tutamiz: ushlangan initData uzoq qayta ishlatilmasin.
  */
-export function verifyInitData(initData: string, maxAgeSec = 21600): TelegramUser | null {
+export function verifyInitData(initData: string, maxAgeSec = 3600): TelegramUser | null {
   const token = process.env.BOT_TOKEN;
   if (!token || !initData) return null;
 
