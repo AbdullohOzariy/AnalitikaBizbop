@@ -17,6 +17,14 @@ enum Role {
   CEO
 }
 
+// Zakaz (sotib olish buyurtmasi) holati
+enum OrderStatus {
+  DRAFT // Qoralama
+  SENT // Yuborildi
+  RECEIVED // Qabul qilindi
+  RETURNED // Qaytarildi
+}
+
 enum FileType {
   SALES
   METRICS
@@ -47,6 +55,7 @@ model User {
 
   uploads           UploadedFile[]
   managedCategories CategoryManager[] // kategoriya menejeri javobgar kategoriyalari
+  purchaseOrders    PurchaseOrder[]
 }
 
 // Kategoriya menejeri ↔ kategoriya (ko'p-ko'p): bir xodim bir nechta kategoriyaga javobgar.
@@ -280,6 +289,7 @@ model Product {
   supplier     Supplier?            @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   sales        ProductSales[]
   nameMismatch ProductNameMismatch?
+  orderItems   PurchaseOrderItem[]
 
   @@index([categoryId])
   @@index([supplierId])
@@ -299,10 +309,46 @@ model ProductNameMismatch {
 
 // Ta'minotchi (POSTAVSHIK) — sku.xlsx'dagi yetkazib beruvchi. Mahsulotga 1:N.
 model Supplier {
-  id        Int       @id @default(autoincrement())
-  name      String    @unique // masalan "2-O'RIKZOR BOZOR"
-  sortOrder Int       @default(0)
+  id        Int             @id @default(autoincrement())
+  name      String          @unique // masalan "2-O'RIKZOR BOZOR"
+  sortOrder Int             @default(0)
   products  Product[]
+  orders    PurchaseOrder[]
+}
+
+// Zakaz — ta'minotchiga sotib olish buyurtmasi (kategoriya menejeri yaratadi).
+model PurchaseOrder {
+  id          Int         @id @default(autoincrement())
+  supplierId  Int
+  createdById Int // yaratgan foydalanuvchi (menejer/admin)
+  status      OrderStatus @default(DRAFT)
+  note        String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  sentAt      DateTime?
+  receivedAt  DateTime?
+
+  supplier  Supplier            @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  createdBy User                @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  items     PurchaseOrderItem[]
+
+  @@index([supplierId])
+  @@index([createdById])
+  @@index([status])
+}
+
+model PurchaseOrderItem {
+  id        Int     @id @default(autoincrement())
+  orderId   Int
+  productId Int
+  quantity  Decimal @db.Decimal(20, 3)
+  price     Decimal @db.Decimal(20, 2) // dona narxi
+
+  order   PurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([orderId, productId])
+  @@index([productId])
 }
 
 // Master sotuv fakti — SKU × filial × davr. Qayta yuklashda upsert (ustiga yoziladi).
