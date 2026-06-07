@@ -29,6 +29,7 @@ import {
   Settings,
   Truck,
   PackageSearch,
+  ShoppingCart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -107,6 +108,12 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/iyerarxiya",          label: "Iyerarxiya",   icon: Tag,          roles: ["ADMIN"] },
       { href: "/baza/taminotchilar",  label: "Ta'minotchilar", icon: Truck,      roles: ["ADMIN"] },
       { href: "/baza/moslanmagan",    label: "Moslanmagan",  icon: PackageSearch, roles: ["ADMIN"] },
+    ],
+  },
+  {
+    label: "Sotuv",
+    items: [
+      { href: "/sotuv/sotib-olish", label: "Sotib olish", icon: ShoppingCart, roles: ["ADMIN", "CAT_MANAGER"] },
     ],
   },
   {

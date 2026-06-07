@@ -45,7 +45,20 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  uploads UploadedFile[]
+  uploads           UploadedFile[]
+  managedCategories CategoryManager[] // kategoriya menejeri javobgar kategoriyalari
+}
+
+// Kategoriya menejeri ↔ kategoriya (ko'p-ko'p): bir xodim bir nechta kategoriyaga javobgar.
+model CategoryManager {
+  userId     Int
+  categoryId Int
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([userId, categoryId])
+  @@index([categoryId])
 }
 
 model Branch {
@@ -102,6 +115,7 @@ model Category {
   products   Product[]
   plans      MonthlyPlan[]
   dailyPlans DailyPlan[]
+  managers   CategoryManager[]
 }
 
 model CategoryAlias {

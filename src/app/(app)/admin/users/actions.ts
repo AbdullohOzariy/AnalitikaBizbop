@@ -15,6 +15,31 @@ const createSchema = z.object({
   role: z.enum(["ADMIN", "CAT_MANAGER", "CEO"]),
 });
 
+/** Foydalanuvchiga (kategoriya menejeri) javobgar kategoriyalarni biriktiradi. */
+export async function setUserCategoriesAction(
+  userId: number,
+  categoryIds: number[]
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    await requireAdmin();
+    const uid = z.coerce.number().int().positive().parse(userId);
+    const ids = z.array(z.coerce.number().int().positive()).parse(categoryIds);
+    await prisma.$transaction([
+      prisma.categoryManager.deleteMany({ where: { userId: uid } }),
+      ...(ids.length > 0
+        ? [prisma.categoryManager.createMany({
+            data: ids.map((categoryId) => ({ userId: uid, categoryId })),
+            skipDuplicates: true,
+          })]
+        : []),
+    ]);
+    revalidatePath("/admin/users");
+    return { ok: true };
+  } catch (err) {
+    return actionError(err, "setUserCategories");
+  }
+}
+
 export async function createUserAction(
   input: z.input<typeof createSchema>
 ): Promise<{ ok: true } | { ok: false; error: string }> {

@@ -52,9 +52,18 @@ export default async function UsersPage() {
   const session = await auth();
   if (session?.user.role !== "ADMIN") redirect("/dashboard");
 
-  const users = await prisma.user.findMany({
-    orderBy: [{ role: "asc" }, { createdAt: "asc" }],
-  });
+  const [users, catRows] = await Promise.all([
+    prisma.user.findMany({
+      orderBy: [{ role: "asc" }, { createdAt: "asc" }],
+      include: { managedCategories: { select: { categoryId: true } } },
+    }),
+    prisma.category.findMany({
+      where: { parentId: null },
+      select: { id: true, name: true, group: { select: { name: true } } },
+      orderBy: [{ groupId: "asc" }, { sortOrder: "asc" }],
+    }),
+  ]);
+  const categories = catRows.map((c) => ({ id: c.id, name: c.name, group: c.group?.name ?? null }));
 
   const totalAdmin      = users.filter((u) => u.role === "ADMIN").length;
   const totalCatManager = users.filter((u) => u.role === "CAT_MANAGER").length;
@@ -171,6 +180,8 @@ export default async function UsersPage() {
                             name={u.name}
                             role={u.role}
                             isSelf={isSelf}
+                            categories={categories}
+                            managedCategoryIds={u.managedCategories.map((m) => m.categoryId)}
                           />
                         </TableCell>
                       </TableRow>
