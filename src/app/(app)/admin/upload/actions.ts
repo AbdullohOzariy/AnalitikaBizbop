@@ -379,11 +379,14 @@ async function uploadV3(
     });
     const existingByCode = new Map(existingRows.map((p) => [p.code, p]));
 
-    // Yangi (master'da yo'q) va nom-farqli (master saqlanadi) mahsulotlar
+    // Yangi (master'da yo'q) va nom-farqli (master saqlanadi) mahsulotlar.
+    // Solishtirishda bo'shliqlar normallashtiriladi (ortiqcha/ketma-ket bo'shliq
+    // farqi ahamiyatsiz — false "nom farqi" bermaslik uchun).
+    const wsNorm = (s: string) => s.replace(/\s+/g, " ").trim();
     const newProducts = fileProducts.filter((p) => !existingByCode.has(p.code));
     const nameChanges = fileProducts.filter((p) => {
       const e = existingByCode.get(p.code);
-      return e && e.name !== p.name;
+      return e && wsNorm(e.name) !== wsNorm(p.name);
     });
     // Hisobot uchun (try'dan tashqarida ishlatiladi)
     newSkuCount = newProducts.length;
@@ -415,7 +418,7 @@ async function uploadV3(
       uploadedFileId: fileRecord.id,
     }));
     const matchedPids = fileProducts
-      .filter((p) => { const e = existingByCode.get(p.code); return !!e && e.name === p.name; })
+      .filter((p) => { const e = existingByCode.get(p.code); return !!e && wsNorm(e.name) === wsNorm(p.name); })
       .map((p) => existingByCode.get(p.code)!.id);
     const touchedPids = [...mismatchData.map((m) => m.productId), ...matchedPids];
     if (touchedPids.length > 0) {

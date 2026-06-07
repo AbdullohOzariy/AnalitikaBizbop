@@ -431,7 +431,8 @@ function parseProductLevel(
       continue;
     }
     if (typeof code !== "number" || typeof name !== "string") continue;
-    data.push({ r, code, name: name.trim(), total: totalOf(r) });
+    // Nomdagi ketma-ket/ortiqcha bo'shliqlar bittaga (1C eksporti shovqini) — toza nom.
+    data.push({ r, code, name: name.replace(/\s+/g, " ").trim(), total: totalOf(r) });
   }
 
   const n = data.length;
