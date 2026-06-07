@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { unstable_cache } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { PackageSearch } from "lucide-react";
@@ -8,6 +9,17 @@ import { MoslanmaganClient, type UnmatchedProduct, type SubOption, type NameMism
 export const dynamic = "force-dynamic";
 
 const PAGE_SIZE = 200;
+
+// 118 subkategoriya (assign Select uchun) kam o'zgaradi — keshlaymiz; qolgani dinamik.
+const getSubcats = unstable_cache(
+  () => prisma.category.findMany({
+    where: { parentId: { not: null } },
+    select: { id: true, name: true, parent: { select: { name: true } }, group: { select: { name: true } } },
+    orderBy: { name: "asc" },
+  }),
+  ["moslanmagan-subcats"],
+  { tags: ["iyerarxiya"], revalidate: 300 }
+);
 
 export default async function MoslanmaganPage({
   searchParams,
@@ -29,16 +41,7 @@ export default async function MoslanmaganPage({
       take: PAGE_SIZE,
       skip: (page - 1) * PAGE_SIZE,
     }),
-    prisma.category.findMany({
-      where: { parentId: { not: null } },
-      select: {
-        id: true,
-        name: true,
-        parent: { select: { name: true } },
-        group: { select: { name: true } },
-      },
-      orderBy: { name: "asc" },
-    }),
+    getSubcats(),
     prisma.productNameMismatch.findMany({
       select: { fileName: true, product: { select: { id: true, code: true, name: true } } },
       orderBy: { createdAt: "desc" },

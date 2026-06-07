@@ -62,8 +62,11 @@ export function SkuList({ groups }: { groups: HGroup[] }) {
     [groups]
   );
 
-  // Ma'lumot yuklash (filtr/qidiruv/sahifa o'zgarganda)
+  // Ma'lumot yuklash (filtr/qidiruv/sahifa o'zgarganda). reqId — race guard:
+  // tez ketma-ket so'rovlarда eski (sekin) javob yangisini ustiga yozmasligi uchun.
+  const reqId = useRef(0);
   useEffect(() => {
+    const myId = ++reqId.current;
     start(async () => {
       const res = await searchSkusAction({
         q: q || undefined,
@@ -72,6 +75,7 @@ export function SkuList({ groups }: { groups: HGroup[] }) {
         subId: subId !== ALL ? Number(subId) : undefined,
         page,
       });
+      if (myId !== reqId.current) return; // yangiroq so'rov bor — bu javobni tashlaymiz
       if (res.ok) { setRows(res.rows); setTotal(res.total); setPageSize(res.pageSize); }
       else { toast.error(res.error); setRows([]); setTotal(0); }
     });
