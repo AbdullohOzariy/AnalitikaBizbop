@@ -20,6 +20,10 @@ export type UploadResult =
 
 const labelSchema = z.string().trim().min(1, "Fayl uchun nom kiriting").max(120);
 
+// Xom ProductSales necha oy saqlanadi (eskirog'i yuklashda tozalanadi). Tahlil
+// tarixi CategorySales rollup'ida qoladi. Env bilan moslash mumkin.
+const PRODUCTSALES_RETENTION_MONTHS = Number(process.env.PRODUCTSALES_RETENTION_MONTHS) || 24;
+
 async function readBuffer(file: File): Promise<Buffer> {
   const bytes = await file.arrayBuffer();
   return Buffer.from(bytes);
@@ -506,6 +510,12 @@ async function uploadV3(
     await prisma.$executeRawUnsafe('ANALYZE "ProductSales"').catch(() => {});
     await prisma.$executeRawUnsafe('ANALYZE "CategorySales"').catch(() => {});
     await prisma.$executeRawUnsafe('ANALYZE "Product"').catch(() => {});
+
+    // 9. RETENTION: eski xom ProductSales qatorlarini tozalaymiz — jadval cheksiz
+    // o'smasin. Tahlil tarixi CategorySales rollup'ida (kichik) saqlanib qoladi.
+    const cutoff = new Date(result.periodEnd);
+    cutoff.setUTCMonth(cutoff.getUTCMonth() - PRODUCTSALES_RETENTION_MONTHS);
+    await prisma.productSales.deleteMany({ where: { periodEnd: { lt: cutoff } } }).catch(() => {});
   } catch (err) {
     await prisma.uploadedFile.delete({ where: { id: fileRecord.id } }).catch(() => null);
     throw err;
