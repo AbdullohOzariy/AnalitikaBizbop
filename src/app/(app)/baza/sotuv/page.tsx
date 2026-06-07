@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { unstable_cache } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import type { Prisma } from "@/generated/prisma/client";
+import { Prisma } from "@/generated/prisma/client";
 import { getDefaultRange } from "@/lib/analytics";
 import type { FilterGroup } from "../category-tree-filter";
 import { Database, ShoppingBag, Layers, TrendingUp, Boxes, Download, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
@@ -46,15 +46,23 @@ const getCategoryTree = unstable_cache(
   { tags: ["iyerarxiya"], revalidate: 300 }
 );
 
-// Saralanadigan ustunlar → Prisma orderBy
-const SORTS: Record<string, (d: "asc" | "desc") => Prisma.ProductSalesOrderByWithRelationInput> = {
-  code: (d) => ({ product: { code: d } }),
-  name: (d) => ({ product: { name: d } }),
-  period: (d) => ({ periodStart: d }),
-  stockQty: (d) => ({ stockQty: d }),
-  soldQty: (d) => ({ soldQty: d }),
-  amount: (d) => ({ amount: d }),
-  costAmount: (d) => ({ costAmount: d }),
+// Saralanadigan ustunlar → SQL ifoda (raw ORDER BY uchun; barchasi fiksirlangan — xavfsiz)
+const MARJA_SQL = `(CASE WHEN ps."costAmount" IS NOT NULL AND ps."amount" > 0 THEN (ps."amount" - ps."costAmount") / ps."amount" * 100 ELSE NULL END)`;
+const SORT_SQL: Record<string, string> = {
+  code: 'p."code"',
+  name: 'p."name"',
+  period: 'ps."periodStart"',
+  stockQty: 'ps."stockQty"',
+  soldQty: 'ps."soldQty"',
+  amount: 'ps."amount"',
+  costAmount: 'ps."costAmount"',
+  marja: MARJA_SQL,
+};
+
+type SalesRow = {
+  id: number; pcode: number; pname: string; cname: string | null; bname: string;
+  periodStart: string; periodEnd: string;
+  stockQty: string | null; soldQty: string | null; amount: string; costAmount: string | null;
 };
 
 /** Saralash uchun ustun sarlavhasi — joriy filtrlarni saqlab, yo'nalishni almashtiradi. */
@@ -65,7 +73,7 @@ function SortHead({ col, label, sp, sort, dir, align }: {
   const active = sort === col;
   const nextDir = active && dir === "desc" ? "asc" : "desc";
   const p = new URLSearchParams();
-  for (const k of ["start", "end", "branchId", "cats", "q"]) { const v = sp[k]; if (v) p.set(k, v); }
+  for (const k of ["start", "end", "branchId", "cats", "q", "mmin", "mmax"]) { const v = sp[k]; if (v) p.set(k, v); }
   p.set("sort", col); p.set("dir", nextDir);
   const Icon = active ? (dir === "desc" ? ArrowDown : ArrowUp) : ArrowUpDown;
   return (
@@ -119,60 +127,65 @@ export default async function BazaSotuvPage({
   const branchId = sp.branchId ? parseInt(sp.branchId) : undefined;
   const catIds = sp.cats ? sp.cats.split(",").map(Number).filter((n) => Number.isInteger(n) && n > 0) : [];
   const q = sp.q?.trim() ?? "";
-
-  // Saralash
-  const sort = sp.sort && SORTS[sp.sort] ? sp.sort : "";
-  const dir: "asc" | "desc" = sp.dir === "asc" ? "asc" : "desc";
-  const orderBy: Prisma.ProductSalesOrderByWithRelationInput[] = sort
-    ? [SORTS[sort](dir)]
-    : [{ periodStart: "desc" }, { amount: "desc" }];
-
-  // Filtr sharti — faqat belgilangan period (period berilmasa — standart davr)
-  const where = {
-    periodStart: { gte: startDate },
-    periodEnd: { lte: endDate },
-    ...(branchId && { branchId }),
-    ...(catIds.length > 0 && { product: { categoryId: { in: catIds } } }),
-    ...(q && {
-      OR: [
-        { product: { name: { contains: q, mode: "insensitive" as const } } },
-        { product: { code: { equals: parseInt(q) || undefined } } },
-      ],
-    }),
-  };
-
-  const [totalCount, rows, branches, catGroups, agg] = await Promise.all([
-    prisma.productSales.count({ where }),
-    prisma.productSales.findMany({
-      where,
-      skip,
-      take: PAGE_SIZE,
-      orderBy,
-      include: {
-        product: { include: { category: true } },
-        branch: { select: { id: true, name: true } },
-      },
-    }),
-    prisma.branch.findMany({ orderBy: { sortOrder: "asc" }, select: { id: true, name: true } }),
-    getCategoryTree(),
-    prisma.productSales.aggregate({
-      where,
-      _sum: { amount: true, costAmount: true, soldQty: true },
-      _count: true,
-    }),
-  ]);
-
-  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
-  const totalAmount = agg._sum.amount ? Number(agg._sum.amount) : 0;
-  const totalCost = agg._sum.costAmount ? Number(agg._sum.costAmount) : 0;
-  const margin = totalAmount > 0 ? ((totalAmount - totalCost) / totalAmount) * 100 : 0;
+  const mmin = sp.mmin != null && sp.mmin !== "" && !isNaN(Number(sp.mmin)) ? Number(sp.mmin) : undefined;
+  const mmax = sp.mmax != null && sp.mmax !== "" && !isNaN(Number(sp.mmax)) ? Number(sp.mmax) : undefined;
 
   const startStr = sp.start ?? startDate.toISOString().slice(0, 10);
   const endStr = sp.end ?? endDate.toISOString().slice(0, 10);
 
+  // Saralash
+  const sort = sp.sort && SORT_SQL[sp.sort] ? sp.sort : "";
+  const dirSql = sp.dir === "asc" ? "ASC" : "DESC";
+  const dir: "asc" | "desc" = sp.dir === "asc" ? "asc" : "desc";
+  const orderRaw = sort
+    ? Prisma.raw(`${SORT_SQL[sort]} ${dirSql} NULLS LAST`)
+    : Prisma.raw(`ps."periodStart" DESC, ps."amount" DESC`);
+
+  // Filtr (raw — marja hisoblangan ustun bo'lgani uchun WHERE'da SQL ifoda kerak)
+  const conds: Prisma.Sql[] = [
+    Prisma.sql`ps."periodStart" >= ${startStr}::date`,
+    Prisma.sql`ps."periodEnd" <= ${endStr}::date`,
+  ];
+  if (branchId) conds.push(Prisma.sql`ps."branchId" = ${branchId}`);
+  if (catIds.length > 0) conds.push(Prisma.sql`p."categoryId" IN (${Prisma.join(catIds)})`);
+  if (q) conds.push(Prisma.sql`(p."name" ILIKE ${"%" + q + "%"} OR p."code"::text = ${q})`);
+  if (mmin != null) conds.push(Prisma.sql`${Prisma.raw(MARJA_SQL)} >= ${mmin}`);
+  if (mmax != null) conds.push(Prisma.sql`${Prisma.raw(MARJA_SQL)} <= ${mmax}`);
+  const baseFrom = Prisma.sql`
+    FROM "ProductSales" ps
+    JOIN "Product" p ON p.id = ps."productId"
+    JOIN "Branch" b ON b.id = ps."branchId"
+    LEFT JOIN "Category" c ON c.id = p."categoryId"
+    WHERE ${Prisma.join(conds, " AND ")}`;
+
+  const [rows, countRes, aggRes, branches, catGroups] = await Promise.all([
+    prisma.$queryRaw<SalesRow[]>(Prisma.sql`
+      SELECT ps.id, p."code" AS pcode, p."name" AS pname, c."name" AS cname, b."name" AS bname,
+             ps."periodStart"::text AS "periodStart", ps."periodEnd"::text AS "periodEnd",
+             ps."stockQty", ps."soldQty", ps."amount", ps."costAmount"
+      ${baseFrom}
+      ORDER BY ${orderRaw}
+      LIMIT ${PAGE_SIZE} OFFSET ${skip}`),
+    prisma.$queryRaw<{ n: number }[]>(Prisma.sql`SELECT COUNT(*)::int AS n ${baseFrom}`),
+    prisma.$queryRaw<{ amount: number; cost: number; sold: number }[]>(Prisma.sql`
+      SELECT COALESCE(SUM(ps."amount"),0)::float8 AS amount,
+             COALESCE(SUM(ps."costAmount"),0)::float8 AS cost,
+             COALESCE(SUM(ps."soldQty"),0)::float8 AS sold
+      ${baseFrom}`),
+    prisma.branch.findMany({ orderBy: { sortOrder: "asc" }, select: { id: true, name: true } }),
+    getCategoryTree(),
+  ]);
+
+  const totalCount = countRes[0]?.n ?? 0;
+  const totalAmount = aggRes[0]?.amount ?? 0;
+  const totalCost = aggRes[0]?.cost ?? 0;
+  const totalSold = aggRes[0]?.sold ?? 0;
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+  const margin = totalAmount > 0 ? ((totalAmount - totalCost) / totalAmount) * 100 : 0;
+
   const exportQs = (() => {
     const p = new URLSearchParams();
-    for (const k of ["start", "end", "branchId", "cats", "q", "sort", "dir"]) { const v = sp[k]; if (v) p.set(k, v); }
+    for (const k of ["start", "end", "branchId", "cats", "q", "mmin", "mmax", "sort", "dir"]) { const v = sp[k]; if (v) p.set(k, v); }
     return p.toString();
   })();
 
@@ -191,8 +204,11 @@ export default async function BazaSotuvPage({
           defaultEnd={endStr}
           defaultBranchId={sp.branchId}
           defaultSearch={sp.q}
+          defaultMarjaMin={sp.mmin}
+          defaultMarjaMax={sp.mmax}
           showCategory
           showSearch
+          showMargin
         />
       </PageHeader>
 
@@ -207,7 +223,7 @@ export default async function BazaSotuvPage({
         />
         <StatCard
           label="Sotilgan (dona)"
-          value={fmtQty(agg._sum.soldQty)}
+          value={fmtQty(totalSold)}
           icon={Boxes}
           tone="default"
         />
@@ -262,15 +278,18 @@ export default async function BazaSotuvPage({
                       <TableHead className="text-right w-[90px]"><SortHead col="stockQty" label="Qoldiq" sp={sp} sort={sort} dir={dir} align="right" /></TableHead>
                       <TableHead className="text-right w-[90px]"><SortHead col="soldQty" label="Sotilgan" sp={sp} sort={sort} dir={dir} align="right" /></TableHead>
                       <TableHead className="text-right w-[130px]"><SortHead col="amount" label="Savdo" sp={sp} sort={sort} dir={dir} align="right" /></TableHead>
-                      <TableHead className="text-right w-[130px]"><SortHead col="costAmount" label="Tannarx" sp={sp} sort={sort} dir={dir} align="right" /></TableHead>
-                      <TableHead className="text-right w-[70px]">Marja%</TableHead>
+                      <TableHead className="text-right w-[140px]"><SortHead col="costAmount" label="Tannarx" sp={sp} sort={sort} dir={dir} align="right" /></TableHead>
+                      <TableHead className="text-right w-[80px]"><SortHead col="marja" label="Marja%" sp={sp} sort={sort} dir={dir} align="right" /></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {rows.map((r) => {
                       const amt = Number(r.amount);
-                      const cost = r.costAmount ? Number(r.costAmount) : null;
+                      const cost = r.costAmount != null ? Number(r.costAmount) : null;
+                      const sold = r.soldQty != null ? Number(r.soldQty) : 0;
                       const mj = cost !== null && amt > 0 ? ((amt - cost) / amt * 100) : null;
+                      const unitPrice = sold > 0 ? amt / sold : null; // bir dona narxi
+                      const unitCost = cost !== null && sold > 0 ? cost / sold : null; // bir dona tannarxi
                       const mjColor =
                         mj === null ? "text-muted-foreground" :
                         mj >= 15 ? "text-primary font-medium" :
@@ -279,35 +298,27 @@ export default async function BazaSotuvPage({
                       const isOos = r.stockQty != null && Number(r.stockQty) <= 0;
                       return (
                         <TableRow key={r.id} className={cn("text-sm", isOos && "bg-destructive/5")}>
-                          <TableCell className="font-mono text-xs text-muted-foreground">
-                            {r.product.code}
-                          </TableCell>
+                          <TableCell className="font-mono text-xs text-muted-foreground">{r.pcode}</TableCell>
                           <TableCell className="max-w-[200px]">
-                            <span className="line-clamp-2 leading-snug">{r.product.name}</span>
+                            <span className="line-clamp-2 leading-snug">{r.pname}</span>
                           </TableCell>
-                          <TableCell className="text-xs text-muted-foreground">
-                            {r.product.category?.name ?? "—"}
-                          </TableCell>
-                          <TableCell className="text-xs">{r.branch.name}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{r.cname ?? "—"}</TableCell>
+                          <TableCell className="text-xs">{r.bname}</TableCell>
                           <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                            {r.periodStart.toISOString().slice(0, 10)}
-                            {r.periodStart.toISOString().slice(0, 10) !== r.periodEnd.toISOString().slice(0, 10) && (
-                              <> → {r.periodEnd.toISOString().slice(0, 10)}</>
-                            )}
+                            {r.periodStart}
+                            {r.periodStart !== r.periodEnd && <> → {r.periodEnd}</>}
                           </TableCell>
-                          <TableCell className="text-right tabular-nums text-xs">
-                            {fmtQty(r.stockQty)}
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums text-xs">
-                            {fmtQty(r.soldQty)}
-                          </TableCell>
+                          <TableCell className="text-right tabular-nums text-xs">{fmtQty(r.stockQty)}</TableCell>
+                          <TableCell className="text-right tabular-nums text-xs">{fmtQty(r.soldQty)}</TableCell>
                           <TableCell className="text-right tabular-nums text-xs font-medium">
                             {fmtAmount(r.amount)}
+                            {unitPrice != null && <div className="text-[10px] font-normal text-muted-foreground">({fmtAmount(unitPrice)}/dona)</div>}
                           </TableCell>
                           <TableCell className="text-right tabular-nums text-xs text-muted-foreground">
-                            {r.costAmount ? fmtAmount(r.costAmount) : "—"}
+                            {cost !== null ? fmtAmount(cost) : "—"}
+                            {unitCost != null && <div className="text-[10px] text-muted-foreground/80">({fmtAmount(unitCost)}/dona)</div>}
                           </TableCell>
-                          <TableCell className={`text-right tabular-nums text-xs ${mjColor}`}>
+                          <TableCell className={`text-right align-top tabular-nums text-xs ${mjColor}`}>
                             {mj !== null ? `${mj.toFixed(1)}%` : "—"}
                           </TableCell>
                         </TableRow>

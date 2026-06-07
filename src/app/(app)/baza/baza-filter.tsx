@@ -42,8 +42,11 @@ export function BazaFilter({
   defaultBranchId,
   defaultCategoryId,
   defaultSearch,
+  defaultMarjaMin,
+  defaultMarjaMax,
   showCategory = false,
   showSearch = false,
+  showMargin = false,
 }: {
   basePath: string;
   branches: Branch[];
@@ -54,8 +57,11 @@ export function BazaFilter({
   defaultBranchId?: string;
   defaultCategoryId?: string;
   defaultSearch?: string;
+  defaultMarjaMin?: string;
+  defaultMarjaMax?: string;
   showCategory?: boolean;
   showSearch?: boolean;
+  showMargin?: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -65,16 +71,19 @@ export function BazaFilter({
   const [branchId, setBranchId] = useState(defaultBranchId ?? "all");
   const [categoryId, setCategoryId] = useState(defaultCategoryId ?? "all");
   const [search, setSearch] = useState(defaultSearch ?? "");
+  const [marjaMin, setMarjaMin] = useState(defaultMarjaMin ?? "");
+  const [marjaMax, setMarjaMax] = useState(defaultMarjaMax ?? "");
   const debounce = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   // Server yangi default berganda lokal holatni qayta sinxronlaymiz
-  const propsKey = `${defaultStart}|${defaultEnd}|${defaultBranchId ?? ""}|${defaultCategoryId ?? ""}|${defaultSearch ?? ""}`;
+  const propsKey = `${defaultStart}|${defaultEnd}|${defaultBranchId ?? ""}|${defaultCategoryId ?? ""}|${defaultSearch ?? ""}|${defaultMarjaMin ?? ""}|${defaultMarjaMax ?? ""}`;
   const [seenKey, setSeenKey] = useState(propsKey);
   if (seenKey !== propsKey) {
     setSeenKey(propsKey);
     setStart(defaultStart); setEnd(defaultEnd);
     setBranchId(defaultBranchId ?? "all"); setCategoryId(defaultCategoryId ?? "all");
     setSearch(defaultSearch ?? "");
+    setMarjaMin(defaultMarjaMin ?? ""); setMarjaMax(defaultMarjaMax ?? "");
   }
 
   // Har o'zgarish avtomatik qo'llanadi (Ko'rish tugmasi shart emas)
@@ -99,6 +108,11 @@ export function BazaFilter({
     clearTimeout(debounce.current);
     debounce.current = setTimeout(() => navigate({ q: value.trim() || undefined }), 450);
   };
+  const onMarja = (key: "mmin" | "mmax", value: string) => {
+    if (key === "mmin") setMarjaMin(value); else setMarjaMax(value);
+    clearTimeout(debounce.current);
+    debounce.current = setTimeout(() => navigate({ [key]: value.trim() || undefined }), 450);
+  };
   const onPreset = (s: string, e: string) => {
     setStart(s); setEnd(e); navigate({ start: s, end: e });
   };
@@ -106,6 +120,7 @@ export function BazaFilter({
   const reset = () => {
     clearTimeout(debounce.current);
     setStart(""); setEnd(""); setBranchId("all"); setCategoryId("all"); setSearch("");
+    setMarjaMin(""); setMarjaMax("");
     router.replace(basePath, { scroll: false });
   };
 
@@ -115,7 +130,8 @@ export function BazaFilter({
   const hasFilters =
     start || end || (branchId && branchId !== "all") ||
     (showCategory && (categoryGroups ? selectedCats.length > 0 : categoryId !== "all")) ||
-    (showSearch && search.trim());
+    (showSearch && search.trim()) ||
+    (showMargin && (marjaMin.trim() || marjaMax.trim()));
   const activePreset = PRESETS.find((p) => { const r = p.range(); return r.start === start && r.end === end; })?.key;
 
   return (
@@ -171,6 +187,18 @@ export function BazaFilter({
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">Mahsulot (nom / kod)</Label>
             <Input type="text" value={search} onChange={(e) => onSearch(e.target.value)} placeholder="Qidirish..." className="h-9 w-52" />
+          </div>
+        )}
+
+        {/* Marja % oralig'i */}
+        {showMargin && (
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Marja %</Label>
+            <div className="flex items-center gap-1">
+              <Input type="number" inputMode="numeric" value={marjaMin} onChange={(e) => onMarja("mmin", e.target.value)} placeholder="dan" className="h-9 w-20" />
+              <span className="text-muted-foreground">–</span>
+              <Input type="number" inputMode="numeric" value={marjaMax} onChange={(e) => onMarja("mmax", e.target.value)} placeholder="gacha" className="h-9 w-20" />
+            </div>
           </div>
         )}
 
