@@ -1,8 +1,10 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@/generated/prisma/client";
 import { getDefaultRange } from "@/lib/analytics";
-import { Database, ShoppingBag, Layers, TrendingUp } from "lucide-react";
+import { Database, ShoppingBag, Layers, TrendingUp, Boxes, Download, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { PageHeader, StatCard, EmptyState } from "@/components/common/page";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -13,10 +15,42 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 import { BazaFilter } from "../baza-filter";
 import { BazaPagination } from "../baza-pagination";
 
 const PAGE_SIZE = 50;
+
+// Saralanadigan ustunlar → Prisma orderBy
+const SORTS: Record<string, (d: "asc" | "desc") => Prisma.ProductSalesOrderByWithRelationInput> = {
+  code: (d) => ({ product: { code: d } }),
+  name: (d) => ({ product: { name: d } }),
+  period: (d) => ({ periodStart: d }),
+  stockQty: (d) => ({ stockQty: d }),
+  soldQty: (d) => ({ soldQty: d }),
+  amount: (d) => ({ amount: d }),
+  costAmount: (d) => ({ costAmount: d }),
+};
+
+/** Saralash uchun ustun sarlavhasi — joriy filtrlarni saqlab, yo'nalishni almashtiradi. */
+function SortHead({ col, label, sp, sort, dir, align }: {
+  col: string; label: string; sp: Record<string, string | undefined>;
+  sort: string; dir: "asc" | "desc"; align?: "right";
+}) {
+  const active = sort === col;
+  const nextDir = active && dir === "desc" ? "asc" : "desc";
+  const p = new URLSearchParams();
+  for (const k of ["start", "end", "branchId", "categoryId", "q"]) { const v = sp[k]; if (v) p.set(k, v); }
+  p.set("sort", col); p.set("dir", nextDir);
+  const Icon = active ? (dir === "desc" ? ArrowDown : ArrowUp) : ArrowUpDown;
+  return (
+    <Link href={`/baza/sotuv?${p.toString()}`} scroll={false}
+      className={cn("inline-flex items-center gap-1 hover:text-foreground", align === "right" && "w-full justify-end")}>
+      {label}
+      <Icon className={cn("h-3 w-3", active ? "text-foreground" : "text-muted-foreground/40")} />
+    </Link>
+  );
+}
 
 function parseDate(s: string | undefined): Date | undefined {
   if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return undefined;
@@ -61,6 +95,13 @@ export default async function BazaSotuvPage({
   const categoryId = sp.categoryId ? parseInt(sp.categoryId) : undefined;
   const q = sp.q?.trim() ?? "";
 
+  // Saralash
+  const sort = sp.sort && SORTS[sp.sort] ? sp.sort : "";
+  const dir: "asc" | "desc" = sp.dir === "asc" ? "asc" : "desc";
+  const orderBy: Prisma.ProductSalesOrderByWithRelationInput[] = sort
+    ? [SORTS[sort](dir)]
+    : [{ periodStart: "desc" }, { amount: "desc" }];
+
   // Filtr sharti — faqat belgilangan period (period berilmasa — standart davr)
   const where = {
     periodStart: { gte: startDate },
@@ -81,7 +122,7 @@ export default async function BazaSotuvPage({
       where,
       skip,
       take: PAGE_SIZE,
-      orderBy: [{ periodStart: "desc" }, { amount: "desc" }],
+      orderBy,
       include: {
         product: { include: { category: true } },
         branch: { select: { id: true, name: true } },
@@ -108,6 +149,12 @@ export default async function BazaSotuvPage({
   const startStr = sp.start ?? startDate.toISOString().slice(0, 10);
   const endStr = sp.end ?? endDate.toISOString().slice(0, 10);
 
+  const exportQs = (() => {
+    const p = new URLSearchParams();
+    for (const k of ["start", "end", "branchId", "categoryId", "q", "sort", "dir"]) { const v = sp[k]; if (v) p.set(k, v); }
+    return p.toString();
+  })();
+
   return (
     <div className="space-y-5">
       <PageHeader
@@ -130,13 +177,19 @@ export default async function BazaSotuvPage({
       </PageHeader>
 
       {/* Statistika */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard
           label="Jami qatorlar"
           value={totalCount.toLocaleString("uz-UZ")}
           icon={Layers}
           tone="blue"
           hint={`Sahifada: ${rows.length}`}
+        />
+        <StatCard
+          label="Sotilgan (dona)"
+          value={fmtQty(agg._sum.soldQty)}
+          icon={Boxes}
+          tone="default"
         />
         <StatCard
           label="Savdo summasi"
@@ -158,6 +211,14 @@ export default async function BazaSotuvPage({
         />
       </div>
 
+      {/* Eksport */}
+      <div className="flex justify-end">
+        <a href={`/api/baza/sotuv/export?${exportQs}`}
+          className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3.5 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-secondary">
+          <Download className="h-4 w-4" /> Excel eksport
+        </a>
+      </div>
+
       {/* Jadval */}
       <Card className="overflow-hidden">
         <CardContent className="p-0">
@@ -173,15 +234,15 @@ export default async function BazaSotuvPage({
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/40 hover:bg-muted/40">
-                      <TableHead className="w-[90px]">Kod</TableHead>
-                      <TableHead>Mahsulot</TableHead>
+                      <TableHead className="w-[90px]"><SortHead col="code" label="Kod" sp={sp} sort={sort} dir={dir} /></TableHead>
+                      <TableHead><SortHead col="name" label="Mahsulot" sp={sp} sort={sort} dir={dir} /></TableHead>
                       <TableHead>Kategoriya</TableHead>
                       <TableHead>Filial</TableHead>
-                      <TableHead className="w-[100px]">Davr</TableHead>
-                      <TableHead className="text-right w-[90px]">Qoldiq</TableHead>
-                      <TableHead className="text-right w-[80px]">Dona</TableHead>
-                      <TableHead className="text-right w-[130px]">Savdo</TableHead>
-                      <TableHead className="text-right w-[130px]">Tannarx</TableHead>
+                      <TableHead className="w-[100px]"><SortHead col="period" label="Davr" sp={sp} sort={sort} dir={dir} /></TableHead>
+                      <TableHead className="text-right w-[90px]"><SortHead col="stockQty" label="Qoldiq" sp={sp} sort={sort} dir={dir} align="right" /></TableHead>
+                      <TableHead className="text-right w-[90px]"><SortHead col="soldQty" label="Sotilgan" sp={sp} sort={sort} dir={dir} align="right" /></TableHead>
+                      <TableHead className="text-right w-[130px]"><SortHead col="amount" label="Savdo" sp={sp} sort={sort} dir={dir} align="right" /></TableHead>
+                      <TableHead className="text-right w-[130px]"><SortHead col="costAmount" label="Tannarx" sp={sp} sort={sort} dir={dir} align="right" /></TableHead>
                       <TableHead className="text-right w-[70px]">Marja%</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -195,8 +256,9 @@ export default async function BazaSotuvPage({
                         mj >= 15 ? "text-primary font-medium" :
                         mj > 0 ? "text-amber-600 dark:text-amber-400" :
                         "text-destructive";
+                      const isOos = r.stockQty != null && Number(r.stockQty) <= 0;
                       return (
-                        <TableRow key={r.id} className="text-sm">
+                        <TableRow key={r.id} className={cn("text-sm", isOos && "bg-destructive/5")}>
                           <TableCell className="font-mono text-xs text-muted-foreground">
                             {r.product.code}
                           </TableCell>
