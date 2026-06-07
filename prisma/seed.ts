@@ -42,8 +42,8 @@ const BRANCHES = [
   },
 ];
 
-// Iyerarxiya (guruh/kategoriya/subkategoriya) endi `Iyerarxiya.xlsx` + 1C KOD asosida
-// alohida skript orqali seed qilinadi:  npx tsx prisma/seed-hierarchy.ts
+// Iyerarxiya (guruh/kategoriya/subkategoriya/SKU) endi sku.xlsx asosida alohida
+// skript orqali quriladi:  ALLOW_DESTRUCTIVE_SEED=1 npm run db:seed-sku
 
 async function main() {
   console.log("→ Seeding branches...");
@@ -62,7 +62,7 @@ async function main() {
     }
   }
 
-  console.log("ℹ Iyerarxiya seed'i alohida: npx tsx prisma/seed-hierarchy.ts");
+  console.log("ℹ Iyerarxiya/SKU seed'i alohida: npm run db:seed-sku");
 
   const adminEmail = process.env.SEED_ADMIN_EMAIL;
   const adminPassword = process.env.SEED_ADMIN_PASSWORD;

@@ -123,9 +123,9 @@ export function IyerarxiyaClient({
   const isGroupOpen = (id: number) => searching || openGroups.has(id);
   const isCatOpen = (id: number) => searching || openCats.has(id);
   const toggleGroup = (id: number) =>
-    setOpenGroups((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
+    setOpenGroups((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const toggleCat = (id: number) =>
-    setOpenCats((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
+    setOpenCats((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   const expandAll = () => {
     setOpenGroups(new Set(groups.map((g) => g.id)));
