@@ -33,6 +33,17 @@ type Data = { meta: Record<string, unknown>; groups: Group[]; categories: Cat[];
 const CHUNK = 5000; // Postgres parametr cheklovi (~65535) uchun mahsulotlarni bo'lib yozamiz
 
 async function main() {
+  // XAVFSIZLIK: bu seed TO'LIQ qayta quradi — Product/Supplier va ularга cascade
+  // bog'liq ProductSales/PurchaseOrder/CategoryManager/reja YO'QOLADI. Master
+  // allaqachon o'rnatilgan; faqat ataylab (env bilan) ishga tushiriladi.
+  if (!process.env.ALLOW_DESTRUCTIVE_SEED) {
+    console.error(
+      "⛔ db:seed-sku to'liq qayta quradi (zakazlar, rejalar, sotuv fakti, menejer-biriktirmalar cascade o'chadi).\n" +
+        "   Ataylab ishlatish uchun: ALLOW_DESTRUCTIVE_SEED=1 npm run db:seed-sku"
+    );
+    process.exit(1);
+  }
+
   const file = path.join(__dirname, "data", "sku-hierarchy.json");
   const data = JSON.parse(fs.readFileSync(file, "utf8")) as Data;
   console.log("📥 Manba:", data.meta);
