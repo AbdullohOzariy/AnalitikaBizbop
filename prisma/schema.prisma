@@ -125,6 +125,9 @@ model Category {
   plans      MonthlyPlan[]
   dailyPlans DailyPlan[]
   managers   CategoryManager[]
+
+  @@index([parentId]) // scope filtrlari (subkat → ota-kategoriya) tezligi uchun
+  @@index([groupId])
 }
 
 model CategoryAlias {

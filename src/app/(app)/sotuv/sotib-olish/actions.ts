@@ -72,19 +72,24 @@ export async function supplierItemsAction(
       take: 2000,
     });
     const pids = products.map((p) => p.id);
+    // So'nggi 30 kun — butun ProductSales tarixini skanlamaslik uchun (tezlik).
+    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const sums = pids.length
       ? await prisma.productSales.groupBy({
           by: ["productId"],
-          where: { productId: { in: pids } },
+          where: { productId: { in: pids }, periodStart: { gte: since } },
           _sum: { stockQty: true, soldQty: true },
+          _count: { _all: true },
         })
       : [];
     const sumById = new Map(sums.map((s) => [s.productId, s]));
     const items: BuilderItem[] = products.map((p) => {
       const s = sumById.get(p.id);
-      const stock = Number(s?._sum.stockQty ?? 0);
-      const sold = Number(s?._sum.soldQty ?? 0);
-      const suggested = Math.max(0, Math.round(sold - stock));
+      const cnt = s?._count._all ?? 0;
+      // qoldiq = so'nggi 30 kun o'rtacha (joriy holat taxmini); sotuv = 30 kunlik talab
+      const stock = cnt > 0 ? Math.round(Number(s!._sum.stockQty ?? 0) / cnt) : 0;
+      const sold = Math.round(Number(s?._sum.soldQty ?? 0));
+      const suggested = Math.max(0, sold - stock);
       return { productId: p.id, code: p.code, name: p.name, sub: p.category?.name ?? null, stock, sold, suggested };
     });
     return { ok: true, items };

@@ -15,6 +15,11 @@ const connectionString = isLocal
 const pool = new Pool({
   connectionString,
   ssl: isLocal ? false : { rejectUnauthorized: true },
+  // Neon pooler limiti (free ~10) — margin qoldiramiz; ulanish o'rnatish qimmat
+  // bo'lgani uchun idle ulanishni uzoqroq ushlaymiz.
+  max: 5,
+  idleTimeoutMillis: 30_000,
+  connectionTimeoutMillis: 5_000,
 });
 
 const adapter = new PrismaPg(pool);

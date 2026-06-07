@@ -1,10 +1,9 @@
 "use client";
 
-import { useState, useId, useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { motion } from "framer-motion";
 import {
   Upload,
   Building2,
@@ -157,7 +156,6 @@ function SidebarNav({
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
-  const activeLayoutId = useId(); // har sidebar instansiyasi (desktop/mobil) uchun noyob
 
   // Yig'ilgan (svernut) parent bo'limlar — localStorage'da saqlanadi
   const foldedGroups = useSyncExternalStore(subscribePref, getFoldedSnapshot, getAllFolded);
@@ -252,10 +250,9 @@ function SidebarNav({
               const Icon = item.icon;
               const active = item.href === activeHref;
               return (
-                <motion.div
+                <div
                   key={item.href}
-                  whileHover={{ scale: 1.01 }}
-                  whileTap={{ scale: 0.98 }}
+                  className="transition-transform duration-150 hover:scale-[1.01] active:scale-[0.98]"
                 >
                   <Link
                     href={item.href}
@@ -271,17 +268,15 @@ function SidebarNav({
                     )}
                   >
                     {active && (
-                      <motion.span
-                        layoutId={activeLayoutId}
-                        className="absolute inset-0 bg-brand-gradient shadow-brand rounded-xl"
+                      <span
+                        className="absolute inset-0 rounded-xl bg-brand-gradient shadow-brand"
                         style={{ zIndex: -1 }}
-                        transition={{ duration: 0.2, ease: "easeOut" }}
                       />
                     )}
                     <Icon className={cn("h-4 w-4 shrink-0", active ? "opacity-100" : "opacity-70")} />
                     {!collapsed && item.label}
                   </Link>
-                </motion.div>
+                </div>
               );
             })}
           </div>
