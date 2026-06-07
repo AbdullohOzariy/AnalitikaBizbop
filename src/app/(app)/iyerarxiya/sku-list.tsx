@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { SubcatTreePicker, type SubItem } from "@/components/common/subcat-tree-picker";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -54,12 +55,10 @@ export function SkuList({ groups }: { groups: HGroup[] }) {
     const src = c ? c.children : allCats.flatMap((x) => x.children);
     return src.map((s) => ({ id: s.id, name: s.name }));
   }, [groups, catId]);
-  // Tahrirlash uchun: guruh › kategoriya bo'yicha guruhlangan subkatlar
-  const groupedSubs = useMemo(
-    () => groups.flatMap((g) => g.categories.map((c) => ({
-      label: `${g.name} › ${c.name}`,
-      subs: c.children.map((s) => ({ id: s.id, name: s.name })),
-    }))).filter((x) => x.subs.length > 0),
+  // Tahrirlash uchun: tekis subkat ro'yxati (daraxt tanlagich uchun)
+  const subsFlat: SubItem[] = useMemo(
+    () => groups.flatMap((g) => g.categories.flatMap((c) =>
+      c.children.map((s) => ({ id: s.id, name: s.name, cat: c.name, group: g.name })))),
     [groups]
   );
 
@@ -173,7 +172,7 @@ export function SkuList({ groups }: { groups: HGroup[] }) {
         <SkuEditDialog
           key={edit.id}
           row={edit}
-          groupedSubs={groupedSubs}
+          subs={subsFlat}
           onClose={() => setEdit(null)}
           onSaved={() => {
             setEdit(null);
@@ -212,15 +211,16 @@ function FilterSelect({ label, value, onChange, options, allLabel }: {
   );
 }
 
-function SkuEditDialog({ row, groupedSubs, onClose, onSaved }: {
+function SkuEditDialog({ row, subs, onClose, onSaved }: {
   row: SkuRow;
-  groupedSubs: { label: string; subs: { id: number; name: string }[] }[];
+  subs: SubItem[];
   onClose: () => void;
   onSaved: () => void;
 }) {
   const [isPending, start] = useTransition();
   const [name, setName] = useState(row.name);
   const [subId, setSubId] = useState<string>(row.subId != null ? String(row.subId) : "");
+  const [subLabel, setSubLabel] = useState<string>(row.sub ?? "");
 
   const save = () => {
     const nm = name.trim();
@@ -255,17 +255,16 @@ function SkuEditDialog({ row, groupedSubs, onClose, onSaved }: {
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Subkategoriya</Label>
-            <Select value={subId} onValueChange={(v) => setSubId(v ?? "")} disabled={isPending}>
-              <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder="Subkategoriya tanlang…" /></SelectTrigger>
-              <SelectContent>
-                {groupedSubs.map((g) => (
-                  <SelectGroup key={g.label}>
-                    <SelectLabel>{g.label}</SelectLabel>
-                    {g.subs.map((s) => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}
-                  </SelectGroup>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex items-center gap-2">
+              <span className="min-w-0 flex-1 truncate text-sm">{subLabel || <span className="text-muted-foreground">tanlanmagan</span>}</span>
+              <SubcatTreePicker
+                subs={subs}
+                disabled={isPending}
+                triggerLabel="Tanlash"
+                currentSubId={subId ? Number(subId) : null}
+                onPick={(sid, label) => { setSubId(String(sid)); setSubLabel(label); }}
+              />
+            </div>
           </div>
         </div>
         <DialogFooter className="gap-2">

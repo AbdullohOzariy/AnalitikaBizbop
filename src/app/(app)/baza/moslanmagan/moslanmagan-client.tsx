@@ -5,11 +5,9 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { EmptyState } from "@/components/common/page";
+import { SubcatTreePicker } from "@/components/common/subcat-tree-picker";
 import { Search, X, Loader2, Pencil, Check, Truck, CheckCircle2 } from "lucide-react";
 import { BazaPagination } from "../baza-pagination";
 import { assignProductSubcatAction, renameProductAction, applyNameAction, dismissNameAction } from "./actions";
@@ -17,7 +15,6 @@ import { assignProductSubcatAction, renameProductAction, applyNameAction, dismis
 export type UnmatchedProduct = { id: number; code: number; name: string; supplier: string | null };
 export type SubOption = { id: number; name: string; cat: string; group: string | null };
 export type NameMismatch = { productId: number; code: number; masterName: string; fileName: string };
-type GroupedSubs = { cat: string; group: string | null; subs: { id: number; name: string }[] }[];
 
 export function MoslanmaganClient({
   products, subs, total, page, pageSize, mismatches, nameTotal,
@@ -30,15 +27,6 @@ export function MoslanmaganClient({
   mismatches: NameMismatch[];
   nameTotal: number;
 }) {
-  const grouped: GroupedSubs = useMemo(() => {
-    const byCat = new Map<string, { group: string | null; subs: { id: number; name: string }[] }>();
-    for (const s of subs) {
-      if (!byCat.has(s.cat)) byCat.set(s.cat, { group: s.group, subs: [] });
-      byCat.get(s.cat)!.subs.push({ id: s.id, name: s.name });
-    }
-    return [...byCat.entries()].map(([cat, v]) => ({ cat, group: v.group, subs: v.subs }));
-  }, [subs]);
-
   if (total === 0 && nameTotal === 0) {
     return (
       <EmptyState
@@ -57,7 +45,7 @@ export function MoslanmaganClient({
       </TabsList>
 
       <TabsContent value="cat" className="pt-3">
-        <CategorylessTab products={products} grouped={grouped} total={total} page={page} pageSize={pageSize} />
+        <CategorylessTab products={products} subs={subs} total={total} page={page} pageSize={pageSize} />
       </TabsContent>
 
       <TabsContent value="name" className="pt-3">
@@ -69,10 +57,10 @@ export function MoslanmaganClient({
 
 // ─── Tab 1: kategoriyasiz SKU ──────────────────────────────────────────────────
 function CategorylessTab({
-  products, grouped, total, page, pageSize,
+  products, subs, total, page, pageSize,
 }: {
   products: UnmatchedProduct[];
-  grouped: GroupedSubs;
+  subs: SubOption[];
   total: number;
   page: number;
   pageSize: number;
@@ -106,7 +94,7 @@ function CategorylessTab({
         <EmptyState icon={Search} title="Bu sahifada topilmadi" description="Boshqa nom/kod yoki keyingi sahifa." />
       ) : (
         <div className="space-y-1.5">
-          {filtered.map((p) => <CategorylessRow key={p.id} product={p} grouped={grouped} />)}
+          {filtered.map((p) => <CategorylessRow key={p.id} product={p} subs={subs} />)}
         </div>
       )}
       {totalPages > 1 && (
@@ -118,17 +106,15 @@ function CategorylessTab({
   );
 }
 
-function CategorylessRow({ product, grouped }: { product: UnmatchedProduct; grouped: GroupedSubs }) {
+function CategorylessRow({ product, subs }: { product: UnmatchedProduct; subs: SubOption[] }) {
   const router = useRouter();
   const [isPending, start] = useTransition();
-  const [subId, setSubId] = useState("");
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(product.name);
 
-  const assign = () => {
-    if (!subId) { toast.error("Subkategoriya tanlang."); return; }
+  const assign = (sid: number) => {
     start(async () => {
-      const res = await assignProductSubcatAction(product.id, Number(subId));
+      const res = await assignProductSubcatAction(product.id, sid);
       if (res.ok) { toast.success("Joylashtirildi."); router.refresh(); } else toast.error(res.error);
     });
   };
@@ -170,20 +156,8 @@ function CategorylessRow({ product, grouped }: { product: UnmatchedProduct; grou
         </span>
       )}
       <div className="ml-auto flex items-center gap-1.5">
-        <Select value={subId} onValueChange={(v) => setSubId(v ?? "")} disabled={isPending}>
-          <SelectTrigger className="h-8 w-60 text-xs"><SelectValue placeholder="Subkategoriya tanlang…" /></SelectTrigger>
-          <SelectContent>
-            {grouped.map((g) => (
-              <SelectGroup key={g.cat}>
-                <SelectLabel>{g.group ? `${g.group} › ${g.cat}` : g.cat}</SelectLabel>
-                {g.subs.map((s) => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}
-              </SelectGroup>
-            ))}
-          </SelectContent>
-        </Select>
-        <Button size="sm" className="h-8" disabled={isPending || !subId} onClick={assign}>
-          {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Tayinlash"}
-        </Button>
+        {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+        <SubcatTreePicker subs={subs} disabled={isPending} onPick={(sid) => assign(sid)} />
       </div>
     </div>
   );
