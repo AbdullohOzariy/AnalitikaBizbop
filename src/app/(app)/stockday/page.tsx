@@ -4,7 +4,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { getDefaultRange } from "@/lib/analytics";
-import { Hourglass, Flame, AlertTriangle, PackageCheck, Boxes, Layers } from "lucide-react";
+import { Hourglass, Flame, AlertTriangle, PackageCheck, Boxes, Layers, Download } from "lucide-react";
 import { PageHeader, StatCard, EmptyState, Pill } from "@/components/common/page";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -33,6 +33,11 @@ function fmtQty(n: unknown): string {
   if (isNaN(num)) return "—";
   return new Intl.NumberFormat("uz-UZ", { maximumFractionDigits: 2 }).format(num);
 }
+function fmtAmount(n: unknown): string {
+  const num = Number(n);
+  if (isNaN(num) || num === 0) return "—";
+  return new Intl.NumberFormat("uz-UZ").format(Math.round(num));
+}
 function fmtDays(n: unknown): string {
   if (n == null) return "—";
   const num = Number(n);
@@ -55,7 +60,7 @@ const VIEW_META: Record<View, {
 type Row = {
   productId: number; branchId: number;
   code: number; pname: string; bname: string; cname: string | null;
-  stockQty: string | null; avgDaily: string | null; stockDays: string | null;
+  stockQty: string | null; avgDaily: string | null; stockDays: string | null; stockValue: string | null;
   periodEnd: string | Date;
 };
 
@@ -98,7 +103,7 @@ export default async function StockdayPage({
   // latest — eng so'nggi snapshot (qoldiq); agg — davrdagi o'rtacha kunlik sotuv.
   const sdCte = Prisma.sql`
     base AS (
-      SELECT ps."productId", ps."branchId", ps."stockQty", ps."soldQty",
+      SELECT ps."productId", ps."branchId", ps."stockQty", ps."soldQty", ps."costAmount",
              ps."periodStart", ps."periodEnd",
              p.code, p.name AS pname, p."categoryId", b.name AS bname
       FROM "ProductSales" ps
@@ -115,6 +120,7 @@ export default async function StockdayPage({
     agg AS (
       SELECT "productId", "branchId",
              COALESCE(SUM("soldQty"), 0) AS sold_total,
+             COALESCE(SUM("costAmount"), 0) AS cost_total,
              COUNT(DISTINCT "periodStart") AS tracked_days
       FROM base
       GROUP BY "productId", "branchId"
@@ -127,7 +133,13 @@ export default async function StockdayPage({
                WHEN l."stockQty" > 0 AND a.sold_total > 0 AND a.tracked_days > 0
                THEN l."stockQty" / (a.sold_total / a.tracked_days)
                ELSE NULL
-             END AS stock_days
+             END AS stock_days,
+             -- Muzlagan kapital: qoldiq × o'rtacha dona tannarxi (davr tannarxi ÷ sotilgan dona)
+             CASE
+               WHEN l."stockQty" > 0 AND a.sold_total > 0 AND a.cost_total > 0
+               THEN l."stockQty" * (a.cost_total / a.sold_total)
+               ELSE NULL
+             END AS stock_value
       FROM latest l
       JOIN agg a ON a."productId" = l."productId" AND a."branchId" = l."branchId"
     )`;
@@ -145,7 +157,7 @@ export default async function StockdayPage({
 
   // KPI'lar (bitta so'rov)
   const kpiRes = await prisma.$queryRaw<
-    { faol: number; kritik: number; kam: number; normal: number; ortiqcha: number }[]
+    { faol: number; kritik: number; kam: number; normal: number; ortiqcha: number; ortiqcha_value: number }[]
   >(Prisma.sql`
     WITH ${sdCte}
     SELECT
@@ -153,17 +165,18 @@ export default async function StockdayPage({
       count(*) FILTER (WHERE sd.stock_days IS NOT NULL AND sd.stock_days <= ${CRITICAL})::int AS kritik,
       count(*) FILTER (WHERE sd.stock_days > ${CRITICAL} AND sd.stock_days <= ${LOW})::int AS kam,
       count(*) FILTER (WHERE sd.stock_days > ${LOW} AND sd.stock_days <= ${NORMAL})::int AS normal,
-      count(*) FILTER (WHERE sd.stock_days > ${NORMAL})::int AS ortiqcha
+      count(*) FILTER (WHERE sd.stock_days > ${NORMAL})::int AS ortiqcha,
+      COALESCE(SUM(sd.stock_value) FILTER (WHERE sd.stock_days > ${NORMAL}), 0)::float8 AS ortiqcha_value
     FROM sd
   `);
-  const kpi = kpiRes[0] ?? { faol: 0, kritik: 0, kam: 0, normal: 0, ortiqcha: 0 };
+  const kpi = kpiRes[0] ?? { faol: 0, kritik: 0, kam: 0, normal: 0, ortiqcha: 0, ortiqcha_value: 0 };
 
   // Jadval + sahifalash uchun soni
   const [rows, countRes, branches, categories] = await Promise.all([
     prisma.$queryRaw<Row[]>(Prisma.sql`
       WITH ${sdCte}
       SELECT sd."productId", sd."branchId", sd.code, sd.pname, sd.bname, sd."periodEnd",
-             sd."stockQty", sd.avg_daily AS "avgDaily", sd.stock_days AS "stockDays",
+             sd."stockQty", sd.avg_daily AS "avgDaily", sd.stock_days AS "stockDays", sd.stock_value AS "stockValue",
              c.name AS cname
       FROM sd
       LEFT JOIN "Category" c ON c.id = sd."categoryId"
@@ -200,11 +213,17 @@ export default async function StockdayPage({
   };
   const tabCount: Record<View, number> = { kritik: kpi.kritik, kam: kpi.kam, normal: kpi.normal, ortiqcha: kpi.ortiqcha };
 
+  const exportQs = (() => {
+    const p = new URLSearchParams();
+    for (const k of ["start", "end", "branchId", "categoryId", "q", "view"]) { const v = sp[k]; if (v) p.set(k, v); }
+    return p.toString();
+  })();
+
   return (
     <div className="space-y-5">
       <PageHeader
         icon={Hourglass}
-        title="Zaxira kunlari"
+        title="Stockday"
         description="Qoldiq o'rtacha kunlik sotuvga necha kun yetishi — qachon buyurtma berish kerakligi signali"
       >
         <BazaFilter
@@ -230,7 +249,7 @@ export default async function StockdayPage({
         <StatCard label="Kam (4–7 kun)" value={kpi.kam.toLocaleString("uz-UZ")} icon={AlertTriangle} tone="orange"
           hint="tez orada buyurtma kerak" />
         <StatCard label="Ortiqcha (>30 kun)" value={kpi.ortiqcha.toLocaleString("uz-UZ")} icon={Boxes} tone="blue"
-          hint="zaxira ko'p · sekin aylanma" />
+          hint={kpi.ortiqcha_value > 0 ? `≈ ${fmtAmount(kpi.ortiqcha_value)} so'm muzlagan kapital` : "zaxira ko'p · sekin aylanma"} />
       </div>
 
       {/* View tabs */}
@@ -260,6 +279,14 @@ export default async function StockdayPage({
         })}
       </div>
 
+      {/* Eksport */}
+      <div className="flex justify-end">
+        <a href={`/api/stockday/export?${exportQs}`}
+          className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3.5 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-secondary">
+          <Download className="h-4 w-4" /> Excel eksport
+        </a>
+      </div>
+
       {/* Jadval */}
       <Card className="overflow-hidden">
         <CardContent className="p-0">
@@ -283,6 +310,7 @@ export default async function StockdayPage({
                       <TableHead className="text-right w-[90px]">Qoldiq</TableHead>
                       <TableHead className="text-right w-[110px]">Sotuv/kun</TableHead>
                       <TableHead className="text-right w-[120px]">Zaxira kunlari</TableHead>
+                      <TableHead className="text-right w-[130px]">Qoldiq qiymati</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -302,6 +330,7 @@ export default async function StockdayPage({
                         <TableCell className="text-right">
                           <Pill tone={VIEW_META[view].pill}>{fmtDays(r.stockDays)}</Pill>
                         </TableCell>
+                        <TableCell className="text-right tabular-nums text-xs">{fmtAmount(r.stockValue)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

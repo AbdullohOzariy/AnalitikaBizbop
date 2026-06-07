@@ -122,7 +122,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/dashboard",    label: "Dashboard",       icon: LayoutDashboard, roles: ["ADMIN", "CEO"] },
       { href: "/dashboard-v2", label: "Dashboard v2",    icon: Sparkles,        roles: ["ADMIN", "CAT_MANAGER", "CEO"] },
       { href: "/oos",          label: "OOS",             icon: PackageX,        roles: ["ADMIN", "CAT_MANAGER", "CEO"] },
-      { href: "/stockday",     label: "Zaxira kunlari",  icon: Hourglass,       roles: ["ADMIN", "CAT_MANAGER", "CEO"] },
+      { href: "/stockday",     label: "Stockday",        icon: Hourglass,       roles: ["ADMIN", "CAT_MANAGER", "CEO"] },
       { href: "/branches",     label: "Filiallar",        icon: Building2,       roles: ["ADMIN"] },
       { href: "/report",       label: "Hisobot",          icon: Table2,          roles: ["ADMIN"] },
       { href: "/admin/upload", label: "Fayllar",          icon: Upload,          adminOnly: true },
