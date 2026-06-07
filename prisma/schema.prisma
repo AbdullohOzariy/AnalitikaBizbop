@@ -288,6 +288,12 @@ model Product {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
+  // Joriy holat — har yuklashda denormalizatsiya qilinadi (OOS/zakaz so'rovi
+  // ProductSales tarixini skanlamasligi uchun). Manba — eng so'nggi davr.
+  currentStock   Decimal?  @db.Decimal(20, 3) // so'nggi davrdagi qoldiq (filiallar yig'indisi)
+  currentSold    Decimal?  @db.Decimal(20, 3) // so'nggi davrdagi sotuv (dona)
+  lastSalePeriod DateTime? @db.Date // so'nggi yuklangan davr (eskini bosib o'tmaslik uchun)
+
   category     Category?            @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   supplier     Supplier?            @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   sales        ProductSales[]

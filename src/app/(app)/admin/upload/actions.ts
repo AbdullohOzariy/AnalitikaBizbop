@@ -477,6 +477,35 @@ async function uploadV3(
       result.periodEnd,
       aliasToBranchId
     );
+
+    // 7. JORIY HOLAT denormalizatsiyasi: Product.currentStock/currentSold/lastSalePeriod
+    // (OOS/zakaz so'rovi ProductSales tarixini skanlamasin). Filiallar yig'indisi,
+    // faqat davr eski bo'lmasa yangilanadi (backfill joriyni bosmaydi).
+    const perProduct = new Map<number, { stock: number; sold: number }>();
+    for (const row of result.productRows) {
+      const pid = productCodeToId.get(row.productCode);
+      if (!pid) continue;
+      const agg = perProduct.get(pid) ?? { stock: 0, sold: 0 };
+      agg.stock += row.stockQty ?? 0;
+      agg.sold += row.soldQty ?? 0;
+      perProduct.set(pid, agg);
+    }
+    const ppEntries = [...perProduct.entries()];
+    for (let i = 0; i < ppEntries.length; i += BATCH) {
+      const chunk = ppEntries.slice(i, i + BATCH);
+      const vals = chunk.map(([pid, a]) => Prisma.sql`(${pid}, ${a.stock}::numeric, ${a.sold}::numeric)`);
+      await prisma.$executeRaw`
+        UPDATE "Product" p SET
+          "currentStock" = v.stock, "currentSold" = v.sold, "lastSalePeriod" = ${result.periodEnd}::date
+        FROM (VALUES ${Prisma.join(vals)}) AS v(pid, stock, sold)
+        WHERE p.id = v.pid AND (p."lastSalePeriod" IS NULL OR p."lastSalePeriod" <= ${result.periodEnd}::date)
+      `;
+    }
+
+    // 8. Planlarni yangi tutamiz — kunlik bulk insert'dan keyin sekin plan oldini oladi.
+    await prisma.$executeRawUnsafe('ANALYZE "ProductSales"').catch(() => {});
+    await prisma.$executeRawUnsafe('ANALYZE "CategorySales"').catch(() => {});
+    await prisma.$executeRawUnsafe('ANALYZE "Product"').catch(() => {});
   } catch (err) {
     await prisma.uploadedFile.delete({ where: { id: fileRecord.id } }).catch(() => null);
     throw err;

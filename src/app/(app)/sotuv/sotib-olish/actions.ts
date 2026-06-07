@@ -65,30 +65,17 @@ export async function supplierItemsAction(
     const sid = z.coerce.number().int().positive().parse(supplierId);
     const scope = await scopeCategoryIds(Number(user.id), user.role);
     if (scope !== null && scope.length === 0) return { ok: true, items: [] };
+    // Joriy holat Product'ga denormalizatsiya qilingan (har yuklashda yangilanadi) —
+    // ProductSales tarixini skanlamaymiz, bir zumda o'qiymiz.
     const products = await prisma.product.findMany({
       where: { supplierId: sid, ...scopeProductWhere(scope) },
-      select: { id: true, code: true, name: true, category: { select: { name: true } } },
+      select: { id: true, code: true, name: true, currentStock: true, currentSold: true, category: { select: { name: true } } },
       orderBy: { name: "asc" },
       take: 2000,
     });
-    const pids = products.map((p) => p.id);
-    // So'nggi 30 kun — butun ProductSales tarixini skanlamaslik uchun (tezlik).
-    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const sums = pids.length
-      ? await prisma.productSales.groupBy({
-          by: ["productId"],
-          where: { productId: { in: pids }, periodStart: { gte: since } },
-          _sum: { stockQty: true, soldQty: true },
-          _count: { _all: true },
-        })
-      : [];
-    const sumById = new Map(sums.map((s) => [s.productId, s]));
     const items: BuilderItem[] = products.map((p) => {
-      const s = sumById.get(p.id);
-      const cnt = s?._count._all ?? 0;
-      // qoldiq = so'nggi 30 kun o'rtacha (joriy holat taxmini); sotuv = 30 kunlik talab
-      const stock = cnt > 0 ? Math.round(Number(s!._sum.stockQty ?? 0) / cnt) : 0;
-      const sold = Math.round(Number(s?._sum.soldQty ?? 0));
+      const stock = Math.round(Number(p.currentStock ?? 0)); // so'nggi davr qoldig'i
+      const sold = Math.round(Number(p.currentSold ?? 0)); // so'nggi davr sotuvi (talab)
       const suggested = Math.max(0, sold - stock);
       return { productId: p.id, code: p.code, name: p.name, sub: p.category?.name ?? null, stock, sold, suggested };
     });
