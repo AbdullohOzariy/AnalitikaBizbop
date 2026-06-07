@@ -309,7 +309,7 @@ async function ChartsSection({
       <ExpandableCard
         title={
           <ChartTitle
-            title="Top Kategoriyalar — Fakt vs Reja"
+            title="Top Kategoriyalar"
             delta={calcDelta(
               top.reduce((sum, r) => sum + r.fact, 0),
               sumFacts(prevTop) ?? 0
@@ -348,8 +348,6 @@ async function ChartsSection({
                 <TableHead className="text-xs font-medium text-muted-foreground text-right">Tashriflar</TableHead>
                 <TableHead className="text-xs font-medium text-muted-foreground text-right">Cheklar</TableHead>
                 <TableHead className="text-xs font-medium text-muted-foreground text-right">O&apos;rt. chek</TableHead>
-                <TableHead className="text-xs font-medium text-muted-foreground text-right">Reja</TableHead>
-                <TableHead className="text-xs font-medium text-muted-foreground text-right">Reja %</TableHead>
                 <TableHead className={`${CARD_PAD} text-xs font-medium text-muted-foreground text-right`}>Konversiya</TableHead>
               </TableRow>
             </TableHeader>
@@ -369,20 +367,6 @@ async function ChartsSection({
                   <TableCell className="text-right tabular-nums text-sm">{formatNumber(r.visits)}</TableCell>
                   <TableCell className="text-right tabular-nums text-sm">{formatNumber(r.receipts)}</TableCell>
                   <TableCell className="text-right tabular-nums text-sm">{formatUZS(r.avgReceipt, { compact: true })}</TableCell>
-                  <TableCell className="text-right tabular-nums text-sm text-muted-foreground">
-                    {r.plan > 0 ? formatUZS(r.plan, { compact: true }) : "—"}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {r.plan > 0 ? (
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
-                        r.planPercent >= 1
-                          ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-                          : "bg-red-500/10 text-red-600 dark:text-red-400"
-                      }`}>
-                        {formatPercent(r.planPercent)}
-                      </span>
-                    ) : <span className="text-muted-foreground text-sm">—</span>}
-                  </TableCell>
                   <TableCell className={`${CARD_PAD} text-right tabular-nums text-sm text-muted-foreground`}>
                     {formatPercent(r.conversion)}
                   </TableCell>

@@ -163,7 +163,7 @@ export default async function BranchDetailPage({
 
           <Card>
             <CardHeader>
-              <CardTitle>Kategoriyalar (Fakt vs Reja)</CardTitle>
+              <CardTitle>Kategoriyalar</CardTitle>
             </CardHeader>
             <CardContent>
               {topNoFact ? (

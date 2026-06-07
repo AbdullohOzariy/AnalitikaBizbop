@@ -19,13 +19,6 @@ function pct(val: number | null) {
   return `${val.toFixed(1)}%`;
 }
 
-function planColor(p: number) {
-  if (p === 0) return "";
-  if (p >= 100) return "text-[oklch(0.55_0.15_134)] font-semibold";
-  if (p >= 80)  return "text-amber-600 font-medium";
-  return "text-red-500";
-}
-
 function marjaColor(m: number) {
   if (m >= 30) return "text-[oklch(0.55_0.15_134)] font-medium";
   if (m >= 15) return "text-amber-600";
@@ -58,12 +51,11 @@ export function ReportTable({
         cost:     a.cost     + catCost,
         receipts: a.receipts + r.receipts,
         visits:   a.visits   + r.visits,
-        plan:     a.plan     + r.plan,
         // weighted avgItems
         itemsSum: a.itemsSum + r.avgItemsPerReceipt * r.receipts,
       };
     },
-    { sales: 0, cost: 0, receipts: 0, visits: 0, plan: 0, itemsSum: 0 }
+    { sales: 0, cost: 0, receipts: 0, visits: 0, itemsSum: 0 }
   );
 
   const totalMarja   = hasCostAny && total.sales > 0
@@ -72,7 +64,6 @@ export function ReportTable({
   const totalAvg     = total.receipts > 0 ? total.sales / total.receipts : 0;
   const totalAvgItems = total.receipts > 0 ? total.itemsSum / total.receipts : 0;
   const totalConv    = total.visits > 0 ? (total.receipts / total.visits) * 100 : 0;
-  const totalPlanPct = total.plan > 0 ? (total.sales / total.plan) * 100 : 0;
 
   return (
     <div className="overflow-x-auto">
@@ -93,9 +84,7 @@ export function ReportTable({
             <TableHead className="text-right">O'rt. chek</TableHead>
             <TableHead className="text-right">O'rt. tovar</TableHead>
             <TableHead className="text-right">Tashriflar</TableHead>
-            <TableHead className="text-right">Konv. %</TableHead>
-            <TableHead className="text-right">Reja</TableHead>
-            <TableHead className="text-right pr-5">Baj. %</TableHead>
+            <TableHead className="text-right pr-5">Konv. %</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -146,14 +135,8 @@ export function ReportTable({
                   <TableCell className="text-right tabular-nums">
                     {r.visits > 0 ? formatNumber(r.visits) : "—"}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">
+                  <TableCell className="text-right tabular-nums pr-5">
                     {r.visits > 0 ? pct(r.conversion) : "—"}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums text-muted-foreground">
-                    {r.plan > 0 ? formatUZS(r.plan) : "—"}
-                  </TableCell>
-                  <TableCell className={`text-right tabular-nums pr-5 ${planColor(r.planPct)}`}>
-                    {r.plan > 0 ? pct(r.planPct) : "—"}
                   </TableCell>
                 </TableRow>
 
@@ -188,13 +171,7 @@ export function ReportTable({
                           </>
                         )}
                         {/* Cheklar, O'rt. chek, O'rt. tovar, Tashriflar, Konv — kategoriya darajasida yo'q */}
-                        <TableCell colSpan={5} />
-                        <TableCell className="text-right tabular-nums text-sm text-muted-foreground">
-                          {c.plan > 0 ? formatUZS(c.plan) : "—"}
-                        </TableCell>
-                        <TableCell className={`text-right tabular-nums text-sm pr-5 ${planColor(c.planPct)}`}>
-                          {c.plan > 0 ? pct(c.planPct) : "—"}
-                        </TableCell>
+                        <TableCell colSpan={5} className="pr-5" />
                       </motion.tr>
                     ))}
                 </AnimatePresence>
@@ -230,14 +207,8 @@ export function ReportTable({
             <TableCell className="text-right tabular-nums">
               {total.visits > 0 ? formatNumber(total.visits) : "—"}
             </TableCell>
-            <TableCell className="text-right tabular-nums">
+            <TableCell className="text-right tabular-nums pr-5">
               {total.visits > 0 ? pct(totalConv) : "—"}
-            </TableCell>
-            <TableCell className="text-right tabular-nums text-muted-foreground">
-              {total.plan > 0 ? formatUZS(total.plan) : "—"}
-            </TableCell>
-            <TableCell className={`text-right tabular-nums pr-5 ${planColor(totalPlanPct)}`}>
-              {total.plan > 0 ? pct(totalPlanPct) : "—"}
             </TableCell>
           </TableRow>
         </TableBody>

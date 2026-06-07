@@ -21,7 +21,7 @@ const getHierarchy = unstable_cache(
               orderBy: { sortOrder: "asc" },
               include: { _count: { select: { sales: true, products: true } } },
             },
-            _count: { select: { sales: true, plans: true, dailyPlans: true } },
+            _count: { select: { sales: true } },
           },
         },
       },

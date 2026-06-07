@@ -6,7 +6,6 @@ import { prisma } from "@/lib/prisma";
 import { SalesUploadForm } from "./sales-form";
 import { MetricsUploadForm } from "./metrics-form";
 import { VisitsUploadForm } from "./visits-form";
-import { DailyPlansUploadForm } from "./daily-plans-form";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -24,7 +23,6 @@ const TYPE_LABEL: Record<string, string> = {
   SALES: "Sotuv",
   METRICS: "Cheklar",
   VISITS: "Tashriflar",
-  DAILY_PLANS: "Kunlik reja",
 };
 
 export default async function UploadPage() {
@@ -42,7 +40,7 @@ export default async function UploadPage() {
         branch: { select: { name: true } },
         uploadedBy: { select: { name: true, email: true } },
         _count: {
-          select: { sales: true, metrics: true, visits: true, dailyPlans: true },
+          select: { sales: true, metrics: true, visits: true },
         },
       },
     }),
@@ -68,7 +66,6 @@ export default async function UploadPage() {
               <TabsTrigger value="sales">Sotuv (kategoriyalar)</TabsTrigger>
               <TabsTrigger value="metrics">Cheklar (sr.xlsx)</TabsTrigger>
               <TabsTrigger value="visits">Tashriflar</TabsTrigger>
-              <TabsTrigger value="plans">Kunlik reja</TabsTrigger>
             </TabsList>
             <TabsContent value="sales">
               <SalesUploadForm />
@@ -78,9 +75,6 @@ export default async function UploadPage() {
             </TabsContent>
             <TabsContent value="visits">
               <VisitsUploadForm />
-            </TabsContent>
-            <TabsContent value="plans">
-              <DailyPlansUploadForm />
             </TabsContent>
           </Tabs>
         </TabsContent>
@@ -112,8 +106,7 @@ export default async function UploadPage() {
                       const rowCount =
                         f._count.sales +
                         f._count.metrics +
-                        f._count.visits +
-                        f._count.dailyPlans;
+                        f._count.visits;
                       return (
                         <TableRow key={f.id}>
                           <TableCell className="font-medium">

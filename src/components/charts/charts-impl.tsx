@@ -233,12 +233,10 @@ export function TopCategoriesChart({
     categoryId: number;
     categoryName: string;
     fact: number;
-    plan: number;
-    achievement: number;
     marja: number | null;
   }[];
 }) {
-  const filtered = data.filter((d) => d.fact > 0 || d.plan > 0);
+  const filtered = data.filter((d) => d.fact > 0);
   if (filtered.length === 0) {
     return (
       <div className="py-16 flex items-center justify-center text-sm text-muted-foreground">
@@ -257,36 +255,14 @@ export function TopCategoriesChart({
           <span className="w-3 h-1.5 rounded-full bg-emerald-500 inline-block" /> Fakt
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-3 h-1.5 rounded-full bg-slate-200 dark:bg-zinc-700 inline-block" /> Reja
-        </span>
-        <span className="flex items-center gap-1.5">
           <span className="w-3 h-1.5 rounded-full bg-orange-400 inline-block" /> Marja
         </span>
       </div>
 
       <div className="divide-y divide-border/30">
         {filtered.map((d, i) => {
-          const hasPlan = d.plan > 0;
-          const ach = hasPlan ? d.fact / d.plan : null;
-
-          /* bar color based on achievement */
-          const barColor =
-            ach == null
-              ? BRAND_GREEN
-              : ach >= 1
-              ? BRAND_GREEN
-              : ach >= 0.8
-              ? "#f59e0b"
-              : RED;
-
-          /* fact bar width: relative to max fact (not plan) so bars fill nicely */
+          /* fact bar width: relative to max fact so bars fill nicely */
           const factW = maxFact > 0 ? (d.fact / maxFact) * 100 : 0;
-          /* plan bar width: relative to max fact so scales match */
-          const planW = maxFact > 0 ? Math.min((d.plan / maxFact) * 100, 100) : 0;
-
-          const achieved = ach != null && ach >= 1;
-          const nearMiss = ach != null && ach >= 0.8 && ach < 1;
-          const behind = ach != null && ach < 0.8;
 
           return (
             <div key={d.categoryId} className="py-3 first:pt-1 last:pb-1">
@@ -304,55 +280,18 @@ export function TopCategoriesChart({
                       M {d.marja.toFixed(1)}%
                     </span>
                   )}
-                  {ach != null ? (
-                    <span
-                      className={`text-[12px] font-bold tabular-nums px-2 py-0.5 rounded-full ${
-                        achieved
-                          ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-                          : nearMiss
-                          ? "bg-amber-400/10 text-amber-600"
-                          : behind
-                          ? "bg-red-500/10 text-red-600"
-                          : ""
-                      }`}
-                    >
-                      {achieved && "✓ "}{(ach * 100).toFixed(0)}%
-                    </span>
-                  ) : (
-                    <span className="text-[12px] font-semibold tabular-nums text-muted-foreground">
-                      {formatUZS(d.fact, { compact: true })}
-                    </span>
-                  )}
+                  <span className="text-[12px] font-semibold tabular-nums text-muted-foreground">
+                    {formatUZS(d.fact, { compact: true })}
+                  </span>
                 </div>
               </div>
 
-              {/* Stacked progress bars */}
+              {/* Fact bar */}
               <div className="relative h-3 rounded-full bg-muted overflow-hidden">
-                {/* Plan track */}
-                {hasPlan && (
-                  <div
-                    className="absolute inset-y-0 left-0 rounded-full bg-slate-200 dark:bg-zinc-700"
-                    style={{ width: `${planW}%` }}
-                  />
-                )}
-                {/* Fact bar */}
                 <div
                   className="absolute inset-y-0 left-0 rounded-full transition-all duration-500"
-                  style={{ width: `${factW}%`, backgroundColor: barColor }}
+                  style={{ width: `${factW}%`, backgroundColor: BRAND_GREEN }}
                 />
-              </div>
-
-              {/* Amounts row */}
-              <div className="flex items-center justify-between mt-1.5 text-[11px] text-muted-foreground">
-                <span>
-                  Fakt:{" "}
-                  <span className="font-semibold text-foreground">
-                    {formatUZS(d.fact, { compact: true })}
-                  </span>
-                </span>
-                {hasPlan && (
-                  <span>Reja: {formatUZS(d.plan, { compact: true })}</span>
-                )}
               </div>
             </div>
           );

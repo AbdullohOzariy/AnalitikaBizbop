@@ -4,7 +4,6 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getDefaultRange } from "@/lib/analytics";
 import {
-  planCompletion,
   dailyVisitsByBranch,
   dailyReceiptsByBranch,
   dailyAvgReceiptByBranch,
@@ -18,7 +17,6 @@ import { PageHeader, StatCard } from "@/components/common/page";
 import { formatUZS, formatNumber } from "@/lib/format";
 import { FiltersBar } from "./filters";
 import {
-  PlanCompletionWidget,
   DailyByBranchWidget,
   MarjaByBranchWidget,
   MarjaByCategoryWidget,
@@ -108,7 +106,6 @@ async function WidgetsSection({
   const previousRange = getPreviousPeriod(range);
 
   const [
-    planStats,
     visits,
     receipts,
     avgReceipt,
@@ -119,7 +116,6 @@ async function WidgetsSection({
     prevKpi,
     groupSales,
   ] = await Promise.all([
-    planCompletion(range, branchId),
     dailyVisitsByBranch(range),
     dailyReceiptsByBranch(range),
     dailyAvgReceiptByBranch(range),
@@ -224,7 +220,6 @@ async function WidgetsSection({
 
       {/* Widgetlar gridi */}
       <div className="grid gap-4 md:grid-cols-2">
-        <PlanCompletionWidget data={planStats} />
         <MarjaByBranchWidget data={marja.byBranch} />
         <MarjaByCategoryWidget data={marja.byCategory} />
         <DailyByBranchWidget title="Tashriflar (kunlik)" data={filterByBranch(visits)} />
@@ -273,7 +268,7 @@ export default async function DashboardV2Page({
       <PageHeader
         icon={Sparkles}
         title="Dashboard v2"
-        description="Reja bajarilishi va asosiy KPI'lar — filial va davr kesimida"
+        description="Asosiy KPI'lar — filial va davr kesimida"
       />
 
       <FiltersBar

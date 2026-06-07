@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { unstable_cache } from "next/cache";
-import { ShoppingBag, Receipt, Users, Target, ChevronRight, Building2, Tag } from "lucide-react";
+import { ShoppingBag, Receipt, Users, ChevronRight, Building2, Tag } from "lucide-react";
 import { PageHeader } from "@/components/common/page";
 import { AliasAddForm, AliasDeleteButton } from "./alias-manager";
 
@@ -11,7 +11,6 @@ const SOURCE_LABEL: Record<string, string> = {
   SALES: "Sotuv",
   VISITS: "Tashriflar",
   SR: "Cheklar",
-  PLANS: "Reja",
 };
 
 const PALETTE = [
@@ -31,7 +30,7 @@ const getBranches = unstable_cache(
       orderBy: { sortOrder: "asc" },
       include: {
         aliases: { orderBy: [{ source: "asc" }, { alias: "asc" }] },
-        _count: { select: { sales: true, metrics: true, visits: true, plans: true, dailyPlans: true } },
+        _count: { select: { sales: true, metrics: true, visits: true } },
       },
     }),
   ["branches-list"],
@@ -71,7 +70,6 @@ export default async function BranchesPage() {
             { icon: ShoppingBag, label: "Sotuv", value: b._count.sales },
             { icon: Receipt, label: "Metrika (kun)", value: b._count.metrics },
             { icon: Users, label: "Tashrif (kun)", value: b._count.visits },
-            { icon: Target, label: "Reja", value: b._count.plans + b._count.dailyPlans },
           ];
           const bySource = b.aliases.reduce<Record<string, typeof b.aliases>>((acc, a) => {
             (acc[a.source] ??= []).push(a);

@@ -11,7 +11,6 @@ import { sha256 } from "@/lib/parsers/utils";
 import { parseSalesWorkbook } from "@/lib/parsers/sales";
 import { parseMetricsWorkbook } from "@/lib/parsers/metrics";
 import { parseVisitsWorkbook } from "@/lib/parsers/visits";
-import { parseDailyPlansWorkbook } from "@/lib/parsers/daily-plans";
 import { matchCategoryNames, matchBranchAlias } from "@/lib/ai-matcher";
 
 export type UploadResult =
@@ -131,14 +130,6 @@ async function resolveBranchWithAI(
 async function getCategoryMap(): Promise<Map<string, number>> {
   const cats = await prisma.category.findMany({ select: { id: true, name: true } });
   return new Map(cats.map((c) => [c.name, c.id]));
-}
-
-/** CategoryAlias jadvali orqali alias → DB kategoriya nomi (normalized). */
-async function getCategoryAliasNameMap(): Promise<Map<string, string>> {
-  const aliases = await prisma.categoryAlias.findMany({
-    select: { alias: true, category: { select: { name: true } } },
-  });
-  return new Map(aliases.map((a) => [a.alias, a.category.name]));
 }
 
 // ============ SALES ============
@@ -767,138 +758,6 @@ export async function uploadVisitsAction(formData: FormData): Promise<UploadResu
       fileId: fileRecord.id,
       aiCorrections: aiCorrections.length > 0 ? aiCorrections : undefined,
       summary: `Saqlandi: ${result.rows.length} qator (${uniqueAliases.length} filial × kunlar).`,
-    };
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "Noma'lum xato." };
-  }
-}
-
-// ============ DAILY PLANS ============
-
-const dailyPlansInputSchema = z.object({
-  label: labelSchema,
-});
-
-export async function uploadDailyPlansAction(formData: FormData): Promise<UploadResult> {
-  try {
-    const user = await requireAdminUser();
-    const file = formData.get("file");
-    if (!(file instanceof File) || file.size === 0) {
-      return { ok: false, error: "Fayl tanlanmagan." };
-    }
-    const parsed = dailyPlansInputSchema.parse({
-      label: formData.get("label"),
-    });
-
-    const buf = await readBuffer(file);
-    const hash = sha256(buf);
-    await ensureNotDuplicate(hash);
-
-    const cats = await getCategoryMap();
-    const catNames = [...cats.keys()];
-    const catAliasMap = await getCategoryAliasNameMap();
-    const aiCorrections: string[] = [];
-
-    // Birinchi parse — kategoriya alias jadvalidagi mosliklar bilan
-    let result = parseDailyPlansWorkbook(buf, catNames, catAliasMap.size > 0 ? catAliasMap : undefined);
-
-    // AI fallback — noma'lum kategoriyalar uchun
-    if (result.skippedCategories.length > 0 && process.env.DEEPSEEK_API_KEY) {
-      const aiMapping = await matchCategoryNames(
-        result.skippedCategories,
-        catNames
-      ).catch(() => new Map<string, string>());
-
-      if (aiMapping.size > 0) {
-        // AI topganlarini CategoryAlias jadvaliga saqlash
-        for (const [alias, dbName] of aiMapping) {
-          const dbId = cats.get(dbName);
-          if (dbId) {
-            await prisma.categoryAlias.create({ data: { alias, categoryId: dbId } }).catch(() => null);
-            aiCorrections.push(`Kategoriya: "${alias}" → "${dbName}" (AI, alias saqlandi)`);
-          }
-        }
-        // Qayta parse
-        const merged = new Map([...catAliasMap, ...aiMapping]);
-        result = parseDailyPlansWorkbook(buf, catNames, merged);
-      }
-    }
-
-    if (result.skippedCategories.length > 0) {
-      return {
-        ok: false,
-        error: `Quyidagi kategoriyalar bazada topilmadi va aliasi yo'q: ${result.skippedCategories.join(", ")}. Kategoriyalar bo'limidan alias qo'shing.`,
-      };
-    }
-
-    // Filial aliaslarini yechish (sheet nomi → branchId)
-    const uniqueBranchAliases = [...new Set(result.rows.map((r) => r.branchAlias))];
-    const branchIdByAlias = new Map<string, number>();
-    for (const alias of uniqueBranchAliases) {
-      const resolved = await resolveBranchWithAI(alias, AliasSource.PLANS);
-      branchIdByAlias.set(alias, resolved.branchId);
-      if (resolved.aiUsed) {
-        aiCorrections.push(
-          `Filial: "${alias}" → "${resolved.branchName}" (AI, alias saqlandi)`
-        );
-      }
-    }
-
-    // Mavjud yozuvlar tekshiruvi — agar shu davrda DailyPlan yozuvi bo'lsa, qabul qilmaslik
-    const existing = await prisma.dailyPlan.findFirst({
-      where: {
-        branchId: { in: [...branchIdByAlias.values()] },
-        date: { gte: result.periodStart, lte: result.periodEnd },
-      },
-      select: { branchId: true, date: true },
-    });
-    if (existing) {
-      const branch = await prisma.branch.findUnique({ where: { id: existing.branchId }, select: { name: true } });
-      return {
-        ok: false,
-        error: `Bu davr uchun reja allaqachon yuklangan ("${branch?.name ?? "?"}", ${existing.date.toISOString().slice(0, 10)}). Yangi reja yuklash uchun avval eski yozuvlarni o'chiring.`,
-      };
-    }
-
-    const fileRecord = await prisma.uploadedFile.create({
-      data: {
-        label: parsed.label,
-        originalName: file.name,
-        fileHash: hash,
-        fileType: FileType.DAILY_PLANS,
-        periodStart: result.periodStart,
-        periodEnd: result.periodEnd,
-        rowCount: result.rows.length,
-        status: UploadStatus.SUCCESS,
-        uploadedById: Number(user.id),
-      },
-    });
-
-    try {
-      const values = result.rows.map((row) => {
-        const branchId = branchIdByAlias.get(row.branchAlias)!;
-        const categoryId = cats.get(row.categoryAlias)!;
-        return Prisma.sql`(${fileRecord.id}, ${branchId}, ${categoryId}, ${row.date}::date, ${new Prisma.Decimal(row.planAmount)})`;
-      });
-      await prisma.$executeRaw`
-        INSERT INTO "DailyPlan" ("uploadedFileId", "branchId", "categoryId", "date", "planAmount")
-        VALUES ${Prisma.join(values)}
-      `;
-    } catch (err) {
-      await prisma.uploadedFile.delete({ where: { id: fileRecord.id } }).catch(() => null);
-      throw err;
-    }
-
-    revalidatePath("/admin/files");
-    revalidatePath("/dashboard");
-    revalidatePath("/report");
-    revalidateTag(ANALYTICS_CACHE_TAG, "max");
-
-    return {
-      ok: true,
-      fileId: fileRecord.id,
-      aiCorrections: aiCorrections.length > 0 ? aiCorrections : undefined,
-      summary: `Saqlandi: ${result.rows.length} kunlik reja (${uniqueBranchAliases.length} filial), ${result.periodStart.toISOString().slice(0, 10)} → ${result.periodEnd.toISOString().slice(0, 10)}.`,
     };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Noma'lum xato." };

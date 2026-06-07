@@ -61,8 +61,6 @@ export async function GET(req: NextRequest) {
     "Tashriflar",
     "Cheklar",
     "O'rtacha chek",
-    "Reja",
-    "Reja %",
     "Konversiya %",
   ];
   const perfRows = perf.map((r) => [
@@ -71,8 +69,6 @@ export async function GET(req: NextRequest) {
     r.visits,
     r.receipts,
     r.avgReceipt,
-    r.plan,
-    r.planPercent,
     r.conversion,
   ]);
   XLSX.utils.book_append_sheet(
@@ -82,8 +78,8 @@ export async function GET(req: NextRequest) {
   );
 
   // Top Kategoriyalar
-  const topHeader = ["Kategoriya", "Fakt", "Reja", "Bajarilish %"];
-  const topRows = top.map((c) => [c.categoryName, c.fact, c.plan, c.achievement]);
+  const topHeader = ["Kategoriya", "Fakt"];
+  const topRows = top.map((c) => [c.categoryName, c.fact]);
   XLSX.utils.book_append_sheet(
     wb,
     XLSX.utils.aoa_to_sheet([topHeader, ...topRows]),

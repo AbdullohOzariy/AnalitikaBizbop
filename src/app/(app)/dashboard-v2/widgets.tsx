@@ -21,7 +21,6 @@ import { Info, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { formatNumber, formatUZS } from "@/lib/format";
 import { ExpandableCard } from "@/components/ui/expandable-card";
 import type {
-  PlanCompletionStats,
   DailyByBranchSeries,
   MarjaRow,
   KpiByBranchRow,
@@ -32,19 +31,9 @@ import type {
 // Barqaror grafik palitra — faqat chiziq/bar ranglari uchun
 const PALETTE = ["#10b981", "#facc15", "#fb923c", "#6366f1", "#0ea5e9", "#f87171", "#a855f7", "#14b8a6"];
 
-function pctColor(p: number | null): string {
-  if (p == null) return "text-muted-foreground";
-  if (p >= 100) return "text-emerald-600";
-  if (p >= 80) return "text-amber-600";
-  return "text-red-500";
-}
 function shortDate(iso: string): string {
   const m = iso.match(/^\d{4}-(\d{2})-(\d{2})$/);
   return m ? `${m[2]}.${m[1]}` : iso;
-}
-
-function fmtPct(p: number | null): string {
-  return p == null ? "—" : `${p.toFixed(1)}%`;
 }
 
 // CSS tokenlariga asoslangan tooltip — dark mode'da ham to'g'ri
@@ -112,79 +101,6 @@ function WidgetTitle({ title, trend }: { title: React.ReactNode; trend?: number 
       <span>{title}</span>
       <CompareBadge value={trend} />
     </span>
-  );
-}
-
-// ============ 1. Plan Completion ============
-
-function MiniChip({ name, pct }: { name: string; pct: number | null }) {
-  const dotBg =
-    pct == null ? "bg-slate-300" :
-    pct >= 100 ? "bg-emerald-500" :
-    pct >= 80  ? "bg-amber-500" :
-    "bg-red-400";
-  return (
-    <div
-      title={`${name}: ${fmtPct(pct)}`}
-      className="flex items-center justify-between gap-2 rounded-lg bg-muted/40 px-2.5 py-1.5 hover:bg-muted/70 transition-colors"
-    >
-      <div className="flex items-center gap-1.5 min-w-0">
-        <span className={`h-2 w-2 rounded-full shrink-0 ${dotBg}`} />
-        <span className="text-xs font-medium truncate">{name}</span>
-      </div>
-      <span className={`text-xs font-semibold tabular-nums shrink-0 ${pctColor(pct)}`}>
-        {fmtPct(pct)}
-      </span>
-    </div>
-  );
-}
-
-export function PlanCompletionWidget({ data }: { data: PlanCompletionStats }) {
-  const { overall, byCategory, byBranch } = data;
-  const sortedCats = [...byCategory].sort((a, b) => (b.pct ?? -1) - (a.pct ?? -1));
-  const sortedBranches = [...byBranch].sort((a, b) => (b.pct ?? -1) - (a.pct ?? -1));
-
-  return (
-    <ExpandableCard title="Reja bajarilishi" className="rounded-2xl" headerClassName="pb-3" contentClassName="space-y-4">
-      <div className="flex items-baseline gap-3">
-        <div className={`text-4xl font-bold tabular-nums ${pctColor(overall.pct)}`}>
-          {fmtPct(overall.pct)}
-        </div>
-        <div className="text-xs text-muted-foreground">umumiy</div>
-      </div>
-
-      {sortedBranches.length > 0 && (
-        <div className="space-y-1.5">
-          <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-            Filiallar
-          </div>
-          <div className="grid grid-cols-2 gap-1.5">
-            {sortedBranches.map((b) => (
-              <MiniChip key={b.branchId} name={b.branchName} pct={b.pct} />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {sortedCats.length > 0 && (
-        <div className="space-y-1.5">
-          <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-            Kategoriyalar ({sortedCats.length})
-          </div>
-          <div className="grid grid-cols-2 gap-1.5">
-            {sortedCats.map((c) => (
-              <MiniChip key={c.categoryId} name={c.categoryName} pct={c.pct} />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {sortedCats.length === 0 && sortedBranches.length === 0 && (
-        <p className="text-sm text-muted-foreground italic text-center py-4">
-          Reja yoki sotuv ma&apos;lumoti yo&apos;q
-        </p>
-      )}
-    </ExpandableCard>
   );
 }
 

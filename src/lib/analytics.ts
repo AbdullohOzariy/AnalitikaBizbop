@@ -174,134 +174,6 @@ async function _costByCategory(
   return map;
 }
 
-/** Davrdagi har oy uchun {year, month, daysInMonth, overlapDays}. */
-function monthsInRange(range: DateRange) {
-  const months: { year: number; month: number; daysInMonth: number; overlapDays: number }[] = [];
-  const cur = new Date(Date.UTC(range.start.getUTCFullYear(), range.start.getUTCMonth(), 1));
-  const stop = new Date(Date.UTC(range.end.getUTCFullYear(), range.end.getUTCMonth(), 1));
-  while (cur.getTime() <= stop.getTime()) {
-    const mStart = new Date(cur);
-    const mEnd = new Date(Date.UTC(cur.getUTCFullYear(), cur.getUTCMonth() + 1, 0));
-    months.push({
-      year: mStart.getUTCFullYear(),
-      month: mStart.getUTCMonth() + 1,
-      daysInMonth: diffDaysInclusive(mStart, mEnd),
-      overlapDays: overlapDays(range.start, range.end, mStart, mEnd),
-    });
-    cur.setUTCMonth(cur.getUTCMonth() + 1);
-  }
-  return months;
-}
-
-/**
- * Reja: kategoriya bo'yicha.
- * DailyPlan ustunlik qiladi; mavjud bo'lmagan (branchId, categoryId) juftlari uchun
- * MonthlyPlan pro-rated fallback sifatida ishlatiladi.
- */
-async function _planByCategory(
-  range: DateRange,
-  branchId?: number
-): Promise<Map<number, number>> {
-  const branchSql = branchId ? Prisma.sql`AND "branchId" = ${branchId}` : Prisma.empty;
-
-  // 1. DailyPlan — kategoriya bo'yicha jami (barcha filiallar yoki bitta filial).
-  // Ko'rinmas kategoriyalar (sortOrder=0) plan tomondan ham chiqarib tashlanadi —
-  // fakt (CategorySales) VISIBLE_CAT_FILTER ishlatadi, plan tomoni ham bir xil bo'lishi kerak.
-  const dailyRows = await prisma.$queryRaw<
-    { categoryId: number; total: number | null }[]
-  >`
-    SELECT dp."categoryId", COALESCE(SUM(dp."planAmount"::numeric), 0)::float8 AS total
-    FROM "DailyPlan" dp
-    JOIN "Category" _c ON _c.id = dp."categoryId" AND _c."sortOrder" > 0
-    WHERE dp.date BETWEEN ${range.start}::date AND ${range.end}::date
-      ${branchSql}
-    GROUP BY dp."categoryId"
-  `;
-  const dailyMap = new Map<number, number>();
-  for (const r of dailyRows) dailyMap.set(r.categoryId, Number(r.total ?? 0));
-
-  // 2. MonthlyPlan — pro-rated (fallback).
-  // Ko'rinmas kategoriyalar bu yerda ham JOIN orqali filtrlangan.
-  const months = monthsInRange(range);
-  const monthlyMap = new Map<number, number>();
-  if (months.length > 0) {
-    const ymPairs = Prisma.join(months.map((m) => Prisma.sql`(${m.year}, ${m.month})`));
-    const rows = await prisma.$queryRaw<
-      { categoryId: number; year: number; month: number; total: number | null }[]
-    >`
-      SELECT mp."categoryId", mp."year", mp."month",
-             COALESCE(SUM(mp."planAmount"::numeric), 0)::float8 AS total
-      FROM "MonthlyPlan" mp
-      JOIN "Category" _c ON _c.id = mp."categoryId" AND _c."sortOrder" > 0
-      WHERE (mp."year", mp."month") IN (${ymPairs})
-        ${branchSql}
-      GROUP BY mp."categoryId", mp."year", mp."month"
-    `;
-    const monthMeta = new Map(months.map((m) => [`${m.year}-${m.month}`, m]));
-    for (const r of rows) {
-      const meta = monthMeta.get(`${r.year}-${r.month}`);
-      if (!meta || meta.daysInMonth === 0) continue;
-      const prorated = Number(r.total ?? 0) * (meta.overlapDays / meta.daysInMonth);
-      monthlyMap.set(r.categoryId, (monthlyMap.get(r.categoryId) ?? 0) + prorated);
-    }
-  }
-
-  // DailyPlan ustunlik qiladi; yo'q kategoriyalar uchun MonthlyPlan ishlatiladi
-  const map = new Map<number, number>(monthlyMap);
-  for (const [catId, val] of dailyMap) map.set(catId, val);
-  return map;
-}
-
-/**
- * Reja: filial bo'yicha.
- * DailyPlan mavjud filiallar uchun MonthlyPlan ni almashtiradi.
- */
-async function _planByBranch(range: DateRange): Promise<Map<number, number>> {
-  // 1. DailyPlan — filial bo'yicha jami.
-  // Ko'rinmas kategoriyalar (sortOrder=0) plan tomondan ham chiqariladi —
-  // _salesByBranch VISIBLE_CAT_FILTER ishlatadi, plan tomoni ham izchil bo'lishi kerak.
-  const dailyRows = await prisma.$queryRaw<
-    { branchId: number; total: number | null }[]
-  >`
-    SELECT dp."branchId", COALESCE(SUM(dp."planAmount"::numeric), 0)::float8 AS total
-    FROM "DailyPlan" dp
-    JOIN "Category" _c ON _c.id = dp."categoryId" AND _c."sortOrder" > 0
-    WHERE dp.date BETWEEN ${range.start}::date AND ${range.end}::date
-    GROUP BY dp."branchId"
-  `;
-  const dailyMap = new Map<number, number>();
-  for (const r of dailyRows) dailyMap.set(r.branchId, Number(r.total ?? 0));
-
-  // 2. MonthlyPlan — pro-rated (fallback).
-  // Ko'rinmas kategoriyalar bu yerda ham JOIN orqali filtrlangan.
-  const months = monthsInRange(range);
-  const monthlyMap = new Map<number, number>();
-  if (months.length > 0) {
-    const ymPairs = Prisma.join(months.map((m) => Prisma.sql`(${m.year}, ${m.month})`));
-    const rows = await prisma.$queryRaw<
-      { branchId: number; year: number; month: number; total: number | null }[]
-    >`
-      SELECT mp."branchId", mp."year", mp."month",
-             COALESCE(SUM(mp."planAmount"::numeric), 0)::float8 AS total
-      FROM "MonthlyPlan" mp
-      JOIN "Category" _c ON _c.id = mp."categoryId" AND _c."sortOrder" > 0
-      WHERE (mp."year", mp."month") IN (${ymPairs})
-      GROUP BY mp."branchId", mp."year", mp."month"
-    `;
-    const monthMeta = new Map(months.map((m) => [`${m.year}-${m.month}`, m]));
-    for (const r of rows) {
-      const meta = monthMeta.get(`${r.year}-${r.month}`);
-      if (!meta || meta.daysInMonth === 0) continue;
-      const prorated = Number(r.total ?? 0) * (meta.overlapDays / meta.daysInMonth);
-      monthlyMap.set(r.branchId, (monthlyMap.get(r.branchId) ?? 0) + prorated);
-    }
-  }
-
-  const map = new Map<number, number>(monthlyMap);
-  for (const [branchId, val] of dailyMap) map.set(branchId, val);
-  return map;
-}
-
 /** Filial bo'yicha kunlik metrika summalari (1 query). */
 async function _metricsByBranch(range: DateRange): Promise<
   Map<number, { receipts: number; receiptTotal: number; avgItemsPerReceipt: number }>
@@ -497,8 +369,6 @@ export type CategoryRow = {
   categoryId: number;
   categoryName: string;
   fact: number;
-  plan: number;
-  achievement: number;
   /** (sotuv - tannarx) / tannarx * 100. Tannarx ma'lumoti yo'q bo'lsa null. */
   marja: number | null;
 };
@@ -508,15 +378,13 @@ async function _topCategories(
   branchId?: number,
   limit = 18
 ): Promise<CategoryRow[]> {
-  const [cats, factMap, planMap, costMap] = await Promise.all([
+  const [cats, factMap, costMap] = await Promise.all([
     prisma.category.findMany({ where: { parentId: null }, orderBy: { sortOrder: "asc" } }),
     _salesByCategory(range, branchId),
-    _planByCategory(range, branchId),
     _costByCategory(range, branchId),
   ]);
   const rows: CategoryRow[] = cats.map((c) => {
     const fact = factMap.get(c.id) ?? 0;
-    const plan = planMap.get(c.id) ?? 0;
     const cost = costMap.get(c.id);
     const marja =
       cost != null && fact > 0 ? ((fact - cost) / fact) * 100 : null;
@@ -524,8 +392,6 @@ async function _topCategories(
       categoryId: c.id,
       categoryName: c.name,
       fact,
-      plan,
-      achievement: plan > 0 ? (fact / plan) * 100 : 0,
       marja,
     };
   });
@@ -545,25 +411,21 @@ export type BranchPerformanceRow = {
   sales: number;
   receipts: number;
   visits: number;
-  plan: number;
-  planPercent: number;
   conversion: number;
   avgReceipt: number;
 };
 
 async function _branchPerformance(range: DateRange): Promise<BranchPerformanceRow[]> {
-  const [branches, salesMap, metricsMap, visitsMap, planMap] = await Promise.all([
+  const [branches, salesMap, metricsMap, visitsMap] = await Promise.all([
     prisma.branch.findMany({ orderBy: { sortOrder: "asc" } }),
     _salesByBranch(range),
     _metricsByBranch(range),
     _visitsByBranch(range),
-    _planByBranch(range),
   ]);
   return branches.map((b) => {
     const sales = salesMap.get(b.id) ?? 0;
     const m = metricsMap.get(b.id) ?? { receipts: 0, receiptTotal: 0 };
     const visits = visitsMap.get(b.id) ?? 0;
-    const plan = planMap.get(b.id) ?? 0;
     // To'g'ri formula: DailyMetrics.receiptTotal / receiptCount (_branchReport bilan izchil).
     // Avvalgi `sales / m.receipts` xato edi — CategorySales summasini POS chek soniga bo'lardi.
     const avgReceipt = m.receipts > 0 ? m.receiptTotal / m.receipts : 0;
@@ -574,8 +436,6 @@ async function _branchPerformance(range: DateRange): Promise<BranchPerformanceRo
       sales,
       receipts: m.receipts,
       visits,
-      plan,
-      planPercent: plan > 0 ? (sales / plan) * 100 : 0,
       conversion,
       avgReceipt,
     };
@@ -644,58 +504,6 @@ async function _costByBranchCategory(
   return map;
 }
 
-/**
- * Filial × kategoriya bo'yicha reja (2D map).
- * DailyPlan mavjud (branchId, categoryId) juftlari uchun MonthlyPlan ni almashtiradi.
- */
-async function _planByBranchCategory(
-  range: DateRange
-): Promise<Map<number, Map<number, number>>> {
-  // 1. DailyPlan — (branch, category) bo'yicha jami
-  const dailyRows = await prisma.$queryRaw<
-    { branchId: number; categoryId: number; total: number | null }[]
-  >`
-    SELECT "branchId", "categoryId", COALESCE(SUM("planAmount"::numeric), 0)::float8 AS total
-    FROM "DailyPlan"
-    WHERE date BETWEEN ${range.start}::date AND ${range.end}::date
-    GROUP BY "branchId", "categoryId"
-  `;
-  const dailySet = new Set<string>();
-  const map = new Map<number, Map<number, number>>();
-  for (const r of dailyRows) {
-    dailySet.add(`${r.branchId}-${r.categoryId}`);
-    if (!map.has(r.branchId)) map.set(r.branchId, new Map());
-    map.get(r.branchId)!.set(r.categoryId, Number(r.total ?? 0));
-  }
-
-  // 2. MonthlyPlan — pro-rated, faqat DailyPlan yo'q juftlar uchun
-  const months = monthsInRange(range);
-  if (months.length > 0) {
-    const ymPairs = Prisma.join(months.map((m) => Prisma.sql`(${m.year}, ${m.month})`));
-    const rows = await prisma.$queryRaw<
-      { branchId: number; categoryId: number; year: number; month: number; total: number | null }[]
-    >`
-      SELECT "branchId", "categoryId", "year", "month",
-             COALESCE(SUM("planAmount"::numeric), 0)::float8 AS total
-      FROM "MonthlyPlan"
-      WHERE ("year", "month") IN (${ymPairs})
-      GROUP BY "branchId", "categoryId", "year", "month"
-    `;
-    const monthMeta = new Map(months.map((m) => [`${m.year}-${m.month}`, m]));
-    for (const r of rows) {
-      if (dailySet.has(`${r.branchId}-${r.categoryId}`)) continue;
-      const meta = monthMeta.get(`${r.year}-${r.month}`);
-      if (!meta || meta.daysInMonth === 0) continue;
-      const prorated = Number(r.total ?? 0) * (meta.overlapDays / meta.daysInMonth);
-      if (!map.has(r.branchId)) map.set(r.branchId, new Map());
-      const catMap = map.get(r.branchId)!;
-      catMap.set(r.categoryId, (catMap.get(r.categoryId) ?? 0) + prorated);
-    }
-  }
-
-  return map;
-}
-
 export type CategoryBreakdown = {
   categoryId: number;
   categoryName: string;
@@ -703,8 +511,6 @@ export type CategoryBreakdown = {
   cost: number;
   hasCost: boolean;
   marja: number | null;
-  plan: number;
-  planPct: number;
 };
 
 export type BranchReportRow = {
@@ -722,20 +528,16 @@ export type BranchReportRow = {
   avgItemsPerReceipt: number;
   visits: number;
   conversion: number;
-  plan: number;
-  /** planPct = categorySales / plan * 100. */
-  planPct: number;
   categories: CategoryBreakdown[];
 };
 
 async function _branchReport(range: DateRange): Promise<BranchReportRow[]> {
-  const [branches, allCategories, salesBCMap, costBCMap, planBCMap, metricsMap, visitsMap] =
+  const [branches, allCategories, salesBCMap, costBCMap, metricsMap, visitsMap] =
     await Promise.all([
       prisma.branch.findMany({ orderBy: { sortOrder: "asc" } }),
       prisma.category.findMany({ where: { parentId: null, sortOrder: { gt: 0 } }, orderBy: { sortOrder: "asc" } }),
       _salesByBranchCategory(range),
       _costByBranchCategory(range),
-      _planByBranchCategory(range),
       _metricsByBranch(range),
       _visitsByBranch(range),
     ]);
@@ -743,13 +545,11 @@ async function _branchReport(range: DateRange): Promise<BranchReportRow[]> {
   return branches.map((b) => {
     const catSalesMap = salesBCMap.get(b.id) ?? new Map<number, number>();
     const catCostMap  = costBCMap.get(b.id)  ?? new Map<number, number>();
-    const catPlanMap  = planBCMap.get(b.id)  ?? new Map<number, number>();
 
-    // CategorySales aggregates (for marja and planPct)
-    let categorySales = 0, cost = 0, plan = 0;
+    // CategorySales aggregates (for marja)
+    let categorySales = 0, cost = 0;
     for (const v of catSalesMap.values()) categorySales += v;
     for (const v of catCostMap.values())  cost          += v;
-    for (const v of catPlanMap.values())  plan          += v;
 
     const hasCost = cost > 0;
     const marja   = hasCost && categorySales > 0 ? ((categorySales - cost) / categorySales) * 100 : null;
@@ -761,7 +561,6 @@ async function _branchReport(range: DateRange): Promise<BranchReportRow[]> {
       const cSales   = catSalesMap.get(c.id) ?? 0;
       const cCost    = catCostMap.get(c.id)  ?? 0;
       const cHasCost = cCost > 0;
-      const cPlan    = catPlanMap.get(c.id)  ?? 0;
       return {
         categoryId:   c.id,
         categoryName: c.name,
@@ -769,8 +568,6 @@ async function _branchReport(range: DateRange): Promise<BranchReportRow[]> {
         cost:    cCost,
         hasCost: cHasCost,
         marja:   cHasCost && cSales > 0 ? ((cSales - cCost) / cSales) * 100 : null,
-        plan:    cPlan,
-        planPct: cPlan > 0 ? (cSales / cPlan) * 100 : 0,
       };
     });
 
@@ -786,8 +583,6 @@ async function _branchReport(range: DateRange): Promise<BranchReportRow[]> {
       avgItemsPerReceipt: m.avgItemsPerReceipt,
       visits,
       conversion:         visits > 0 ? (m.receipts / visits) * 100 : 0,
-      plan,
-      planPct:            plan > 0 ? (categorySales / plan) * 100 : 0,
       categories,
     };
   });
@@ -844,78 +639,6 @@ export const findMissingDays = (range: DateRange) =>
   unstable_cache(
     () => _findMissingDays(range),
     ["missingDays", ...makeKey(range)],
-    { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
-  )();
-
-export type DailyPlanVsActualRow = {
-  date: string;        // ISO YYYY-MM-DD
-  plan: number;        // Jami DailyPlan (filial × kategoriya jami) shu kun uchun
-  actual: number | null; // Jami CategorySales pro-rated; agar ma'lumot yo'q bo'lsa null
-};
-
-async function _dailyPlanVsActual(
-  range: DateRange,
-  branchId?: number
-): Promise<DailyPlanVsActualRow[]> {
-  const branchFilter = branchId
-    ? Prisma.sql`AND "branchId" = ${branchId}`
-    : Prisma.sql``;
-
-  // 1. DailyPlan — har kun uchun jami (filiallar va kategoriyalar yig'indisi)
-  const planRows = await prisma.$queryRaw<{ d: Date; total: number | null }[]>`
-    SELECT date AS d, COALESCE(SUM("planAmount"),0)::float AS total
-    FROM "DailyPlan"
-    WHERE date BETWEEN ${range.start} AND ${range.end}
-    ${branchFilter}
-    GROUP BY date
-  `;
-  const planMap = new Map(planRows.map((r) => [isoDay(r.d), Number(r.total) ?? 0]));
-
-  // 2. CategorySales — pro-rated kunlarga bo'linadi.
-  // VISIBLE_CAT_FILTER qo'shildi: boshqa funksiyalar (topCategories, branchReport) bilan
-  // izchillik — ko'rinmas kategoriyalar (sortOrder=0) fakt tomonga ham kirmasin.
-  const salesRanges = await prisma.$queryRaw<{ ps: Date; pe: Date; total: number | null }[]>`
-    SELECT "periodStart" AS ps, "periodEnd" AS pe,
-           COALESCE(SUM(amount),0)::float AS total
-    FROM "CategorySales"
-    WHERE "periodEnd"   >= ${range.start}
-      AND "periodStart" <= ${range.end}
-    ${branchFilter}
-    ${VISIBLE_CAT_FILTER}
-    GROUP BY "periodStart", "periodEnd"
-  `;
-  const dayMs = 86_400_000;
-  const actualMap = new Map<string, number>();
-  for (const r of salesRanges) {
-    const total = Number(r.total) || 0;
-    if (total === 0) continue;
-    const ps = r.ps.getTime();
-    const pe = r.pe.getTime();
-    const lenDays = Math.round((pe - ps) / dayMs) + 1;
-    const perDay = total / lenDays;
-    const s = Math.max(ps, range.start.getTime());
-    const e = Math.min(pe, range.end.getTime());
-    for (let t = s; t <= e; t += dayMs) {
-      const iso = isoDay(new Date(t));
-      actualMap.set(iso, (actualMap.get(iso) ?? 0) + perDay);
-    }
-  }
-
-  // 3. Davrning har bir kuni uchun qator yasash
-  const out: DailyPlanVsActualRow[] = [];
-  for (let t = range.start.getTime(); t <= range.end.getTime(); t += dayMs) {
-    const iso = isoDay(new Date(t));
-    const plan = planMap.get(iso) ?? 0;
-    const actual = actualMap.has(iso) ? Math.round(actualMap.get(iso)! * 100) / 100 : null;
-    out.push({ date: iso, plan, actual });
-  }
-  return out;
-}
-
-export const dailyPlanVsActual = (range: DateRange, branchId?: number) =>
-  unstable_cache(
-    () => _dailyPlanVsActual(range, branchId),
-    ["dailyPlanVsActual", ...makeKey(range, branchId)],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
   )();
 

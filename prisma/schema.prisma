@@ -29,7 +29,6 @@ enum FileType {
   SALES
   METRICS
   VISITS
-  DAILY_PLANS
 }
 
 enum AliasSource {
@@ -81,8 +80,6 @@ model Branch {
   productSales  ProductSales[]
   metrics       DailyMetrics[]
   visits        DailyVisits[]
-  plans         MonthlyPlan[]
-  dailyPlans    DailyPlan[]
   uploads       UploadedFile[]
 }
 
@@ -122,8 +119,6 @@ model Category {
   aliases    CategoryAlias[]
   sales      CategorySales[]
   products   Product[]
-  plans      MonthlyPlan[]
-  dailyPlans DailyPlan[]
   managers   CategoryManager[]
 
   @@index([parentId]) // scope filtrlari (subkat → ota-kategoriya) tezligi uchun
@@ -203,47 +198,6 @@ model DailyVisits {
   @@index([uploadedFileId])
 }
 
-// Admin qo'lda kiritadigan oylik "Normal Reja" — filial × oy × kategoriya × summa.
-model MonthlyPlan {
-  id         Int     @id @default(autoincrement())
-  branchId   Int
-  year       Int
-  month      Int     // 1..12
-  categoryId Int
-  planAmount Decimal @db.Decimal(20, 2)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  branch   Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-
-  @@unique([branchId, year, month, categoryId])
-  @@index([year, month])
-  @@index([branchId, year, month])
-  @@index([categoryId, year, month])
-}
-
-// Kunlik reja — filial × sana × kategoriya × planAmount.
-// "aprel 2026 kunlik planlar.xlsx" formatidagi fayllardan keladi.
-model DailyPlan {
-  id             Int      @id @default(autoincrement())
-  uploadedFileId Int
-  branchId       Int
-  categoryId     Int
-  date           DateTime @db.Date
-  planAmount     Decimal  @db.Decimal(20, 2)
-
-  uploadedFile UploadedFile @relation(fields: [uploadedFileId], references: [id], onDelete: Cascade)
-  branch       Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  category     Category     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-
-  @@unique([branchId, categoryId, date])
-  @@index([date])
-  @@index([branchId, date])
-  @@index([branchId, categoryId, date])
-  @@index([uploadedFileId])
-}
-
 // Yuklangan har bir fayl audit + dublikat oldini olish uchun saqlanadi.
 model UploadedFile {
   id           Int          @id @default(autoincrement())
@@ -269,7 +223,6 @@ model UploadedFile {
   productSales ProductSales[]
   metrics      DailyMetrics[]
   visits       DailyVisits[]
-  dailyPlans   DailyPlan[]
 
   @@index([fileType, periodStart, periodEnd])
   @@index([uploadedById])

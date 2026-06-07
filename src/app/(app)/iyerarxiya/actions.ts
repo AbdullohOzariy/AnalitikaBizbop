@@ -355,13 +355,13 @@ export async function deleteCategoryAction(id: number): Promise<Result> {
     await requireAdmin();
     const cat = await prisma.category.findUnique({
       where: { id },
-      include: { _count: { select: { sales: true, plans: true, dailyPlans: true, children: true } } },
+      include: { _count: { select: { sales: true, children: true } } },
     });
     if (!cat) return { ok: false, error: "Topilmadi." };
     const c = cat._count;
     if (c.children > 0) return { ok: false, error: `${c.children} ta subkategoriyasi bor — avval ularni o'chiring.` };
-    if (c.sales > 0 || c.plans > 0 || c.dailyPlans > 0) {
-      return { ok: false, error: `Bog'langan ma'lumot bor (sotuv: ${c.sales}, reja: ${c.plans + c.dailyPlans}) — o'chirib bo'lmaydi.` };
+    if (c.sales > 0) {
+      return { ok: false, error: `Bog'langan ma'lumot bor (sotuv: ${c.sales}) — o'chirib bo'lmaydi.` };
     }
     await prisma.category.delete({ where: { id } });
     revalidatePath("/iyerarxiya");

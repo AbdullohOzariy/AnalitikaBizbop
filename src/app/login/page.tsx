@@ -6,7 +6,7 @@ import { LoginForm } from "./login-form";
 const FEATURES = [
   { icon: TrendingUp, title: "Savdo analitikasi", desc: "Filial × kategoriya × davr kesimida" },
   { icon: ArrowDownUp, title: "Chiqim va vozvrat", desc: "Spisaniya, qaytarish, kafe hisobi" },
-  { icon: Target, title: "Reja va bajarilish", desc: "Kunlik va oylik rejalar nazorati" },
+  { icon: Target, title: "Zaxira nazorati", desc: "OOS va Stockday — qoldiq monitoringi" },
 ];
 
 export default function LoginPage() {
@@ -42,7 +42,7 @@ export default function LoginPage() {
                 Supermarket biznesingiz — bitta platformada
               </h2>
               <p className="text-sm text-white/80">
-                Savdo, chiqim va rejalarni real vaqtda kuzating. To&apos;g&apos;ri qarorlar — aniq raqamlar asosida.
+                Savdo, chiqim va zaxiralarni real vaqtda kuzating. To&apos;g&apos;ri qarorlar — aniq raqamlar asosida.
               </p>
             </div>
             <ul className="space-y-4">
