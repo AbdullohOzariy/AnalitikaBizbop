@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { CategoryTreeFilter, type FilterGroup } from "./category-tree-filter";
 
 type Branch = { id: number; name: string };
 type Category = { id: number; name: string };
@@ -35,6 +36,7 @@ export function BazaFilter({
   basePath,
   branches,
   categories,
+  categoryGroups,
   defaultStart,
   defaultEnd,
   defaultBranchId,
@@ -46,6 +48,7 @@ export function BazaFilter({
   basePath: string;
   branches: Branch[];
   categories?: Category[];
+  categoryGroups?: FilterGroup[]; // berilsa — kategoriya daraxt (ko'p tanlash) rejimi
   defaultStart: string;
   defaultEnd: string;
   defaultBranchId?: string;
@@ -106,9 +109,12 @@ export function BazaFilter({
     router.replace(basePath, { scroll: false });
   };
 
+  const catsParam = searchParams.get("cats");
+  const selectedCats = catsParam ? catsParam.split(",").map(Number).filter((n) => Number.isInteger(n) && n > 0) : [];
+
   const hasFilters =
     start || end || (branchId && branchId !== "all") ||
-    (showCategory && categoryId !== "all") ||
+    (showCategory && (categoryGroups ? selectedCats.length > 0 : categoryId !== "all")) ||
     (showSearch && search.trim());
   const activePreset = PRESETS.find((p) => { const r = p.range(); return r.start === start && r.end === end; })?.key;
 
@@ -127,8 +133,17 @@ export function BazaFilter({
           </Select>
         </div>
 
-        {/* Kategoriya */}
-        {showCategory && categories && (
+        {/* Kategoriya — daraxt (ko'p tanlash) yoki tekis (bitta) */}
+        {showCategory && categoryGroups ? (
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Kategoriya</Label>
+            <CategoryTreeFilter
+              groups={categoryGroups}
+              selected={selectedCats}
+              onApply={(ids) => navigate({ cats: ids.length ? ids.join(",") : undefined })}
+            />
+          </div>
+        ) : showCategory && categories ? (
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">Kategoriya</Label>
             <Select value={categoryId} onValueChange={(v) => { const nv = v ?? "all"; setCategoryId(nv); navigate({ categoryId: nv }); }}>
@@ -139,7 +154,7 @@ export function BazaFilter({
               </SelectContent>
             </Select>
           </div>
-        )}
+        ) : null}
 
         {/* Davr */}
         <div className="space-y-1">

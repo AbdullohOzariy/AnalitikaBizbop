@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { unstable_cache } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@/generated/prisma/client";
 import { getDefaultRange } from "@/lib/analytics";
+import type { FilterGroup } from "../category-tree-filter";
 import { Database, ShoppingBag, Layers, TrendingUp, Boxes, Download, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { PageHeader, StatCard, EmptyState } from "@/components/common/page";
 import { Card, CardContent } from "@/components/ui/card";
@@ -20,6 +22,29 @@ import { BazaFilter } from "../baza-filter";
 import { BazaPagination } from "../baza-pagination";
 
 const PAGE_SIZE = 50;
+
+// Kategoriya iyerarxiyasi (filtr daraxti) — kam o'zgaradi, keshlaymiz ("iyerarxiya" tegi).
+const getCategoryTree = unstable_cache(
+  async (): Promise<FilterGroup[]> => {
+    const groups = await prisma.categoryGroup.findMany({
+      orderBy: { sortOrder: "asc" },
+      select: {
+        id: true, name: true,
+        categories: {
+          where: { parentId: null },
+          orderBy: { sortOrder: "asc" },
+          select: { id: true, name: true, children: { orderBy: { sortOrder: "asc" }, select: { id: true, name: true } } },
+        },
+      },
+    });
+    return groups.map((g) => ({
+      id: g.id, name: g.name,
+      cats: g.categories.map((c) => ({ id: c.id, name: c.name, subs: c.children.map((s) => ({ id: s.id, name: s.name })) })),
+    }));
+  },
+  ["sotuv-category-tree"],
+  { tags: ["iyerarxiya"], revalidate: 300 }
+);
 
 // Saralanadigan ustunlar → Prisma orderBy
 const SORTS: Record<string, (d: "asc" | "desc") => Prisma.ProductSalesOrderByWithRelationInput> = {
@@ -40,7 +65,7 @@ function SortHead({ col, label, sp, sort, dir, align }: {
   const active = sort === col;
   const nextDir = active && dir === "desc" ? "asc" : "desc";
   const p = new URLSearchParams();
-  for (const k of ["start", "end", "branchId", "categoryId", "q"]) { const v = sp[k]; if (v) p.set(k, v); }
+  for (const k of ["start", "end", "branchId", "cats", "q"]) { const v = sp[k]; if (v) p.set(k, v); }
   p.set("sort", col); p.set("dir", nextDir);
   const Icon = active ? (dir === "desc" ? ArrowDown : ArrowUp) : ArrowUpDown;
   return (
@@ -92,7 +117,7 @@ export default async function BazaSotuvPage({
   const startDate = parseDate(sp.start) ?? def.start;
   const endDate = parseDate(sp.end) ?? def.end;
   const branchId = sp.branchId ? parseInt(sp.branchId) : undefined;
-  const categoryId = sp.categoryId ? parseInt(sp.categoryId) : undefined;
+  const catIds = sp.cats ? sp.cats.split(",").map(Number).filter((n) => Number.isInteger(n) && n > 0) : [];
   const q = sp.q?.trim() ?? "";
 
   // Saralash
@@ -107,7 +132,7 @@ export default async function BazaSotuvPage({
     periodStart: { gte: startDate },
     periodEnd: { lte: endDate },
     ...(branchId && { branchId }),
-    ...(categoryId && { product: { categoryId } }),
+    ...(catIds.length > 0 && { product: { categoryId: { in: catIds } } }),
     ...(q && {
       OR: [
         { product: { name: { contains: q, mode: "insensitive" as const } } },
@@ -116,7 +141,7 @@ export default async function BazaSotuvPage({
     }),
   };
 
-  const [totalCount, rows, branches, categories, agg] = await Promise.all([
+  const [totalCount, rows, branches, catGroups, agg] = await Promise.all([
     prisma.productSales.count({ where }),
     prisma.productSales.findMany({
       where,
@@ -129,11 +154,7 @@ export default async function BazaSotuvPage({
       },
     }),
     prisma.branch.findMany({ orderBy: { sortOrder: "asc" }, select: { id: true, name: true } }),
-    prisma.category.findMany({
-      orderBy: { sortOrder: "asc" },
-      select: { id: true, name: true },
-      where: { products: { some: {} } },
-    }),
+    getCategoryTree(),
     prisma.productSales.aggregate({
       where,
       _sum: { amount: true, costAmount: true, soldQty: true },
@@ -151,7 +172,7 @@ export default async function BazaSotuvPage({
 
   const exportQs = (() => {
     const p = new URLSearchParams();
-    for (const k of ["start", "end", "branchId", "categoryId", "q", "sort", "dir"]) { const v = sp[k]; if (v) p.set(k, v); }
+    for (const k of ["start", "end", "branchId", "cats", "q", "sort", "dir"]) { const v = sp[k]; if (v) p.set(k, v); }
     return p.toString();
   })();
 
@@ -165,11 +186,10 @@ export default async function BazaSotuvPage({
         <BazaFilter
           basePath="/baza/sotuv"
           branches={branches}
-          categories={categories}
+          categoryGroups={catGroups}
           defaultStart={startStr}
           defaultEnd={endStr}
           defaultBranchId={sp.branchId}
-          defaultCategoryId={sp.categoryId}
           defaultSearch={sp.q}
           showCategory
           showSearch

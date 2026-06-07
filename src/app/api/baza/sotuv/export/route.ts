@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
   const startDate = parseDate(sp.get("start")) ?? def.start;
   const endDate = parseDate(sp.get("end")) ?? def.end;
   const branchId = sp.get("branchId") ? parseInt(sp.get("branchId")!) : undefined;
-  const categoryId = sp.get("categoryId") ? parseInt(sp.get("categoryId")!) : undefined;
+  const catIds = sp.get("cats") ? sp.get("cats")!.split(",").map(Number).filter((n) => Number.isInteger(n) && n > 0) : [];
   const q = sp.get("q")?.trim() ?? "";
   const sort = sp.get("sort") && SORTS[sp.get("sort")!] ? sp.get("sort")! : "";
   const dir: "asc" | "desc" = sp.get("dir") === "asc" ? "asc" : "desc";
@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
     periodStart: { gte: startDate },
     periodEnd: { lte: endDate },
     ...(branchId && { branchId }),
-    ...(categoryId && { product: { categoryId } }),
+    ...(catIds.length > 0 && { product: { categoryId: { in: catIds } } }),
     ...(q && {
       OR: [
         { product: { name: { contains: q, mode: "insensitive" as const } } },
