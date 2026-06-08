@@ -65,6 +65,46 @@ export async function createUserAction(
   }
 }
 
+const updateSchema = z.object({
+  id: z.number().int().positive(),
+  name: z.string().trim().min(1).max(100),
+  email: z.string().trim().min(1).max(100),
+  role: z.enum(["SYSTEM_ADMIN", "ADMIN", "CAT_MANAGER", "CEO"]),
+});
+
+/** Foydalanuvchi ma'lumotlarini (nom, login, rol) tahrirlash — faqat System Admin. */
+export async function updateUserAction(
+  input: z.input<typeof updateSchema>
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const me = await requireAdmin();
+    const p = updateSchema.parse(input);
+    // O'zini System Admin'dan tushirib, tizimni qulflab qo'ymasin
+    if (Number(me.id) === p.id && p.role !== "SYSTEM_ADMIN") {
+      return { ok: false, error: "O'z rolingizni System Admin'dan o'zgartira olmaysiz." };
+    }
+    // Login boshqa foydalanuvchida band emasligini tekshiramiz
+    const taken = await prisma.user.findFirst({ where: { email: p.email, id: { not: p.id } } });
+    if (taken) return { ok: false, error: "Bu login band." };
+
+    const cur = await prisma.user.findUnique({ where: { id: p.id }, select: { role: true } });
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: p.id },
+        data: { name: p.name, email: p.email, role: p.role as Role },
+      }),
+      // Rol CAT_MANAGER'dan boshqaga o'zgarsa — kategoriya biriktirishlari ortiqcha
+      ...(cur?.role === "CAT_MANAGER" && p.role !== "CAT_MANAGER"
+        ? [prisma.categoryManager.deleteMany({ where: { userId: p.id } })]
+        : []),
+    ]);
+    revalidatePath("/admin/users");
+    return { ok: true };
+  } catch (err) {
+    return actionError(err, "users");
+  }
+}
+
 export async function deleteUserAction(
   id: number
 ): Promise<{ ok: true } | { ok: false; error: string }> {
