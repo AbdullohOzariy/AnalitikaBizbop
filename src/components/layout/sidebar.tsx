@@ -29,6 +29,7 @@ import {
   Hourglass,
   ClipboardList,
   Target,
+  Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -111,6 +112,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Sotuv",
     items: [
       { href: "/sotuv/sotib-olish", label: "Sotib olish", icon: ShoppingCart, roles: [SA, A, "CAT_MANAGER"] },
+      { href: "/sotuv/finans",      label: "Finans",      icon: Wallet,       roles: [SA, A, "CEO"] },
     ],
   },
   {

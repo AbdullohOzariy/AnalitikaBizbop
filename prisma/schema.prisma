@@ -56,6 +56,7 @@ model User {
   uploads           UploadedFile[]
   managedCategories CategoryManager[] // kategoriya menejeri javobgar kategoriyalari
   purchaseOrders    PurchaseOrder[]
+  expenses          Expense[]
 }
 
 // Kategoriya menejeri ↔ kategoriya (ko'p-ko'p): bir xodim bir nechta kategoriyaga javobgar.
@@ -362,6 +363,24 @@ model SalesPlan {
 
   @@unique([branchId, categoryId, year, month])
   @@index([branchId, year, month])
+}
+
+// Sotuv bo'limi moliyasi — harajatlar (filialsiz, umumiy ro'yxat).
+// Summa = miqdor × narx (serverda hisoblanadi).
+model Expense {
+  id          Int      @id @default(autoincrement())
+  name        String // harajat nomi
+  quantity    Decimal  @db.Decimal(20, 3) // miqdor
+  unitPrice   Decimal  @db.Decimal(20, 2) // narx (bir birlik)
+  amount      Decimal  @db.Decimal(20, 2) // summa = quantity × unitPrice
+  spentAt     DateTime @db.Date // harajat qilingan sana
+  createdById Int
+  createdAt   DateTime @default(now())
+
+  createdBy User @relation(fields: [createdById], references: [id])
+
+  @@index([spentAt])
+  @@index([createdById])
 }
 
 // Marja rejasi — subkategoriya × filial (vaqtsiz, o'zgarganda yangilanadi)
