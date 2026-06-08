@@ -14,7 +14,7 @@ import {
 
 async function requireAdmin() {
   const session = await auth();
-  if (session?.user.role !== "ADMIN") throw new Error("Ruxsat yo'q");
+  if (session?.user.role !== "SYSTEM_ADMIN") throw new Error("Ruxsat yo'q");
 }
 
 export async function upsertSalesPlan(input: {

@@ -11,7 +11,8 @@ datasource db {
 }
 
 enum Role {
-  ADMIN
+  SYSTEM_ADMIN // to'liq huquq — barcha tahrir + Tizim bo'limi (oldingi ADMIN)
+  ADMIN // read-only — Tizimdan boshqa hammasini ko'radi, o'zgartira olmaydi
   VIEWER // eskirgan — ishlatilmaydi (migratsiyada CAT_MANAGER'ga o'tkazilgan). UI'da yo'q.
   CAT_MANAGER
   CEO

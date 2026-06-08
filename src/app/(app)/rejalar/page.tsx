@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { canSeeAnalytics, isSystemAdmin } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { ClipboardList } from "lucide-react";
 import { PageHeader } from "@/components/common/page";
@@ -19,10 +20,10 @@ export default async function RejalarPage({
   const session = await auth();
   if (!session) redirect("/login");
   const role = session.user.role;
-  if (role !== "ADMIN" && role !== "CAT_MANAGER" && role !== "CEO") {
+  if (!canSeeAnalytics(role)) {
     redirect("/dashboard-v2");
   }
-  const isAdmin = role === "ADMIN";
+  const isAdmin = isSystemAdmin(role);
 
   const sp = await searchParams;
   const now = new Date();

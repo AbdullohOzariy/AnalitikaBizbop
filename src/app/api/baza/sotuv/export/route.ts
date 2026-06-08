@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import * as XLSX from "xlsx";
 import { auth } from "@/auth";
+import { isAdminTier } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { getDefaultRange } from "@/lib/analytics";
@@ -33,7 +34,7 @@ function num(n: unknown): number {
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user) return new Response("Unauthorized", { status: 401 });
-  if (session.user.role !== "ADMIN") return new Response("Forbidden", { status: 403 });
+  if (!isAdminTier(session.user.role)) return new Response("Forbidden", { status: 403 });
 
   const sp = req.nextUrl.searchParams;
   const def = await getDefaultRange();

@@ -17,7 +17,7 @@ import { RuxsatEditor } from "./ruxsat-editor";
 export default async function SozlamalarPage() {
   const session = await auth();
   if (!session) redirect("/login");
-  if (session.user.role !== "ADMIN") redirect("/dashboard");
+  if (session.user.role !== "SYSTEM_ADMIN") redirect("/dashboard");
 
   return (
     <div className="space-y-5">

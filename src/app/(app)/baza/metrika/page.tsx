@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { isAdminTier } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { getDefaultRange } from "@/lib/analytics";
 import {
@@ -40,7 +41,7 @@ export default async function BazaMetrikaPage({
 }) {
   const session = await auth();
   if (!session) redirect("/login");
-  if (session.user.role !== "ADMIN") redirect("/dashboard-v2");
+  if (!isAdminTier(session.user.role)) redirect("/dashboard-v2");
 
   const sp = await searchParams;
   const tab: "metrika" | "tashrif" = sp.tab === "tashrif" ? "tashrif" : "metrika";

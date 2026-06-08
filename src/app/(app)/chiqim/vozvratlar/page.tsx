@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { canSeeAnalytics, isSystemAdmin } from "@/lib/roles";
 import {
   botConfigured,
   aktivFilialNomlari,
@@ -30,7 +31,7 @@ export default async function VozvratlarPage({
   const session = await auth();
   if (!session) redirect("/login");
   const role = session.user.role;
-  if (role !== "ADMIN" && role !== "CAT_MANAGER" && role !== "CEO") redirect("/dashboard-v2");
+  if (!canSeeAnalytics(role)) redirect("/dashboard-v2");
 
   if (!botConfigured()) {
     return (
@@ -94,7 +95,7 @@ export default async function VozvratlarPage({
       </div>
 
       {/* Kanban yoki Ro'yxat ko'rinishi — faqat admin tahrirlaydi */}
-      <VozvratViews vozvratlar={rows} canEdit={role === "ADMIN"} filials={filials} />
+      <VozvratViews vozvratlar={rows} canEdit={isSystemAdmin(role)} filials={filials} />
     </div>
   );
 }

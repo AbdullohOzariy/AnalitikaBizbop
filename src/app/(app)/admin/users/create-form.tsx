@@ -43,15 +43,16 @@ function InputField({
 }
 
 const ROLE_OPTIONS = [
-  { value: "CAT_MANAGER", label: "Kategoriya menejeri", desc: "Dashboard V2, Spisaniya, OOS — faqat ko'rish" },
-  { value: "CEO",         label: "CEO",                 desc: "Dashboard V1+V2, Spisaniya, OOS — faqat ko'rish" },
-  { value: "ADMIN",       label: "Admin",               desc: "To'liq huquq" },
+  { value: "CAT_MANAGER",  label: "Kategoriya menejeri", desc: "Dashboard V2, Spisaniya, OOS — faqat ko'rish" },
+  { value: "CEO",          label: "CEO",                 desc: "Dashboard V1+V2, Spisaniya, OOS — faqat ko'rish" },
+  { value: "ADMIN",        label: "Admin (ko'rish)",     desc: "Tizimdan boshqa hammasi — faqat ko'rish, tahrir yo'q" },
+  { value: "SYSTEM_ADMIN", label: "System Admin",        desc: "To'liq huquq — barcha tahrir + Tizim bo'limi" },
 ] as const;
 
 // ── Forma ─────────────────────────────────────────────────────────────────────
 export function CreateUserForm() {
   const formRef = useRef<HTMLFormElement>(null);
-  const [role, setRole]           = useState<"CAT_MANAGER" | "CEO" | "ADMIN">("CAT_MANAGER");
+  const [role, setRole]           = useState<"CAT_MANAGER" | "CEO" | "ADMIN" | "SYSTEM_ADMIN">("CAT_MANAGER");
   const [showPass, setShowPass]   = useState(false);
   const [isPending, start]        = useTransition();
 

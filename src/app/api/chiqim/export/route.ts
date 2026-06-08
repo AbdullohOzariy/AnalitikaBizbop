@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import * as XLSX from "xlsx";
 import { auth } from "@/auth";
+import { canSeeAnalytics } from "@/lib/roles";
 import {
   chiqimDefaultRange,
   chiqimSummary,
@@ -23,7 +24,7 @@ export async function GET(req: NextRequest) {
   if (!session?.user) return new Response("Unauthorized", { status: 401 });
 
   const role = session.user.role;
-  if (role !== "ADMIN" && role !== "CAT_MANAGER" && role !== "CEO") {
+  if (!canSeeAnalytics(role)) {
     return new Response("Forbidden", { status: 403 });
   }
 

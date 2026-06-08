@@ -12,7 +12,7 @@ const ALLOWED = new Set(["iyerarxiya", "analytics", "branches"]);
 
 async function handle(req: NextRequest) {
   const session = await auth();
-  if (session?.user?.role !== "ADMIN")
+  if (session?.user?.role !== "SYSTEM_ADMIN")
     return NextResponse.json({ ok: false, error: "Ruxsat yo'q" }, { status: 403 });
 
   const tag = req.nextUrl.searchParams.get("tag") ?? "";

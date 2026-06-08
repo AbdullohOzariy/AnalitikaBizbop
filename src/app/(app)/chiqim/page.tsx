@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { canSeeAnalytics, isSystemAdmin } from "@/lib/roles";
 import {
   botConfigured,
   chiqimDefaultRange,
@@ -86,7 +87,7 @@ export default async function ChiqimPage({
   const session = await auth();
   if (!session) redirect("/login");
   const role = session.user.role;
-  if (role !== "ADMIN" && role !== "CAT_MANAGER" && role !== "CEO") redirect("/dashboard-v2");
+  if (!canSeeAnalytics(role)) redirect("/dashboard-v2");
 
   // Bot ulanmaganmi?
   if (!botConfigured()) {
@@ -259,7 +260,7 @@ export default async function ChiqimPage({
                       <TableHead className="w-[120px]">Kategoriya</TableHead>
                       <TableHead>Sabab</TableHead>
                       <TableHead className="w-[120px]">Xodim</TableHead>
-                      {role === "ADMIN" && (
+                      {isSystemAdmin(role) && (
                         <TableHead className="w-[80px] text-right">Amallar</TableHead>
                       )}
                     </TableRow>
@@ -317,7 +318,7 @@ export default async function ChiqimPage({
                         </TableCell>
 
                         {/* Amallar — faqat ADMIN */}
-                        {role === "ADMIN" && (
+                        {isSystemAdmin(role) && (
                           <TableCell className="text-right">
                             <ChiqimRowActions
                               record={r}

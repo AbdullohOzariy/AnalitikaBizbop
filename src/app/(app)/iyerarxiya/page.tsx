@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { isAdminTier, isSystemAdmin } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { unstable_cache } from "next/cache";
 import { Tag } from "lucide-react";
@@ -32,8 +33,8 @@ const getHierarchy = unstable_cache(
 
 export default async function IyerarxiyaPage() {
   const session = await auth();
-  if (!session?.user || session.user.role !== "ADMIN") redirect("/dashboard-v2");
-  const isAdmin = true;
+  if (!session?.user || !isAdminTier(session.user.role)) redirect("/dashboard-v2");
+  const isAdmin = isSystemAdmin(session.user.role);
   const groups = await getHierarchy();
 
   const data: HGroup[] = groups.map((g) => ({

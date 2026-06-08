@@ -20,10 +20,11 @@ const ROLE_CONFIG: Record<
   string,
   { label: string; tone: "green" | "blue" | "muted"; icon: string }
 > = {
-  ADMIN:       { label: "Admin",               tone: "green",  icon: "A" },
-  CEO:         { label: "CEO",                  tone: "blue",   icon: "C" },
-  CAT_MANAGER: { label: "Kategoriya menejeri", tone: "blue",   icon: "K" },
-  VIEWER:      { label: "Ko'ruvchi",           tone: "muted",  icon: "V" },
+  SYSTEM_ADMIN: { label: "System Admin",        tone: "green",  icon: "S" },
+  ADMIN:        { label: "Admin (ko'rish)",     tone: "blue",   icon: "A" },
+  CEO:          { label: "CEO",                  tone: "blue",   icon: "C" },
+  CAT_MANAGER:  { label: "Kategoriya menejeri", tone: "blue",   icon: "K" },
+  VIEWER:       { label: "Ko'ruvchi",           tone: "muted",  icon: "V" },
 };
 
 // ── Avatar: ismdagi bosh harflar ─────────────────────────────────────────────
@@ -50,7 +51,7 @@ function getInitials(name: string) {
 // ── Sahifa ────────────────────────────────────────────────────────────────────
 export default async function UsersPage() {
   const session = await auth();
-  if (session?.user.role !== "ADMIN") redirect("/dashboard");
+  if (session?.user.role !== "SYSTEM_ADMIN") redirect("/dashboard");
 
   const [users, catRows] = await Promise.all([
     prisma.user.findMany({
@@ -65,7 +66,7 @@ export default async function UsersPage() {
   ]);
   const categories = catRows.map((c) => ({ id: c.id, name: c.name, group: c.group?.name ?? null }));
 
-  const totalAdmin      = users.filter((u) => u.role === "ADMIN").length;
+  const totalAdmin      = users.filter((u) => u.role === "SYSTEM_ADMIN").length;
   const totalCatManager = users.filter((u) => u.role === "CAT_MANAGER").length;
   const totalViewer     = users.filter((u) => u.role === "CEO").length;
 

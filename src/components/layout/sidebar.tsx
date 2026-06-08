@@ -28,6 +28,7 @@ import {
   ShoppingCart,
   Hourglass,
   ClipboardList,
+  Target,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -90,49 +91,53 @@ function getFoldedSnapshot(): Set<string> {
 }
 
 // ─── Navigatsiya tuzilmasi ───────────────────────────────────────────────────
+const A = "ADMIN" as const;        // read-only admin
+const SA = "SYSTEM_ADMIN" as const; // to'liq admin
+
 const NAV_GROUPS: NavGroup[] = [
   {
     label: "Analitika",
     items: [
-      { href: "/dashboard",    label: "Dashboard",    icon: LayoutDashboard, roles: ["ADMIN", "CEO"] },
-      { href: "/dashboard-v2", label: "Dashboard v2", icon: Sparkles,        roles: ["ADMIN", "CAT_MANAGER", "CEO"] },
-      { href: "/oos",          label: "OOS",          icon: PackageX,        roles: ["ADMIN", "CAT_MANAGER", "CEO"] },
-      { href: "/stockday",     label: "Stockday",     icon: Hourglass,       roles: ["ADMIN", "CAT_MANAGER", "CEO"] },
-      { href: "/report",       label: "Hisobot",      icon: Table2,          roles: ["ADMIN"] },
-      { href: "/rejalar",      label: "Rejalar",      icon: ClipboardList,   roles: ["ADMIN", "CAT_MANAGER", "CEO"] },
+      { href: "/dashboard",       label: "Dashboard",       icon: LayoutDashboard, roles: [SA, A, "CEO"] },
+      { href: "/sotuv-dashboard", label: "Sotuv Dashboard", icon: Target,          roles: [SA, A, "CEO"] },
+      { href: "/dashboard-v2",    label: "Dashboard v2",    icon: Sparkles,        roles: [SA, A, "CAT_MANAGER", "CEO"] },
+      { href: "/oos",             label: "OOS",             icon: PackageX,        roles: [SA, A, "CAT_MANAGER", "CEO"] },
+      { href: "/stockday",        label: "Stockday",        icon: Hourglass,       roles: [SA, A, "CAT_MANAGER", "CEO"] },
+      { href: "/report",          label: "Hisobot",         icon: Table2,          roles: [SA, A] },
+      { href: "/rejalar",         label: "Rejalar",         icon: ClipboardList,   roles: [SA, A, "CAT_MANAGER", "CEO"] },
     ],
   },
   {
     label: "Sotuv",
     items: [
-      { href: "/sotuv/sotib-olish", label: "Sotib olish", icon: ShoppingCart, roles: ["ADMIN", "CAT_MANAGER"] },
+      { href: "/sotuv/sotib-olish", label: "Sotib olish", icon: ShoppingCart, roles: [SA, A, "CAT_MANAGER"] },
     ],
   },
   {
     label: "Hisobdan chiqarish",
     items: [
-      { href: "/chiqim",            label: "Chiqimlar",  icon: PackageMinus, roles: ["ADMIN", "CAT_MANAGER", "CEO"] },
-      { href: "/chiqim/statistika", label: "Statistika", icon: ChartPie,     roles: ["ADMIN", "CAT_MANAGER", "CEO"] },
-      { href: "/chiqim/vozvratlar", label: "Vozvratlar", icon: Recycle,      roles: ["ADMIN", "CAT_MANAGER", "CEO"] },
+      { href: "/chiqim",            label: "Chiqimlar",  icon: PackageMinus, roles: [SA, A, "CAT_MANAGER", "CEO"] },
+      { href: "/chiqim/statistika", label: "Statistika", icon: ChartPie,     roles: [SA, A, "CAT_MANAGER", "CEO"] },
+      { href: "/chiqim/vozvratlar", label: "Vozvratlar", icon: Recycle,      roles: [SA, A, "CAT_MANAGER", "CEO"] },
     ],
   },
   {
     label: "Baza",
     items: [
-      { href: "/baza/sotuv",         label: "Sotuv",          icon: Database,      roles: ["ADMIN"] },
-      { href: "/baza/metrika",       label: "Metrika & Tashrif", icon: BarChart2,  roles: ["ADMIN"] },
-      { href: "/iyerarxiya",         label: "Iyerarxiya",     icon: Tag,           roles: ["ADMIN"] },
-      { href: "/baza/taminotchilar", label: "Ta'minotchilar", icon: Truck,         roles: ["ADMIN"] },
-      { href: "/baza/moslanmagan",   label: "Moslanmagan",    icon: PackageSearch, roles: ["ADMIN"] },
+      { href: "/baza/sotuv",         label: "Sotuv",             icon: Database,      roles: [SA, A] },
+      { href: "/baza/metrika",       label: "Metrika & Tashrif", icon: BarChart2,     roles: [SA, A] },
+      { href: "/iyerarxiya",         label: "Iyerarxiya",        icon: Tag,           roles: [SA, A] },
+      { href: "/baza/taminotchilar", label: "Ta'minotchilar",    icon: Truck,         roles: [SA, A] },
+      { href: "/baza/moslanmagan",   label: "Moslanmagan",       icon: PackageSearch, roles: [SA, A] },
     ],
   },
   {
     label: "Tizim",
     items: [
-      { href: "/branches",          label: "Filiallar",        icon: Building2, roles: ["ADMIN"] },
-      { href: "/admin/upload",      label: "Fayllar",          icon: Upload,    adminOnly: true },
-      { href: "/admin/users",       label: "Foydalanuvchilar", icon: Users,     adminOnly: true },
-      { href: "/admin/sozlamalar",  label: "Sozlamalar",       icon: Settings,  adminOnly: true },
+      { href: "/branches",          label: "Filiallar",        icon: Building2, roles: [SA] },
+      { href: "/admin/upload",      label: "Fayllar",          icon: Upload,    roles: [SA] },
+      { href: "/admin/users",       label: "Foydalanuvchilar", icon: Users,     roles: [SA] },
+      { href: "/admin/sozlamalar",  label: "Sozlamalar",       icon: Settings,  roles: [SA] },
     ],
   },
 ];
@@ -161,7 +166,7 @@ function SidebarNav({
   const visibleGroups = NAV_GROUPS.map((g) => ({
     ...g,
     items: g.items.filter((i) => {
-      if (i.adminOnly && role !== "ADMIN") return false;
+      if (i.adminOnly && role !== "SYSTEM_ADMIN") return false;
       if (i.roles && !i.roles.includes(role)) return false;
       return true;
     }),
@@ -284,8 +289,10 @@ function SidebarNav({
           <div className="h-2 w-2 rounded-full shrink-0 bg-primary" />
           {!collapsed && (
             <span className="text-xs text-muted-foreground font-medium truncate">
-              {role === "ADMIN"
-                ? "Administrator"
+              {role === "SYSTEM_ADMIN"
+                ? "System Admin"
+                : role === "ADMIN"
+                ? "Admin (ko'rish)"
                 : role === "CAT_MANAGER"
                 ? "Kategoriya menejeri"
                 : role === "CEO"

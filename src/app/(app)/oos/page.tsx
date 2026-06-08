@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { canSeeAnalytics } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { getDefaultRange } from "@/lib/analytics";
@@ -54,7 +55,7 @@ export default async function OosPage({
   const session = await auth();
   if (!session) redirect("/login");
   const role = session.user.role;
-  if (role !== "ADMIN" && role !== "CAT_MANAGER" && role !== "CEO") redirect("/dashboard");
+  if (!canSeeAnalytics(role)) redirect("/dashboard");
 
   const sp = await searchParams;
   const view: View = sp.view === "low" || sp.view === "dead" ? sp.view : "oos";

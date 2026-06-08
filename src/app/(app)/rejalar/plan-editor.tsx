@@ -628,7 +628,7 @@ export function PlanEditor({
               <SelectContent>{YEARS.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
             </Select>
           </div>
-          {!isAdmin && <span className="self-end pb-1.5 text-xs italic text-muted-foreground">Ko'rish rejimi — faqat ADMIN tahrirlaydi</span>}
+          {!isAdmin && <span className="self-end pb-1.5 text-xs italic text-muted-foreground">Ko'rish rejimi — faqat System Admin tahrirlaydi</span>}
         </div>
       )}
 

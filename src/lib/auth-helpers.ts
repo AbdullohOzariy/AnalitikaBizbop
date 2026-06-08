@@ -8,9 +8,10 @@ export class AuthorizationError extends Error {
   }
 }
 
+// "requireAdmin" = to'liq admin (SYSTEM_ADMIN). Read-only ADMIN bu yerdan o'tmaydi.
 export async function requireAdmin() {
   const session = await auth();
-  if (!session?.user || session.user.role !== "ADMIN") {
+  if (!session?.user || session.user.role !== "SYSTEM_ADMIN") {
     throw new AuthorizationError();
   }
   return session.user;
@@ -43,7 +44,7 @@ export async function requireUser() {
 export async function requireCatManagerOrAdmin() {
   const session = await auth();
   const role = session?.user?.role;
-  if (!session?.user || (role !== "ADMIN" && role !== "CAT_MANAGER")) {
+  if (!session?.user || (role !== "SYSTEM_ADMIN" && role !== "CAT_MANAGER")) {
     throw new AuthorizationError();
   }
   return session.user;

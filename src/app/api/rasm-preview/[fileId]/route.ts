@@ -4,6 +4,7 @@
  */
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { canSeeAnalytics } from "@/lib/roles";
 import { telegramFileUrl } from "@/lib/spisaniya/bot";
 
 export const runtime = "nodejs";
@@ -15,7 +16,7 @@ export async function GET(
 ) {
   const session = await auth();
   const role = session?.user?.role;
-  if (!session || (role !== "ADMIN" && role !== "CAT_MANAGER" && role !== "CEO")) {
+  if (!session || (!canSeeAnalytics(role))) {
     return new NextResponse("Ruxsat yo'q", { status: 403 });
   }
 

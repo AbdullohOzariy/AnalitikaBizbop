@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import * as XLSX from "xlsx";
 import { auth } from "@/auth";
+import { canSeeAnalytics } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { getDefaultRange } from "@/lib/analytics";
@@ -29,7 +30,7 @@ export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user) return new Response("Unauthorized", { status: 401 });
   const role = session.user.role;
-  if (role !== "ADMIN" && role !== "CAT_MANAGER" && role !== "CEO") return new Response("Forbidden", { status: 403 });
+  if (!canSeeAnalytics(role)) return new Response("Forbidden", { status: 403 });
 
   const sp = req.nextUrl.searchParams;
   const def = await getDefaultRange();

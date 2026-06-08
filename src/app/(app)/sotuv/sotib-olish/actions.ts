@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireCatManagerOrAdmin } from "@/lib/auth-helpers";
+import { isAdminTier, isSystemAdmin } from "@/lib/roles";
 import { actionError } from "@/lib/action-error";
 
 export type OrderItemInput = { productId: number; quantity: number; price: number };
@@ -18,9 +19,9 @@ export type BuilderItem = {
   suggested: number;
 };
 
-/** Joriy foydalanuvchi qamrovidagi kategoriya id'lari (ADMIN — barchasi = null). */
+/** Joriy foydalanuvchi qamrovidagi kategoriya id'lari (admin — barchasi = null). */
 async function scopeCategoryIds(userId: number, role: string): Promise<number[] | null> {
-  if (role === "ADMIN") return null;
+  if (isAdminTier(role)) return null;
   const rows = await prisma.categoryManager.findMany({ where: { userId }, select: { categoryId: true } });
   return rows.map((r) => r.categoryId);
 }
@@ -95,7 +96,7 @@ type ActorUser = { id: string | number; role: string };
 
 /** CAT_MANAGER faqat o'z zakaziga ta'sir qilsin — egalik (IDOR) tekshiruvi. */
 function ownsOrder(user: ActorUser, createdById: number): boolean {
-  return user.role === "ADMIN" || createdById === Number(user.id);
+  return isSystemAdmin(user.role) || createdById === Number(user.id);
 }
 
 /** Mahsulotlar foydalanuvchi qamrovida (kategoriya menejeri scope) ekanini tekshiradi. */

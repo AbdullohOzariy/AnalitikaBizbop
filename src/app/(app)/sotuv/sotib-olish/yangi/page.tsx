@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export default async function YangiZakazPage() {
   const session = await auth();
   const role = session?.user?.role;
-  if (!session?.user || (role !== "ADMIN" && role !== "CAT_MANAGER")) redirect("/dashboard-v2");
+  if (!session?.user || (role !== "SYSTEM_ADMIN" && role !== "CAT_MANAGER")) redirect("/dashboard-v2");
 
   return (
     <div className="space-y-5">

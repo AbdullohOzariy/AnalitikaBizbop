@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { unstable_cache } from "next/cache";
 import { auth } from "@/auth";
+import { isAdminTier } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { getDefaultRange } from "@/lib/analytics";
@@ -115,7 +116,7 @@ export default async function BazaSotuvPage({
   const session = await auth();
   if (!session) redirect("/login");
   const role = session.user.role;
-  if (role !== "ADMIN") redirect("/dashboard-v2");
+  if (!isAdminTier(role)) redirect("/dashboard-v2");
 
   const sp = await searchParams;
   const page = Math.max(1, parseInt(sp.page ?? "1") || 1);
