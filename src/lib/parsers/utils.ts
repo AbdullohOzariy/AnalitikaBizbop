@@ -25,6 +25,21 @@ export function parseAmount(raw: unknown): number | null {
 }
 
 /**
+ * 1C mahsulot/kategoriya kodi → butun son.
+ * 1C eksportida kod 1000 dan katta bo'lsa probelli MATN bo'ladi ("50 911"),
+ * kichik bo'lsa raqam (299). Ikkalasini ham qabul qilamiz.
+ * "Итого" yoki raqam bo'lmagan matn → null.
+ */
+export function parseCode(raw: unknown): number | null {
+  if (typeof raw === "number") return Number.isInteger(raw) && raw > 0 ? raw : null;
+  if (typeof raw !== "string") return null;
+  const digits = raw.replace(/\s/g, ""); // \s NBSP ( ) va tor-NBSP ( ) ni ham qamraydi
+  if (!/^\d+$/.test(digits)) return null;
+  const n = parseInt(digits, 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/**
  * "DD.MM.YYYY" yoki "DD/MM/YYYY" yoki Date object → Date (UTC, kun boshi)
  */
 export function parseDate(raw: unknown): Date | null {

@@ -1,6 +1,7 @@
 import * as XLSX from "xlsx";
 import {
   parseAmount,
+  parseCode,
   parseRussianPeriod,
   normalizeName,
 } from "./utils";
@@ -424,13 +425,16 @@ function parseProductLevel(
   for (let i = dataStartIdx; i < rows.length; i++) {
     const r = rows[i];
     if (!r) continue;
-    const code = r[0];
+    const rawCode = r[0];
     const name = r[1];
-    if (typeof code === "string" && code.trim().toLowerCase() === "итого") {
+    if (typeof rawCode === "string" && rawCode.trim().toLowerCase() === "итого") {
       totalRow = r;
       continue;
     }
-    if (typeof code !== "number" || typeof name !== "string") continue;
+    // 1C kodi 1000 dan katta bo'lsa probelli matn ("50 911") — parseCode ikkalasini ham oladi.
+    // (Oldin typeof !== "number" tashlanardi → katta kodli SKUlar yo'qolardi.)
+    const code = parseCode(rawCode);
+    if (code == null || typeof name !== "string") continue;
     // Nomdagi ketma-ket/ortiqcha bo'shliqlar bittaga (1C eksporti shovqini) — toza nom.
     data.push({ r, code, name: name.replace(/\s+/g, " ").trim(), total: totalOf(r) });
   }
