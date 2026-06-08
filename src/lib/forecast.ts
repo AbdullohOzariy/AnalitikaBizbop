@@ -54,8 +54,11 @@ async function fetchGroupDailyHistory(
       AND cs."periodStart" <= g.s::date
       AND cs."periodEnd"   >= g.s::date
       AND cs."categoryId" IN (
-        SELECT id FROM "Category"
-        WHERE "groupId" = ${groupId} AND "parentId" IS NULL AND "sortOrder" > 0
+        -- CategorySales SUBKAT darajasida — subkatni ota-kat orqali guruhga bog'laymiz
+        -- (oldin faqat top-kat'ga join qilinardi → history bo'sh → uniform prognoz).
+        SELECT c.id FROM "Category" c
+        LEFT JOIN "Category" par ON par.id = c."parentId"
+        WHERE COALESCE(par."groupId", c."groupId") = ${groupId}
       )
     GROUP BY g.s
     ORDER BY g.s
