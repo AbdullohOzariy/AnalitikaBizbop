@@ -1,10 +1,13 @@
 /**
- * AI mahsulot kategoriyalash (Claude Haiku) — bizbop yozuvlari uchun.
- * Yozuv saqlangandan keyin FONDA (await qilinmasdan) chaqiriladi: xato bo'lsa
- * faqat log qiladi, yozuvni buzmaydi. ANTHROPIC_API_KEY yo'q bo'lsa jim o'chadi.
+ * AI mahsulot kategoriyalash (Claude) — bizbop yozuvlari uchun.
+ * Yangi yozuv saqlangandan keyin FONDA chaqiriladi: xato bo'lsa faqat log qiladi.
+ *
+ * MUHIM: AI yangi kategoriya YARATMAYDI — har mahsulotni mavjud Iyerarxiya
+ * SUBKATEGORIYALARIDAN biriga biriktiradi (yoki mos kelmasa — qoldiradi).
  */
 import Anthropic from "@anthropic-ai/sdk";
-import { kategoriyaNomlari, yozuvKategoriyaSaqla, kategoriyasizYozuvlar } from "./db";
+import { prisma } from "@/lib/prisma";
+import { yozuvKategoriyaSet, kategoriyasizYozuvlar } from "./db";
 
 const MODEL = "claude-haiku-4-5";
 
@@ -16,64 +19,62 @@ function getClient(): Anthropic | null {
   return _client;
 }
 
-const SYSTEM_PROMPT = `Sen oziq-ovqat va chakana savdo do'koni uchun mahsulotlarni
-kategoriyalashtiruvchi yordamchisan. Senga tovar nomi va mavjud kategoriyalar ro'yxati
-beriladi. Vazifang — tovarga eng mos kategoriyani aniqlash.
+// ─── Subkat ro'yxati (dublikat nom → ota-kategoriya bilan farqlanadi) ──────────
+type SubOpt = { id: number; label: string; group: string; cat: string; name: string };
+let _subCache: { at: number; data: SubOpt[] } | null = null;
 
-Qoidalar:
-- Agar mavjud kategoriyalardan biri tovarga mos kelsa, ANIQ o'sha nomni qaytar (yangi yaratma).
-- Agar hech qaysi mos kelmasa, qisqa (1-2 so'z), umumiy va o'zbek tilidagi yangi kategoriya yarat.
-  Masalan: "Sut mahsulotlari", "Sabzavotlar", "Mevalar", "Ichimliklar", "Go'sht mahsulotlari",
-  "Non va un mahsulotlari", "Shirinliklar", "Bakaleya", "Tozalik vositalari".
-- Kategoriya nomini Bosh harf bilan boshla. Tovar markasi yoki o'lchamini kategoriya qilma.
-- Kategoriya nomi 100 belgidan oshmasin.
-- Faqat so'ralgan JSON formatida javob ber.`;
-
-const SCHEMA = {
-  type: "object" as const,
-  properties: {
-    kategoriya: { type: "string", description: "Tanlangan yoki yangi yaratilgan kategoriya nomi" },
-  },
-  required: ["kategoriya"],
-  additionalProperties: false,
-};
-
-async function aiKategoriyaAniqla(
-  client: Anthropic,
-  tovar: string,
-  mavjud: string[]
-): Promise<string> {
-  const royxat = mavjud.length ? mavjud.map((k) => `- ${k}`).join("\n") : "(hozircha kategoriya yo'q)";
-
-  // output_config (json_schema) API'da qo'llanadi, lekin SDK turlarida hali yo'q —
-  // shuning uchun params'ni kengaytirib cast qilamiz.
-  const params = {
-    model: MODEL,
-    max_tokens: 256,
-    system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
-    output_config: { format: { type: "json_schema", schema: SCHEMA } },
-    messages: [
-      {
-        role: "user",
-        content:
-          `Mavjud kategoriyalar:\n${royxat}\n\n` +
-          `Tovar nomi: "${tovar}"\n\n` +
-          `Shu tovar uchun eng mos kategoriyani tanla yoki yangi yarat.`,
-      },
-    ],
-  };
-  const msg = await client.messages.create(
-    params as unknown as Anthropic.MessageCreateParamsNonStreaming
-  );
-
-  const block = msg.content.find((b) => b.type === "text");
-  const matn = block && "text" in block ? block.text : "{}";
-  const kat = (JSON.parse(matn).kategoriya as string | undefined)?.trim();
-  if (!kat) throw new Error("AI bo'sh kategoriya qaytardi");
-  return kat.slice(0, 100);
+async function loadSubcats(): Promise<SubOpt[]> {
+  if (_subCache && Date.now() - _subCache.at < 5 * 60_000) return _subCache.data;
+  const rows = await prisma.category.findMany({
+    where: { parentId: { not: null } },
+    select: {
+      id: true,
+      name: true,
+      parent: { select: { name: true, group: { select: { name: true } } } },
+    },
+  });
+  const cnt = new Map<string, number>();
+  for (const r of rows) cnt.set(r.name, (cnt.get(r.name) ?? 0) + 1);
+  const data: SubOpt[] = rows.map((r) => {
+    const cat = r.parent?.name ?? "-";
+    const dup = (cnt.get(r.name) ?? 0) > 1;
+    return {
+      id: r.id,
+      name: r.name,
+      cat,
+      group: r.parent?.group?.name ?? "-",
+      label: (dup ? `${r.name} (${cat})` : r.name).slice(0, 100),
+    };
+  });
+  _subCache = { at: Date.now(), data };
+  return data;
 }
 
-/** Bitta yozuvni kategoriyalaydi. Xato bo'lsa faqat log (yozuvni buzmaydi). */
+function buildSystem(subs: SubOpt[]): string {
+  const list = subs.map((s) => `${s.id}. ${s.group} › ${s.cat} › ${s.name}`).join("\n");
+  return (
+    "Sen do'kon chiqim (hisobdan chiqarilgan) mahsulotlarini mavjud SUBKATEGORIYALARGA " +
+    "biriktiruvchisisan. Mahsulot nomiga eng mos subkategoriya id'sini tanla. " +
+    "YANGI kategoriya YARATMA — faqat ro'yxatdagi id. Mos kelmasa id=null. Faqat JSON.\n\n" +
+    "Subkategoriyalar:\n" + list
+  );
+}
+
+async function aiAssign(client: Anthropic, tovar: string, subs: SubOpt[]): Promise<number | null> {
+  const msg = await client.messages.create({
+    model: MODEL,
+    max_tokens: 60,
+    system: [{ type: "text", text: buildSystem(subs), cache_control: { type: "ephemeral" } }],
+    messages: [{ role: "user", content: `Mahsulot: "${tovar}"\n\nJSON: {"id": subkat_id_yoki_null}` }],
+  } as unknown as Anthropic.MessageCreateParamsNonStreaming);
+  const block = msg.content.find((b) => b.type === "text");
+  const text = block && "text" in block ? block.text : "{}";
+  const json = text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1);
+  const id = JSON.parse(json).id;
+  return typeof id === "number" && subs.some((s) => s.id === id) ? id : null;
+}
+
+/** Bitta yozuvni mavjud subkatga biriktiradi. Xato bo'lsa faqat log. */
 export async function kategoriyalashtirish(yozuvId: number, tovar: string): Promise<void> {
   const client = getClient();
   if (!client) {
@@ -81,10 +82,16 @@ export async function kategoriyalashtirish(yozuvId: number, tovar: string): Prom
     return;
   }
   try {
-    const mavjud = await kategoriyaNomlari();
-    const kategoriya = await aiKategoriyaAniqla(client, tovar, mavjud);
-    await yozuvKategoriyaSaqla(yozuvId, kategoriya);
-    console.log(`[kategoriya] Yozuv #${yozuvId} "${tovar}" → "${kategoriya}"`);
+    const subs = await loadSubcats();
+    if (subs.length === 0) return;
+    const id = await aiAssign(client, tovar, subs);
+    if (id == null) {
+      console.log(`[kategoriya] Yozuv #${yozuvId} "${tovar}" → mos subkat topilmadi`);
+      return;
+    }
+    const label = subs.find((s) => s.id === id)!.label;
+    await yozuvKategoriyaSet(yozuvId, label);
+    console.log(`[kategoriya] Yozuv #${yozuvId} "${tovar}" → "${label}"`);
   } catch (err) {
     console.error(`[kategoriya] Yozuv #${yozuvId} xato:`, err instanceof Error ? err.message : err);
   }

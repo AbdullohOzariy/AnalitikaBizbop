@@ -337,6 +337,12 @@ export async function kategoriyaNomlari(): Promise<string[]> {
   }
 }
 
+/** Yozuvga MAVJUD subkat label'ini yozadi (yangi kategoriya YARATMAYDI). */
+export async function yozuvKategoriyaSet(yozuvId: number, kategoriya: string): Promise<void> {
+  const p = requirePool();
+  await p.query(`UPDATE yozuvlar SET kategoriya=$1 WHERE id=$2`, [kategoriya, yozuvId]);
+}
+
 /** Kategoriyani yozuvga yozadi (mavjud bo'lmasa kategoriyalar jadvaliga qo'shadi) — atomik. */
 export async function yozuvKategoriyaSaqla(yozuvId: number, kategoriya: string): Promise<void> {
   const p = requirePool();
