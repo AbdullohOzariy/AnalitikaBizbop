@@ -41,20 +41,19 @@ export default async function RejalarPage({
   // Iyerarxiya: bo'lim → kategoriya → subkategoriya
   const rawGroups = await prisma.categoryGroup.findMany({
     orderBy: { sortOrder: "asc" },
-    include: {
+    select: {
+      id: true,
+      name: true,
       categories: {
         where: { parentId: null },
         orderBy: { sortOrder: "asc" },
-        include: {
+        select: {
+          id: true,
+          name: true,
           children: {
             orderBy: { sortOrder: "asc" },
             select: { id: true, name: true },
           },
-        },
-        select: {
-          id: true,
-          name: true,
-          children: true,
         },
       },
     },
