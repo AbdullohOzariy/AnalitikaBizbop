@@ -47,23 +47,17 @@ export function ReportTable({
       const catSales = r.categories.reduce((s, c) => s + c.sales, 0);
       const catCost  = r.categories.reduce((s, c) => s + c.cost, 0);
       return {
-        sales:    a.sales    + catSales,
-        cost:     a.cost     + catCost,
-        receipts: a.receipts + r.receipts,
-        visits:   a.visits   + r.visits,
-        // weighted avgItems
-        itemsSum: a.itemsSum + r.avgItemsPerReceipt * r.receipts,
+        sales:  a.sales  + catSales,
+        cost:   a.cost   + catCost,
+        visits: a.visits + r.visits,
       };
     },
-    { sales: 0, cost: 0, receipts: 0, visits: 0, itemsSum: 0 }
+    { sales: 0, cost: 0, visits: 0 }
   );
 
-  const totalMarja   = hasCostAny && total.sales > 0
+  const totalMarja = hasCostAny && total.sales > 0
     ? ((total.sales - total.cost) / total.sales) * 100
     : null;
-  const totalAvg     = total.receipts > 0 ? total.sales / total.receipts : 0;
-  const totalAvgItems = total.receipts > 0 ? total.itemsSum / total.receipts : 0;
-  const totalConv    = total.visits > 0 ? (total.receipts / total.visits) * 100 : 0;
 
   return (
     <div className="overflow-x-auto">
@@ -80,11 +74,7 @@ export function ReportTable({
                 <TableHead className="text-right">Marja %</TableHead>
               </>
             )}
-            <TableHead className="text-right">Cheklar</TableHead>
-            <TableHead className="text-right">O'rt. chek</TableHead>
-            <TableHead className="text-right">O'rt. tovar</TableHead>
-            <TableHead className="text-right">Tashriflar</TableHead>
-            <TableHead className="text-right pr-5">Konv. %</TableHead>
+            <TableHead className="text-right pr-5">Tashriflar</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -123,20 +113,8 @@ export function ReportTable({
                       </TableCell>
                     </>
                   )}
-                  <TableCell className="text-right tabular-nums">
-                    {r.receipts > 0 ? formatNumber(r.receipts) : "—"}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {r.avgReceipt > 0 ? formatUZS(r.avgReceipt) : "—"}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {r.avgItemsPerReceipt > 0 ? r.avgItemsPerReceipt.toFixed(1) : "—"}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {r.visits > 0 ? formatNumber(r.visits) : "—"}
-                  </TableCell>
                   <TableCell className="text-right tabular-nums pr-5">
-                    {r.visits > 0 ? pct(r.conversion) : "—"}
+                    {r.visits > 0 ? formatNumber(r.visits) : "—"}
                   </TableCell>
                 </TableRow>
 
@@ -170,8 +148,8 @@ export function ReportTable({
                             </TableCell>
                           </>
                         )}
-                        {/* Cheklar, O'rt. chek, O'rt. tovar, Tashriflar, Konv — kategoriya darajasida yo'q */}
-                        <TableCell colSpan={5} className="pr-5" />
+                        {/* Tashriflar — kategoriya darajasida yo'q */}
+                        <TableCell className="pr-5" />
                       </motion.tr>
                     ))}
                 </AnimatePresence>
@@ -195,20 +173,8 @@ export function ReportTable({
                 </TableCell>
               </>
             )}
-            <TableCell className="text-right tabular-nums">
-              {total.receipts > 0 ? formatNumber(total.receipts) : "—"}
-            </TableCell>
-            <TableCell className="text-right tabular-nums">
-              {totalAvg > 0 ? formatUZS(totalAvg) : "—"}
-            </TableCell>
-            <TableCell className="text-right tabular-nums">
-              {totalAvgItems > 0 ? totalAvgItems.toFixed(1) : "—"}
-            </TableCell>
-            <TableCell className="text-right tabular-nums">
-              {total.visits > 0 ? formatNumber(total.visits) : "—"}
-            </TableCell>
             <TableCell className="text-right tabular-nums pr-5">
-              {total.visits > 0 ? pct(totalConv) : "—"}
+              {total.visits > 0 ? formatNumber(total.visits) : "—"}
             </TableCell>
           </TableRow>
         </TableBody>

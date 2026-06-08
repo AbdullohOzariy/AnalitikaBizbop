@@ -5,7 +5,6 @@ import { prisma } from "@/lib/prisma";
 import {
   computeKPI,
   dailySalesSeries,
-  dailyReceiptsSeries,
   branchShare,
   topCategories,
   branchPerformance,
@@ -14,14 +13,14 @@ import {
 } from "@/lib/analytics";
 import { dailyForecastSeries } from "@/lib/forecast";
 import { isAdminTier } from "@/lib/roles";
-import { formatUZS, formatNumber, formatPercent } from "@/lib/format";
+import { formatUZS, formatNumber } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { ExpandableCard } from "@/components/ui/expandable-card";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  ShoppingBag, Users, Receipt, TrendingUp, ArrowRight, Download, BarChart3, LayoutDashboard,
+  ShoppingBag, Users, ArrowRight, Download, BarChart3, LayoutDashboard,
 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -29,7 +28,7 @@ import { PageHeader } from "@/components/common/page";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PeriodFilter } from "@/components/common/period-filter";
 import {
-  DailySalesChart, DailyReceiptsChart, BranchShareChart, TopCategoriesChart,
+  DailySalesChart, BranchShareChart, TopCategoriesChart,
 } from "@/components/charts";
 import { StaggerList, StaggerItem } from "@/components/motion";
 
@@ -84,8 +83,8 @@ const CARD_PB  = "pb-4 sm:pb-6 lg:pb-8";
 
 function KpiSkeleton() {
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
-      {Array.from({ length: 5 }).map((_, i) => (
+    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
+      {Array.from({ length: 3 }).map((_, i) => (
         <div key={i} className="rounded-2xl bg-card ring-1 ring-foreground/10 p-4 sm:p-5 space-y-3">
           <div className="flex items-start justify-between">
             <Skeleton className="h-4 w-24" />
@@ -134,7 +133,7 @@ async function KpiSection({
     compareRange ? computeKPI(compareRange, branchId) : Promise.resolve<KPI | null>(null),
   ]);
 
-  const hasAnyData = kpi.totalSales > 0 || kpi.totalReceipts > 0 || kpi.totalVisits > 0;
+  const hasAnyData = kpi.totalSales > 0 || kpi.totalVisits > 0;
 
   if (!hasAnyData) {
     return (
@@ -170,26 +169,14 @@ async function KpiSection({
     },
     {
       icon: <Users className="h-5 w-5" />, label: "Tashriflar Soni",
-      primary: formatNumber(kpi.totalVisits), secondary: `${formatNumber(kpi.totalReceipts)} chek`,
+      primary: formatNumber(kpi.totalVisits), secondary: "tashriflar",
       curr: kpi.totalVisits, prev: kpiPrev?.totalVisits ?? null,
       iconColor: "bg-amber-400/15 text-amber-600", higherIsBetter: true,
-    },
-    {
-      icon: <Receipt className="h-5 w-5" />, label: "O'rtacha Chek",
-      primary: formatUZS(kpi.avgReceipt, { compact: true }), secondary: formatUZS(kpi.avgReceipt),
-      curr: kpi.avgReceipt, prev: kpiPrev?.avgReceipt ?? null,
-      iconColor: "bg-orange-500/10 text-orange-600", higherIsBetter: true,
-    },
-    {
-      icon: <TrendingUp className="h-5 w-5" />, label: "Konversiya",
-      primary: formatPercent(kpi.conversion), secondary: "cheklar / tashriflar",
-      curr: kpi.conversion, prev: kpiPrev?.conversion ?? null,
-      iconColor: "bg-emerald-500/10 text-emerald-600", higherIsBetter: true,
     },
   ];
 
   return (
-    <StaggerList className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+    <StaggerList className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
       {KPIS.map((k) => {
         const d = k.prev != null ? calcDelta(k.curr, k.prev) : null;
         return (
@@ -221,25 +208,21 @@ async function ChartsSection({
 
   const [
     dailySales,
-    dailyReceipts,
     share,
     top,
     perf,
     forecast,
     prevDailySales,
-    prevDailyReceipts,
     prevShare,
     prevTop,
     prevPerf,
   ] = await Promise.all([
     dailySalesSeries(range, branchId),
-    dailyReceiptsSeries(range, branchId),
     branchShare(range),
     topCategories(range, branchId, 18),
     branchPerformance(range),
     dailyForecastSeries(range, branchId),
     compareRange ? dailySalesSeries(compareRange, branchId) : Promise.resolve(null),
-    compareRange ? dailyReceiptsSeries(compareRange, branchId) : Promise.resolve(null),
     compareRange ? branchShare(compareRange) : Promise.resolve(null),
     compareRange ? topCategories(compareRange, branchId, 18) : Promise.resolve(null),
     compareRange ? branchPerformance(compareRange) : Promise.resolve(null),
@@ -309,24 +292,6 @@ async function ChartsSection({
       <ExpandableCard
         title={
           <ChartTitle
-            title="Kunlik Chek Soni Dinamikasi"
-            delta={calcDelta(
-              dailyReceipts.reduce((sum, r) => sum + r.value, 0),
-              sumValues(prevDailyReceipts) ?? 0
-            )}
-            compareLabel={compareLabel}
-          />
-        }
-        className="rounded-2xl border-none shadow-sm bg-card overflow-hidden"
-        headerClassName={`${CARD_PT} ${CARD_PAD} pb-3`}
-        contentClassName={`${CARD_PAD} ${CARD_PB}`}
-      >
-        <DailyReceiptsChart receipts={dailyReceipts} />
-      </ExpandableCard>
-
-      <ExpandableCard
-        title={
-          <ChartTitle
             title="Top Kategoriyalar"
             delta={calcDelta(
               top.reduce((sum, r) => sum + r.fact, 0),
@@ -363,10 +328,7 @@ async function ChartsSection({
               <TableRow className="hover:bg-transparent border-b border-border/60">
                 <TableHead className={`${CARD_PAD} text-xs font-medium text-muted-foreground`}>Filial</TableHead>
                 <TableHead className="text-xs font-medium text-muted-foreground text-right">Savdo</TableHead>
-                <TableHead className="text-xs font-medium text-muted-foreground text-right">Tashriflar</TableHead>
-                <TableHead className="text-xs font-medium text-muted-foreground text-right">Cheklar</TableHead>
-                <TableHead className="text-xs font-medium text-muted-foreground text-right">O&apos;rt. chek</TableHead>
-                <TableHead className={`${CARD_PAD} text-xs font-medium text-muted-foreground text-right`}>Konversiya</TableHead>
+                <TableHead className={`${CARD_PAD} text-xs font-medium text-muted-foreground text-right`}>Tashriflar</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -382,12 +344,7 @@ async function ChartsSection({
                     </Link>
                   </TableCell>
                   <TableCell className="text-right tabular-nums text-sm">{formatUZS(r.sales, { compact: true })}</TableCell>
-                  <TableCell className="text-right tabular-nums text-sm">{formatNumber(r.visits)}</TableCell>
-                  <TableCell className="text-right tabular-nums text-sm">{formatNumber(r.receipts)}</TableCell>
-                  <TableCell className="text-right tabular-nums text-sm">{formatUZS(r.avgReceipt, { compact: true })}</TableCell>
-                  <TableCell className={`${CARD_PAD} text-right tabular-nums text-sm text-muted-foreground`}>
-                    {formatPercent(r.conversion)}
-                  </TableCell>
+                  <TableCell className={`${CARD_PAD} text-right tabular-nums text-sm`}>{formatNumber(r.visits)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

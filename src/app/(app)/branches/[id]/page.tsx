@@ -5,12 +5,11 @@ import { prisma } from "@/lib/prisma";
 import {
   computeKPI,
   dailySalesSeries,
-  dailyReceiptsSeries,
   dailyVisitsSeries,
   topCategories,
   getDefaultRange,
 } from "@/lib/analytics";
-import { formatUZS, formatNumber, formatPercent } from "@/lib/format";
+import { formatUZS, formatNumber } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -21,7 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, ShoppingBag, Users, Receipt, TrendingUp } from "lucide-react";
+import { ArrowLeft, ShoppingBag, Users } from "lucide-react";
 import { PeriodFilter } from "@/components/common/period-filter";
 import {
   DailyDynamicsChart,
@@ -62,10 +61,9 @@ export default async function BranchDetailPage({
   const range = { start, end };
 
   const branches = await prisma.branch.findMany({ orderBy: { sortOrder: "asc" } });
-  const [kpi, dailySales, dailyReceipts, dailyVisits, top] = await Promise.all([
+  const [kpi, dailySales, dailyVisits, top] = await Promise.all([
     computeKPI(range, branchId),
     dailySalesSeries(range, branchId),
-    dailyReceiptsSeries(range, branchId),
     dailyVisitsSeries(range, branchId),
     topCategories(range, branchId, 12),
   ]);
@@ -95,7 +93,7 @@ export default async function BranchDetailPage({
         branches={branches}
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <KpiCard
           icon={<ShoppingBag className="h-5 w-5" />}
           label="Savdo"
@@ -109,19 +107,6 @@ export default async function BranchDetailPage({
           primary={formatNumber(kpi.totalVisits)}
           accent="orange"
         />
-        <KpiCard
-          icon={<Receipt className="h-5 w-5" />}
-          label="Cheklar / O'rt.chek"
-          primary={formatNumber(kpi.totalReceipts)}
-          secondary={`O'rt: ${formatUZS(kpi.avgReceipt)} so'm`}
-          accent="purple"
-        />
-        <KpiCard
-          icon={<TrendingUp className="h-5 w-5" />}
-          label="Konversiya"
-          primary={formatPercent(kpi.conversion)}
-          accent="cyan"
-        />
       </div>
 
       <div className="grid grid-cols-1 gap-4">
@@ -130,7 +115,7 @@ export default async function BranchDetailPage({
             <CardTitle>Kunlik dinamika</CardTitle>
           </CardHeader>
           <CardContent>
-            <DailyDynamicsChart sales={dailySales} receipts={dailyReceipts} />
+            <DailyDynamicsChart sales={dailySales} receipts={[]} />
           </CardContent>
         </Card>
 

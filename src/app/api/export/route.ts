@@ -7,7 +7,6 @@ import {
   branchPerformance,
   topCategories,
   dailySalesSeries,
-  dailyReceiptsSeries,
   dailyVisitsSeries,
   getDefaultRange,
 } from "@/lib/analytics";
@@ -31,12 +30,11 @@ export async function GET(req: NextRequest) {
   const branchId = sp.get("branchId") ? Number(sp.get("branchId")) : undefined;
   const range = { start, end };
 
-  const [kpi, perf, top, sales, receipts, visits] = await Promise.all([
+  const [kpi, perf, top, sales, visits] = await Promise.all([
     computeKPI(range, branchId),
     branchPerformance(range),
     topCategories(range, branchId, 18),
     dailySalesSeries(range, branchId),
-    dailyReceiptsSeries(range, branchId),
     dailyVisitsSeries(range, branchId),
   ]);
 
@@ -48,30 +46,14 @@ export async function GET(req: NextRequest) {
     [],
     ["Ko'rsatkich", "Qiymat"],
     ["Umumiy Savdo (UZS)", kpi.totalSales],
+    ["Marja (%)", kpi.marja ?? 0],
     ["Tashriflar Soni", kpi.totalVisits],
-    ["Cheklar Soni", kpi.totalReceipts],
-    ["O'rtacha Chek (UZS)", kpi.avgReceipt],
-    ["Konversiya (%)", kpi.conversion],
   ];
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(kpiRows), "KPI");
 
   // Filiallar Faoliyati
-  const perfHeader = [
-    "Filial",
-    "Savdo",
-    "Tashriflar",
-    "Cheklar",
-    "O'rtacha chek",
-    "Konversiya %",
-  ];
-  const perfRows = perf.map((r) => [
-    r.branchName,
-    r.sales,
-    r.visits,
-    r.receipts,
-    r.avgReceipt,
-    r.conversion,
-  ]);
+  const perfHeader = ["Filial", "Savdo", "Tashriflar"];
+  const perfRows = perf.map((r) => [r.branchName, r.sales, r.visits]);
   XLSX.utils.book_append_sheet(
     wb,
     XLSX.utils.aoa_to_sheet([perfHeader, ...perfRows]),
@@ -88,26 +70,21 @@ export async function GET(req: NextRequest) {
   );
 
   // Kunlik dinamika
-  const dailyHeader = ["Sana", "Savdo (UZS)", "Cheklar", "Tashriflar"];
-  const dateMap = new Map<string, { sales: number; receipts: number; visits: number }>();
+  const dailyHeader = ["Sana", "Savdo (UZS)", "Tashriflar"];
+  const dateMap = new Map<string, { sales: number; visits: number }>();
   for (const r of sales) {
-    const cur = dateMap.get(r.date) ?? { sales: 0, receipts: 0, visits: 0 };
+    const cur = dateMap.get(r.date) ?? { sales: 0, visits: 0 };
     cur.sales = r.value;
     dateMap.set(r.date, cur);
   }
-  for (const r of receipts) {
-    const cur = dateMap.get(r.date) ?? { sales: 0, receipts: 0, visits: 0 };
-    cur.receipts = r.value;
-    dateMap.set(r.date, cur);
-  }
   for (const r of visits) {
-    const cur = dateMap.get(r.date) ?? { sales: 0, receipts: 0, visits: 0 };
+    const cur = dateMap.get(r.date) ?? { sales: 0, visits: 0 };
     cur.visits = r.value;
     dateMap.set(r.date, cur);
   }
   const dailyRows = [...dateMap.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, v]) => [date, v.sales, v.receipts, v.visits]);
+    .map(([date, v]) => [date, v.sales, v.visits]);
   XLSX.utils.book_append_sheet(
     wb,
     XLSX.utils.aoa_to_sheet([dailyHeader, ...dailyRows]),
