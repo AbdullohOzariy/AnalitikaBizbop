@@ -81,6 +81,8 @@ model Branch {
   metrics       DailyMetrics[]
   visits        DailyVisits[]
   uploads       UploadedFile[]
+  salesPlans    SalesPlan[]
+  marginPlans   MarginPlan[]
 }
 
 model BranchAlias {
@@ -116,10 +118,12 @@ model Category {
   parent   Category?      @relation("CategoryParent", fields: [parentId], references: [id], onDelete: SetNull)
   children Category[]     @relation("CategoryParent")
 
-  aliases    CategoryAlias[]
-  sales      CategorySales[]
-  products   Product[]
-  managers   CategoryManager[]
+  aliases     CategoryAlias[]
+  sales       CategorySales[]
+  products    Product[]
+  managers    CategoryManager[]
+  salesPlans  SalesPlan[]
+  marginPlans MarginPlan[]
 
   @@index([parentId]) // scope filtrlari (subkat → ota-kategoriya) tezligi uchun
   @@index([groupId])
@@ -335,4 +339,36 @@ model ProductSales {
   @@index([branchId, periodStart, periodEnd])
   @@index([productId, periodStart, periodEnd])
   @@index([uploadedFileId])
+}
+
+// Oylik sotuv rejasi — subkategoriya × filial × yil/oy
+model SalesPlan {
+  id         Int      @id @default(autoincrement())
+  branchId   Int
+  categoryId Int
+  year       Int
+  month      Int      // 1–12
+  amount     Decimal  @default(0) @db.Decimal(18, 2)
+  updatedAt  DateTime @updatedAt
+
+  branch   Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([branchId, categoryId, year, month])
+  @@index([branchId, year, month])
+}
+
+// Marja rejasi — subkategoriya × filial (vaqtsiz, o'zgarganda yangilanadi)
+model MarginPlan {
+  id         Int      @id @default(autoincrement())
+  branchId   Int
+  categoryId Int
+  marginPct  Decimal  @default(0) @db.Decimal(6, 2)
+  updatedAt  DateTime @updatedAt
+
+  branch   Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([branchId, categoryId])
+  @@index([branchId])
 }

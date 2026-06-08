@@ -27,6 +27,7 @@ import {
   PackageSearch,
   ShoppingCart,
   Hourglass,
+  ClipboardList,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -98,6 +99,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/oos",          label: "OOS",          icon: PackageX,        roles: ["ADMIN", "CAT_MANAGER", "CEO"] },
       { href: "/stockday",     label: "Stockday",     icon: Hourglass,       roles: ["ADMIN", "CAT_MANAGER", "CEO"] },
       { href: "/report",       label: "Hisobot",      icon: Table2,          roles: ["ADMIN"] },
+      { href: "/rejalar",      label: "Rejalar",      icon: ClipboardList,   roles: ["ADMIN", "CAT_MANAGER", "CEO"] },
     ],
   },
   {
