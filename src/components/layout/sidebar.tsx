@@ -30,7 +30,7 @@ import {
   ClipboardList,
   Target,
   Wallet,
-  Link2,
+  Tags,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -119,9 +119,10 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "Hisobdan chiqarish",
     items: [
-      { href: "/chiqim",            label: "Chiqimlar",  icon: PackageMinus, roles: [SA, A, "CAT_MANAGER", "CEO"] },
-      { href: "/chiqim/statistika", label: "Statistika", icon: ChartPie,     roles: [SA, A, "CAT_MANAGER", "CEO"] },
-      { href: "/chiqim/vozvratlar", label: "Vozvratlar", icon: Recycle,      roles: [SA, A, "CAT_MANAGER", "CEO"] },
+      { href: "/chiqim",            label: "Chiqimlar",        icon: PackageMinus, roles: [SA, A, "CAT_MANAGER", "CEO"] },
+      { href: "/chiqim/statistika", label: "Statistika",       icon: ChartPie,     roles: [SA, A, "CAT_MANAGER", "CEO"] },
+      { href: "/chiqim/vozvratlar", label: "Vozvratlar",       icon: Recycle,      roles: [SA, A, "CAT_MANAGER", "CEO"] },
+      { href: "/chiqim/moslash",    label: "Kategoriya moslash", icon: Tags,       roles: [SA, A] },
     ],
   },
   {
@@ -132,7 +133,6 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/iyerarxiya",         label: "Iyerarxiya",        icon: Tag,           roles: [SA, A] },
       { href: "/baza/taminotchilar", label: "Ta'minotchilar",    icon: Truck,         roles: [SA, A] },
       { href: "/baza/moslanmagan",   label: "Moslanmagan",       icon: PackageSearch, roles: [SA, A] },
-      { href: "/baza/chiqim-kategoriya", label: "Chiqim kategoriya", icon: Link2,     roles: [SA, A] },
     ],
   },
   {

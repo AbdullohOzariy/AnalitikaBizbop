@@ -361,6 +361,26 @@ export async function yozuvKategoriyaSaqla(yozuvId: number, kategoriya: string):
 }
 
 /** Kategoriyasi yo'q yozuvlar (backfill uchun). */
+/** Kategoriya moslash sahifasi — kategoriyasiz yozuvlar (boy maydonlar) + jami. */
+export async function chiqimKatsiz(
+  limit: number
+): Promise<{ rows: { id: number; tovar: string; filial: string; summa: number; vaqt: string }[]; total: number }> {
+  const p = getPool();
+  if (!p) return { rows: [], total: 0 };
+  try {
+    const t = await p.query(`SELECT count(*)::int AS n FROM yozuvlar WHERE kategoriya IS NULL OR kategoriya=''`);
+    const { rows } = await p.query(
+      `SELECT id, tovar, filial, summa::float8 AS summa, vaqt::text AS vaqt
+       FROM yozuvlar WHERE kategoriya IS NULL OR kategoriya=''
+       ORDER BY vaqt DESC LIMIT $1`,
+      [limit]
+    );
+    return { rows: rows as { id: number; tovar: string; filial: string; summa: number; vaqt: string }[], total: (t.rows[0]?.n as number) ?? 0 };
+  } catch {
+    return { rows: [], total: 0 };
+  }
+}
+
 export async function kategoriyasizYozuvlar(limit: number): Promise<{ id: number; tovar: string }[]> {
   const p = getPool();
   if (!p) return [];

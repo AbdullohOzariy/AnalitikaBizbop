@@ -8,9 +8,6 @@ import {
   filialYangila,
   filialOchir,
   guruhChatIdSaqla,
-  kategoriyaQoshish,
-  kategoriyaYangila,
-  kategoriyaOchir,
   ruxsatQoshish,
   ruxsatToggle,
   ruxsatOchir,
@@ -83,34 +80,6 @@ export async function guruhSaqlaAction(chatId: string): Promise<Result> {
   try {
     await requireAdmin();
     await guruhChatIdSaqla(chatIdSchema.parse(chatId));
-    revalidatePath(RP);
-    return { ok: true };
-  } catch (err) { return xato(err); }
-}
-
-// ─── Kategoriyalar ──────────────────────────────────────────────────────────────
-export async function kategoriyaQoshishAction(nomi: string): Promise<Result> {
-  try {
-    await requireAdmin();
-    await kategoriyaQoshish(nomiSchema.parse(nomi));
-    revalidatePath(RP);
-    return { ok: true };
-  } catch (err) { return xato(err); }
-}
-
-export async function kategoriyaYangilaAction(id: number, nomi: string): Promise<Result> {
-  try {
-    await requireAdmin();
-    await kategoriyaYangila(z.coerce.number().int().positive().parse(id), nomiSchema.parse(nomi));
-    revalidatePath(RP);
-    return { ok: true };
-  } catch (err) { return xato(err); }
-}
-
-export async function kategoriyaOchirAction(id: number): Promise<Result> {
-  try {
-    await requireAdmin();
-    await kategoriyaOchir(z.coerce.number().int().positive().parse(id));
     revalidatePath(RP);
     return { ok: true };
   } catch (err) { return xato(err); }

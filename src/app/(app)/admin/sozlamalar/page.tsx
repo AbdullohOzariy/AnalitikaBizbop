@@ -3,15 +3,13 @@ import { auth } from "@/auth";
 import {
   botConfigured,
   filialarToliq,
-  kategoriyalarSoni,
   guruhChatIdOl,
   ruxsatList,
 } from "@/lib/spisaniya/db";
-import { Settings, WifiOff, Building2, Tag, Send, MessageSquare, Users } from "lucide-react";
+import { Settings, WifiOff, Building2, Send, MessageSquare, Users } from "lucide-react";
 import { PageHeader, SectionCard, EmptyState } from "@/components/common/page";
 import { GuruhEditor } from "./guruh-editor";
 import { FilialarEditor } from "./filialar-editor";
-import { KategoriyalarEditor } from "./kategoriyalar-editor";
 import { RuxsatEditor } from "./ruxsat-editor";
 
 export default async function SozlamalarPage() {
@@ -49,9 +47,8 @@ export default async function SozlamalarPage() {
 }
 
 async function SettingsBody() {
-  const [filialar, kategoriyalar, chatId, ruxsatlar] = await Promise.all([
+  const [filialar, chatId, ruxsatlar] = await Promise.all([
     filialarToliq(),
-    kategoriyalarSoni(),
     guruhChatIdOl(),
     ruxsatList(),
   ]);
@@ -74,23 +71,13 @@ async function SettingsBody() {
         <GuruhEditor initial={chatId} />
       </SectionCard>
 
-      <div className="grid gap-5 lg:grid-cols-2">
-        <SectionCard
-          title="Filiallar"
-          description={`${filialar.length} ta · guruh topiklariga ulash`}
-          actions={<Building2 className="h-4 w-4 text-muted-foreground" />}
-        >
-          <FilialarEditor filialar={filialar} />
-        </SectionCard>
-
-        <SectionCard
-          title="Kategoriyalar"
-          description={`${kategoriyalar.length} ta · AI avtomatik to'ldiradi`}
-          actions={<Tag className="h-4 w-4 text-muted-foreground" />}
-        >
-          <KategoriyalarEditor kategoriyalar={kategoriyalar} />
-        </SectionCard>
-      </div>
+      <SectionCard
+        title="Filiallar"
+        description={`${filialar.length} ta · guruh topiklariga ulash`}
+        actions={<Building2 className="h-4 w-4 text-muted-foreground" />}
+      >
+        <FilialarEditor filialar={filialar} />
+      </SectionCard>
     </div>
   );
 }

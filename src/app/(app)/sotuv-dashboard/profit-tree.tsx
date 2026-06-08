@@ -99,7 +99,7 @@ export function ProfitTree({ tree }: { tree: ProfitTree }) {
       {tree.unmappedWriteoff > 0 && (
         <div className="border-t border-border bg-amber-500/[0.06] px-3 py-2 text-xs text-muted-foreground">
           ⚠ Bog&apos;lanmagan chiqim: <span className="font-semibold text-foreground">−{money(tree.unmappedWriteoff)}</span> — sof foydaga kiritilmadi.{" "}
-          <a href="/baza/chiqim-kategoriya" className="underline underline-offset-2">Chiqim kategoriya</a> bo&apos;limidan bog&apos;lang.
+          <a href="/chiqim/moslash" className="underline underline-offset-2">Kategoriya moslash</a> bo&apos;limidan moslang.
         </div>
       )}
     </div>
