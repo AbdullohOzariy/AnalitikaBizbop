@@ -1,70 +1,83 @@
 "use client";
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { useState } from "react";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
-const MONTHS = [
-  "Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun",
-  "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr",
+function ymd(d: Date) { return d.toISOString().slice(0, 10); }
+const PRESETS: { key: string; label: string; range: () => { start: string; end: string } }[] = [
+  { key: "today",     label: "Bugun",     range: () => { const t = new Date(); t.setUTCHours(0,0,0,0); return { start: ymd(t), end: ymd(t) }; } },
+  { key: "yesterday", label: "Kecha",     range: () => { const t = new Date(); t.setUTCHours(0,0,0,0); const y = new Date(t.getTime()-86400000); return { start: ymd(y), end: ymd(y) }; } },
+  { key: "last7",     label: "7 kun",     range: () => { const e = new Date(); e.setUTCHours(0,0,0,0); const s = new Date(e.getTime()-6*86400000); return { start: ymd(s), end: ymd(e) }; } },
+  { key: "thisMonth", label: "Joriy oy",  range: () => { const n = new Date(); return { start: ymd(new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), 1))), end: ymd(new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth()+1, 0))) }; } },
+  { key: "lastMonth", label: "O'tgan oy", range: () => { const n = new Date(); return { start: ymd(new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth()-1, 1))), end: ymd(new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), 0))) }; } },
 ];
-const CUR_YEAR = new Date().getFullYear();
-const YEARS = [CUR_YEAR - 1, CUR_YEAR, CUR_YEAR + 1];
 
 export function SotuvFilter({
-  branches, year, month, branchId,
+  branches, start, end, branchId,
 }: {
   branches: { id: number; name: string }[];
-  year: number;
-  month: number;
+  start: string;
+  end: string;
   branchId?: number;
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const [s, setS] = useState(start);
+  const [e, setE] = useState(end);
 
   const nav = (changes: Record<string, string>) => {
     const p = new URLSearchParams(searchParams.toString());
-    for (const [k, v] of Object.entries(changes)) {
-      if (!v || v === "all") p.delete(k); else p.set(k, v);
-    }
+    for (const [k, v] of Object.entries(changes)) { if (!v || v === "all") p.delete(k); else p.set(k, v); }
     router.push(`${pathname}?${p.toString()}`);
   };
-
-  const monthItems = Object.fromEntries(MONTHS.map((m, i) => [String(i + 1), m]));
-  const yearItems = Object.fromEntries(YEARS.map((y) => [String(y), String(y)]));
-  const branchItems = {
-    all: "Barcha filiallar",
-    ...Object.fromEntries(branches.map((b) => [String(b.id), b.name])),
+  const onDate = (which: "start" | "end", v: string) => {
+    if (which === "start") setS(v); else setE(v);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(v)) nav({ [which]: v });
   };
+  const branchItems = { all: "Barcha filiallar", ...Object.fromEntries(branches.map((b) => [String(b.id), b.name])) };
+  const activePreset = PRESETS.find((p) => { const r = p.range(); return r.start === s && r.end === e; })?.key;
 
   return (
-    <div className="flex flex-wrap items-end gap-3">
-      <div className="space-y-1">
-        <Label className="text-xs text-muted-foreground">Oy</Label>
-        <Select items={monthItems} value={String(month)} onValueChange={(v) => v && nav({ month: v })}>
-          <SelectTrigger className="h-9 w-36"><SelectValue /></SelectTrigger>
-          <SelectContent>{MONTHS.map((m, i) => <SelectItem key={i + 1} value={String(i + 1)}>{m}</SelectItem>)}</SelectContent>
-        </Select>
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Boshlanish</Label>
+          <Input type="date" value={s} onChange={(ev) => onDate("start", ev.target.value)} className="h-9 w-40" />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Tugash</Label>
+          <Input type="date" value={e} onChange={(ev) => onDate("end", ev.target.value)} className="h-9 w-40" />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Filial</Label>
+          <Select items={branchItems} value={branchId ? String(branchId) : "all"} onValueChange={(v) => nav({ branchId: v ?? "all" })}>
+            <SelectTrigger className="h-9 w-48"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Barcha filiallar</SelectItem>
+              {branches.map((b) => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
-      <div className="space-y-1">
-        <Label className="text-xs text-muted-foreground">Yil</Label>
-        <Select items={yearItems} value={String(year)} onValueChange={(v) => v && nav({ year: v })}>
-          <SelectTrigger className="h-9 w-28"><SelectValue /></SelectTrigger>
-          <SelectContent>{YEARS.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
-        </Select>
-      </div>
-      <div className="space-y-1">
-        <Label className="text-xs text-muted-foreground">Filial</Label>
-        <Select items={branchItems} value={branchId ? String(branchId) : "all"} onValueChange={(v) => nav({ branchId: v ?? "all" })}>
-          <SelectTrigger className="h-9 w-48"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Barcha filiallar</SelectItem>
-            {branches.map((b) => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
-          </SelectContent>
-        </Select>
+      <div className="flex flex-wrap gap-1.5">
+        {PRESETS.map((p) => {
+          const active = activePreset === p.key;
+          return (
+            <button key={p.key} type="button"
+              onClick={() => { const r = p.range(); setS(r.start); setE(r.end); nav({ start: r.start, end: r.end }); }}
+              className={cn("h-7 rounded-full px-3 text-xs font-medium transition-colors",
+                active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground")}>
+              {p.label}
+            </button>
+          );
+        })}
       </div>
     </div>
   );

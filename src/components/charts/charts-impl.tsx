@@ -226,13 +226,13 @@ export function DailySalesChart({
             <Line
               type="monotone"
               dataKey="forecast"
-              name="Prognoz (reja)"
-              stroke="#8b5cf6"
+              name="Reja (prognoz)"
+              stroke={ORANGE}
               strokeWidth={2.5}
               strokeDasharray="5 4"
               dot={false}
               connectNulls
-              activeDot={{ r: 5, fill: "#8b5cf6", strokeWidth: 3, stroke: "#fff" }}
+              activeDot={{ r: 5, fill: ORANGE, strokeWidth: 3, stroke: "#fff" }}
             />
           )}
         </ComposedChart>
