@@ -18,7 +18,6 @@ import {
   ChevronDown,
   Database,
   BarChart2,
-  Footprints,
   PackageMinus,
   PackageX,
   ChartPie,
@@ -44,18 +43,17 @@ type NavItem = {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   adminOnly?: boolean;
-  roles?: Role[]; // faqat shu rollar ko'radi (bo'sh = hammasi)
+  roles?: Role[];
 };
 
 type NavGroup = { label: string; items: NavItem[] };
 
-// ─── localStorage UI sozlamalari (set-state-in-effect'siz, SSR-xavfsiz) ────────
-// useSyncExternalStore — SSR'da getServerSnapshot, hydration'dan keyin getSnapshot.
+// ─── localStorage UI sozlamalari ─────────────────────────────────────────────
 const PREF_EVENT = "sidebar-pref";
 function subscribePref(cb: () => void) {
   if (typeof window === "undefined") return () => {};
   window.addEventListener(PREF_EVENT, cb);
-  window.addEventListener("storage", cb); // boshqa tab'dagi o'zgarish ham aks etsin
+  window.addEventListener("storage", cb);
   return () => {
     window.removeEventListener(PREF_EVENT, cb);
     window.removeEventListener("storage", cb);
@@ -67,44 +65,31 @@ function emitPref() {
 function getCollapsedSnapshot() {
   return localStorage.getItem("sidebar-collapsed") === "true";
 }
-// foldedGroups — Set bo'lgani uchun getSnapshot STABIL havola qaytarishi shart
-// (aks holda useSyncExternalStore cheksiz render qiladi) — shu sabab keshlaymiz.
+
+// foldedGroups — default: HAMMASI OCHIQ (bo'sh to'plam)
 const EMPTY_FOLDED = new Set<string>();
-// Birinchi kirish (saqlangan sozlama yo'q) uchun standart: barcha parent guruhlar yig'ilgan.
-// NAV_GROUPS pastda e'lon qilingani sabab lazy (chaqiruv paytida tayyor) + keshlangan.
-let _allFolded: Set<string> | null = null;
-function getAllFolded(): Set<string> {
-  if (!_allFolded) _allFolded = new Set(NAV_GROUPS.map((g) => g.label));
-  return _allFolded;
-}
-let foldedCache: { raw: string | null; set: Set<string> } = { raw: null, set: EMPTY_FOLDED };
+let foldedCache: { raw: string | null; set: Set<string> } = { raw: undefined as unknown as null, set: EMPTY_FOLDED };
 function getFoldedSnapshot(): Set<string> {
   const raw = localStorage.getItem("sidebar-folded-groups");
   if (raw === foldedCache.raw) return foldedCache.set;
-  // raw === null — hech qachon o'zgartirilmagan → standart: hammasi yig'ilgan.
-  // raw === "[]" — foydalanuvchi ataylab hammasini ochgan (bo'sh to'plam saqlangan).
-  let set: Set<string>;
-  if (raw === null) {
-    set = getAllFolded();
-  } else {
-    set = EMPTY_FOLDED;
+  let set: Set<string> = EMPTY_FOLDED;
+  if (raw !== null) {
     try { set = new Set(JSON.parse(raw) as string[]); } catch { set = EMPTY_FOLDED; }
   }
   foldedCache = { raw, set };
   return set;
 }
 
-// Bo'limlar tartibi muhim — "Tizim" doim oxirida turadi.
+// ─── Navigatsiya tuzilmasi ───────────────────────────────────────────────────
 const NAV_GROUPS: NavGroup[] = [
   {
-    label: "Baza",
+    label: "Analitika",
     items: [
-      { href: "/baza/sotuv",          label: "Sotuv",        icon: Database,     roles: ["ADMIN"] },
-      { href: "/baza/metrika",        label: "Metrikalar",   icon: BarChart2,    roles: ["ADMIN"] },
-      { href: "/baza/tashrif",        label: "Tashriflar",   icon: Footprints,   roles: ["ADMIN"] },
-      { href: "/iyerarxiya",          label: "Iyerarxiya",   icon: Tag,          roles: ["ADMIN"] },
-      { href: "/baza/taminotchilar",  label: "Ta'minotchilar", icon: Truck,      roles: ["ADMIN"] },
-      { href: "/baza/moslanmagan",    label: "Moslanmagan",  icon: PackageSearch, roles: ["ADMIN"] },
+      { href: "/dashboard",    label: "Dashboard",    icon: LayoutDashboard, roles: ["ADMIN", "CEO"] },
+      { href: "/dashboard-v2", label: "Dashboard v2", icon: Sparkles,        roles: ["ADMIN", "CAT_MANAGER", "CEO"] },
+      { href: "/oos",          label: "OOS",          icon: PackageX,        roles: ["ADMIN", "CAT_MANAGER", "CEO"] },
+      { href: "/stockday",     label: "Stockday",     icon: Hourglass,       roles: ["ADMIN", "CAT_MANAGER", "CEO"] },
+      { href: "/report",       label: "Hisobot",      icon: Table2,          roles: ["ADMIN"] },
     ],
   },
   {
@@ -114,30 +99,30 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    label: "Analitika",
+    label: "Hisobdan chiqarish",
     items: [
-      { href: "/dashboard",    label: "Dashboard",       icon: LayoutDashboard, roles: ["ADMIN", "CEO"] },
-      { href: "/dashboard-v2", label: "Dashboard v2",    icon: Sparkles,        roles: ["ADMIN", "CAT_MANAGER", "CEO"] },
-      { href: "/oos",          label: "OOS",             icon: PackageX,        roles: ["ADMIN", "CAT_MANAGER", "CEO"] },
-      { href: "/stockday",     label: "Stockday",        icon: Hourglass,       roles: ["ADMIN", "CAT_MANAGER", "CEO"] },
-      { href: "/branches",     label: "Filiallar",        icon: Building2,       roles: ["ADMIN"] },
-      { href: "/report",       label: "Hisobot",          icon: Table2,          roles: ["ADMIN"] },
-      { href: "/admin/upload", label: "Fayllar",          icon: Upload,          adminOnly: true },
+      { href: "/chiqim",            label: "Chiqimlar",  icon: PackageMinus, roles: ["ADMIN", "CAT_MANAGER", "CEO"] },
+      { href: "/chiqim/statistika", label: "Statistika", icon: ChartPie,     roles: ["ADMIN", "CAT_MANAGER", "CEO"] },
+      { href: "/chiqim/vozvratlar", label: "Vozvratlar", icon: Recycle,      roles: ["ADMIN", "CAT_MANAGER", "CEO"] },
     ],
   },
   {
-    label: "Hisobdan chiqarish",
+    label: "Baza",
     items: [
-      { href: "/chiqim",            label: "Chiqimlar",         icon: PackageMinus, roles: ["ADMIN", "CAT_MANAGER", "CEO"] },
-      { href: "/chiqim/statistika", label: "Statistika",        icon: ChartPie,     roles: ["ADMIN", "CAT_MANAGER", "CEO"] },
-      { href: "/chiqim/vozvratlar", label: "Vozvratlar",        icon: Recycle,      roles: ["ADMIN", "CAT_MANAGER", "CEO"] },
+      { href: "/baza/sotuv",         label: "Sotuv",          icon: Database,      roles: ["ADMIN"] },
+      { href: "/baza/metrika",       label: "Metrika & Tashrif", icon: BarChart2,  roles: ["ADMIN"] },
+      { href: "/iyerarxiya",         label: "Iyerarxiya",     icon: Tag,           roles: ["ADMIN"] },
+      { href: "/baza/taminotchilar", label: "Ta'minotchilar", icon: Truck,         roles: ["ADMIN"] },
+      { href: "/baza/moslanmagan",   label: "Moslanmagan",    icon: PackageSearch, roles: ["ADMIN"] },
     ],
   },
   {
     label: "Tizim",
     items: [
-      { href: "/admin/users",     label: "Foydalanuvchilar", icon: Users,    adminOnly: true },
-      { href: "/admin/sozlamalar", label: "Sozlamalar",      icon: Settings, adminOnly: true },
+      { href: "/branches",          label: "Filiallar",        icon: Building2, roles: ["ADMIN"] },
+      { href: "/admin/upload",      label: "Fayllar",          icon: Upload,    adminOnly: true },
+      { href: "/admin/users",       label: "Foydalanuvchilar", icon: Users,     adminOnly: true },
+      { href: "/admin/sozlamalar",  label: "Sozlamalar",       icon: Settings,  adminOnly: true },
     ],
   },
 ];
@@ -155,8 +140,7 @@ function SidebarNav({
 }) {
   const pathname = usePathname();
 
-  // Yig'ilgan (svernut) parent bo'limlar — localStorage'da saqlanadi
-  const foldedGroups = useSyncExternalStore(subscribePref, getFoldedSnapshot, getAllFolded);
+  const foldedGroups = useSyncExternalStore(subscribePref, getFoldedSnapshot, () => EMPTY_FOLDED);
   const toggleGroup = (label: string) => {
     const next = new Set(foldedGroups);
     if (next.has(label)) next.delete(label); else next.add(label);
@@ -173,9 +157,6 @@ function SidebarNav({
     }),
   })).filter((g) => g.items.length > 0);
 
-  // Faqat ENG ANIQ (eng uzun) mos keladigan havola active bo'ladi.
-  // Aks holda "/chiqim" ham, "/chiqim/vozvratlar" ham bir vaqtda active bo'lib,
-  // bir xil layoutId bilan ikki "pill" animatsiya qilib, oq artefakt paydo bo'ladi.
   const activeHref = visibleGroups
     .flatMap((g) => g.items)
     .filter((i) => pathname === i.href || pathname.startsWith(i.href + "/"))
@@ -220,65 +201,71 @@ function SidebarNav({
         )}
       </div>
 
-      {/* Nav items — bo'limlarga guruhlangan */}
+      {/* Nav items */}
       <nav className="flex-1 p-2 space-y-3 overflow-y-auto">
         {visibleGroups.map((group, gi) => {
           const folded = foldedGroups.has(group.label);
           return (
-          <div
-            key={group.label}
-            className={cn(
-              "space-y-0.5",
-              // yig'iq holatda guruhlar orasida nozik chiziq (birinchisidan tashqari)
-              collapsed && gi > 0 && "mt-3 border-t border-border/60 pt-3"
-            )}
-          >
-            {!collapsed && (
-              <button
-                type="button"
-                onClick={() => toggleGroup(group.label)}
-                title={folded ? "Ochish" : "Yig'ish"}
-                className="flex w-full items-center justify-between rounded-md px-3 pb-1 pt-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
-              >
-                <span>{group.label}</span>
-                <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground/70 transition-transform", folded && "-rotate-90")} />
-              </button>
-            )}
-            {(collapsed || !folded) && group.items.map((item) => {
-              const Icon = item.icon;
-              const active = item.href === activeHref;
-              return (
-                <div
-                  key={item.href}
-                  className="transition-transform duration-150 hover:scale-[1.01] active:scale-[0.98]"
+            <div
+              key={group.label}
+              className={cn(
+                "space-y-0.5",
+                collapsed && gi > 0 && "mt-3 border-t border-border/60 pt-3"
+              )}
+            >
+              {!collapsed && (
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(group.label)}
+                  title={folded ? "Ochish" : "Yig'ish"}
+                  className="flex w-full items-center justify-between rounded-md px-3 pb-1 pt-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
                 >
-                  <Link
-                    href={item.href}
-                    onClick={onNavigate}
-                    aria-current={active ? "page" : undefined}
-                    title={collapsed ? item.label : undefined}
+                  <span>{group.label}</span>
+                  <ChevronDown
                     className={cn(
-                      "relative isolate flex items-center rounded-xl text-sm font-medium transition-colors duration-150 overflow-hidden",
-                      collapsed ? "justify-center px-0 py-2.5" : "gap-3 px-3 py-2.5",
-                      active
-                        ? "text-primary-foreground shadow-sm"
-                        : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                      "h-3.5 w-3.5 shrink-0 text-muted-foreground/70 transition-transform duration-200",
+                      folded && "-rotate-90"
                     )}
-                  >
-                    {active && (
-                      <span
-                        className="absolute inset-0 rounded-xl bg-brand-gradient shadow-brand"
-                        style={{ zIndex: -1 }}
-                      />
-                    )}
-                    <Icon className={cn("h-4 w-4 shrink-0", active ? "opacity-100" : "opacity-70")} />
-                    {!collapsed && item.label}
-                  </Link>
-                </div>
-              );
-            })}
-          </div>
-        ); })}
+                  />
+                </button>
+              )}
+              {(collapsed || !folded) &&
+                group.items.map((item) => {
+                  const Icon = item.icon;
+                  const active = item.href === activeHref;
+                  return (
+                    <div
+                      key={item.href}
+                      className="transition-transform duration-150 hover:scale-[1.01] active:scale-[0.98]"
+                    >
+                      <Link
+                        href={item.href}
+                        onClick={onNavigate}
+                        aria-current={active ? "page" : undefined}
+                        title={collapsed ? item.label : undefined}
+                        className={cn(
+                          "relative isolate flex items-center rounded-xl text-sm font-medium transition-colors duration-150 overflow-hidden",
+                          collapsed ? "justify-center px-0 py-2.5" : "gap-3 px-3 py-2.5",
+                          active
+                            ? "text-primary-foreground shadow-sm"
+                            : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                        )}
+                      >
+                        {active && (
+                          <span
+                            className="absolute inset-0 rounded-xl bg-brand-gradient shadow-brand"
+                            style={{ zIndex: -1 }}
+                          />
+                        )}
+                        <Icon className={cn("h-4 w-4 shrink-0", active ? "opacity-100" : "opacity-70")} />
+                        {!collapsed && item.label}
+                      </Link>
+                    </div>
+                  );
+                })}
+            </div>
+          );
+        })}
       </nav>
 
       {/* Footer */}
@@ -287,7 +274,14 @@ function SidebarNav({
           <div className="h-2 w-2 rounded-full shrink-0 bg-primary" />
           {!collapsed && (
             <span className="text-xs text-muted-foreground font-medium truncate">
-              {role === "ADMIN" ? "Administrator" : role === "CAT_MANAGER" ? "Kategoriya menejeri" : role === "CEO" ? "CEO" : "Ko'ruvchi"} · v0.1
+              {role === "ADMIN"
+                ? "Administrator"
+                : role === "CAT_MANAGER"
+                ? "Kategoriya menejeri"
+                : role === "CEO"
+                ? "CEO"
+                : "Ko'ruvchi"}{" "}
+              · v0.1
             </span>
           )}
         </div>
