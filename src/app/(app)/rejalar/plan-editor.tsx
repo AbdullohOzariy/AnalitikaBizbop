@@ -5,7 +5,7 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import {
   ChevronRight, Loader2, Check, AlertCircle, TrendingUp, Percent,
   Search, ChevronsDownUp, ChevronsUpDown, Wallet, ListChecks, X,
-  Sparkles, RefreshCw, Clock, CalendarRange, Lock, Unlock,
+  Sparkles, RefreshCw, Clock, CalendarRange, Lock, Unlock, Eraser,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Label } from "@/components/ui/label";
@@ -24,6 +24,9 @@ import {
   upsertMarginPlan,
   generateForecastAllAction,
   setForecastDayAction,
+  clearSalesPlansAction,
+  clearMarginPlansAction,
+  clearForecastAction,
 } from "./actions";
 import type { ForecastMonthStatus, ForecastDayCell } from "@/lib/forecast";
 
@@ -174,6 +177,37 @@ export function PlanEditor({
       } else {
         toast.error(res.error || "Prognoz yaratishda xato.");
       }
+    });
+  };
+
+  // ─── Tozalash (tanlangan, ko'rinib turgan davr) ────────────────────────────
+  const [clearing, startClear] = useTransition();
+  const clearSales = () => {
+    if (!confirm(`${MONTHS[month - 1]} ${year} — barcha sotuv rejasi (barcha filial) o'chirilsinmi?`)) return;
+    startClear(async () => {
+      const res = await clearSalesPlansAction({ year, month });
+      if (res.ok) { toast.success(`${res.count} ta yozuv tozalandi.`); setSalesCells({}); router.refresh(); }
+      else toast.error(res.error);
+    });
+  };
+  const clearMargin = () => {
+    if (!confirm("Barcha marja rejasi o'chirilsinmi? (marja vaqtsiz)")) return;
+    startClear(async () => {
+      const res = await clearMarginPlansAction();
+      if (res.ok) { toast.success(`${res.count} ta yozuv tozalandi.`); setMarginCells({}); router.refresh(); }
+      else toast.error(res.error);
+    });
+  };
+  const clearForecast = () => {
+    if (!confirm(`${MONTHS[month - 1]} ${year} — prognoz o'chirilsinmi?`)) return;
+    startClear(async () => {
+      const res = await clearForecastAction({ year, month });
+      if (res.ok) {
+        toast.success("Prognoz tozalandi.");
+        setFcCells({});
+        setFcStatus({ lastGeneratedAt: null, branchIds: [] });
+        router.refresh();
+      } else toast.error(res.error);
     });
   };
 
@@ -470,14 +504,33 @@ export function PlanEditor({
     </div>
   );
 
+  const clearBtn = (onClick: () => void, label: string) => (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={clearing}
+      className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+    >
+      {clearing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Eraser className="h-3 w-3" />}
+      {label}
+    </button>
+  );
+
   const summaryRow = (type: "sotuv" | "marja") => (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       {type === "sotuv" ? (
         <Chip icon={Wallet} label="Jami reja (barcha filial)" value={`${fmtMoney(stats.sTotal)} so'm`} tone="emerald" />
       ) : (
         <Chip icon={Percent} label="O'rtacha marja" value={`${stats.mAvg.toFixed(1)}%`} tone="violet" />
       )}
       <Chip icon={ListChecks} label="To'ldirilgan" value={`${type === "sotuv" ? stats.sFill : stats.mFill} / ${stats.total}`} tone="slate" />
+      {isAdmin && (
+        <div className="ml-auto">
+          {type === "sotuv"
+            ? clearBtn(clearSales, `${MONTHS[month - 1]} tozalash`)
+            : clearBtn(clearMargin, "Marjani tozalash")}
+        </div>
+      )}
     </div>
   );
 
@@ -519,11 +572,14 @@ export function PlanEditor({
             </div>
           </div>
           {isAdmin && (
-            <button type="button" onClick={runForecastAll} disabled={fcPending}
-              className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-violet-600 px-3.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-violet-700 disabled:opacity-60">
-              {fcPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : hasAnyForecast ? <RefreshCw className="h-3.5 w-3.5" /> : <Sparkles className="h-3.5 w-3.5" />}
-              {fcPending ? "Hisoblanmoqda..." : hasAnyForecast ? "Qayta yaratish" : "Prognoz yaratish"}
-            </button>
+            <div className="flex shrink-0 items-center gap-2">
+              {hasAnyForecast && clearBtn(clearForecast, "Tozalash")}
+              <button type="button" onClick={runForecastAll} disabled={fcPending}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-violet-600 px-3.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-violet-700 disabled:opacity-60">
+                {fcPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : hasAnyForecast ? <RefreshCw className="h-3.5 w-3.5" /> : <Sparkles className="h-3.5 w-3.5" />}
+                {fcPending ? "Hisoblanmoqda..." : hasAnyForecast ? "Qayta yaratish" : "Prognoz yaratish"}
+              </button>
+            </div>
           )}
         </div>
       </div>

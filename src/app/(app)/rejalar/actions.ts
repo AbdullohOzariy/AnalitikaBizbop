@@ -125,3 +125,50 @@ export async function setForecastDayAction(input: {
     return { ok: false, error: e instanceof Error ? e.message : "Noma'lum xato" };
   }
 }
+
+export type ClearResult = { ok: true; count: number } | { ok: false; error: string };
+
+// Tanlangan oy uchun barcha sotuv rejalarini tozalaydi (barcha filial × subkat).
+export async function clearSalesPlansAction(input: {
+  year: number;
+  month: number;
+}): Promise<ClearResult> {
+  try {
+    await requireAdmin();
+    const res = await prisma.salesPlan.deleteMany({ where: { year: input.year, month: input.month } });
+    revalidateTag(ANALYTICS_CACHE_TAG, "max");
+    return { ok: true, count: res.count };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Noma'lum xato" };
+  }
+}
+
+// Barcha marja rejalarini tozalaydi (marja vaqtsiz — davr yo'q).
+export async function clearMarginPlansAction(): Promise<ClearResult> {
+  try {
+    await requireAdmin();
+    const res = await prisma.marginPlan.deleteMany({});
+    return { ok: true, count: res.count };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Noma'lum xato" };
+  }
+}
+
+// Tanlangan oy prognozini tozalaydi (kunlik + egri chiziq + jurnal).
+export async function clearForecastAction(input: {
+  year: number;
+  month: number;
+}): Promise<ClearResult> {
+  try {
+    await requireAdmin();
+    const [days] = await prisma.$transaction([
+      prisma.forecastDay.deleteMany({ where: { year: input.year, month: input.month } }),
+      prisma.forecastCurve.deleteMany({ where: { year: input.year, month: input.month } }),
+      prisma.forecastRun.deleteMany({ where: { year: input.year, month: input.month } }),
+    ]);
+    revalidateTag(ANALYTICS_CACHE_TAG, "max");
+    return { ok: true, count: days.count };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Noma'lum xato" };
+  }
+}
