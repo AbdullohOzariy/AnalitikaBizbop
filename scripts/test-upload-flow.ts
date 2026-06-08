@@ -5,7 +5,6 @@ import { FileType, AliasSource, UploadStatus } from "../src/generated/prisma/enu
 import { PrismaPg } from "@prisma/adapter-pg";
 import { sha256 } from "../src/lib/parsers/utils";
 import { parseSalesWorkbook } from "../src/lib/parsers/sales";
-import { parseMetricsWorkbook } from "../src/lib/parsers/metrics";
 import { parseVisitsWorkbook } from "../src/lib/parsers/visits";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
@@ -120,46 +119,6 @@ async function main() {
         }
       });
     }
-  }
-
-  // === METRICS ===
-  console.log("→ Uploading METRICS (sr.xlsx, branch=Mega Center) ...");
-  {
-    const buf = readFileSync("samples/sr.xlsx");
-    const hash = sha256(buf);
-    const branch = await prisma.branch.findUnique({ where: { name: "Mega Center" } });
-    const r = parseMetricsWorkbook(buf);
-    await prisma.$transaction(async (tx) => {
-      const created = await tx.uploadedFile.create({
-        data: {
-          label: "Aprel — Mega chek",
-          originalName: "sr.xlsx",
-          fileHash: hash,
-          fileType: FileType.METRICS,
-          branchId: branch!.id,
-          periodStart: r.periodStart,
-          periodEnd: r.periodEnd,
-          rowCount: r.metrics.length,
-          status: UploadStatus.SUCCESS,
-          uploadedById: admin.id,
-        },
-      });
-      for (const m of r.metrics) {
-        await tx.dailyMetrics.create({
-          data: {
-            uploadedFileId: created.id,
-            branchId: branch!.id,
-            date: m.date,
-            receiptCount: m.receiptCount,
-            receiptTotal: new Prisma.Decimal(m.receiptTotal),
-            avgItemsPerReceipt: new Prisma.Decimal(m.avgItemsPerReceipt),
-            avgReceipt: new Prisma.Decimal(m.avgReceipt),
-            bigPurchaseLevel: new Prisma.Decimal(m.bigPurchaseLevel),
-            smallPurchaseLevel: new Prisma.Decimal(m.smallPurchaseLevel),
-          },
-        });
-      }
-    });
   }
 
   // === VISITS ===

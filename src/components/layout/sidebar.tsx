@@ -17,7 +17,7 @@ import {
   PanelLeftOpen,
   ChevronDown,
   Database,
-  BarChart2,
+  Footprints,
   PackageMinus,
   PackageX,
   ChartPie,
@@ -129,7 +129,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Baza",
     items: [
       { href: "/baza/sotuv",         label: "Sotuv",             icon: Database,      roles: [SA, A] },
-      { href: "/baza/metrika",       label: "Metrika & Tashrif", icon: BarChart2,     roles: [SA, A] },
+      { href: "/baza/tashrif",       label: "Tashriflar",        icon: Footprints,    roles: [SA, A] },
       { href: "/iyerarxiya",         label: "Iyerarxiya",        icon: Tag,           roles: [SA, A] },
       { href: "/baza/taminotchilar", label: "Ta'minotchilar",    icon: Truck,         roles: [SA, A] },
       { href: "/baza/moslanmagan",   label: "Moslanmagan",       icon: PackageSearch, roles: [SA, A] },

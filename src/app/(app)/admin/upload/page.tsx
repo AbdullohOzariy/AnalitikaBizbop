@@ -4,7 +4,6 @@ import { PageHeader } from "@/components/common/page";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { SalesUploadForm } from "./sales-form";
-import { MetricsUploadForm } from "./metrics-form";
 import { VisitsUploadForm } from "./visits-form";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,22 +28,16 @@ export default async function UploadPage() {
   const session = await auth();
   if (session?.user.role !== "SYSTEM_ADMIN") redirect("/dashboard");
 
-  const [branches, files] = await Promise.all([
-    prisma.branch.findMany({
-      orderBy: { sortOrder: "asc" },
-      select: { id: true, name: true },
-    }),
-    prisma.uploadedFile.findMany({
-      orderBy: { createdAt: "desc" },
-      include: {
-        branch: { select: { name: true } },
-        uploadedBy: { select: { name: true, email: true } },
-        _count: {
-          select: { sales: true, metrics: true, visits: true },
-        },
+  const files = await prisma.uploadedFile.findMany({
+    orderBy: { createdAt: "desc" },
+    include: {
+      branch: { select: { name: true } },
+      uploadedBy: { select: { name: true, email: true } },
+      _count: {
+        select: { sales: true, metrics: true, visits: true },
       },
-    }),
-  ]);
+    },
+  });
 
   return (
     <div className="space-y-6">
@@ -64,14 +57,10 @@ export default async function UploadPage() {
           <Tabs defaultValue="sales" className="space-y-6">
             <TabsList>
               <TabsTrigger value="sales">Sotuv (kategoriyalar)</TabsTrigger>
-              <TabsTrigger value="metrics">Cheklar (sr.xlsx)</TabsTrigger>
               <TabsTrigger value="visits">Tashriflar</TabsTrigger>
             </TabsList>
             <TabsContent value="sales">
               <SalesUploadForm />
-            </TabsContent>
-            <TabsContent value="metrics">
-              <MetricsUploadForm branches={branches} />
             </TabsContent>
             <TabsContent value="visits">
               <VisitsUploadForm />

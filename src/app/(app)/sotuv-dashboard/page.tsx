@@ -83,8 +83,12 @@ export default async function SotuvDashboardPage({
              AND (make_date(sp.year, sp.month, 1) + interval '1 month' - interval '1 day')::date >= ${start}::date),
           0
         )::float8 AS plan,
-        COALESCE((SELECT SUM(dm."receiptTotal") FROM "DailyMetrics" dm
-                  WHERE dm."branchId" = b.id AND dm.date BETWEEN ${start}::date AND ${end}::date), 0)::float8 AS actual
+        COALESCE((SELECT SUM(cs."amount"::numeric * (
+            (LEAST(cs."periodEnd", ${end}::date) - GREATEST(cs."periodStart", ${start}::date) + 1)::numeric
+            / NULLIF((cs."periodEnd" - cs."periodStart" + 1), 0)::numeric))
+          FROM "CategorySales" cs
+          WHERE cs."branchId" = b.id
+            AND cs."periodStart" <= ${end}::date AND cs."periodEnd" >= ${start}::date), 0)::float8 AS actual
       FROM "Branch" b
       ${branchId ? Prisma.sql`WHERE b.id = ${branchId}` : Prisma.empty}
       ORDER BY b."sortOrder" ASC

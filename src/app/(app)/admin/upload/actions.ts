@@ -9,7 +9,6 @@ import { requireAdminUser } from "@/lib/auth-helpers";
 import { ANALYTICS_CACHE_TAG } from "@/lib/analytics";
 import { sha256 } from "@/lib/parsers/utils";
 import { parseSalesWorkbook } from "@/lib/parsers/sales";
-import { parseMetricsWorkbook } from "@/lib/parsers/metrics";
 import { parseVisitsWorkbook } from "@/lib/parsers/visits";
 import { matchCategoryNames, matchBranchAlias } from "@/lib/ai-matcher";
 
@@ -594,85 +593,6 @@ async function deriveCategorySalesFromProducts(
         "amount"         = EXCLUDED."amount",
         "costAmount"     = EXCLUDED."costAmount"
     `;
-  }
-}
-
-// ============ METRICS ============
-
-const metricsInputSchema = z.object({
-  label: labelSchema,
-  branchId: z.coerce.number().int().positive(),
-});
-
-export async function uploadMetricsAction(formData: FormData): Promise<UploadResult> {
-  try {
-    const user = await requireAdminUser();
-    const file = formData.get("file");
-    if (!(file instanceof File) || file.size === 0) {
-      return { ok: false, error: "Fayl tanlanmagan." };
-    }
-    const parsed = metricsInputSchema.parse({
-      label: formData.get("label"),
-      branchId: formData.get("branchId"),
-    });
-
-    const branch = await prisma.branch.findUnique({ where: { id: parsed.branchId } });
-    if (!branch) return { ok: false, error: "Filial topilmadi." };
-
-    const buf = await readBuffer(file);
-    const hash = sha256(buf);
-    await ensureNotDuplicate(hash);
-
-    const result = parseMetricsWorkbook(buf);
-
-    const fileRecord = await prisma.uploadedFile.create({
-      data: {
-        label: parsed.label,
-        originalName: file.name,
-        fileHash: hash,
-        fileType: FileType.METRICS,
-        branchId: parsed.branchId,
-        periodStart: result.periodStart,
-        periodEnd: result.periodEnd,
-        rowCount: result.metrics.length,
-        status: UploadStatus.SUCCESS,
-        uploadedById: Number(user.id),
-      },
-    });
-
-    try {
-      const values = result.metrics.map((m) =>
-        Prisma.sql`(${fileRecord.id}, ${parsed.branchId}, ${m.date}::date, ${m.receiptCount}, ${new Prisma.Decimal(m.receiptTotal)}, ${new Prisma.Decimal(m.avgItemsPerReceipt)}, ${new Prisma.Decimal(m.avgReceipt)}, ${new Prisma.Decimal(m.bigPurchaseLevel)}, ${new Prisma.Decimal(m.smallPurchaseLevel)})`
-      );
-      await prisma.$executeRaw`
-        INSERT INTO "DailyMetrics" ("uploadedFileId", "branchId", "date", "receiptCount", "receiptTotal", "avgItemsPerReceipt", "avgReceipt", "bigPurchaseLevel", "smallPurchaseLevel")
-        VALUES ${Prisma.join(values)}
-        ON CONFLICT ("branchId", "date")
-        DO UPDATE SET
-          "uploadedFileId"       = EXCLUDED."uploadedFileId",
-          "receiptCount"         = EXCLUDED."receiptCount",
-          "receiptTotal"         = EXCLUDED."receiptTotal",
-          "avgItemsPerReceipt"   = EXCLUDED."avgItemsPerReceipt",
-          "avgReceipt"           = EXCLUDED."avgReceipt",
-          "bigPurchaseLevel"     = EXCLUDED."bigPurchaseLevel",
-          "smallPurchaseLevel"   = EXCLUDED."smallPurchaseLevel"
-      `;
-    } catch (err) {
-      await prisma.uploadedFile.delete({ where: { id: fileRecord.id } }).catch(() => null);
-      throw err;
-    }
-
-    revalidatePath("/admin/files");
-    revalidatePath("/dashboard");
-    revalidateTag(ANALYTICS_CACHE_TAG, "max");
-
-    return {
-      ok: true,
-      fileId: fileRecord.id,
-      summary: `Saqlandi: ${branch.name} uchun ${result.metrics.length} kunlik metrika.`,
-    };
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "Noma'lum xato." };
   }
 }
 

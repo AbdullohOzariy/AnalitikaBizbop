@@ -1,7 +1,6 @@
 import "dotenv/config";
 import { readFileSync } from "node:fs";
 import { parseSalesWorkbook } from "../src/lib/parsers/sales";
-import { parseMetricsWorkbook } from "../src/lib/parsers/metrics";
 import { parseVisitsWorkbook } from "../src/lib/parsers/visits";
 
 const CATEGORIES = [
@@ -65,22 +64,6 @@ console.log("\n=== SALES: 1 (2).xlsx (29 kun, 4 filial) ===");
       console.log(`  ${alias.padEnd(35)} → ${fmt(total)}`);
     }
   }
-}
-
-console.log("\n=== METRICS: sr.xlsx ===");
-{
-  const buf = readFileSync("samples/sr.xlsx");
-  const r = parseMetricsWorkbook(buf);
-  console.log(`Period: ${r.periodStart.toISOString().slice(0, 10)} → ${r.periodEnd.toISOString().slice(0, 10)}`);
-  console.log(`Kunlar soni: ${r.metrics.length}`);
-  const m0 = r.metrics[0];
-  console.log(`Birinchi kun (${m0.date.toISOString().slice(0, 10)}):`);
-  console.log(`  Cheklar: ${m0.receiptCount}`);
-  console.log(`  Cheklar summasi: ${fmt(m0.receiptTotal)}`);
-  console.log(`  O'rtacha mahsulot: ${m0.avgItemsPerReceipt}`);
-  console.log(`  O'rtacha chek: ${fmt(m0.avgReceipt)}`);
-  console.log(`  Katta xarid: ${fmt(m0.bigPurchaseLevel)}`);
-  console.log(`  Mayda xarid: ${fmt(m0.smallPurchaseLevel)}`);
 }
 
 console.log("\n=== VISITS: export (1).xlsx (yil = 2026) ===");

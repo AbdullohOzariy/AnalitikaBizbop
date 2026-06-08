@@ -5,17 +5,6 @@ import { unstable_cache } from "next/cache";
 export const ANALYTICS_CACHE_TAG = "analytics";
 
 /**
- * Faqat ko'rinadigan kategoriyalar (sortOrder > 0) hisoblanadi.
- * "Jami sotuv = ko'rinadigan kategoriyalar yig'indisi" qoidasi.
- */
-const VISIBLE_CAT_FILTER = Prisma.sql`
-  AND EXISTS (
-    SELECT 1 FROM "Category" "_c"
-    WHERE "_c"."id" = "CategorySales"."categoryId" AND "_c"."sortOrder" > 0
-  )
-`;
-
-/**
  * UTC kun boshi sifatida Date qaytaradi.
  */
 export function utcDate(year: number, month: number, day: number): Date {
@@ -88,9 +77,7 @@ async function _sumCategorySalesProRated(
     WHERE "periodStart" <= ${range.end}::date
       AND "periodEnd"   >= ${range.start}::date
       ${branchId ? Prisma.sql`AND "branchId" = ${branchId}` : Prisma.empty}
-      ${categoryId ? Prisma.sql`AND "categoryId" = ${categoryId}` : Prisma.empty}
-      ${VISIBLE_CAT_FILTER}
-  `;
+      ${categoryId ? Prisma.sql`AND "categoryId" = ${categoryId}` : Prisma.empty}  `;
   return Number(rows[0]?.total ?? 0);
 }
 
@@ -116,9 +103,7 @@ async function _salesByBranch(range: DateRange): Promise<Map<number, number>> {
     ), 0)::float8 AS total
     FROM "CategorySales"
     WHERE "periodStart" <= ${range.end}::date
-      AND "periodEnd"   >= ${range.start}::date
-      ${VISIBLE_CAT_FILTER}
-    GROUP BY "branchId"
+      AND "periodEnd"   >= ${range.start}::date    GROUP BY "branchId"
   `;
   const map = new Map<number, number>();
   for (const r of rows) map.set(r.branchId, Number(r.total ?? 0));
@@ -140,9 +125,7 @@ async function _salesByCategory(
     FROM "CategorySales"
     WHERE "periodStart" <= ${range.end}::date
       AND "periodEnd"   >= ${range.start}::date
-      ${branchId ? Prisma.sql`AND "branchId" = ${branchId}` : Prisma.empty}
-      ${VISIBLE_CAT_FILTER}
-    GROUP BY "categoryId"
+      ${branchId ? Prisma.sql`AND "branchId" = ${branchId}` : Prisma.empty}    GROUP BY "categoryId"
   `;
   const map = new Map<number, number>();
   for (const r of rows) map.set(r.categoryId, Number(r.total ?? 0));
@@ -165,9 +148,7 @@ async function _costByCategory(
     WHERE "periodStart" <= ${range.end}::date
       AND "periodEnd"   >= ${range.start}::date
       AND "costAmount"  IS NOT NULL
-      ${branchId ? Prisma.sql`AND "branchId" = ${branchId}` : Prisma.empty}
-      ${VISIBLE_CAT_FILTER}
-    GROUP BY "categoryId"
+      ${branchId ? Prisma.sql`AND "branchId" = ${branchId}` : Prisma.empty}    GROUP BY "categoryId"
   `;
   const map = new Map<number, number>();
   for (const r of rows) map.set(r.categoryId, Number(r.total ?? 0));
@@ -258,23 +239,26 @@ export const computeKPI = (range: DateRange, branchId?: number) =>
 
 export type DailyPoint = { date: string; value: number };
 
+// Kunlik savdo = CategorySales (ProductSales rollup) kunlik proratsiyasi.
+// Har kun uchun: ustma-ust davrlardan amount/(period kun soni) yig'indisi.
 async function _dailySalesSeries(
   range: DateRange,
   branchId?: number
 ): Promise<DailyPoint[]> {
-  const rows = await prisma.dailyMetrics.groupBy({
-    by: ["date"],
-    where: {
-      date: { gte: range.start, lte: range.end },
-      ...(branchId ? { branchId } : {}),
-    },
-    _sum: { receiptTotal: true },
-    orderBy: { date: "asc" },
-  });
-  return rows.map((r) => ({
-    date: isoDay(r.date),
-    value: Number(r._sum.receiptTotal ?? 0),
-  }));
+  const rows = await prisma.$queryRaw<{ date: string; value: number | null }[]>`
+    SELECT g.s::date::text AS date,
+      COALESCE(SUM(
+        cs."amount"::numeric / NULLIF((cs."periodEnd" - cs."periodStart" + 1), 0)::numeric
+      ), 0)::float8 AS value
+    FROM generate_series(${range.start}::date, ${range.end}::date, '1 day'::interval) AS g(s)
+    LEFT JOIN "CategorySales" cs
+      ON cs."periodStart" <= g.s::date
+      AND cs."periodEnd"   >= g.s::date
+      ${branchId ? Prisma.sql`AND cs."branchId" = ${branchId}` : Prisma.empty}
+    GROUP BY g.s
+    ORDER BY g.s
+  `;
+  return rows.map((r) => ({ date: r.date.slice(0, 10), value: Number(r.value ?? 0) }));
 }
 
 export const dailySalesSeries = (range: DateRange, branchId?: number) =>
@@ -464,9 +448,7 @@ async function _salesByBranchCategory(
     ), 0)::float8 AS total
     FROM "CategorySales"
     WHERE "periodStart" <= ${range.end}::date
-      AND "periodEnd"   >= ${range.start}::date
-      ${VISIBLE_CAT_FILTER}
-    GROUP BY "branchId", "categoryId"
+      AND "periodEnd"   >= ${range.start}::date    GROUP BY "branchId", "categoryId"
   `;
   const map = new Map<number, Map<number, number>>();
   for (const r of rows) {
@@ -492,9 +474,7 @@ async function _costByBranchCategory(
     FROM "CategorySales"
     WHERE "periodStart" <= ${range.end}::date
       AND "periodEnd"   >= ${range.start}::date
-      AND "costAmount"  IS NOT NULL
-      ${VISIBLE_CAT_FILTER}
-    GROUP BY "branchId", "categoryId"
+      AND "costAmount"  IS NOT NULL    GROUP BY "branchId", "categoryId"
   `;
   const map = new Map<number, Map<number, number>>();
   for (const r of rows) {
@@ -535,7 +515,7 @@ async function _branchReport(range: DateRange): Promise<BranchReportRow[]> {
   const [branches, allCategories, salesBCMap, costBCMap, metricsMap, visitsMap] =
     await Promise.all([
       prisma.branch.findMany({ orderBy: { sortOrder: "asc" } }),
-      prisma.category.findMany({ where: { parentId: null, sortOrder: { gt: 0 } }, orderBy: { sortOrder: "asc" } }),
+      prisma.category.findMany({ where: { parentId: null }, orderBy: { sortOrder: "asc" } }),
       _salesByBranchCategory(range),
       _costByBranchCategory(range),
       _metricsByBranch(range),
@@ -646,12 +626,11 @@ export const findMissingDays = (range: DateRange) =>
 // unstable_cache Date serialize qila olmaydi — ISO string sifatida cache qilamiz.
 const _cachedDefaultRange = unstable_cache(
   async (): Promise<{ start: string; end: string }> => {
-    const [lastSale, lastMetric, lastVisit] = await Promise.all([
+    const [lastSale, lastVisit] = await Promise.all([
       prisma.categorySales.findFirst({ orderBy: { periodEnd: "desc" }, select: { periodEnd: true } }),
-      prisma.dailyMetrics.findFirst({ orderBy: { date: "desc" }, select: { date: true } }),
       prisma.dailyVisits.findFirst({ orderBy: { date: "desc" }, select: { date: true } }),
     ]);
-    const candidates = [lastSale?.periodEnd, lastMetric?.date, lastVisit?.date].filter(Boolean) as Date[];
+    const candidates = [lastSale?.periodEnd, lastVisit?.date].filter(Boolean) as Date[];
     if (candidates.length === 0) {
       const now = new Date();
       return { start: isoDay(startOfMonth(now)), end: isoDay(endOfMonth(now)) };

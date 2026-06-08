@@ -142,9 +142,7 @@ async function _marjaBreakdown(range: DateRange, branchId?: number): Promise<{
            COALESCE(SUM(${proRatedCost}), 0)::float8 AS cost
     FROM "CategorySales" cs
     JOIN "Category" c ON c.id = cs."categoryId"
-    WHERE cs."periodEnd" >= ${range.start} AND cs."periodStart" <= ${range.end}
-      AND c."sortOrder" > 0
-    ${branchSql}
+    WHERE cs."periodEnd" >= ${range.start} AND cs."periodStart" <= ${range.end}    ${branchSql}
     GROUP BY c.id, c.name, c."sortOrder"
     ORDER BY c."sortOrder" ASC
   `;
@@ -155,9 +153,7 @@ async function _marjaBreakdown(range: DateRange, branchId?: number): Promise<{
     FROM "CategorySales" cs
     JOIN "Branch" b ON b.id = cs."branchId"
     JOIN "Category" cat ON cat.id = cs."categoryId"
-    WHERE cs."periodEnd" >= ${range.start} AND cs."periodStart" <= ${range.end}
-      AND cat."sortOrder" > 0
-    ${branchSql}
+    WHERE cs."periodEnd" >= ${range.start} AND cs."periodStart" <= ${range.end}    ${branchSql}
     GROUP BY b.id, b.name, b."sortOrder"
     ORDER BY b."sortOrder" ASC
   `;
@@ -271,14 +267,11 @@ async function _dailySalesByGroup(
       cg.id                               AS "groupId",
       cg.name                             AS "groupName",
       COALESCE(SUM(
-        cs.amount::numeric * (
-          (LEAST(cs."periodEnd", ${range.end}::date) - GREATEST(cs."periodStart", g.s::date) + 1)::float8
-          / NULLIF((cs."periodEnd" - cs."periodStart" + 1)::float8, 0)
-        )
+        cs.amount::numeric / NULLIF((cs."periodEnd" - cs."periodStart" + 1)::float8, 0)
       ), 0)::float8                        AS amount
     FROM generate_series(${range.start}::date, ${range.end}::date, '1 day'::interval) AS g(s)
     CROSS JOIN "CategoryGroup" cg
-    LEFT JOIN "Category" cat ON cat."groupId" = cg.id AND cat."parentId" IS NULL AND cat."sortOrder" > 0
+    LEFT JOIN "Category" cat ON cat."groupId" = cg.id AND cat."parentId" IS NULL
     LEFT JOIN "CategorySales" cs
       ON cs."categoryId" = cat.id
       AND cs."periodStart" <= g.s::date
@@ -333,10 +326,7 @@ async function _dailySalesByCategory(
       cat.id                              AS "categoryId",
       cat.name                            AS "categoryName",
       COALESCE(SUM(
-        cs.amount::numeric * (
-          (LEAST(cs."periodEnd", ${range.end}::date) - GREATEST(cs."periodStart", g.s::date) + 1)::float8
-          / NULLIF((cs."periodEnd" - cs."periodStart" + 1)::float8, 0)
-        )
+        cs.amount::numeric / NULLIF((cs."periodEnd" - cs."periodStart" + 1)::float8, 0)
       ), 0)::float8                        AS amount
     FROM generate_series(${range.start}::date, ${range.end}::date, '1 day'::interval) AS g(s)
     CROSS JOIN "Category" cat
@@ -346,9 +336,7 @@ async function _dailySalesByCategory(
       AND cs."periodEnd"   >= g.s::date
       ${branchSql}
     WHERE cat."groupId" = ${groupId}
-      AND cat."parentId" IS NULL
-      AND cat."sortOrder" > 0
-    GROUP BY g.s, cat.id, cat.name, cat."sortOrder"
+      AND cat."parentId" IS NULL    GROUP BY g.s, cat.id, cat.name, cat."sortOrder"
     ORDER BY g.s, cat."sortOrder"
   `;
 
