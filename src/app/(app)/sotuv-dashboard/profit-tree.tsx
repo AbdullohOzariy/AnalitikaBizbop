@@ -19,7 +19,7 @@ function Cells({ sales, cost, gross, writeoff, net }: { sales: number; cost: num
     <>
       <td className="px-2 py-1.5 text-right tabular-nums">{money(sales)}</td>
       <td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground">{money(cost)}</td>
-      <td className="px-2 py-1.5 text-right tabular-nums">{money(gross)}</td>
+      <td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground">{sales > 0 ? `${((gross / sales) * 100).toFixed(1)}%` : "—"}</td>
       <td className="px-2 py-1.5 text-right tabular-nums text-red-600/80 dark:text-red-400/80">{writeoff > 0 ? `−${money(writeoff)}` : "—"}</td>
       <td className={cn("px-3 py-1.5 text-right font-semibold tabular-nums", netClass(net))}>{money(net)}</td>
     </>
@@ -40,7 +40,7 @@ export function ProfitTree({ tree }: { tree: ProfitTree }) {
             <th className="px-3 py-2.5 text-left font-semibold">Bo&apos;lim / Kategoriya / Subkat</th>
             <th className="px-2 py-2.5 text-right font-semibold">Sotuv</th>
             <th className="px-2 py-2.5 text-right font-semibold">Tannarx</th>
-            <th className="px-2 py-2.5 text-right font-semibold">Yalpi</th>
+            <th className="px-2 py-2.5 text-right font-semibold">Marja %</th>
             <th className="px-2 py-2.5 text-right font-semibold">Chiqim</th>
             <th className="px-3 py-2.5 text-right font-semibold">Sof foyda</th>
           </tr>
