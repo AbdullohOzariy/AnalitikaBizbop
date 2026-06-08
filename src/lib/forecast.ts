@@ -183,6 +183,22 @@ export async function generateForecast(
   const monthStart = new Date(Date.UTC(year, month - 1, 1));
   const lookbackEnd = new Date(monthStart.getTime() - 86_400_000);
   const lookbackStart = new Date(monthStart.getTime() - LOOKBACK_DAYS * 86_400_000);
+  const nDays = daysInMonth(year, month);
+
+  // Bo'lim bo'yicha oylik reja summasi (subkat → ota → bo'lim)
+  const planRows = await prisma.$queryRaw<{ gid: number; amt: number }[]>`
+    SELECT COALESCE(par."groupId", sub."groupId") AS gid, SUM(sp.amount)::float8 AS amt
+    FROM "SalesPlan" sp
+    JOIN "Category" sub ON sub.id = sp."categoryId"
+    LEFT JOIN "Category" par ON par.id = sub."parentId"
+    WHERE sp."branchId" = ${branchId} AND sp.year = ${year} AND sp.month = ${month}
+      AND COALESCE(par."groupId", sub."groupId") IS NOT NULL
+    GROUP BY COALESCE(par."groupId", sub."groupId")
+  `;
+  const planByGroup = new Map(planRows.map((r) => [Number(r.gid), Number(r.amt)]));
+
+  // Kunlik jami prognoz (barcha bo'lim yig'indisi) — ForecastDay uchun
+  const dayTotals = new Array<number>(nDays).fill(0);
 
   const results: GroupForecastResult[] = [];
 
@@ -210,6 +226,10 @@ export async function generateForecast(
         : "Tarix yetarli emas — kunlar teng taqsimlandi.";
       usedModel = "fallback";
     }
+
+    // Kunlik jamiga bo'lim hissasini qo'shamiz: reja × og'irlik
+    const gPlan = planByGroup.get(group.id) ?? 0;
+    weights.forEach((w, i) => { dayTotals[i] += gPlan * w; });
 
     // Saqlash: eski egri chiziqni almashtirish + run jurnali
     const curveRows = weights.map((w, i) => ({
@@ -239,6 +259,20 @@ export async function generateForecast(
       hadHistory,
     });
   }
+
+  // Kunlik prognoz summalarini yozamiz (regeneratsiya qo'lda tahrirlarni almashtiradi)
+  const dayRows = dayTotals.map((amt, i) => ({
+    branchId,
+    year,
+    month,
+    date: new Date(Date.UTC(year, month - 1, i + 1)),
+    amount: new Prisma.Decimal(amt.toFixed(2)),
+    locked: false,
+  }));
+  await prisma.$transaction([
+    prisma.forecastDay.deleteMany({ where: { branchId, year, month } }),
+    prisma.forecastDay.createMany({ data: dayRows }),
+  ]);
 
   return results;
 }
@@ -275,35 +309,19 @@ export async function getForecastStatus(
   };
 }
 
-// ─── Kunlik prognoz qatori (dashboard overlay) ─────────────────────────────────
-// forecast[kun] = Σ_bo'lim ( bo'lim oylik rejasi × og'irlik[kun] )
+// ─── Kunlik prognoz qatori (dashboard overlay) — ForecastDay'dan ───────────────
 async function _dailyForecastSeries(
   range: DateRange,
   branchId?: number
 ): Promise<{ date: string; value: number }[]> {
-  const branchSql = branchId ? Prisma.sql`AND fc."branchId" = ${branchId}` : Prisma.empty;
+  const branchSql = branchId ? Prisma.sql`AND "branchId" = ${branchId}` : Prisma.empty;
   const rows = await prisma.$queryRaw<{ date: string; value: number }[]>`
-    SELECT fc."date"::text AS date,
-      COALESCE(SUM(fc.weight::numeric * sp.amt), 0)::float8 AS value
-    FROM "ForecastCurve" fc
-    JOIN (
-      SELECT sp."branchId",
-             COALESCE(par."groupId", sub."groupId") AS "groupId",
-             sp.year, sp.month, SUM(sp.amount)::numeric AS amt
-      FROM "SalesPlan" sp
-      JOIN "Category" sub ON sub.id = sp."categoryId"
-      LEFT JOIN "Category" par ON par.id = sub."parentId"
-      WHERE COALESCE(par."groupId", sub."groupId") IS NOT NULL
-      GROUP BY sp."branchId", COALESCE(par."groupId", sub."groupId"), sp.year, sp.month
-    ) sp
-      ON sp."branchId" = fc."branchId"
-      AND sp."groupId" = fc."groupId"
-      AND sp.year = fc.year
-      AND sp.month = fc.month
-    WHERE fc."date" BETWEEN ${range.start}::date AND ${range.end}::date
+    SELECT "date"::text AS date, COALESCE(SUM("amount"), 0)::float8 AS value
+    FROM "ForecastDay"
+    WHERE "date" BETWEEN ${range.start}::date AND ${range.end}::date
       ${branchSql}
-    GROUP BY fc."date"
-    ORDER BY fc."date"
+    GROUP BY "date"
+    ORDER BY "date"
   `;
   return rows.map((r) => ({ date: isoDay(new Date(r.date)), value: Number(r.value) }));
 }
@@ -314,3 +332,105 @@ export const dailyForecastSeries = (range: DateRange, branchId?: number) =>
     ["dailyForecastSeries", isoDay(range.start), isoDay(range.end), branchId ? String(branchId) : "all"],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
   )();
+
+// ─── Oy bo'yicha prognoz holati (Rejalar UI uchun) ─────────────────────────────
+export type ForecastMonthStatus = { lastGeneratedAt: string | null; branchIds: number[] };
+
+export async function getForecastMonthStatus(
+  year: number,
+  month: number
+): Promise<ForecastMonthStatus> {
+  const runs = await prisma.forecastRun.findMany({
+    where: { year, month },
+    select: { branchId: true, createdAt: true },
+  });
+  return {
+    lastGeneratedAt: runs.length
+      ? new Date(Math.max(...runs.map((r) => r.createdAt.getTime()))).toISOString()
+      : null,
+    branchIds: [...new Set(runs.map((r) => r.branchId))],
+  };
+}
+
+// ─── Kunlik prognoz qiymatlari (Kunlik prognoz tab) ────────────────────────────
+export type ForecastDayCell = { amount: number; locked: boolean };
+
+export async function getForecastDays(
+  year: number,
+  month: number
+): Promise<Record<number, Record<string, ForecastDayCell>>> {
+  const rows = await prisma.forecastDay.findMany({
+    where: { year, month },
+    select: { branchId: true, date: true, amount: true, locked: true },
+  });
+  const map: Record<number, Record<string, ForecastDayCell>> = {};
+  for (const r of rows) {
+    (map[r.branchId] ??= {})[isoDay(r.date)] = { amount: Number(r.amount), locked: r.locked };
+  }
+  return map;
+}
+
+// ─── Kunlik prognozni qo'lda tahrirlash (qulflash + qayta taqsimlash) ──────────
+// amount=null → kunni qulfdan chiqarish (auto). Yig'indi har doim filial oylik
+// reja summasiga teng saqlanadi: qulflangan kunlar fiks, qolganlari proporsional.
+export async function applyForecastDayEdit(
+  branchId: number,
+  year: number,
+  month: number,
+  dateISO: string,
+  amount: number | null
+): Promise<Record<string, ForecastDayCell>> {
+  const planRows = await prisma.$queryRaw<{ amt: number }[]>`
+    SELECT COALESCE(SUM(sp.amount), 0)::float8 AS amt
+    FROM "SalesPlan" sp
+    WHERE sp."branchId" = ${branchId} AND sp.year = ${year} AND sp.month = ${month}
+  `;
+  const planTotal = Number(planRows[0]?.amt ?? 0);
+  const target = new Date(dateISO + "T00:00:00.000Z");
+
+  if (amount === null) {
+    await prisma.forecastDay.updateMany({
+      where: { branchId, year, month, date: target },
+      data: { locked: false },
+    });
+  } else {
+    const val = new Prisma.Decimal(Math.max(0, amount).toFixed(2));
+    await prisma.forecastDay.upsert({
+      where: { branchId_year_month_date: { branchId, year, month, date: target } },
+      create: { branchId, year, month, date: target, amount: val, locked: true },
+      update: { amount: val, locked: true },
+    });
+  }
+
+  const days = await prisma.forecastDay.findMany({
+    where: { branchId, year, month },
+    orderBy: { date: "asc" },
+  });
+  const lockedSum = days.filter((d) => d.locked).reduce((s, d) => s + Number(d.amount), 0);
+  const leftover = Math.max(0, planTotal - lockedSum);
+  const unlocked = days.filter((d) => !d.locked);
+  const curUnlockedSum = unlocked.reduce((s, d) => s + Number(d.amount), 0);
+
+  const updates = unlocked.map((d) => {
+    const cur = Number(d.amount);
+    const next =
+      curUnlockedSum > 0
+        ? (cur * leftover) / curUnlockedSum
+        : unlocked.length
+        ? leftover / unlocked.length
+        : 0;
+    return prisma.forecastDay.update({
+      where: { id: d.id },
+      data: { amount: new Prisma.Decimal(next.toFixed(2)) },
+    });
+  });
+  if (updates.length) await prisma.$transaction(updates);
+
+  const fresh = await prisma.forecastDay.findMany({
+    where: { branchId, year, month },
+    orderBy: { date: "asc" },
+  });
+  const out: Record<string, ForecastDayCell> = {};
+  for (const d of fresh) out[isoDay(d.date)] = { amount: Number(d.amount), locked: d.locked };
+  return out;
+}

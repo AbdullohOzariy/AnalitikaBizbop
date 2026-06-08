@@ -85,6 +85,7 @@ model Branch {
   marginPlans   MarginPlan[]
   forecastCurves ForecastCurve[]
   forecastRuns   ForecastRun[]
+  forecastDays   ForecastDay[]
 }
 
 model BranchAlias {
@@ -395,6 +396,26 @@ model ForecastCurve {
   @@unique([branchId, groupId, year, month, date])
   @@index([branchId, year, month])
   @@index([date])
+}
+
+// Kunlik prognoz summasi — filial × oy × kun (barcha bo'limlar yig'indisi).
+// Dashboard va Rejalar "Kunlik prognoz" tab shu jadvalni o'qiydi/tahrirlaydi.
+// locked=true — admin qo'lda o'zgartirgan kun; qayta taqsimlashda o'zgarmaydi.
+// Yig'indi (oy bo'yicha) = filial oylik reja summasiga teng (tahrirda saqlanadi).
+model ForecastDay {
+  id       Int      @id @default(autoincrement())
+  branchId Int
+  year     Int
+  month    Int
+  date     DateTime @db.Date
+  amount   Decimal  @db.Decimal(18, 2)
+  locked   Boolean  @default(false)
+
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([branchId, year, month, date])
+  @@index([date])
+  @@index([branchId, year, month])
 }
 
 // Prognoz yaratish jurnali — filial × bo'lim × oy uchun AI izohi va meta.
