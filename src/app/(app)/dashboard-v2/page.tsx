@@ -5,14 +5,11 @@ import { prisma } from "@/lib/prisma";
 import { getDefaultRange } from "@/lib/analytics";
 import {
   dailyVisitsByBranch,
-  dailyReceiptsByBranch,
-  dailyAvgReceiptByBranch,
   marjaBreakdown,
-  kpiByBranch,
   dailySalesByGroup,
   dailySalesByCategory,
 } from "@/lib/analytics-v2";
-import { Sparkles, ShoppingCart, TrendingUp, Users, ReceiptText } from "lucide-react";
+import { Sparkles, ShoppingCart, TrendingUp, Users } from "lucide-react";
 import { PageHeader, StatCard } from "@/components/common/page";
 import { formatUZS, formatNumber } from "@/lib/format";
 import { FiltersBar } from "./filters";
@@ -20,8 +17,6 @@ import {
   DailyByBranchWidget,
   MarjaByBranchWidget,
   MarjaByCategoryWidget,
-  ConversionWidget,
-  AvgItemsWidget,
   GroupSalesDynamicsWidget,
 } from "./widgets";
 
@@ -31,20 +26,7 @@ function parseISO(s: string | undefined, fallback: Date): Date {
   return isNaN(d.getTime()) ? fallback : d;
 }
 
-type BranchSeries = Awaited<ReturnType<typeof dailyReceiptsByBranch>>;
-
-function getPreviousPeriod(range: { start: Date; end: Date }): { start: Date; end: Date } {
-  const dayMs = 86_400_000;
-  const len = Math.round((range.end.getTime() - range.start.getTime()) / dayMs) + 1;
-  const end = new Date(range.start.getTime() - dayMs);
-  const start = new Date(end.getTime() - (len - 1) * dayMs);
-  return { start, end };
-}
-
-function calcDelta(curr: number | null | undefined, prev: number | null | undefined): number | null {
-  if (curr == null || prev == null || prev === 0) return null;
-  return ((curr - prev) / Math.abs(prev)) * 100;
-}
+type BranchSeries = Awaited<ReturnType<typeof dailyVisitsByBranch>>;
 
 function seriesTotal(series: BranchSeries): number {
   return series.values.reduce((sum, row) => {
@@ -52,21 +34,6 @@ function seriesTotal(series: BranchSeries): number {
       return branchSum + Number(row[`b${branch.id}`] ?? 0);
     }, 0);
   }, 0);
-}
-
-function seriesAverage(series: BranchSeries): number | null {
-  let sum = 0;
-  let count = 0;
-  for (const row of series.values) {
-    for (const branch of series.branches) {
-      const value = Number(row[`b${branch.id}`] ?? 0);
-      if (value > 0) {
-        sum += value;
-        count += 1;
-      }
-    }
-  }
-  return count > 0 ? sum / count : null;
 }
 
 function WidgetsSkeleton() {
@@ -103,27 +70,10 @@ async function WidgetsSection({
     start: new Date(startStr + "T00:00:00.000Z"),
     end: new Date(endStr + "T00:00:00.000Z"),
   };
-  const previousRange = getPreviousPeriod(range);
 
-  const [
-    visits,
-    receipts,
-    avgReceipt,
-    marja,
-    kpi,
-    prevReceipts,
-    prevAvgReceipt,
-    prevKpi,
-    groupSales,
-  ] = await Promise.all([
+  const [visits, marja, groupSales] = await Promise.all([
     dailyVisitsByBranch(range),
-    dailyReceiptsByBranch(range),
-    dailyAvgReceiptByBranch(range),
     marjaBreakdown(range, branchId),
-    kpiByBranch(range),
-    dailyReceiptsByBranch(previousRange),
-    dailyAvgReceiptByBranch(previousRange),
-    kpiByBranch(previousRange),
     dailySalesByGroup(range, branchId),
   ]);
 
@@ -138,59 +88,20 @@ async function WidgetsSection({
 
   const filterByBranch = (s: typeof visits) =>
     branchId == null ? s : { ...s, branches: s.branches.filter((b) => b.id === branchId) };
-  const visibleReceipts = filterByBranch(receipts);
-  const visiblePrevReceipts = filterByBranch(prevReceipts);
-  const visibleAvgReceipt = filterByBranch(avgReceipt);
-  const visiblePrevAvgReceipt = filterByBranch(prevAvgReceipt);
-  const visibleKpi = branchId ? kpi.filter((r) => r.branchId === branchId) : kpi;
-  const previousVisibleKpi = branchId ? prevKpi.filter((r) => r.branchId === branchId) : prevKpi;
-  const prevKpiMap = new Map(prevKpi.map((r) => [r.branchId, r]));
-  const kpiWithTrends = visibleKpi.map((r) => {
-    const prev = prevKpiMap.get(r.branchId);
-    return {
-      ...r,
-      conversionTrend: calcDelta(r.conversion, prev?.conversion),
-      avgItemsTrend: calcDelta(r.avgItemsPerReceipt, prev?.avgItemsPerReceipt),
-    };
-  });
-  const sumKpi = (rows: typeof visibleKpi) =>
-    rows.reduce(
-      (acc, r) => ({
-        receipts: acc.receipts + r.receipts,
-        visits: acc.visits + r.visits,
-        avgItemsSum: acc.avgItemsSum + (r.avgItemsPerReceipt ?? 0) * r.receipts,
-      }),
-      { receipts: 0, visits: 0, avgItemsSum: 0 }
-    );
-  const currentKpiTotals = sumKpi(visibleKpi);
-  const previousKpiTotals = sumKpi(previousVisibleKpi);
-  const conversionTrend = calcDelta(
-    currentKpiTotals.visits > 0 ? (currentKpiTotals.receipts / currentKpiTotals.visits) * 100 : null,
-    previousKpiTotals.visits > 0 ? (previousKpiTotals.receipts / previousKpiTotals.visits) * 100 : null
-  );
-  const avgItemsTrend = calcDelta(
-    currentKpiTotals.receipts > 0 ? currentKpiTotals.avgItemsSum / currentKpiTotals.receipts : null,
-    previousKpiTotals.receipts > 0 ? previousKpiTotals.avgItemsSum / previousKpiTotals.receipts : null
-  );
 
   // ── KPI hero row uchun jami hisoblar ──────────────────────────────
-  // Umumiy savdo: GroupSalesDayRow.total yig'indisi (mavjud ma'lumotdan)
   const totalSales = groupSales.days.reduce((s, d) => s + d.total, 0);
-  // Umumiy marja: marja.byBranch dan weighted average
   const marjaTotalSales = marja.byBranch.reduce((s, r) => s + r.sales, 0);
   const marjaTotalCost  = marja.byBranch.reduce((s, r) => s + r.cost, 0);
   const overallMarja    = marjaTotalSales > 0
     ? ((marjaTotalSales - marjaTotalCost) / marjaTotalSales) * 100
     : null;
-  // Umumiy tashriflar va cheklar
-  const totalVisits   = currentKpiTotals.visits;
-  const totalReceipts = currentKpiTotals.receipts;
-  const overallConversion = totalVisits > 0 ? (totalReceipts / totalVisits) * 100 : null;
+  const totalVisits = seriesTotal(filterByBranch(visits));
 
   return (
     <div className="space-y-4">
       {/* KPI Hero qatori */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-3 gap-3">
         <StatCard
           label="Umumiy savdo"
           value={totalSales > 0 ? formatUZS(totalSales, { compact: true }) : "—"}
@@ -209,13 +120,6 @@ async function WidgetsSection({
           icon={Users}
           tone="blue"
         />
-        <StatCard
-          label="Konversiya"
-          value={overallConversion != null ? `${overallConversion.toFixed(1)}%` : "—"}
-          icon={ReceiptText}
-          hint={totalReceipts > 0 ? `${formatNumber(totalReceipts)} chek` : undefined}
-          tone="default"
-        />
       </div>
 
       {/* Widgetlar gridi */}
@@ -223,19 +127,6 @@ async function WidgetsSection({
         <MarjaByBranchWidget data={marja.byBranch} />
         <MarjaByCategoryWidget data={marja.byCategory} />
         <DailyByBranchWidget title="Tashriflar (kunlik)" data={filterByBranch(visits)} />
-        <DailyByBranchWidget
-          title="Chek soni (kunlik)"
-          data={visibleReceipts}
-          trend={calcDelta(seriesTotal(visibleReceipts), seriesTotal(visiblePrevReceipts))}
-        />
-        <DailyByBranchWidget
-          title="O'rtacha chek (kunlik)"
-          data={visibleAvgReceipt}
-          format="uzs-compact"
-          trend={calcDelta(seriesAverage(visibleAvgReceipt), seriesAverage(visiblePrevAvgReceipt))}
-        />
-        <ConversionWidget rows={kpiWithTrends} trend={conversionTrend} />
-        <AvgItemsWidget rows={kpiWithTrends} trend={avgItemsTrend} />
         <GroupSalesDynamicsWidget
           days={groupSales.days}
           groups={groupSales.groups}
