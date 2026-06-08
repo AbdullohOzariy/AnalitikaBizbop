@@ -1,8 +1,9 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth-helpers";
+import { ANALYTICS_CACHE_TAG } from "@/lib/analytics";
 import { yozuvYangila, yozuvOchir } from "@/lib/spisaniya/db";
 
 type Result = { ok: true } | { ok: false; error: string };
@@ -19,7 +20,13 @@ function xato(err: unknown): Result {
 }
 
 // revalidate qilinadigan yo'llar
-const PATHS = ["/chiqim", "/chiqim/statistika"] as const;
+const PATHS = ["/chiqim", "/chiqim/statistika", "/chiqim/moslash"] as const;
+
+// chiqim o'zgarishi sof foyda (sotuv-dashboard) ga ta'sir qiladi → ANALYTICS tegini ham yangilaymiz
+function revalidateAll() {
+  for (const path of PATHS) revalidatePath(path);
+  revalidateTag(ANALYTICS_CACHE_TAG, "max");
+}
 
 const yangilaSchema = z.object({
   id: z.coerce.number().int().positive(),
@@ -61,7 +68,7 @@ export async function chiqimYozuvYangilaAction(input: {
       kategoriya: p.kategoriya !== undefined ? (p.kategoriya || null) : undefined,
     });
     if (!updated) return { ok: false, error: "Yozuv topilmadi yoki o'zgartirish yo'q." };
-    for (const path of PATHS) revalidatePath(path);
+    revalidateAll();
     return { ok: true };
   } catch (err) {
     return xato(err);
@@ -73,7 +80,7 @@ export async function chiqimYozuvOchirAction(id: number): Promise<Result> {
     await requireAdmin();
     const validId = z.coerce.number().int().positive().parse(id);
     await yozuvOchir(validId);
-    for (const path of PATHS) revalidatePath(path);
+    revalidateAll();
     return { ok: true };
   } catch (err) {
     return xato(err);

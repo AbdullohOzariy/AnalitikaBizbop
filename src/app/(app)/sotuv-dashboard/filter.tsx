@@ -31,6 +31,9 @@ export function SotuvFilter({
   const searchParams = useSearchParams();
   const [s, setS] = useState(start);
   const [e, setE] = useState(end);
+  // Server yangi sana bersa (navigatsiya/orqaga) lokal holatni sinxronlaymiz
+  const [seen, setSeen] = useState(`${start}|${end}`);
+  if (seen !== `${start}|${end}`) { setSeen(`${start}|${end}`); setS(start); setE(end); }
 
   const nav = (changes: Record<string, string>) => {
     const p = new URLSearchParams(searchParams.toString());

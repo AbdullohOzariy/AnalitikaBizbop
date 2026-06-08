@@ -45,12 +45,12 @@ export default async function FinansPage({
 
   const [rows, agg] = await Promise.all([
     prisma.expense.findMany({
-      where: { spentAt: { gte: start, lte: end } },
+      where: { spentAt: { gte: start, lte: end }, deletedAt: null },
       orderBy: [{ spentAt: "desc" }, { createdAt: "desc" }],
       include: { createdBy: { select: { name: true } } },
     }),
     prisma.expense.aggregate({
-      where: { spentAt: { gte: start, lte: end } },
+      where: { spentAt: { gte: start, lte: end }, deletedAt: null },
       _sum: { amount: true },
       _count: true,
     }),

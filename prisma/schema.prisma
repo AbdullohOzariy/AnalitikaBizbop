@@ -388,10 +388,11 @@ model Expense {
   name        String // harajat nomi
   quantity    Decimal  @db.Decimal(20, 3) // miqdor
   unitPrice   Decimal  @db.Decimal(20, 2) // narx (bir birlik)
-  amount      Decimal  @db.Decimal(20, 2) // summa = quantity × unitPrice
-  spentAt     DateTime @db.Date // harajat qilingan sana
+  amount      Decimal   @db.Decimal(20, 2) // summa = quantity × unitPrice
+  spentAt     DateTime  @db.Date // harajat qilingan sana
   createdById Int
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
+  deletedAt   DateTime? // soft delete — moliyaviy yozuv butunlay o'chmaydi
 
   createdBy User @relation(fields: [createdById], references: [id])
 
@@ -412,6 +413,7 @@ model MarginPlan {
 
   @@unique([branchId, categoryId])
   @@index([branchId])
+  @@index([categoryId])
 }
 
 // AI prognoz egri chizig'i — filial × bo'lim × oy uchun kunlik og'irlik (taqsimot shakli).

@@ -96,7 +96,7 @@ export default async function SotuvDashboardPage({
 
     dailySalesSeries(range, branchId),
     dailyForecastSeries(range, branchId),
-    computeProfitTree(range),
+    computeProfitTree(range, branchId),
   ]);
 
   const totalPlan = branchRows.reduce((s, b) => s + b.plan, 0);
@@ -190,7 +190,7 @@ export default async function SotuvDashboardPage({
           <div className="flex items-center gap-2">
             <Coins className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
             <h3 className="text-sm font-semibold">Sof foyda — Iyerarxiya bo&apos;yicha</h3>
-            <span className="text-xs text-muted-foreground">(sotuv − tannarx − chiqim · barcha filiallar)</span>
+            <span className="text-xs text-muted-foreground">(sotuv − tannarx − chiqim{branchId ? "" : " · barcha filiallar"})</span>
           </div>
           <span className="rounded-lg bg-emerald-500/10 px-3 py-1 text-sm font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
             Jami sof foyda: {formatUZS(profit.total.net, { compact: true })}

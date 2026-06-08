@@ -25,6 +25,23 @@ const credentialsSchema = z.object({
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
+  callbacks: {
+    ...authConfig.callbacks,
+    // Rolni HAR sessiyada DB'dan qayta o'qiymiz — rol pasaytirilsa/o'chirilsa
+    // darhol kuchga kiradi (eskirgan JWT token'ga ishonmaymiz). O'chirilgan
+    // foydalanuvchi VIEWER (huquqsiz) bo'lib qoladi — hamma joydan bloklanadi.
+    session: async ({ session, token }) => {
+      if (token?.id && session.user) {
+        session.user.id = token.id as string;
+        const dbUser = await prisma.user.findUnique({
+          where: { id: Number(token.id) },
+          select: { role: true },
+        });
+        session.user.role = (dbUser?.role ?? "VIEWER") as Role;
+      }
+      return session;
+    },
+  },
   providers: [
     Credentials({
       credentials: {

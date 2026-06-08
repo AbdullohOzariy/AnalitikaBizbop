@@ -263,8 +263,15 @@ export async function generateForecast(
     });
   }
 
-  // Kunlik prognoz summalarini yozamiz (regeneratsiya qo'lda tahrirlarni almashtiradi)
-  const dayRows = dayTotals.map((amt, i) => ({
+  // Kunlik prognoz summalarini yozamiz (regeneratsiya qo'lda tahrirlarni almashtiradi).
+  // Epsilon: 2 kasrga yaxlitlash qoldig'ini oxirgi kunga qo'shamiz → yig'indi aniq rejaga teng.
+  const planSum = [...planByGroup.values()].reduce((s, v) => s + v, 0);
+  const rounded = dayTotals.map((v) => Math.round(v * 100) / 100);
+  if (rounded.length) {
+    const rSum = rounded.reduce((s, v) => s + v, 0);
+    rounded[rounded.length - 1] = Math.max(0, Math.round((rounded[rounded.length - 1] + (planSum - rSum)) * 100) / 100);
+  }
+  const dayRows = rounded.map((amt, i) => ({
     branchId,
     year,
     month,
@@ -391,6 +398,23 @@ export async function applyForecastDayEdit(
   const planTotal = Number(planRows[0]?.amt ?? 0);
   const target = new Date(dateISO + "T00:00:00.000Z");
 
+  // ── Mutatsiyadan OLDIN tekshiruvlar ──
+  const existing = await prisma.forecastDay.findMany({
+    where: { branchId, year, month },
+    orderBy: { date: "asc" },
+  });
+  if (existing.length === 0) {
+    throw new Error("Bu oy uchun prognoz yo'q — avval \"Prognoz yaratish\"ni bosing.");
+  }
+  if (amount !== null) {
+    const otherLocked = existing
+      .filter((d) => d.locked && isoDay(d.date) !== dateISO)
+      .reduce((s, d) => s + Number(d.amount), 0);
+    if (otherLocked + Math.max(0, amount) > planTotal + 0.5) {
+      throw new Error("Qulflangan kunlar yig'indisi oylik rejadan oshib ketdi.");
+    }
+  }
+
   if (amount === null) {
     await prisma.forecastDay.updateMany({
       where: { branchId, year, month, date: target },
@@ -414,19 +438,25 @@ export async function applyForecastDayEdit(
   const unlocked = days.filter((d) => !d.locked);
   const curUnlockedSum = unlocked.reduce((s, d) => s + Number(d.amount), 0);
 
-  const updates = unlocked.map((d) => {
+  // Yangi qiymatlar + epsilon to'g'rilash (yaxlitlash qoldig'i oxirgi kunga) → yig'indi = reja
+  const newVals = unlocked.map((d) => {
     const cur = Number(d.amount);
     const next =
-      curUnlockedSum > 0
-        ? (cur * leftover) / curUnlockedSum
-        : unlocked.length
-        ? leftover / unlocked.length
-        : 0;
-    return prisma.forecastDay.update({
-      where: { id: d.id },
-      data: { amount: new Prisma.Decimal(next.toFixed(2)) },
-    });
+      curUnlockedSum > 0 ? (cur * leftover) / curUnlockedSum
+      : unlocked.length ? leftover / unlocked.length
+      : 0;
+    return Math.round(next * 100) / 100;
   });
+  if (newVals.length) {
+    const rSum = newVals.reduce((s, v) => s + v, 0);
+    newVals[newVals.length - 1] = Math.max(0, Math.round((newVals[newVals.length - 1] + (leftover - rSum)) * 100) / 100);
+  }
+  const updates = unlocked.map((d, i) =>
+    prisma.forecastDay.update({
+      where: { id: d.id },
+      data: { amount: new Prisma.Decimal(newVals[i].toFixed(2)) },
+    })
+  );
   if (updates.length) await prisma.$transaction(updates);
 
   const fresh = await prisma.forecastDay.findMany({

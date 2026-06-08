@@ -53,7 +53,8 @@ export async function deleteExpenseAction(
   try {
     await requireExpenseEditor();
     const uid = z.coerce.number().int().positive().parse(id);
-    await prisma.expense.delete({ where: { id: uid } });
+    // Soft-delete — moliyaviy yozuv butunlay o'chmaydi
+    await prisma.expense.update({ where: { id: uid }, data: { deletedAt: new Date() } });
     revalidatePath("/sotuv/finans");
     return { ok: true };
   } catch (err) {

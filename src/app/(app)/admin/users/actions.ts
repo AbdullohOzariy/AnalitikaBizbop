@@ -88,6 +88,11 @@ export async function updateUserAction(
     if (taken) return { ok: false, error: "Bu login band." };
 
     const cur = await prisma.user.findUnique({ where: { id: p.id }, select: { role: true } });
+    // Oxirgi System Admin'ni pasaytirib tizimni adminsiz qoldirmaslik
+    if (cur?.role === "SYSTEM_ADMIN" && p.role !== "SYSTEM_ADMIN") {
+      const saCount = await prisma.user.count({ where: { role: "SYSTEM_ADMIN" } });
+      if (saCount <= 1) return { ok: false, error: "Oxirgi System Admin'ni pasaytirib bo'lmaydi." };
+    }
     await prisma.$transaction([
       prisma.user.update({
         where: { id: p.id },
@@ -111,6 +116,12 @@ export async function deleteUserAction(
   try {
     const me = await requireAdmin();
     if (Number(me.id) === id) return { ok: false, error: "O'zingizni o'chira olmaysiz." };
+    // Oxirgi System Admin'ni o'chirib tizimni adminsiz qoldirmaslik
+    const target = await prisma.user.findUnique({ where: { id }, select: { role: true } });
+    if (target?.role === "SYSTEM_ADMIN") {
+      const saCount = await prisma.user.count({ where: { role: "SYSTEM_ADMIN" } });
+      if (saCount <= 1) return { ok: false, error: "Oxirgi System Admin'ni o'chirib bo'lmaydi." };
+    }
     // Foydalanuvchi yuklagan fayllar UploadedFile.uploadedById orqali bog'langan (FK).
     // O'chirishdan oldin ularni joriy adminga qayta biriktiramiz (ma'lumot saqlanadi).
     await prisma.$transaction([

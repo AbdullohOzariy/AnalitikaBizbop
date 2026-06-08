@@ -1,5 +1,6 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
+import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import {
   computeKPI,
@@ -41,6 +42,9 @@ export default async function BranchDetailPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ start?: string; end?: string }>;
 }) {
+  const session = await auth();
+  if (!session?.user || session.user.role !== "SYSTEM_ADMIN") redirect("/dashboard-v2");
+
   const { id } = await params;
   const sp = await searchParams;
   const branchId = Number(id);

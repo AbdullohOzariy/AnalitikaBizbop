@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useMemo, useTransition } from "react";
+import { useState, useRef, useMemo, useTransition, useEffect } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import {
   ChevronRight, Loader2, Check, AlertCircle, TrendingUp, Percent,
@@ -163,6 +163,13 @@ export function PlanEditor({
   const marginTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const fcTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
+  // Unmount (oy/tab almashganda) — kutilayotgan debounce timerlarni tozalaymiz
+  // (eskirgan qiymat DB'ga yozilmasligi uchun).
+  useEffect(() => {
+    const all = [salesTimers, marginTimers, fcTimers];
+    return () => { for (const t of all) Object.values(t.current).forEach(clearTimeout); };
+  }, []);
+
   // ─── Prognoz holati ────────────────────────────────────────────────────────
   const [fcStatus, setFcStatus] = useState<ForecastMonthStatus>(forecastStatus);
   const [fcPending, startFc] = useTransition();
@@ -191,7 +198,7 @@ export function PlanEditor({
     });
   };
   const clearMargin = () => {
-    if (!confirm("Barcha marja rejasi o'chirilsinmi? (marja vaqtsiz)")) return;
+    if (!confirm("BARCHA filial va subkategoriya marja rejasi o'chiriladi (marja vaqtsiz — oy bo'yicha emas). Davom etilsinmi?")) return;
     startClear(async () => {
       const res = await clearMarginPlansAction();
       if (res.ok) { toast.success(`${res.count} ta yozuv tozalandi.`); setMarginCells({}); router.refresh(); }
@@ -443,6 +450,7 @@ export function PlanEditor({
                                           type === "sotuv" ? (
                                             <input
                                               type="text" inputMode="numeric"
+                                              aria-label={`${sub.name} — ${b.name} reja (so'm)`}
                                               value={groupDigits(cell.val)}
                                               onChange={(e) => onChange(sub.id, b.id, e.target.value)}
                                               placeholder="0"
@@ -452,6 +460,7 @@ export function PlanEditor({
                                             <div className="relative w-full">
                                               <input
                                                 type="number" min="0" max="100" step="0.01"
+                                                aria-label={`${sub.name} — ${b.name} marja %`}
                                                 value={cell.val}
                                                 onChange={(e) => onChange(sub.id, b.id, e.target.value)}
                                                 placeholder="0"
@@ -618,6 +627,7 @@ export function PlanEditor({
                           {isAdmin ? (
                             <input
                               type="text" inputMode="numeric"
+                              aria-label={`${d}-kun — ${b.name} prognoz (so'm)`}
                               value={groupDigits(cell.val)}
                               onChange={(e) => onFcChange(b.id, date, e.target.value)}
                               placeholder="0"

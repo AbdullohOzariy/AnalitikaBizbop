@@ -76,6 +76,11 @@ export function ExpenseFilter({ start, end }: { start: string; end: string }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const [s, setS] = useState(start);
+  const [e, setE] = useState(end);
+  // Server yangi sana bersa lokal holatni sinxronlaymiz (controlled input)
+  const [seen, setSeen] = useState(`${start}|${end}`);
+  if (seen !== `${start}|${end}`) { setSeen(`${start}|${end}`); setS(start); setE(end); }
   const nav = (k: string, v: string) => {
     const p = new URLSearchParams(searchParams.toString());
     if (v) p.set(k, v); else p.delete(k);
@@ -85,11 +90,11 @@ export function ExpenseFilter({ start, end }: { start: string; end: string }) {
     <div className="flex flex-wrap items-end gap-3">
       <div className="space-y-1">
         <Label className="text-xs text-muted-foreground">Boshlanish</Label>
-        <Input type="date" defaultValue={start} onChange={(e) => nav("start", e.target.value)} className="h-9 w-40" />
+        <Input type="date" value={s} onChange={(ev) => { setS(ev.target.value); if (/^\d{4}-\d{2}-\d{2}$/.test(ev.target.value)) nav("start", ev.target.value); }} className="h-9 w-40" />
       </div>
       <div className="space-y-1">
         <Label className="text-xs text-muted-foreground">Tugash</Label>
-        <Input type="date" defaultValue={end} onChange={(e) => nav("end", e.target.value)} className="h-9 w-40" />
+        <Input type="date" value={e} onChange={(ev) => { setE(ev.target.value); if (/^\d{4}-\d{2}-\d{2}$/.test(ev.target.value)) nav("end", ev.target.value); }} className="h-9 w-40" />
       </div>
     </div>
   );

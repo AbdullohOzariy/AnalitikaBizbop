@@ -7,8 +7,13 @@
  * Chiqim: bizbop yozuvlari (ALOHIDA baza) → SpisaniyaCategoryLink (nom → subkat) orqali.
  * Subkat → kategoriya → bo'lim → umumiy bo'yicha yig'iladi.
  */
+import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@/generated/prisma/client";
+import { ANALYTICS_CACHE_TAG } from "@/lib/analytics";
 import { chiqimByKategoriya, type ChiqimRange } from "./db";
+
+const isoDay = (d: Date) => d.toISOString().slice(0, 10);
 
 export type ProfitNode = {
   id: number;
@@ -31,7 +36,12 @@ function finalize<T extends { sales: number; cost: number; writeoff: number }>(n
   return { ...n, gross: n.sales - n.cost, net: n.sales - n.cost - n.writeoff };
 }
 
-export async function computeProfitTree(range: ChiqimRange): Promise<ProfitTree> {
+async function _computeProfitTree(
+  range: ChiqimRange,
+  branchId?: number,
+  branchName?: string
+): Promise<ProfitTree> {
+  const branchSql = branchId ? Prisma.sql`AND ps."branchId" = ${branchId}` : Prisma.empty;
   const [groups, salesRows, writeoffRows, links] = await Promise.all([
     prisma.categoryGroup.findMany({
       orderBy: { sortOrder: "asc" },
@@ -65,9 +75,10 @@ export async function computeProfitTree(range: ChiqimRange): Promise<ProfitTree>
       WHERE ps."periodStart" <= ${range.end}::date
         AND ps."periodEnd" >= ${range.start}::date
         AND p."categoryId" IS NOT NULL
+        ${branchSql}
       GROUP BY p."categoryId"
     `,
-    chiqimByKategoriya(range),
+    chiqimByKategoriya(range, branchName),
     prisma.spisaniyaCategoryLink.findMany({ select: { botName: true, categoryId: true } }),
   ]);
 
@@ -111,4 +122,19 @@ export async function computeProfitTree(range: ChiqimRange): Promise<ProfitTree>
     total: { sales: tS, cost: tC, writeoff: tW, gross: tS - tC, net: tS - tC - tW },
     unmappedWriteoff,
   };
+}
+
+// Keshlangan (ANALYTICS_CACHE_TAG bilan) — reja/chiqim o'zgarganda invalidatsiya bo'ladi.
+// 731k ProductSales bo'yicha og'ir so'rov har yuklashda emas, faqat cache miss'da bajariladi.
+export function computeProfitTree(range: ChiqimRange, branchId?: number): Promise<ProfitTree> {
+  return unstable_cache(
+    async () => {
+      const branchName = branchId
+        ? (await prisma.branch.findUnique({ where: { id: branchId }, select: { name: true } }))?.name
+        : undefined;
+      return _computeProfitTree(range, branchId, branchName);
+    },
+    ["computeProfitTree", isoDay(range.start), isoDay(range.end), branchId ? String(branchId) : "all"],
+    { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
+  )();
 }

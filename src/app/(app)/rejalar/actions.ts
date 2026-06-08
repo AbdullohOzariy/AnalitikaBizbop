@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidateTag } from "next/cache";
+import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { ANALYTICS_CACHE_TAG } from "@/lib/analytics";
@@ -17,57 +18,40 @@ async function requireAdmin() {
   if (session?.user.role !== "SYSTEM_ADMIN") throw new Error("Ruxsat yo'q");
 }
 
-export async function upsertSalesPlan(input: {
-  branchId: number;
-  categoryId: number;
-  year: number;
-  month: number;
-  amount: number;
-}) {
+const id = z.coerce.number().int().positive();
+const yearZ = z.coerce.number().int().min(2000).max(2100);
+const monthZ = z.coerce.number().int().min(1).max(12);
+
+const salesSchema = z.object({
+  branchId: id, categoryId: id, year: yearZ, month: monthZ,
+  amount: z.coerce.number().min(0).max(1e15),
+});
+const marginSchema = z.object({
+  branchId: id, categoryId: id,
+  marginPct: z.coerce.number().min(0).max(100),
+});
+
+export async function upsertSalesPlan(input: z.input<typeof salesSchema>) {
   await requireAdmin();
+  const p = salesSchema.parse(input);
   await prisma.salesPlan.upsert({
-    where: {
-      branchId_categoryId_year_month: {
-        branchId: input.branchId,
-        categoryId: input.categoryId,
-        year: input.year,
-        month: input.month,
-      },
-    },
-    create: {
-      branchId: input.branchId,
-      categoryId: input.categoryId,
-      year: input.year,
-      month: input.month,
-      amount: input.amount,
-    },
-    update: { amount: input.amount },
+    where: { branchId_categoryId_year_month: { branchId: p.branchId, categoryId: p.categoryId, year: p.year, month: p.month } },
+    create: { branchId: p.branchId, categoryId: p.categoryId, year: p.year, month: p.month, amount: p.amount },
+    update: { amount: p.amount },
   });
-  // Reja o'zgardi → dashboard prognozi qayta hisoblansin (egri chiziq o'zgarmaydi,
-  // faqat kattalik qayta masshtablanadi).
+  // Reja o'zgardi → dashboard prognozi qayta hisoblansin.
   revalidateTag(ANALYTICS_CACHE_TAG, "max");
 }
 
-export async function upsertMarginPlan(input: {
-  branchId: number;
-  categoryId: number;
-  marginPct: number;
-}) {
+export async function upsertMarginPlan(input: z.input<typeof marginSchema>) {
   await requireAdmin();
+  const p = marginSchema.parse(input);
   await prisma.marginPlan.upsert({
-    where: {
-      branchId_categoryId: {
-        branchId: input.branchId,
-        categoryId: input.categoryId,
-      },
-    },
-    create: {
-      branchId: input.branchId,
-      categoryId: input.categoryId,
-      marginPct: input.marginPct,
-    },
-    update: { marginPct: input.marginPct },
+    where: { branchId_categoryId: { branchId: p.branchId, categoryId: p.categoryId } },
+    create: { branchId: p.branchId, categoryId: p.categoryId, marginPct: p.marginPct },
+    update: { marginPct: p.marginPct },
   });
+  revalidateTag(ANALYTICS_CACHE_TAG, "max");
 }
 
 export type GenerateForecastResult =
@@ -102,23 +86,18 @@ export type SetForecastDayResult =
   | { ok: true; days: Record<string, ForecastDayCell> }
   | { ok: false; error: string };
 
+const fcDaySchema = z.object({
+  branchId: id, year: yearZ, month: monthZ,
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Sana noto'g'ri"),
+  amount: z.coerce.number().min(0).max(1e15).nullable(),
+});
+
 // Kunlik prognozni qo'lda tahrirlash (amount=null → qulfdan chiqarish)
-export async function setForecastDayAction(input: {
-  branchId: number;
-  year: number;
-  month: number;
-  date: string;
-  amount: number | null;
-}): Promise<SetForecastDayResult> {
+export async function setForecastDayAction(input: z.input<typeof fcDaySchema>): Promise<SetForecastDayResult> {
   try {
     await requireAdmin();
-    const days = await applyForecastDayEdit(
-      input.branchId,
-      input.year,
-      input.month,
-      input.date,
-      input.amount
-    );
+    const p = fcDaySchema.parse(input);
+    const days = await applyForecastDayEdit(p.branchId, p.year, p.month, p.date, p.amount);
     revalidateTag(ANALYTICS_CACHE_TAG, "max");
     return { ok: true, days };
   } catch (e) {
@@ -148,6 +127,7 @@ export async function clearMarginPlansAction(): Promise<ClearResult> {
   try {
     await requireAdmin();
     const res = await prisma.marginPlan.deleteMany({});
+    revalidateTag(ANALYTICS_CACHE_TAG, "max");
     return { ok: true, count: res.count };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Noma'lum xato" };

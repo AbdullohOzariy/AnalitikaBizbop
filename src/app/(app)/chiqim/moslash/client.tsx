@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { Loader2, Check } from "lucide-react";
 import {
   Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue,
@@ -18,7 +17,6 @@ export function MoslashSelect({
   subs: SubOpt[];
   canEdit: boolean;
 }) {
-  const router = useRouter();
   const [val, setVal] = useState<string>("none");
   const [isPending, start] = useTransition();
   const [saved, setSaved] = useState(false);
@@ -47,7 +45,9 @@ export function MoslashSelect({
     if (!sub) return;
     start(async () => {
       const res = await chiqimYozuvYangilaAction({ id: yozuvId, kategoriya: sub.label });
-      if (res.ok) { toast.success(`"${sub.name}" biriktirildi.`); setSaved(true); router.refresh(); }
+      // router.refresh() chaqirmaymiz — 200 qatorli RSC qayta yuklashdan qochamiz;
+      // qator optimistik "✓ biriktirildi" bo'lib qoladi, keyingi yuklashda ro'yxatdan chiqadi.
+      if (res.ok) { toast.success(`"${sub.name}" biriktirildi.`); setSaved(true); }
       else { toast.error(res.error); setVal("none"); }
     });
   };

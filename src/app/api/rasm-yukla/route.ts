@@ -41,6 +41,17 @@ export async function POST(req: Request) {
     if (!chatId) return NextResponse.json({ xato: "GROUP_CHAT_ID sozlanmagan" }, { status: 500 });
 
     const buffer = Buffer.from(await file.arrayBuffer());
+    // Magic-byte tekshiruvi — mijoz bergan file.type'ga ishonmaymiz (JPEG/PNG/GIF/WEBP)
+    const b = buffer;
+    const isRealImage =
+      (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) || // JPEG
+      (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) || // PNG
+      (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46) || // GIF
+      (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 &&
+        b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50); // WEBP
+    if (!isRealImage) {
+      return NextResponse.json({ xato: "Fayl haqiqiy rasm emas" }, { status: 415 });
+    }
     const result = await bot.telegram.sendPhoto(chatId, {
       source: buffer,
       filename: file.name || "rasm.jpg",
