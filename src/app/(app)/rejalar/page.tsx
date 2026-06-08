@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { ClipboardList } from "lucide-react";
 import { PageHeader } from "@/components/common/page";
+import { getForecastStatus } from "@/lib/forecast";
 import { PlanEditor, type Group } from "./plan-editor";
 
 function parseIntOr(v: string | undefined, fallback: number) {
@@ -93,6 +94,8 @@ export default async function RejalarPage({
     marginPlans.map((p) => [p.categoryId, Number(p.marginPct)])
   );
 
+  const forecastStatus = await getForecastStatus(branchId, year, month);
+
   return (
     <div className="space-y-5">
       <PageHeader
@@ -112,6 +115,7 @@ export default async function RejalarPage({
         month={month}
         activeTab={activeTab}
         isAdmin={isAdmin}
+        forecastStatus={forecastStatus}
       />
     </div>
   );

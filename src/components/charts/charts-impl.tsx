@@ -190,18 +190,51 @@ export function BranchShareChart({
   );
 }
 
-export function DailySalesChart({ sales }: { sales: { date: string; value: number }[] }) {
-  if (sales.length === 0) return <div className="h-72 flex items-center justify-center text-sm text-muted-foreground">Kunlik savdo ma'lumoti yo'q.</div>;
+export function DailySalesChart({
+  sales,
+  forecast,
+}: {
+  sales: { date: string; value: number }[];
+  forecast?: { date: string; value: number }[];
+}) {
+  const hasForecast = !!forecast && forecast.length > 0;
+  if (sales.length === 0 && !hasForecast)
+    return <div className="h-72 flex items-center justify-center text-sm text-muted-foreground">Kunlik savdo ma&apos;lumoti yo&apos;q.</div>;
+
+  // Sana bo'yicha fakt + prognozni birlashtiramiz (prognoz kelajak kunlarni ham qamrashi mumkin)
+  const salesMap = new Map(sales.map((r) => [r.date, r.value]));
+  const fcMap = new Map((forecast ?? []).map((r) => [r.date, r.value]));
+  const dates = Array.from(new Set([...salesMap.keys(), ...fcMap.keys()])).sort();
+  const data = dates.map((d) => ({
+    date: d,
+    sales: salesMap.get(d) ?? 0,
+    forecast: fcMap.has(d) ? fcMap.get(d) : undefined,
+  }));
+
   return (
     <div className="h-72">
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={sales.map(r => ({ date: r.date, sales: r.value }))} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+        <ComposedChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
           {CHART_GRADIENTS}
           <CartesianGrid strokeDasharray="4 4" stroke="#f1f5f9" vertical={false} />
           <XAxis dataKey="date" tickFormatter={shortDate} fontSize={12} fill={GRAY} tickLine={false} axisLine={false} tickMargin={12} fontFamily="Sora" />
           <YAxis tickFormatter={(v) => formatUZS(v as number, { compact: true })} fontSize={12} fill={GRAY} tickLine={false} axisLine={false} tickMargin={12} fontFamily="Sora" />
-          <Tooltip contentStyle={tooltipStyle} formatter={(v) => [formatUZS(Number(v)) + " so'm", "Savdo"]} labelFormatter={(v) => `Sana: ${v}`} />
-          <Bar dataKey="sales" name="Savdo" fill="url(#colorSales)" radius={[12, 12, 12, 12]} barSize={16} />
+          <Tooltip contentStyle={tooltipStyle} formatter={(v, name) => [formatUZS(Number(v)) + " so'm", name as string]} labelFormatter={(v) => `Sana: ${v}`} />
+          {hasForecast && <Legend wrapperStyle={{ fontSize: 12, fontFamily: "Sora" }} iconType="plainline" />}
+          <Bar dataKey="sales" name="Fakt savdo" fill="url(#colorSales)" radius={[12, 12, 12, 12]} barSize={16} />
+          {hasForecast && (
+            <Line
+              type="monotone"
+              dataKey="forecast"
+              name="Prognoz (reja)"
+              stroke="#8b5cf6"
+              strokeWidth={2.5}
+              strokeDasharray="5 4"
+              dot={false}
+              connectNulls
+              activeDot={{ r: 5, fill: "#8b5cf6", strokeWidth: 3, stroke: "#fff" }}
+            />
+          )}
         </ComposedChart>
       </ResponsiveContainer>
     </div>

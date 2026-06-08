@@ -12,6 +12,7 @@ import {
   getDefaultRange,
   type KPI,
 } from "@/lib/analytics";
+import { dailyForecastSeries } from "@/lib/forecast";
 import { formatUZS, formatNumber, formatPercent } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { ExpandableCard } from "@/components/ui/expandable-card";
@@ -223,6 +224,7 @@ async function ChartsSection({
     share,
     top,
     perf,
+    forecast,
     prevDailySales,
     prevDailyReceipts,
     prevShare,
@@ -234,12 +236,24 @@ async function ChartsSection({
     branchShare(range),
     topCategories(range, branchId, 18),
     branchPerformance(range),
+    dailyForecastSeries(range, branchId),
     compareRange ? dailySalesSeries(compareRange, branchId) : Promise.resolve(null),
     compareRange ? dailyReceiptsSeries(compareRange, branchId) : Promise.resolve(null),
     compareRange ? branchShare(compareRange) : Promise.resolve(null),
     compareRange ? topCategories(compareRange, branchId, 18) : Promise.resolve(null),
     compareRange ? branchPerformance(compareRange) : Promise.resolve(null),
   ]);
+
+  // Davr bo'yicha reja bajarilishi (faqat fakt mavjud kunlar bo'yicha solishtiriladi)
+  const actualByDate = new Map(dailySales.map((r) => [r.date, r.value]));
+  const forecastForActualDays = forecast
+    .filter((f) => actualByDate.has(f.date))
+    .reduce((s, f) => s + f.value, 0);
+  const actualForForecastDays = forecast
+    .filter((f) => actualByDate.has(f.date))
+    .reduce((s, f) => s + (actualByDate.get(f.date) ?? 0), 0);
+  const planExecution =
+    forecastForActualDays > 0 ? (actualForForecastDays / forecastForActualDays) * 100 : null;
 
   const sumValues = (rows: { value: number }[] | null) =>
     rows?.reduce((sum, r) => sum + r.value, 0) ?? null;
@@ -253,20 +267,23 @@ async function ChartsSection({
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         <ExpandableCard
           title={
-            <ChartTitle
-              title="Kunlik Savdo Dinamikasi"
-              delta={calcDelta(
-                dailySales.reduce((sum, r) => sum + r.value, 0),
-                sumValues(prevDailySales) ?? 0
-              )}
-              compareLabel={compareLabel}
-            />
+            <span className="flex flex-wrap items-center gap-2">
+              <ChartTitle
+                title="Kunlik Savdo Dinamikasi"
+                delta={calcDelta(
+                  dailySales.reduce((sum, r) => sum + r.value, 0),
+                  sumValues(prevDailySales) ?? 0
+                )}
+                compareLabel={compareLabel}
+              />
+              {planExecution != null && <PlanExecBadge pct={planExecution} />}
+            </span>
           }
           className="xl:col-span-2 rounded-2xl border-none shadow-sm bg-card overflow-hidden"
           headerClassName={`${CARD_PT} ${CARD_PAD} pb-3`}
           contentClassName={`${CARD_PAD} ${CARD_PB}`}
         >
-          <DailySalesChart sales={dailySales} />
+          <DailySalesChart sales={dailySales} forecast={forecast} />
         </ExpandableCard>
 
         <ExpandableCard
@@ -467,6 +484,26 @@ function ChartTitle({
       {compareLabel && (
         <CompareBadge delta={delta} compareLabel={compareLabel} />
       )}
+    </span>
+  );
+}
+
+function PlanExecBadge({ pct }: { pct: number }) {
+  // ≥100% yashil, 90–100% sariq, <90% qizil
+  const good = pct >= 100;
+  const mid = pct >= 90 && pct < 100;
+  return (
+    <span
+      className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+        good
+          ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+          : mid
+          ? "bg-amber-400/15 text-amber-700 dark:text-amber-400"
+          : "bg-red-500/10 text-red-600 dark:text-red-400"
+      }`}
+      title="Fakt savdo / AI prognoz (reja) — mavjud kunlar bo'yicha"
+    >
+      Reja bajarilishi: {pct.toFixed(0)}%
     </span>
   );
 }

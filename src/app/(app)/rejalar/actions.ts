@@ -1,7 +1,10 @@
 "use server";
 
+import { revalidateTag } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { ANALYTICS_CACHE_TAG } from "@/lib/analytics";
+import { generateForecast, type GroupForecastResult } from "@/lib/forecast";
 
 async function requireAdmin() {
   const session = await auth();
@@ -34,6 +37,9 @@ export async function upsertSalesPlan(input: {
     },
     update: { amount: input.amount },
   });
+  // Reja o'zgardi → dashboard prognozi qayta hisoblansin (egri chiziq o'zgarmaydi,
+  // faqat kattalik qayta masshtablanadi).
+  revalidateTag(ANALYTICS_CACHE_TAG, "max");
 }
 
 export async function upsertMarginPlan(input: {
@@ -56,4 +62,23 @@ export async function upsertMarginPlan(input: {
     },
     update: { marginPct: input.marginPct },
   });
+}
+
+export type GenerateForecastResult =
+  | { ok: true; groups: GroupForecastResult[] }
+  | { ok: false; error: string };
+
+export async function generateForecastAction(input: {
+  branchId: number;
+  year: number;
+  month: number;
+}): Promise<GenerateForecastResult> {
+  try {
+    await requireAdmin();
+    const groups = await generateForecast(input.branchId, input.year, input.month);
+    revalidateTag(ANALYTICS_CACHE_TAG, "max");
+    return { ok: true, groups };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Noma'lum xato" };
+  }
 }

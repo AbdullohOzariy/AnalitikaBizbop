@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useTransition } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import {
   ChevronRight, Loader2, Check, AlertCircle, TrendingUp, Percent,
   Search, ChevronsDownUp, ChevronsUpDown, Wallet, ListChecks, X,
+  Sparkles, RefreshCw, Clock, Bot,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import {
@@ -17,7 +19,8 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
-import { upsertSalesPlan, upsertMarginPlan } from "./actions";
+import { upsertSalesPlan, upsertMarginPlan, generateForecastAction } from "./actions";
+import type { ForecastStatus } from "@/lib/forecast";
 
 // ─── Tiplar ──────────────────────────────────────────────────────────────────
 type CellSt = "idle" | "saving" | "saved" | "error";
@@ -37,6 +40,7 @@ export interface PlanEditorProps {
   month: number;
   activeTab: "sotuv" | "marja";
   isAdmin: boolean;
+  forecastStatus: ForecastStatus;
 }
 
 // ─── Konstantalar ────────────────────────────────────────────────────────────
@@ -92,6 +96,7 @@ export function PlanEditor({
   month,
   activeTab,
   isAdmin,
+  forecastStatus,
 }: PlanEditorProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -128,6 +133,32 @@ export function PlanEditor({
 
   const salesTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
   const marginTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+
+  // ─── Prognoz holati ────────────────────────────────────────────────────────
+  const [fcStatus, setFcStatus] = useState<ForecastStatus>(forecastStatus);
+  const [fcPending, startFc] = useTransition();
+  const runForecast = () => {
+    startFc(async () => {
+      const res = await generateForecastAction({ branchId, year, month });
+      if (res.ok) {
+        toast.success("Prognoz yangilandi — dashboardda aks etadi.");
+        setFcStatus({
+          generated: true,
+          lastGeneratedAt: new Date().toISOString(),
+          groups: res.groups.map((g) => ({
+            groupId: g.groupId,
+            groupName: g.groupName,
+            model: g.model,
+            rationale: g.rationale,
+            createdAt: new Date().toISOString(),
+          })),
+        });
+        router.refresh();
+      } else {
+        toast.error(res.error || "Prognoz yaratishda xato.");
+      }
+    });
+  };
 
   // ─── Select items xaritalari (label ko'rsatish uchun) ──────────────────────
   const branchItems = useMemo(
@@ -493,9 +524,78 @@ export function PlanEditor({
     </div>
   );
 
+  // ─── AI prognoz paneli (faqat sotuv tab) ───────────────────────────────────
+  const lastGen = fcStatus.lastGeneratedAt
+    ? new Date(fcStatus.lastGeneratedAt).toLocaleString("uz-UZ", {
+        day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
+      })
+    : null;
+
+  const forecastPanel = (
+    <div className="rounded-xl border border-violet-500/20 bg-violet-500/[0.04] p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start gap-2.5">
+          <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600 dark:text-violet-400">
+            <Sparkles className="h-4 w-4" />
+          </div>
+          <div className="space-y-0.5">
+            <div className="text-sm font-semibold">AI kunlik prognoz</div>
+            <p className="max-w-md text-xs text-muted-foreground leading-relaxed">
+              Reja summasi tarixiy savdo shakliga ko'ra kunlarga taqsimlanadi. Yig'indi har doim
+              kiritilgan rejaga teng. Dashboardda kunlik fakt vs prognoz aks etadi.
+            </p>
+            {lastGen && (
+              <div className="flex items-center gap-1 pt-0.5 text-[11px] text-muted-foreground">
+                <Clock className="h-3 w-3" /> Oxirgi: {lastGen}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={runForecast}
+            disabled={fcPending}
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-violet-600 px-3.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-violet-700 disabled:opacity-60"
+          >
+            {fcPending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : fcStatus.generated ? (
+              <RefreshCw className="h-3.5 w-3.5" />
+            ) : (
+              <Sparkles className="h-3.5 w-3.5" />
+            )}
+            {fcPending ? "Hisoblanmoqda..." : fcStatus.generated ? "Yangilash" : "Prognoz yaratish"}
+          </button>
+        )}
+      </div>
+
+      {fcStatus.groups.length > 0 && (
+        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+          {fcStatus.groups.map((g) => (
+            <div key={g.groupId} className="rounded-lg border border-border/60 bg-card/60 p-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-semibold truncate">{g.groupName}</span>
+                <span className="inline-flex items-center gap-0.5 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground shrink-0">
+                  <Bot className="h-2.5 w-2.5" />
+                  {g.model === "fallback" ? "auto" : "AI"}
+                </span>
+              </div>
+              <p className="mt-1 text-[11px] text-muted-foreground leading-snug line-clamp-3">
+                {g.rationale}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   const body = (tabType: "sotuv" | "marja") => (
     <div className="space-y-3 pt-4">
       {summaryRow(tabType)}
+      {tabType === "sotuv" && forecastPanel}
       {toolbar}
       {treeContent(tabType)}
     </div>

@@ -83,6 +83,8 @@ model Branch {
   uploads       UploadedFile[]
   salesPlans    SalesPlan[]
   marginPlans   MarginPlan[]
+  forecastCurves ForecastCurve[]
+  forecastRuns   ForecastRun[]
 }
 
 model BranchAlias {
@@ -103,7 +105,9 @@ model CategoryGroup {
   code      Int?   @unique // 1C KOD — bo'lim identifikatori
   sortOrder Int    @default(0)
 
-  categories Category[]
+  categories     Category[]
+  forecastCurves ForecastCurve[]
+  forecastRuns   ForecastRun[]
 }
 
 model Category {
@@ -371,4 +375,42 @@ model MarginPlan {
 
   @@unique([branchId, categoryId])
   @@index([branchId])
+}
+
+// AI prognoz egri chizig'i — filial × bo'lim × oy uchun kunlik og'irlik (taqsimot shakli).
+// Og'irliklar oy bo'yicha yig'indisi = 1. Kunlik prognoz = bo'lim oylik rejasi × weight.
+// Shu sabab kunlik prognoz yig'indisi har doim aniq rejaga teng bo'ladi.
+model ForecastCurve {
+  id       Int      @id @default(autoincrement())
+  branchId Int
+  groupId  Int
+  year     Int
+  month    Int // 1–12
+  date     DateTime @db.Date
+  weight   Decimal  @db.Decimal(9, 8)
+
+  branch Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  group  CategoryGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([branchId, groupId, year, month, date])
+  @@index([branchId, year, month])
+  @@index([date])
+}
+
+// Prognoz yaratish jurnali — filial × bo'lim × oy uchun AI izohi va meta.
+model ForecastRun {
+  id        Int      @id @default(autoincrement())
+  branchId  Int
+  groupId   Int
+  year      Int
+  month     Int
+  model     String // ishlatilgan model (yoki "fallback")
+  rationale String // AI ning qisqa izohi (nega shunday taqsimladi)
+  createdAt DateTime @default(now())
+
+  branch Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  group  CategoryGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([branchId, groupId, year, month])
+  @@index([branchId, year, month])
 }
