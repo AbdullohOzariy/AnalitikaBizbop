@@ -30,6 +30,7 @@ import {
   ClipboardList,
   Target,
   Wallet,
+  Link2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -131,6 +132,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/iyerarxiya",         label: "Iyerarxiya",        icon: Tag,           roles: [SA, A] },
       { href: "/baza/taminotchilar", label: "Ta'minotchilar",    icon: Truck,         roles: [SA, A] },
       { href: "/baza/moslanmagan",   label: "Moslanmagan",       icon: PackageSearch, roles: [SA, A] },
+      { href: "/baza/chiqim-kategoriya", label: "Chiqim kategoriya", icon: Link2,     roles: [SA, A] },
     ],
   },
   {

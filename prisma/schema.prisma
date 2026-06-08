@@ -125,12 +125,13 @@ model Category {
   parent   Category?      @relation("CategoryParent", fields: [parentId], references: [id], onDelete: SetNull)
   children Category[]     @relation("CategoryParent")
 
-  aliases     CategoryAlias[]
-  sales       CategorySales[]
-  products    Product[]
-  managers    CategoryManager[]
-  salesPlans  SalesPlan[]
-  marginPlans MarginPlan[]
+  aliases        CategoryAlias[]
+  sales          CategorySales[]
+  products       Product[]
+  managers       CategoryManager[]
+  salesPlans     SalesPlan[]
+  marginPlans    MarginPlan[]
+  spisaniyaLinks SpisaniyaCategoryLink[]
 
   @@index([parentId]) // scope filtrlari (subkat → ota-kategoriya) tezligi uchun
   @@index([groupId])
@@ -363,6 +364,21 @@ model SalesPlan {
 
   @@unique([branchId, categoryId, year, month])
   @@index([branchId, year, month])
+}
+
+// Spisaniya (chiqim) kategoriya ko'prigi — bizbop kategoriya nomi → Iyerarxiya subkat.
+// bizbop ALOHIDA bazada (cross-DB join yo'q) — shu sabab nom bo'yicha bog'laymiz.
+// yozuvlar.kategoriya (matn) → botName → categoryId → bo'lim/kat/subkat rollup.
+model SpisaniyaCategoryLink {
+  id         Int      @id @default(autoincrement())
+  botName    String   @unique // bizbop kategoriya nomi (yozuvlar.kategoriya bilan mos)
+  categoryId Int // Iyerarxiya kategoriya/subkategoriya id
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@index([categoryId])
 }
 
 // Sotuv bo'limi moliyasi — harajatlar (filialsiz, umumiy ro'yxat).

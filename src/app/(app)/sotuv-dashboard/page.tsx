@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { dailySalesSeries } from "@/lib/analytics";
 import { dailyForecastSeries } from "@/lib/forecast";
+import { computeProfitTree } from "@/lib/spisaniya/profit";
 import { formatUZS } from "@/lib/format";
 import { PageHeader, StatCard } from "@/components/common/page";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,8 +14,9 @@ import {
 } from "@/components/ui/table";
 import { ExpandableCard } from "@/components/ui/expandable-card";
 import { DailySalesChart } from "@/components/charts";
-import { Target, Wallet, TrendingUp, Scale, CalendarClock } from "lucide-react";
+import { Target, Wallet, TrendingUp, Scale, CalendarClock, Coins } from "lucide-react";
 import { SotuvFilter } from "./filter";
+import { ProfitTree } from "./profit-tree";
 
 function parseIntOr(v: string | undefined, fb: number) {
   const n = parseInt(v ?? "");
@@ -113,6 +115,9 @@ export default async function SotuvDashboardPage({
     dailyForecastSeries(range, branchId),
   ]);
   void brFilterDM;
+
+  // Sof foyda (Iyerarxiya bo'yicha) — period kesimida, barcha filiallar
+  const profit = await computeProfitTree({ start: monthStart, end: monthEnd });
 
   const totalPlan = branchRows.reduce((s, b) => s + b.plan, 0);
   const totalActual = branchRows.reduce((s, b) => s + b.actual, 0);
@@ -250,6 +255,21 @@ export default async function SotuvDashboardPage({
               </div>
             </CardContent>
           </Card>
+
+          {/* Sof foyda (Iyerarxiya bo'yicha) */}
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Coins className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                <h3 className="text-sm font-semibold">Sof foyda — Iyerarxiya bo&apos;yicha</h3>
+                <span className="text-xs text-muted-foreground">(sotuv − tannarx − chiqim · barcha filiallar)</span>
+              </div>
+              <span className="rounded-lg bg-emerald-500/10 px-3 py-1 text-sm font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
+                Jami sof foyda: {formatUZS(profit.total.net, { compact: true })}
+              </span>
+            </div>
+            <ProfitTree tree={profit} />
+          </div>
         </>
       )}
     </div>
