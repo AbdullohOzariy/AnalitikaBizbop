@@ -66,14 +66,22 @@ function getCollapsedSnapshot() {
   return localStorage.getItem("sidebar-collapsed") === "true";
 }
 
-// foldedGroups — default: HAMMASI OCHIQ (bo'sh to'plam)
+// foldedGroups — default: HAMMASI YIG'IQ (barcha guruh nomlari)
 const EMPTY_FOLDED = new Set<string>();
+let _allFolded: Set<string> | null = null;
+function getAllFolded(): Set<string> {
+  if (!_allFolded) _allFolded = new Set(NAV_GROUPS.map((g) => g.label));
+  return _allFolded;
+}
 let foldedCache: { raw: string | null; set: Set<string> } = { raw: undefined as unknown as null, set: EMPTY_FOLDED };
 function getFoldedSnapshot(): Set<string> {
   const raw = localStorage.getItem("sidebar-folded-groups");
   if (raw === foldedCache.raw) return foldedCache.set;
-  let set: Set<string> = EMPTY_FOLDED;
-  if (raw !== null) {
+  let set: Set<string>;
+  if (raw === null) {
+    set = getAllFolded();
+  } else {
+    set = EMPTY_FOLDED;
     try { set = new Set(JSON.parse(raw) as string[]); } catch { set = EMPTY_FOLDED; }
   }
   foldedCache = { raw, set };
@@ -140,7 +148,7 @@ function SidebarNav({
 }) {
   const pathname = usePathname();
 
-  const foldedGroups = useSyncExternalStore(subscribePref, getFoldedSnapshot, () => EMPTY_FOLDED);
+  const foldedGroups = useSyncExternalStore(subscribePref, getFoldedSnapshot, getAllFolded);
   const toggleGroup = (label: string) => {
     const next = new Set(foldedGroups);
     if (next.has(label)) next.delete(label); else next.add(label);
