@@ -20,21 +20,45 @@ async function requireEditor() {
 
 const isoDay = (d: Date) => d.toISOString().slice(0, 10);
 
-/** Tanlangan oy uchun barcha filial × kun metrikalari. Kalit: `${branchId}_${YYYY-MM-DD}`. */
+/** Tanlangan oy uchun filial × kun bo'yicha kunlik sotuv (CategorySales, SKU-derive). */
+export async function getMonthlySalesByBranch(
+  year: number,
+  month: number
+): Promise<Record<string, number>> {
+  const start = new Date(Date.UTC(year, month - 1, 1));
+  const end = new Date(Date.UTC(year, month, 0));
+  const rows = await prisma.$queryRaw<{ branchId: number; d: string; sales: number }[]>`
+    SELECT "branchId", "periodStart"::text AS d, SUM("amount")::float8 AS sales
+    FROM "CategorySales"
+    WHERE "periodStart" >= ${start}::date AND "periodStart" <= ${end}::date
+    GROUP BY "branchId", "periodStart"
+  `;
+  const out: Record<string, number> = {};
+  for (const r of rows) out[`${r.branchId}_${r.d.slice(0, 10)}`] = Number(r.sales);
+  return out;
+}
+
+/** Tanlangan oy uchun barcha filial × kun metrikalari + kunlik sotuv. Kalit: `${branchId}_${YYYY-MM-DD}`. */
 export async function getReceiptMetricsAction(
   year: number,
   month: number
-): Promise<{ ok: true; data: Record<string, ReceiptMetricCell> } | { ok: false; error: string }> {
+): Promise<
+  | { ok: true; data: Record<string, ReceiptMetricCell>; sales: Record<string, number> }
+  | { ok: false; error: string }
+> {
   try {
     await requireViewer();
     const y = z.coerce.number().int().min(2000).max(2100).parse(year);
     const m = z.coerce.number().int().min(1).max(12).parse(month);
     const start = new Date(Date.UTC(y, m - 1, 1));
     const end = new Date(Date.UTC(y, m, 0)); // oy oxiri
-    const rows = await prisma.dailyReceiptMetric.findMany({
-      where: { date: { gte: start, lte: end } },
-      select: { branchId: true, date: true, receiptCount: true, itemsPerReceipt: true },
-    });
+    const [rows, sales] = await Promise.all([
+      prisma.dailyReceiptMetric.findMany({
+        where: { date: { gte: start, lte: end } },
+        select: { branchId: true, date: true, receiptCount: true, itemsPerReceipt: true },
+      }),
+      getMonthlySalesByBranch(y, m),
+    ]);
     const data: Record<string, ReceiptMetricCell> = {};
     for (const r of rows) {
       data[`${r.branchId}_${isoDay(r.date)}`] = {
@@ -42,7 +66,7 @@ export async function getReceiptMetricsAction(
         itemsPerReceipt: Number(r.itemsPerReceipt),
       };
     }
-    return { ok: true, data };
+    return { ok: true, data, sales };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Noma'lum xato" };
   }

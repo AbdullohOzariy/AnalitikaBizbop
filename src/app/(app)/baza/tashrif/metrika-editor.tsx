@@ -6,6 +6,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { formatUZS } from "@/lib/format";
 import { toast } from "sonner";
 import {
   getReceiptMetricsAction,
@@ -35,17 +36,20 @@ export function ReceiptMetricsEditor({
   initialYear,
   initialMonth,
   initialData,
+  initialSales,
   canEdit,
 }: {
   branches: Branch[];
   initialYear: number;
   initialMonth: number;
   initialData: Record<string, ReceiptMetricCell>;
+  initialSales: Record<string, number>;
   canEdit: boolean;
 }) {
   const [year, setYear] = useState(initialYear);
   const [month, setMonth] = useState(initialMonth);
   const [cells, setCells] = useState<Record<string, Cell>>(() => buildCells(initialData));
+  const [sales, setSales] = useState<Record<string, number>>(initialSales);
   const [loading, startLoad] = useTransition();
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
@@ -65,7 +69,7 @@ export function ReceiptMetricsEditor({
   const reload = (y: number, m: number) => {
     startLoad(async () => {
       const res = await getReceiptMetricsAction(y, m);
-      if (res.ok) setCells(buildCells(res.data));
+      if (res.ok) { setCells(buildCells(res.data)); setSales(res.sales); }
       else toast.error(res.error);
     });
   };
@@ -104,22 +108,22 @@ export function ReceiptMetricsEditor({
 
   // Filial bo'yicha jami chek + o'rtacha tovar (oy bo'yicha)
   const totals = useMemo(() => {
-    const t: Record<number, { sumCount: number; sumItemsW: number }> = {};
+    const t: Record<number, { sumCount: number; sumItemsW: number; sumSales: number }> = {};
     for (const b of branches) {
-      let sumCount = 0, sumItemsW = 0;
+      let sumCount = 0, sumItemsW = 0, sumSales = 0;
       for (const d of days) {
         const c = cells[ck(b.id, d)];
-        if (!c) continue;
-        const cnt = c.count === "" ? 0 : Number(c.count);
-        const itm = c.items === "" ? 0 : Number(c.items);
+        const cnt = c && c.count !== "" ? Number(c.count) : 0;
+        const itm = c && c.items !== "" ? Number(c.items) : 0;
         sumCount += cnt;
         sumItemsW += itm * cnt; // chek soniga vaznlangan o'rtacha
+        if (cnt > 0) sumSales += sales[ck(b.id, d)] ?? 0; // faqat chek kiritilgan kunlar
       }
-      t[b.id] = { sumCount, sumItemsW };
+      t[b.id] = { sumCount, sumItemsW, sumSales };
     }
     return t;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cells, branches, days, year, month]);
+  }, [cells, sales, branches, days, year, month]);
 
   const yearOpts = [year - 2, year - 1, year, year + 1];
   const NF = new Intl.NumberFormat("uz-UZ");
@@ -147,20 +151,22 @@ export function ReceiptMetricsEditor({
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-border/60">
-        <table className="min-w-[640px] w-full border-collapse text-sm">
+        <table className="min-w-[820px] w-full border-collapse text-sm">
           <thead>
             <tr className="bg-muted/40">
               <th rowSpan={2} className="sticky left-0 z-10 bg-muted/40 px-3 py-2 text-left text-xs font-medium text-muted-foreground">Sana</th>
               {branches.map((b) => (
-                <th key={b.id} colSpan={2} className="border-l border-border/60 px-2 py-1.5 text-center text-xs font-semibold">{b.name}</th>
+                <th key={b.id} colSpan={3} className="border-l border-border/60 px-2 py-1.5 text-center text-xs font-semibold">{b.name}</th>
               ))}
             </tr>
             <tr className="bg-muted/40">
               {branches.map((b) => (
                 <th key={b.id} className="border-l border-border/60 px-2 py-1 text-center text-[11px] font-medium text-muted-foreground">
-                  <div className="flex gap-1">
+                  <div className="flex items-center gap-1">
                     <span className="flex-1">Chek</span>
                     <span className="flex-1">Tovar</span>
+                    <span className="flex-1">O&apos;rt.chek</span>
+                    <span className="w-3 shrink-0" />
                   </div>
                 </th>
               ))}
@@ -177,6 +183,10 @@ export function ReceiptMetricsEditor({
                   </td>
                   {branches.map((b) => {
                     const c = cells[ck(b.id, d)] ?? { count: "", items: "", st: "idle" as CellSt };
+                    const cnt = c.count === "" ? 0 : Number(c.count);
+                    const daySales = sales[ck(b.id, d)] ?? 0;
+                    const avg = cnt > 0 ? daySales / cnt : null; // o'rt. chek = sotuv / chek soni (avto)
+                    const avgTxt = avg != null ? formatUZS(avg, { compact: true }) : "—";
                     return (
                       <td key={b.id} className="border-l border-border/60 px-1.5 py-1">
                         <div className="flex items-center gap-1">
@@ -188,7 +198,7 @@ export function ReceiptMetricsEditor({
                                 value={c.count}
                                 onChange={(e) => onCount(b.id, d, e.target.value)}
                                 placeholder="0"
-                                className="h-7 w-full min-w-12 rounded-md border border-input/60 bg-background px-1.5 text-right text-xs tabular-nums focus:outline-none focus:ring-1 focus:ring-ring"
+                                className="h-7 w-full min-w-11 flex-1 rounded-md border border-input/60 bg-background px-1.5 text-right text-xs tabular-nums focus:outline-none focus:ring-1 focus:ring-ring"
                               />
                               <input
                                 type="text" inputMode="decimal"
@@ -196,14 +206,17 @@ export function ReceiptMetricsEditor({
                                 value={c.items}
                                 onChange={(e) => onItems(b.id, d, e.target.value)}
                                 placeholder="0"
-                                className="h-7 w-full min-w-12 rounded-md border border-input/60 bg-background px-1.5 text-right text-xs tabular-nums focus:outline-none focus:ring-1 focus:ring-ring"
+                                className="h-7 w-full min-w-11 flex-1 rounded-md border border-input/60 bg-background px-1.5 text-right text-xs tabular-nums focus:outline-none focus:ring-1 focus:ring-ring"
                               />
+                              <span className="min-w-11 flex-1 text-right text-xs tabular-nums text-muted-foreground" title={avg != null ? `${Math.round(avg).toLocaleString()} so'm` : "Chek soni kiriting"}>{avgTxt}</span>
                               <StatusIcon st={c.st} />
                             </>
                           ) : (
-                            <div className="flex w-full gap-1 text-right text-xs tabular-nums text-foreground/80">
+                            <div className="flex w-full items-center gap-1 text-right text-xs tabular-nums text-foreground/80">
                               <span className="flex-1">{c.count || "—"}</span>
                               <span className="flex-1">{c.items || "—"}</span>
+                              <span className="flex-1 text-muted-foreground">{avgTxt}</span>
+                              <span className="w-3 shrink-0" />
                             </div>
                           )}
                         </div>
@@ -218,13 +231,16 @@ export function ReceiptMetricsEditor({
             <tr className="border-t-2 border-border bg-muted/30 font-semibold">
               <td className="sticky left-0 z-10 bg-muted/30 px-3 py-1.5 text-xs">Jami / o&apos;rtacha</td>
               {branches.map((b) => {
-                const t = totals[b.id] ?? { sumCount: 0, sumItemsW: 0 };
+                const t = totals[b.id] ?? { sumCount: 0, sumItemsW: 0, sumSales: 0 };
                 const avgItems = t.sumCount > 0 ? t.sumItemsW / t.sumCount : 0;
+                const avgReceipt = t.sumCount > 0 ? t.sumSales / t.sumCount : 0;
                 return (
                   <td key={b.id} className="border-l border-border/60 px-1.5 py-1.5 text-xs tabular-nums">
-                    <div className="flex gap-1 text-right">
+                    <div className="flex items-center gap-1 text-right">
                       <span className="flex-1" title="Oylik jami chek">{t.sumCount > 0 ? NF.format(t.sumCount) : "—"}</span>
                       <span className="flex-1 text-muted-foreground" title="O'rtacha tovar (chekka vaznlangan)">{avgItems > 0 ? avgItems.toFixed(2) : "—"}</span>
+                      <span className="flex-1 text-muted-foreground" title="O'rtacha chek (oylik sotuv / chek)">{avgReceipt > 0 ? formatUZS(avgReceipt, { compact: true }) : "—"}</span>
+                      <span className="w-3 shrink-0" />
                     </div>
                   </td>
                 );
@@ -235,7 +251,7 @@ export function ReceiptMetricsEditor({
       </div>
       <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <CalendarDays className="h-3.5 w-3.5" />
-        Har katak avtomatik saqlanadi. Chap ustun — chek soni, o&apos;ng — chekdagi o&apos;rtacha tovar soni. Hafta oxiri sariq fonda.
+        Chek soni va chekdagi tovar soni qo&apos;lda kiritiladi (avto-saqlash). O&apos;rt. chek = kunlik sotuv ÷ chek soni — avtomatik hisoblanadi. Hafta oxiri sariq fonda.
       </p>
     </div>
   );

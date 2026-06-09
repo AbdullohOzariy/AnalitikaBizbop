@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BazaFilter } from "../baza-filter";
 import { BazaPagination } from "../baza-pagination";
 import { ReceiptMetricsEditor } from "./metrika-editor";
-import type { ReceiptMetricCell } from "./metrika-actions";
+import { getMonthlySalesByBranch, type ReceiptMetricCell } from "./metrika-actions";
 
 const PAGE_SIZE = 50;
 
@@ -54,7 +54,7 @@ export default async function BazaTashrifPage({
   const mStart = new Date(Date.UTC(mYear, mMonth - 1, 1));
   const mEnd = new Date(Date.UTC(mYear, mMonth, 0));
 
-  const [branches, totalCount, rows, agg, metricRows] = await Promise.all([
+  const [branches, totalCount, rows, agg, metricRows, initialSales] = await Promise.all([
     prisma.branch.findMany({ orderBy: { sortOrder: "asc" }, select: { id: true, name: true } }),
     prisma.dailyVisits.count({ where }),
     prisma.dailyVisits.findMany({
@@ -67,6 +67,7 @@ export default async function BazaTashrifPage({
       where: { date: { gte: mStart, lte: mEnd } },
       select: { branchId: true, date: true, receiptCount: true, itemsPerReceipt: true },
     }),
+    getMonthlySalesByBranch(mYear, mMonth),
   ]);
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
   const totalVisits = agg._sum.visitCount ?? 0;
@@ -162,6 +163,7 @@ export default async function BazaTashrifPage({
             initialYear={mYear}
             initialMonth={mMonth}
             initialData={initialMetrics}
+            initialSales={initialSales}
             canEdit={canEdit}
           />
         </TabsContent>
