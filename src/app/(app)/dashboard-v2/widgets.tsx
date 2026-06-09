@@ -559,6 +559,11 @@ export function GroupSalesDynamicsWidget({
     .filter((x) => x.value > 0);
   const groupGrand = groupTotals.reduce((s, x) => s + x.value, 0);
 
+  // Davrda umuman fakt savdo bormi? (groupGrand=0 va reja yo'q → bo'sh holat).
+  // CategorySales faqat ayrim oylarda bor; tanlangan davrda (mas. joriy oy) bo'sh
+  // bo'lsa, grafiklar 0 chiziq sifatida ko'rinib, foydalanuvchini chalg'itadi.
+  const hasAnyData = groupGrand > 0 || hasPlan;
+
   // Tanlangan guruh kategoriyalari bo'yicha jami (butun davr)
   const catTotals = catData
     ? catData.categories
@@ -609,6 +614,12 @@ export function GroupSalesDynamicsWidget({
           })}
         </div>
 
+        {!hasAnyData ? (
+          <p className="py-12 text-center text-xs italic text-muted-foreground">
+            Tanlangan davr uchun savdo ma&apos;lumoti yo&apos;q.
+            Boshqa davrni tanlang yoki <a href="/rejalar" className="underline underline-offset-2">Rejalar</a> bo&apos;limidan reja kiriting.
+          </p>
+        ) : (
         <div className="grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
         <ResponsiveContainer width="100%" height={300}>
@@ -690,6 +701,7 @@ export function GroupSalesDynamicsWidget({
           </ResponsiveContainer>
         </div>
         </div>
+        )}
       </ExpandableCard>
 
       {/* Kategoriyalar bo'yicha foiz dinamikasi (guruh tanlanganda) */}

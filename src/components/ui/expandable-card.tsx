@@ -125,9 +125,33 @@ export function ExpandableCard({
                 </Button>
               </div>
 
-              {/* Content — to'g'ridan-to'g'ri grafik (ResponsiveContainer) bo'lsa
-                  modalni to'liq egallaydi (height={280} qotib qolmaydi). */}
-              <div className="flex flex-1 flex-col overflow-auto p-6 min-h-0 [&>.recharts-responsive-container]:!h-auto [&>.recharts-responsive-container]:min-h-0 [&>.recharts-responsive-container]:flex-1">
+              {/* Content — kengaytirilganda grafiklar modalni to'liq egallaydi.
+                  Uch xil holatni qamraydi:
+                  1) To'g'ridan-to'g'ri bola ResponsiveContainer (v2: DailyByBranch,
+                     CountDynamics, PlanFact) → flex-1 bilan to'liq cho'ziladi.
+                  2) O'ralgan/ko'p grafik (v2: MarjaBase `<div className="pt-2">`,
+                     GroupSales grid) → naslli (descendant) ResponsiveContainer'larga
+                     katta beton min-balandlik (`!min-h-[60vh]`) berilib, inline
+                     `height={280|300}` yengiladi; ResizeObserver yangidan o'lchaydi.
+                  3) Qattiq balandlikli o'rab turuvchi div (v1: DailySalesChart va h.k.
+                     `<div className="h-72">`) → to'g'ridan-to'g'ri div bolaga flex-1 +
+                     h-auto berilib, qotgan balandlik (h-72/h-64) ochiq holatda bekor
+                     qilinadi, ichidagi `height="100%"` container to'liq cho'ziladi.
+                  Grafiksiz widgetlar (ro'yxat/kartalar/jadval) recharts-container
+                  saqlamaydi, demak min-h qoidalari ularga ta'sir qilmaydi; flex-1
+                  esa faqat ko'proq joy beradi, mazmunni buzmaydi. */}
+              <div
+                className={cn(
+                  "flex flex-1 flex-col overflow-auto p-6 min-h-0",
+                  // To'g'ridan-to'g'ri bola ResponsiveContainer — flex bilan to'liq cho'ziladi
+                  "[&>.recharts-responsive-container]:flex-1 [&>.recharts-responsive-container]:!h-auto [&>.recharts-responsive-container]:min-h-0",
+                  // To'g'ridan-to'g'ri o'rab turuvchi div'larda qotgan balandlikni (h-72/h-64) bekor qilamiz
+                  // (flex-1 BERMAYMIZ — aks holda grafiksiz/yondosh divlar ham cho'zilib layout buziladi)
+                  "[&>div]:!h-auto [&>div]:min-h-0",
+                  // Har qanday naslli grafik kamida 60vh — qotgan inline balandlikni (height={280|300}/h-72) yengadi
+                  "[&_.recharts-responsive-container]:!min-h-[60vh] [&_.recharts-responsive-container]:!h-auto"
+                )}
+              >
                 {children}
               </div>
             </div>
