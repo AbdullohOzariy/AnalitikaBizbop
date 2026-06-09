@@ -23,6 +23,7 @@ import { ExpandableCard } from "@/components/ui/expandable-card";
 import type {
   DailyByBranchSeries,
   MarjaRow,
+  KpiByBranchRow,
   GroupSalesDayRow,
   CategorySalesDayRow,
 } from "@/lib/analytics-v2";
@@ -293,6 +294,67 @@ export function MarjaByCategoryWidget({ data }: { data: MarjaRow[] }) {
       }
       rows={data}
     />
+  );
+}
+
+// ============ 5 & 6. KPI by branch (cards) ============
+
+type KpiByBranchTrendRow = KpiByBranchRow & {
+  conversionTrend?: number | null;
+  avgItemsTrend?: number | null;
+};
+
+export function ConversionWidget({
+  rows,
+  trend,
+}: {
+  rows: KpiByBranchTrendRow[];
+  trend?: number | null;
+}) {
+  return (
+    <ExpandableCard title={<WidgetTitle title="Konversiya" trend={trend} />} className="rounded-2xl">
+      <div className="grid grid-cols-2 gap-3">
+        {rows.map((r) => (
+          <div key={r.branchId} className="rounded-xl bg-muted/40 p-3">
+            <div className="text-xs text-muted-foreground truncate">{r.branchName}</div>
+            <div className="text-2xl font-bold tabular-nums mt-1">
+              {r.conversion != null ? `${r.conversion.toFixed(1)}%` : "—"}
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">
+              {formatNumber(r.receipts)} chek / {formatNumber(r.visits)} tashrif
+            </div>
+            <TrendIndicator value={r.conversionTrend} />
+          </div>
+        ))}
+      </div>
+    </ExpandableCard>
+  );
+}
+
+export function AvgItemsWidget({
+  rows,
+  trend,
+}: {
+  rows: KpiByBranchTrendRow[];
+  trend?: number | null;
+}) {
+  return (
+    <ExpandableCard title={<WidgetTitle title="Chekdagi o'rt. tovar soni" trend={trend} />} className="rounded-2xl">
+      <div className="grid grid-cols-2 gap-3">
+        {rows.map((r) => (
+          <div key={r.branchId} className="rounded-xl bg-muted/40 p-3">
+            <div className="text-xs text-muted-foreground truncate">{r.branchName}</div>
+            <div className="text-2xl font-bold tabular-nums mt-1">
+              {r.avgItemsPerReceipt != null ? r.avgItemsPerReceipt.toFixed(2) : "—"}
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">
+              {formatNumber(r.receipts)} chekdan
+            </div>
+            <TrendIndicator value={r.avgItemsTrend} />
+          </div>
+        ))}
+      </div>
+    </ExpandableCard>
   );
 }
 

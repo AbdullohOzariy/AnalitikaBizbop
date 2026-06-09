@@ -38,7 +38,10 @@ export type DateRange = { start: Date; end: Date };
 
 export type KPI = {
   totalSales: number;
+  totalReceipts: number;
   totalVisits: number;
+  avgReceipt: number;
+  conversion: number; // %
   marja: number | null;
 };
 
@@ -152,6 +155,34 @@ async function _costByCategory(
   return map;
 }
 
+/** Filial bo'yicha kunlik metrika summalari (1 query). */
+// Chek metrikalari — QO'LDA kiritilgan DailyReceiptMetric'dan (sr.xlsx emas).
+// O'rt. chek bu yerda hisoblanmaydi — chaqiruvchi sotuv÷chek bilan oladi.
+async function _metricsByBranch(range: DateRange): Promise<
+  Map<number, { receipts: number; avgItemsPerReceipt: number }>
+> {
+  const rows = await prisma.$queryRaw<
+    { branchId: number; receipts: number; avgItems: number }[]
+  >`
+    SELECT "branchId",
+      SUM("receiptCount")::int                                                     AS receipts,
+      CASE WHEN SUM("receiptCount") > 0
+        THEN SUM("itemsPerReceipt"::numeric * "receiptCount") / SUM("receiptCount")
+        ELSE 0
+      END::float8                                                                  AS "avgItems"
+    FROM "DailyReceiptMetric"
+    WHERE "date" >= ${range.start}::date AND "date" <= ${range.end}::date
+    GROUP BY "branchId"
+  `;
+  const map = new Map<number, { receipts: number; avgItemsPerReceipt: number }>();
+  for (const r of rows) {
+    map.set(r.branchId, {
+      receipts:           Number(r.receipts ?? 0),
+      avgItemsPerReceipt: Number(r.avgItems ?? 0),
+    });
+  }
+  return map;
+}
 
 /** Filial bo'yicha tashriflar summalari (1 query). */
 async function _visitsByBranch(range: DateRange): Promise<Map<number, number>> {
@@ -169,8 +200,15 @@ async function _visitsByBranch(range: DateRange): Promise<Map<number, number>> {
  * KPI (umumiy yoki bitta filial uchun). Hamma so'rovlar parallel.
  */
 async function _computeKPI(range: DateRange, branchId?: number): Promise<KPI> {
-  const [totalSales, visitsAgg, costMap] = await Promise.all([
+  const [totalSales, metricsAgg, visitsAgg, costMap] = await Promise.all([
     _sumCategorySalesProRated(range, branchId),
+    prisma.dailyReceiptMetric.aggregate({
+      where: {
+        date: { gte: range.start, lte: range.end },
+        ...(branchId ? { branchId } : {}),
+      },
+      _sum: { receiptCount: true },
+    }),
     prisma.dailyVisits.aggregate({
       where: {
         date: { gte: range.start, lte: range.end },
@@ -181,11 +219,15 @@ async function _computeKPI(range: DateRange, branchId?: number): Promise<KPI> {
     _costByCategory(range, branchId),
   ]);
 
+  const totalReceipts = metricsAgg._sum.receiptCount ?? 0;
   const totalVisits = visitsAgg._sum.visitCount ?? 0;
+  // O'rt. chek = sotuv ÷ chek soni (SKU sotuv / qo'lda chek)
+  const avgReceipt = totalReceipts > 0 ? totalSales / totalReceipts : 0;
+  const conversion = totalVisits > 0 ? (totalReceipts / totalVisits) * 100 : 0;
   const totalCost = [...costMap.values()].reduce((a, b) => a + b, 0);
   const marja = totalSales > 0 ? ((totalSales - totalCost) / totalSales) * 100 : null;
 
-  return { totalSales, totalVisits, marja };
+  return { totalSales, totalReceipts, totalVisits, avgReceipt, conversion, marja };
 }
 
 export const computeKPI = (range: DateRange, branchId?: number) =>
@@ -226,6 +268,31 @@ export const dailySalesSeries = (range: DateRange, branchId?: number) =>
     { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
   )();
 
+async function _dailyReceiptsSeries(
+  range: DateRange,
+  branchId?: number
+): Promise<DailyPoint[]> {
+  const rows = await prisma.dailyReceiptMetric.groupBy({
+    by: ["date"],
+    where: {
+      date: { gte: range.start, lte: range.end },
+      ...(branchId ? { branchId } : {}),
+    },
+    _sum: { receiptCount: true },
+    orderBy: { date: "asc" },
+  });
+  return rows.map((r) => ({
+    date: isoDay(r.date),
+    value: Number(r._sum.receiptCount ?? 0),
+  }));
+}
+
+export const dailyReceiptsSeries = (range: DateRange, branchId?: number) =>
+  unstable_cache(
+    () => _dailyReceiptsSeries(range, branchId),
+    ["dailyReceiptsSeries", ...makeKey(range, branchId)],
+    { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
+  )();
 
 async function _dailyVisitsSeries(
   range: DateRange,
@@ -326,21 +393,36 @@ export type BranchPerformanceRow = {
   branchId: number;
   branchName: string;
   sales: number;
+  receipts: number;
   visits: number;
+  conversion: number;
+  avgReceipt: number;
 };
 
 async function _branchPerformance(range: DateRange): Promise<BranchPerformanceRow[]> {
-  const [branches, salesMap, visitsMap] = await Promise.all([
+  const [branches, salesMap, metricsMap, visitsMap] = await Promise.all([
     prisma.branch.findMany({ orderBy: { sortOrder: "asc" } }),
     _salesByBranch(range),
+    _metricsByBranch(range),
     _visitsByBranch(range),
   ]);
-  return branches.map((b) => ({
-    branchId: b.id,
-    branchName: b.name,
-    sales: salesMap.get(b.id) ?? 0,
-    visits: visitsMap.get(b.id) ?? 0,
-  }));
+  return branches.map((b) => {
+    const sales = salesMap.get(b.id) ?? 0;
+    const m = metricsMap.get(b.id) ?? { receipts: 0, avgItemsPerReceipt: 0 };
+    const visits = visitsMap.get(b.id) ?? 0;
+    // O'rt. chek = SKU sotuv ÷ chek soni (qo'lda DailyReceiptMetric)
+    const avgReceipt = m.receipts > 0 ? sales / m.receipts : 0;
+    const conversion = visits > 0 ? (m.receipts / visits) * 100 : 0;
+    return {
+      branchId: b.id,
+      branchName: b.name,
+      sales,
+      receipts: m.receipts,
+      visits,
+      conversion,
+      avgReceipt,
+    };
+  });
 }
 
 export const branchPerformance = (range: DateRange) =>
@@ -413,24 +495,29 @@ export type CategoryBreakdown = {
 export type BranchReportRow = {
   branchId: number;
   branchName: string;
-  /** Sotuv = CategorySales jami (pro-rated). */
+  /** Sotuv = CategorySales jami (SKU-derive, pro-rated). */
   sales: number;
   /** Tannarx — CategorySales.costAmount dan. */
   cost: number;
   hasCost: boolean;
-  /** Marja = (sales - cost) / sales * 100. */
+  /** Marja = (categorySales - cost) / cost * 100 (CategorySales asosida). */
   marja: number | null;
+  receipts: number;
+  avgReceipt: number;
+  avgItemsPerReceipt: number;
   visits: number;
+  conversion: number;
   categories: CategoryBreakdown[];
 };
 
 async function _branchReport(range: DateRange): Promise<BranchReportRow[]> {
-  const [branches, allCategories, salesBCMap, costBCMap, visitsMap] =
+  const [branches, allCategories, salesBCMap, costBCMap, metricsMap, visitsMap] =
     await Promise.all([
       prisma.branch.findMany({ orderBy: { sortOrder: "asc" } }),
       prisma.category.findMany({ where: { parentId: null }, orderBy: { sortOrder: "asc" } }),
       _salesByBranchCategory(range),
       _costByBranchCategory(range),
+      _metricsByBranch(range),
       _visitsByBranch(range),
     ]);
 
@@ -446,6 +533,7 @@ async function _branchReport(range: DateRange): Promise<BranchReportRow[]> {
     const hasCost = cost > 0;
     const marja   = hasCost && categorySales > 0 ? ((categorySales - cost) / categorySales) * 100 : null;
 
+    const m      = metricsMap.get(b.id) ?? { receipts: 0, avgItemsPerReceipt: 0 };
     const visits = visitsMap.get(b.id) ?? 0;
 
     const categories: CategoryBreakdown[] = allCategories.map((c) => {
@@ -469,7 +557,11 @@ async function _branchReport(range: DateRange): Promise<BranchReportRow[]> {
       cost,
       hasCost,
       marja,
+      receipts:           m.receipts,
+      avgReceipt:         m.receipts > 0 ? categorySales / m.receipts : 0,
+      avgItemsPerReceipt: m.avgItemsPerReceipt,
       visits,
+      conversion:         visits > 0 ? (m.receipts / visits) * 100 : 0,
       categories,
     };
   });

@@ -38,6 +38,38 @@ async function _dailyVisitsByBranch(range: DateRange): Promise<DailyByBranchSeri
   ]);
   return buildSeries(range, branches, rows);
 }
+async function _dailyReceiptsByBranch(range: DateRange): Promise<DailyByBranchSeries> {
+  const [branches, rows] = await Promise.all([
+    prisma.branch.findMany({ orderBy: { sortOrder: "asc" } }),
+    prisma.$queryRaw<{ d: Date; branchId: number; v: number }[]>`
+      SELECT date AS d, "branchId", "receiptCount" AS v
+      FROM "DailyReceiptMetric"
+      WHERE date BETWEEN ${range.start} AND ${range.end}
+    `,
+  ]);
+  return buildSeries(range, branches, rows);
+}
+
+// O'rt. chek (kunlik) = kunlik SKU sotuv ÷ kunlik chek soni (qo'lda)
+async function _dailyAvgReceiptByBranch(range: DateRange): Promise<DailyByBranchSeries> {
+  const [branches, rows] = await Promise.all([
+    prisma.branch.findMany({ orderBy: { sortOrder: "asc" } }),
+    prisma.$queryRaw<{ d: Date; branchId: number; v: number }[]>`
+      SELECT rm.date AS d, rm."branchId",
+        (CASE WHEN rm."receiptCount" > 0 THEN COALESCE(cs.sales, 0) / rm."receiptCount" ELSE 0 END)::float8 AS v
+      FROM "DailyReceiptMetric" rm
+      LEFT JOIN (
+        SELECT "branchId", "periodStart" AS d, SUM("amount") AS sales
+        FROM "CategorySales"
+        WHERE "periodStart" BETWEEN ${range.start} AND ${range.end}
+        GROUP BY "branchId", "periodStart"
+      ) cs ON cs."branchId" = rm."branchId" AND cs.d = rm.date
+      WHERE rm.date BETWEEN ${range.start} AND ${range.end}
+    `,
+  ]);
+  return buildSeries(range, branches, rows);
+}
+
 function buildSeries(
   range: DateRange,
   branches: { id: number; name: string }[],
@@ -68,6 +100,20 @@ export const dailyVisitsByBranch = (range: DateRange) =>
     ["v2_dailyVisits", ...makeKey(range)],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
   )();
+export const dailyReceiptsByBranch = (range: DateRange) =>
+  unstable_cache(
+    () => _dailyReceiptsByBranch(range),
+    ["v2_dailyReceipts", ...makeKey(range)],
+    { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
+  )();
+
+export const dailyAvgReceiptByBranch = (range: DateRange) =>
+  unstable_cache(
+    () => _dailyAvgReceiptByBranch(range),
+    ["v2_dailyAvgReceipt", ...makeKey(range)],
+    { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
+  )();
+
 // ============ Marja breakdown (category + branch) ============
 
 export type MarjaRow = {
@@ -141,6 +187,62 @@ export const marjaBreakdown = (range: DateRange, branchId?: number) =>
   unstable_cache(
     () => _marjaBreakdown(range, branchId),
     ["v2_marja", ...makeKey(range, branchId)],
+    { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
+  )();
+
+// ============ KPI by branch (conversion + avg items per receipt) ============
+
+export type KpiByBranchRow = {
+  branchId: number;
+  branchName: string;
+  receipts: number;
+  visits: number;
+  conversion: number | null;       // %
+  avgItemsPerReceipt: number | null;
+};
+
+async function _kpiByBranch(range: DateRange): Promise<KpiByBranchRow[]> {
+  const [branches, mRows, vRows] = await Promise.all([
+    prisma.branch.findMany({ orderBy: { sortOrder: "asc" } }),
+    prisma.$queryRaw<{ branchId: number; receipts: number; avgItems: number | null }[]>`
+      SELECT "branchId",
+             COALESCE(SUM("receiptCount"),0)::int AS receipts,
+             CASE WHEN SUM("receiptCount") > 0
+                  THEN SUM("itemsPerReceipt"::numeric * "receiptCount") / SUM("receiptCount")
+                  ELSE 0 END::float8 AS "avgItems"
+      FROM "DailyReceiptMetric"
+      WHERE date BETWEEN ${range.start} AND ${range.end}
+      GROUP BY "branchId"
+    `,
+    prisma.$queryRaw<{ branchId: number; visits: number }[]>`
+      SELECT "branchId", COALESCE(SUM("visitCount"),0)::int AS visits
+      FROM "DailyVisits"
+      WHERE date BETWEEN ${range.start} AND ${range.end}
+      GROUP BY "branchId"
+    `,
+  ]);
+  const mMap = new Map(mRows.map((r) => [r.branchId, r]));
+  const vMap = new Map(vRows.map((r) => [r.branchId, r.visits]));
+
+  return branches.map((b) => {
+    const m = mMap.get(b.id);
+    const receipts = m?.receipts ?? 0;
+    const visits   = vMap.get(b.id) ?? 0;
+    return {
+      branchId: b.id,
+      branchName: b.name,
+      receipts,
+      visits,
+      conversion: visits > 0 ? (receipts / visits) * 100 : null,
+      avgItemsPerReceipt: receipts > 0 ? Number(m?.avgItems ?? 0) : null,
+    };
+  });
+}
+
+export const kpiByBranch = (range: DateRange) =>
+  unstable_cache(
+    () => _kpiByBranch(range),
+    ["v2_kpiByBranch", ...makeKey(range)],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
   )();
 
