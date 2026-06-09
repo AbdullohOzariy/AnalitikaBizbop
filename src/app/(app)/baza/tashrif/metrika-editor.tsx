@@ -22,7 +22,6 @@ const WD = ["Ya", "Du", "Se", "Ch", "Pa", "Ju", "Sha"];
 const MONTHS = ["Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun", "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr"];
 const pad = (n: number) => String(n).padStart(2, "0");
 const onlyDigits = (s: string) => s.replace(/[^\d]/g, "");
-const onlyDecimal = (s: string) => s.replace(/[^\d.]/g, "").replace(/(\..*)\./g, "$1");
 
 function StatusIcon({ st }: { st: CellSt }) {
   if (st === "saving") return <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />;
@@ -100,7 +99,7 @@ export function ReceiptMetricsEditor({
   };
   const onItems = (branchId: number, d: number, raw: string) => {
     const key = ck(branchId, d);
-    const items = onlyDecimal(raw);
+    const items = onlyDigits(raw); // chekdagi tovar soni — butun son
     const count = cells[key]?.count ?? "";
     setCells((p) => ({ ...p, [key]: { count, items, st: "idle" } }));
     save(branchId, d, count, items);
@@ -203,7 +202,7 @@ export function ReceiptMetricsEditor({
                         <td className="px-1.5 py-1">
                           {canEdit ? (
                             <input
-                              type="text" inputMode="decimal"
+                              type="text" inputMode="numeric"
                               aria-label={`${d}-kun — ${b.name} chekdagi tovar soni`}
                               value={c.items}
                               onChange={(e) => onItems(b.id, d, e.target.value)}

@@ -76,7 +76,7 @@ const upsertSchema = z.object({
   branchId: z.coerce.number().int().positive(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Sana noto'g'ri"),
   receiptCount: z.coerce.number().int().min(0).max(1_000_000),
-  itemsPerReceipt: z.coerce.number().min(0).max(10_000),
+  itemsPerReceipt: z.coerce.number().int().min(0).max(1_000_000), // chekdagi tovar soni — butun son
 });
 
 /** Bitta katak (filial × kun) ni saqlaydi. receiptCount=0 va items=0 bo'lsa yozuv o'chiriladi. */
