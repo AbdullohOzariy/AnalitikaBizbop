@@ -81,6 +81,7 @@ model Branch {
   sales         CategorySales[]
   productSales  ProductSales[]
   metrics       DailyMetrics[]
+  receiptMetrics DailyReceiptMetric[]
   visits        DailyVisits[]
   uploads       UploadedFile[]
   salesPlans    SalesPlan[]
@@ -238,6 +239,24 @@ model UploadedFile {
 
   @@index([fileType, periodStart, periodEnd])
   @@index([uploadedById])
+}
+
+// Kunlik chek metrikalari — QO'LDA kiritiladi (sr.xlsx emas). Filial × sana.
+// Chek soni va chekdagi o'rtacha tovar soni (Tashriflar bo'limi tabida).
+model DailyReceiptMetric {
+  id              Int      @id @default(autoincrement())
+  branchId        Int
+  date            DateTime @db.Date
+  receiptCount    Int      @default(0) // kunlik chek soni
+  itemsPerReceipt Decimal  @default(0) @db.Decimal(10, 3) // chekdagi o'rtacha tovar soni
+  createdById     Int? // kim kiritdi (audit)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([branchId, date])
+  @@index([date])
 }
 
 // ─── Master baza: mahsulot (SKU) darajasidagi ma'lumot ───────────────────────
