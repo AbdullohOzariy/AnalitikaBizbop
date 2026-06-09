@@ -18,22 +18,17 @@ import {
   Pie,
 } from "recharts";
 import { Info, TrendingUp, TrendingDown, Minus, ChevronRight } from "lucide-react";
-import { formatNumber, formatUZS } from "@/lib/format";
+import { formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { ExpandableCard } from "@/components/ui/expandable-card";
+import { DailySalesChart } from "@/components/charts";
 import type {
   MarjaRow,
   MarjaGroupNode,
   KpiByBranchRow,
   GroupSalesDayRow,
-  CategorySalesDayRow,
   GroupPlanDayRow,
 } from "@/lib/analytics-v2";
-
-function shortDate(iso: string): string {
-  const m = iso.match(/^\d{4}-(\d{2})-(\d{2})$/);
-  return m ? `${m[2]}.${m[1]}` : iso;
-}
 
 // CSS tokenlariga asoslangan tooltip — dark mode'da ham to'g'ri
 const tooltipStyle: React.CSSProperties = {
@@ -381,144 +376,74 @@ const GROUP_COLORS: Record<string, string> = {
   "FOOD":     "#facc15",
   "NON-FOOD": "#6366f1",
 };
-const CAT_PALETTE = [
-  "#10b981","#34d399","#6ee7b7","#facc15","#fde047","#fef08a",
-  "#6366f1","#818cf8","#a5b4fc","#fb923c","#f97316","#ea580c",
-  "#0ea5e9","#38bdf8","#7dd3fc","#f87171","#ef4444","#dc2626",
-];
-
-// Primary yashil token — "Jami" chizig'i uchun
-const TOTAL_LINE_COLOR = "#1FBF5C";
-
 type GroupMeta = { id: number; name: string };
 
+/**
+ * Guruhlar bo'yicha kunlik savdo — Sotuv Dashboardidagi "Kunlik reja vs fakt"
+ * chart (DailySalesChart: Fakt yashil ustun + Reja orange punktir) asosida.
+ * Qo'shimcha: guruh filtri (har guruh alohida) + davr bo'yicha ulush donut.
+ */
 export function GroupSalesDynamicsWidget({
   days,
   groups,
-  categoryDataMap,
-  dailyPlan = [],
   planDays = [],
 }: {
   days: GroupSalesDayRow[];
   groups: GroupMeta[];
-  categoryDataMap: Map<number, { days: CategorySalesDayRow[]; categories: { id: number; name: string }[] }>;
-  /** Kunlik reja JAMI (ForecastDay) — umumiy Fakt vs Reja chizig'i uchun */
-  dailyPlan?: { date: string; value: number }[];
-  /** Kunlik reja HAR GURUH bo'yicha — guruh tanlanganda Fakt vs Reja uchun */
   planDays?: GroupPlanDayRow[];
 }) {
   const [activeGroup, setActiveGroup] = useState<number | null>(null);
-  const planByDate = new Map(dailyPlan.map((p) => [p.date, p.value]));
+  const planByDate = new Map(planDays.map((p) => [p.date, p]));
 
-  // Guruh kunlik rejasi: date → groupId → reja (guruh tanlanganda ishlatiladi)
-  const groupPlanByDate = new Map<string, Map<number, number>>();
-  for (const d of planDays) {
-    const m = new Map<number, number>();
-    for (const g of d.groups) m.set(g.groupId, g.plan);
-    groupPlanByDate.set(d.date, m);
-  }
-
-  // Guruhlar bo'yicha chart data + kunlik jami (_total=Fakt, _plan=Reja)
-  const groupChartData = days.map((d) => {
-    const row: Record<string, string | number> = { _label: shortDate(d.date) };
-    let total = 0;
-    for (const g of d.groups) {
-      row[`g${g.groupId}`] = g.amount;
-      total += g.amount;
-    }
-    row["_total"] = total;
-    row["_plan"] = planByDate.get(d.date) ?? 0;
-    return row;
+  // Faol ko'lam (Barcha guruhlar = jami, yoki bitta guruh) uchun kunlik Fakt + Reja
+  const faktSeries = days.map((d) => ({
+    date: d.date,
+    value: activeGroup == null ? d.total : d.groups.find((g) => g.groupId === activeGroup)?.amount ?? 0,
+  }));
+  const rejaSeries = days.map((d) => {
+    const pd = planByDate.get(d.date);
+    const plan = activeGroup == null ? pd?.total ?? 0 : pd?.groups.find((g) => g.groupId === activeGroup)?.plan ?? 0;
+    return { date: d.date, value: plan };
   });
-  const hasPlan = dailyPlan.some((p) => p.value > 0);
+  const hasReja = rejaSeries.some((r) => r.value > 0);
 
-  // Tanlangan guruh uchun: kunlik Fakt (yashil) vs Reja (to'q sariq punktir)
-  const activeGroupName = activeGroup != null ? groups.find((g) => g.id === activeGroup)?.name : undefined;
-  const groupPlanFactData =
-    activeGroup != null
-      ? days.map((d) => {
-          const fact = d.groups.find((g) => g.groupId === activeGroup)?.amount ?? 0;
-          const plan = groupPlanByDate.get(d.date)?.get(activeGroup) ?? 0;
-          return { _label: shortDate(d.date), _fact: fact, _plan: plan };
-        })
-      : null;
-  const activeGroupHasPlan = groupPlanFactData?.some((d) => d._plan > 0) ?? false;
-  const activeGroupHasFact = groupPlanFactData?.some((d) => d._fact > 0) ?? false;
-
-  // Tanlangan guruh uchun kategoriya chart data (ulush % — qo'shimcha kontekst)
-  const catData = activeGroup != null ? categoryDataMap.get(activeGroup) : null;
-  const catChartData = catData
-    ? catData.days.map((d) => {
-        const row: Record<string, string | number> = { _label: shortDate(d.date) };
-        for (const c of d.categories) row[`c${c.categoryId}`] = c.pct;
-        return row;
-      })
-    : null;
-
-  const fmtUZS = (v: number) => v === 0 ? "—" : formatUZS(v, { compact: true });
-
-  // "Barcha guruhlar" rejimida jami ko'rsatiladimi?
-  const showTotal = activeGroup === null;
-
-  // ── Donut: davr bo'yicha umumiy ulush ──────────────────────────────────────
-  // Guruhlar bo'yicha jami (butun davr)
+  // Donut: davr bo'yicha guruh ulushi (fakt asosida)
   const groupTotals = groups
-    .map((g) => {
-      let value = 0;
-      for (const d of days) value += d.groups.find((x) => x.groupId === g.id)?.amount ?? 0;
-      return { id: g.id, name: g.name, value, color: GROUP_COLORS[g.name] ?? "#94a3b8" };
-    })
+    .map((g) => ({
+      id: g.id,
+      name: g.name,
+      value: days.reduce((s, d) => s + (d.groups.find((x) => x.groupId === g.id)?.amount ?? 0), 0),
+      color: GROUP_COLORS[g.name] ?? "#94a3b8",
+    }))
     .filter((x) => x.value > 0);
-  const groupGrand = groupTotals.reduce((s, x) => s + x.value, 0);
-
-  // Davrda umuman fakt savdo bormi? (groupGrand=0 va reja yo'q → bo'sh holat).
-  // CategorySales faqat ayrim oylarda bor; tanlangan davrda (mas. joriy oy) bo'sh
-  // bo'lsa, grafiklar 0 chiziq sifatida ko'rinib, foydalanuvchini chalg'itadi.
-  const hasAnyData = groupGrand > 0 || hasPlan;
-
-  // Tanlangan guruh kategoriyalari bo'yicha jami (butun davr)
-  const catTotals = catData
-    ? catData.categories
-        .map((c, i) => {
-          let value = 0;
-          for (const d of catData.days) value += d.categories.find((x) => x.categoryId === c.id)?.amount ?? 0;
-          return { id: c.id, name: c.name, value, color: CAT_PALETTE[i % CAT_PALETTE.length] };
-        })
-        .filter((x) => x.value > 0)
-    : [];
-  const catGrand = catTotals.reduce((s, x) => s + x.value, 0);
+  const grand = groupTotals.reduce((s, x) => s + x.value, 0);
+  const activeName = activeGroup == null ? "Barcha guruhlar" : groups.find((g) => g.id === activeGroup)?.name ?? "";
 
   return (
-    <div className="col-span-2 space-y-4">
-      {/* Guruhlar bo'yicha kunlik savdo */}
+    <div className="col-span-2">
       <ExpandableCard title="Guruhlar bo'yicha kunlik savdo" className="rounded-2xl">
-        {/* Guruh filtr tugmalari */}
-        <div className="flex flex-wrap gap-2 mb-4">
+        {/* Guruh filtri */}
+        <div className="mb-4 flex flex-wrap gap-2">
           <button
             onClick={() => setActiveGroup(null)}
-            className={`h-7 rounded-full px-3 text-xs font-medium border transition-colors ${
+            className={cn(
+              "h-7 rounded-full border px-3 text-xs font-medium transition-colors",
               activeGroup === null
-                ? "bg-foreground text-background border-foreground"
-                : "bg-background text-muted-foreground border-border hover:border-foreground/40"
-            }`}
+                ? "border-foreground bg-foreground text-background"
+                : "border-border bg-background text-muted-foreground hover:border-foreground/40"
+            )}
           >
             Barcha guruhlar
           </button>
           {groups.map((g) => {
             const color = GROUP_COLORS[g.name] ?? "#94a3b8";
-            const isActive = activeGroup === g.id;
+            const active = activeGroup === g.id;
             return (
               <button
                 key={g.id}
-                onClick={() => setActiveGroup(isActive ? null : g.id)}
-                className={`h-7 rounded-full px-3 text-xs font-semibold border transition-all ${
-                  isActive ? "shadow-sm scale-[1.03]" : "opacity-70 hover:opacity-100"
-                }`}
-                style={{
-                  backgroundColor: isActive ? color + "22" : "transparent",
-                  borderColor: color,
-                  color: color,
-                }}
+                onClick={() => setActiveGroup(active ? null : g.id)}
+                className={cn("h-7 rounded-full border px-3 text-xs font-semibold transition-all", active ? "shadow-sm scale-[1.03]" : "opacity-70 hover:opacity-100")}
+                style={{ backgroundColor: active ? color + "22" : "transparent", borderColor: color, color }}
               >
                 {g.name}
               </button>
@@ -526,219 +451,35 @@ export function GroupSalesDynamicsWidget({
           })}
         </div>
 
-        {!hasAnyData ? (
-          <p className="py-12 text-center text-xs italic text-muted-foreground">
-            Tanlangan davr uchun savdo ma&apos;lumoti yo&apos;q.
-            Boshqa davrni tanlang yoki <a href="/rejalar" className="underline underline-offset-2">Rejalar</a> bo&apos;limidan reja kiriting.
-          </p>
-        ) : (
         <div className="grid gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-        {/* Sarlavha: rejim — umumiy yoki tanlangan guruh Reja vs Fakt */}
-        <div className="mb-1 flex items-center gap-2 text-xs">
-          {showTotal ? (
-            <span className="font-medium text-muted-foreground">Kunlik dinamika — Reja vs Fakt (jami)</span>
-          ) : (
-            <span className="font-semibold" style={{ color: GROUP_COLORS[activeGroupName ?? ""] ?? "#94a3b8" }}>
-              {activeGroupName} — kunlik Reja vs Fakt
-            </span>
-          )}
-        </div>
-        {showTotal ? (
-        /* ── Barcha guruhlar: umumiy Fakt vs Reja + guruh chiziqlari ── */
-        <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={groupChartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_STROKE} />
-            <XAxis dataKey="_label" tick={{ fontSize: 11, fill: CHART_TICK_FILL }} interval="preserveStartEnd" />
-            {/* Summa urg'ulanmaydi: o'q ixcham/muted, faqat shakl uchun mo'ljal */}
-            <YAxis tick={{ fontSize: 10, fill: CHART_TICK_FILL }} tickFormatter={(v) => fmtUZS(Number(v))} width={44} axisLine={false} tickLine={false} />
-            <Tooltip
-              contentStyle={tooltipStyle}
-              formatter={(value, name) => {
-                if (name === "_total") return [fmtUZS(Number(value)), "Fakt"];
-                if (name === "_plan") return [fmtUZS(Number(value)), "Reja"];
-                const g = groups.find((g) => `g${g.id}` === name);
-                return [fmtUZS(Number(value)), g?.name ?? String(name)];
-              }}
-            />
-            <Legend
-              formatter={(value) => {
-                if (value === "_total") return "Fakt";
-                if (value === "_plan") return "Reja";
-                const g = groups.find((g) => `g${g.id}` === value);
-                return g?.name ?? value;
-              }}
-              wrapperStyle={{ fontSize: 12 }}
-            />
-            {groups.map((g) => (
-              <Line
-                key={g.id}
-                type="monotone"
-                dataKey={`g${g.id}`}
-                name={`g${g.id}`}
-                stroke={GROUP_COLORS[g.name] ?? "#94a3b8"}
-                strokeWidth={2}
-                opacity={1}
-                dot={false}
-                activeDot={{ r: 4 }}
-              />
-            ))}
-            {/* Fakt (jami) — yashil; Reja — to'q sariq punktir. */}
-            <Line
-              type="monotone"
-              dataKey="_total"
-              name="_total"
-              stroke={TOTAL_LINE_COLOR}
-              strokeWidth={3}
-              dot={false}
-              activeDot={{ r: 5 }}
-            />
-            {hasPlan && (
-              <Line
-                type="monotone"
-                dataKey="_plan"
-                name="_plan"
-                stroke="#fb923c"
-                strokeWidth={2}
-                strokeDasharray="5 4"
-                dot={false}
-                activeDot={{ r: 4 }}
-              />
-            )}
-          </LineChart>
-        </ResponsiveContainer>
-        ) : !activeGroupHasFact && !activeGroupHasPlan ? (
-        /* ── Tanlangan guruh: ma'lumot ham, reja ham yo'q ── */
-        <p className="py-16 text-center text-xs italic text-muted-foreground">
-          {activeGroupName} uchun tanlangan davrda savdo va reja ma&apos;lumoti yo&apos;q.
-        </p>
-        ) : (
-        /* ── Tanlangan guruh: Fakt (yashil) vs Reja (to'q sariq punktir) ── */
-        <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={groupPlanFactData!} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_STROKE} />
-            <XAxis dataKey="_label" tick={{ fontSize: 11, fill: CHART_TICK_FILL }} interval="preserveStartEnd" />
-            {/* Summa urg'ulanmaydi: o'q ixcham/muted, faqat shakl uchun mo'ljal */}
-            <YAxis tick={{ fontSize: 10, fill: CHART_TICK_FILL }} tickFormatter={(v) => fmtUZS(Number(v))} width={44} axisLine={false} tickLine={false} />
-            <Tooltip
-              contentStyle={tooltipStyle}
-              formatter={(value, name) => [fmtUZS(Number(value)), name === "_fact" ? "Fakt" : "Reja"]}
-            />
-            <Legend
-              formatter={(value) => (value === "_fact" ? "Fakt" : "Reja")}
-              wrapperStyle={{ fontSize: 12 }}
-            />
-            <Line
-              type="monotone"
-              dataKey="_fact"
-              name="_fact"
-              stroke={TOTAL_LINE_COLOR}
-              strokeWidth={3}
-              dot={false}
-              activeDot={{ r: 5 }}
-            />
-            {activeGroupHasPlan && (
-              <Line
-                type="monotone"
-                dataKey="_plan"
-                name="_plan"
-                stroke="#fb923c"
-                strokeWidth={2}
-                strokeDasharray="5 4"
-                dot={false}
-                activeDot={{ r: 4 }}
-              />
-            )}
-          </LineChart>
-        </ResponsiveContainer>
-        )}
-        </div>
-        <div className="flex flex-col">
-          <p className="mb-1 text-xs font-medium text-muted-foreground">Davr bo&apos;yicha ulush</p>
-          <ResponsiveContainer width="100%" height={280}>
-            <PieChart>
-              <Pie data={groupTotals} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={2} stroke="var(--card)">
-                {groupTotals.map((e) => <Cell key={e.id} fill={e.color} />)}
-              </Pie>
-              <Tooltip
-                contentStyle={tooltipStyle}
-                formatter={(v, n) => [`${fmtUZS(Number(v))} · ${groupGrand > 0 ? ((Number(v) / groupGrand) * 100).toFixed(1) : "0"}%`, String(n)]}
-              />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-        </div>
-        )}
-      </ExpandableCard>
-
-      {/* Kategoriyalar bo'yicha foiz dinamikasi (guruh tanlanganda) */}
-      {activeGroup != null && catData && catData.categories.length > 0 && (
-        <ExpandableCard
-          title={`${groups.find((g) => g.id === activeGroup)?.name ?? ""} — kategoriyalar ulushi (%)`}
-          className="rounded-2xl"
-        >
-          <p className="text-xs text-muted-foreground mb-3">
-            Guruh ichidagi har bir kategoriyaning kunlik ulushi (%)
-          </p>
-          <div className="grid gap-4 lg:grid-cols-3">
+          {/* Kunlik Reja vs Fakt (Sotuv chart namunasi) */}
           <div className="lg:col-span-2">
-          <ResponsiveContainer width="100%" height={280}>
-            <LineChart data={catChartData!} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_STROKE} />
-              <XAxis dataKey="_label" tick={{ fontSize: 11, fill: CHART_TICK_FILL }} interval="preserveStartEnd" />
-              <YAxis
-                tick={{ fontSize: 11, fill: CHART_TICK_FILL }}
-                tickFormatter={(v) => `${Number(v).toFixed(0)}%`}
-                domain={[0, 100]}
-              />
-              <Tooltip
-                contentStyle={tooltipStyle}
-                formatter={(value, name) => {
-                  const c = catData.categories.find((c) => `c${c.id}` === name);
-                  return [`${Number(value).toFixed(1)}%`, c?.name ?? String(name)];
-                }}
-              />
-              <Legend
-                formatter={(value) => {
-                  const c = catData.categories.find((c) => `c${c.id}` === value);
-                  return c?.name ?? value;
-                }}
-                wrapperStyle={{ fontSize: 11 }}
-              />
-              {catData.categories.map((c, i) => (
-                <Line
-                  key={c.id}
-                  type="monotone"
-                  dataKey={`c${c.id}`}
-                  name={`c${c.id}`}
-                  stroke={CAT_PALETTE[i % CAT_PALETTE.length]}
-                  strokeWidth={2}
-                  dot={false}
-                  activeDot={{ r: 4 }}
-                />
-              ))}
-            </LineChart>
-          </ResponsiveContainer>
+            <p className="mb-1 text-xs font-medium text-muted-foreground">{activeName} — kunlik Reja vs Fakt</p>
+            <DailySalesChart sales={faktSeries} forecast={hasReja ? rejaSeries : undefined} />
           </div>
+
+          {/* Davr bo'yicha ulush (donut, summasiz — faqat %) */}
           <div className="flex flex-col">
             <p className="mb-1 text-xs font-medium text-muted-foreground">Davr bo&apos;yicha ulush</p>
-            <ResponsiveContainer width="100%" height={260}>
-              <PieChart>
-                <Pie data={catTotals} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2} stroke="var(--card)">
-                  {catTotals.map((e) => <Cell key={e.id} fill={e.color} />)}
-                </Pie>
-                <Tooltip
-                  contentStyle={tooltipStyle}
-                  formatter={(v, n) => [`${fmtUZS(Number(v))} · ${catGrand > 0 ? ((Number(v) / catGrand) * 100).toFixed(1) : "0"}%`, String(n)]}
-                />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-              </PieChart>
-            </ResponsiveContainer>
+            {groupTotals.length === 0 ? (
+              <div className="flex h-72 items-center justify-center text-xs italic text-muted-foreground">Ma&apos;lumot yo&apos;q</div>
+            ) : (
+              <ResponsiveContainer width="100%" height={288}>
+                <PieChart>
+                  <Pie data={groupTotals} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={2} stroke="var(--card)">
+                    {groupTotals.map((e) => <Cell key={e.id} fill={e.color} />)}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={tooltipStyle}
+                    formatter={(v, n) => [`${grand > 0 ? ((Number(v) / grand) * 100).toFixed(1) : "0"}%`, String(n)]}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
           </div>
-          </div>
-        </ExpandableCard>
-      )}
+        </div>
+      </ExpandableCard>
     </div>
   );
 }

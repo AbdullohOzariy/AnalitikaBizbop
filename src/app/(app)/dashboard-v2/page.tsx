@@ -10,7 +10,6 @@ import {
   marjaHierarchy,
   kpiByBranch,
   dailySalesByGroup,
-  dailySalesByCategory,
   dailyPlanByGroup,
 } from "@/lib/analytics-v2";
 import { dailyForecastSeries } from "@/lib/forecast";
@@ -119,15 +118,6 @@ async function WidgetsSection({
     dailyForecastSeries(range, branchId),
   ]);
 
-  // Har bir guruh uchun kategoriya dinamikasi (parallel)
-  const catDataEntries = await Promise.all(
-    groupSales.groups.map(async (g) => {
-      const data = await dailySalesByCategory(range, g.id, branchId);
-      return [g.id, data] as const;
-    })
-  );
-  const categoryDataMap = new Map(catDataEntries);
-
   const filterByBranch = (s: typeof visits) =>
     branchId == null ? s : { ...s, branches: s.branches.filter((b) => b.id === branchId) };
   const visibleVisits = filterByBranch(visits);
@@ -214,8 +204,6 @@ async function WidgetsSection({
           <GroupSalesDynamicsWidget
             days={groupSales.days}
             groups={groupSales.groups}
-            categoryDataMap={categoryDataMap}
-            dailyPlan={dailyPlan}
             planDays={groupPlan.days}
           />
         </div>
