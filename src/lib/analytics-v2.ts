@@ -209,12 +209,9 @@ async function _marjaHierarchy(range: DateRange, branchId?: number): Promise<Mar
   }));
 }
 
+// Keshsiz — savdo ulushi donut (SalesShareWidget) har doim fresh.
 export const marjaHierarchy = (range: DateRange, branchId?: number) =>
-  unstable_cache(
-    () => _marjaHierarchy(range, branchId),
-    ["v3_marjaHierarchy", ...makeKey(range, branchId)],
-    { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
-  )();
+  _marjaHierarchy(range, branchId);
 
 // ============ KPI by branch (conversion + avg items per receipt) ============
 
@@ -333,12 +330,9 @@ async function _dailySalesByGroup(
   return { days, groups };
 }
 
+// Keshsiz — to'g'ridan-to'g'ri DB (unstable_cache stale Fakt'ni qotirib qo'yardi).
 export const dailySalesByGroup = (range: DateRange, branchId?: number) =>
-  unstable_cache(
-    () => _dailySalesByGroup(range, branchId),
-    ["v3_dailySalesByGroup", ...makeKey(range, branchId)],
-    { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
-  )();
+  _dailySalesByGroup(range, branchId);
 
 // ============ Guruh bo'yicha kunlik REJA (Reja vs Fakt dinamikasi uchun) ============
 //
@@ -474,9 +468,6 @@ async function _dailyPlanByGroup(
   return { days, groups };
 }
 
+// Keshsiz — guruh widgeti har doim fresh ma'lumot (Fakt bilan izchil).
 export const dailyPlanByGroup = (range: DateRange, branchId?: number) =>
-  unstable_cache(
-    () => _dailyPlanByGroup(range, branchId),
-    ["v3_dailyPlanByGroup", ...makeKey(range, branchId)],
-    { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
-  )();
+  _dailyPlanByGroup(range, branchId);
