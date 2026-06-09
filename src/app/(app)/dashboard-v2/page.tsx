@@ -22,7 +22,6 @@ import {
   MarjaByBranchWidget,
   MarjaHierarchyWidget,
   ConversionWidget,
-  PlanFactWidget,
   GroupSalesDynamicsWidget,
 } from "./widgets";
 
@@ -105,8 +104,6 @@ async function WidgetsSection({
     groupSales,
     dailyFact,
     dailyPlan,
-    prevFact,
-    prevPlan,
   ] = await Promise.all([
     dailyVisitsByBranch(range),
     dailyReceiptsByBranch(range),
@@ -117,8 +114,6 @@ async function WidgetsSection({
     dailySalesByGroup(range, branchId),
     dailySalesSeries(range, branchId),
     dailyForecastSeries(range, branchId),
-    dailySalesSeries(previousRange, branchId),
-    dailyForecastSeries(previousRange, branchId),
   ]);
 
   // Har bir guruh uchun kategoriya dinamikasi (parallel)
@@ -161,14 +156,10 @@ async function WidgetsSection({
   const marjaTotalCost = marja.byBranch.reduce((s, r) => s + r.cost, 0);
   const overallMarja = marjaTotalSales > 0 ? ((marjaTotalSales - marjaTotalCost) / marjaTotalSales) * 100 : null;
 
-  // ── Reja bajarilishi (fakt ÷ reja) — summasiz ──
+  // ── Reja bajarilishi (fakt ÷ reja) — hero KPI uchun ──
   const totalFact = dailyFact.reduce((s, p) => s + p.value, 0);
   const totalPlan = dailyPlan.reduce((s, p) => s + p.value, 0);
   const execution = totalPlan > 0 ? (totalFact / totalPlan) * 100 : null;
-  const prevFactTotal = prevFact.reduce((s, p) => s + p.value, 0);
-  const prevPlanTotal = prevPlan.reduce((s, p) => s + p.value, 0);
-  const prevExecution = prevPlanTotal > 0 ? (prevFactTotal / prevPlanTotal) * 100 : null;
-  const executionTrend = calcDelta(execution, prevExecution);
 
   // ── Kunlik son dinamikasi (Tashriflar + Cheklar, jami) ──
   const receiptsByDay = new Map(sumSeriesByDay(visibleReceipts).map((d) => [d.date, d.total]));
@@ -177,13 +168,6 @@ async function WidgetsSection({
     tashrif: d.total,
     chek: receiptsByDay.get(d.date) ?? 0,
   }));
-
-  // ── Reja vs Fakt — kunlik bajarilish % ──
-  const planByDate = new Map(dailyPlan.map((p) => [p.date, p.value]));
-  const planFactDaily = dailyFact.map((f) => {
-    const plan = planByDate.get(f.date) ?? 0;
-    return { label: shortDate(f.date), pct: plan > 0 ? (f.value / plan) * 100 : null };
-  });
 
   return (
     <div className="space-y-4">
@@ -223,9 +207,6 @@ async function WidgetsSection({
         <MarjaHierarchyWidget data={marjaHier} />
         <CountDynamicsWidget title="Kunlik son: tashrif va chek" data={countDaily} trend={countTrend} />
         <ConversionWidget rows={kpiWithTrends} trend={conversionTrend} />
-        <div className="md:col-span-2">
-          <PlanFactWidget title="Reja vs Fakt — kunlik bajarilish" data={planFactDaily} trend={executionTrend} />
-        </div>
         <div className="md:col-span-2">
           <GroupSalesDynamicsWidget
             days={groupSales.days}

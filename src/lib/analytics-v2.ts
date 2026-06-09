@@ -332,13 +332,14 @@ async function _dailySalesByGroup(
       ), 0)::float8                        AS amount
     FROM generate_series(${range.start}::date, ${range.end}::date, '1 day'::interval) AS g(s)
     CROSS JOIN "CategoryGroup" cg
-    LEFT JOIN "Category" cat ON cat."groupId" = cg.id AND cat."parentId" IS NULL
+    LEFT JOIN "Category" par ON par."groupId" = cg.id AND par."parentId" IS NULL
+    LEFT JOIN "Category" sub ON sub."parentId" = par.id
     LEFT JOIN "CategorySales" cs
-      ON cs."categoryId" = cat.id
+      ON cs."categoryId" = sub.id
       AND cs."periodStart" <= g.s::date
       AND cs."periodEnd"   >= g.s::date
       ${branchSql}
-    GROUP BY g.s, cg.id, cg.name
+    GROUP BY g.s, cg.id, cg.name, cg."sortOrder"
     ORDER BY g.s, cg."sortOrder"
   `;
 
@@ -391,13 +392,15 @@ async function _dailySalesByCategory(
       ), 0)::float8                        AS amount
     FROM generate_series(${range.start}::date, ${range.end}::date, '1 day'::interval) AS g(s)
     CROSS JOIN "Category" cat
+    LEFT JOIN "Category" sub ON sub."parentId" = cat.id
     LEFT JOIN "CategorySales" cs
-      ON cs."categoryId" = cat.id
+      ON cs."categoryId" = sub.id
       AND cs."periodStart" <= g.s::date
       AND cs."periodEnd"   >= g.s::date
       ${branchSql}
     WHERE cat."groupId" = ${groupId}
-      AND cat."parentId" IS NULL    GROUP BY g.s, cat.id, cat.name, cat."sortOrder"
+      AND cat."parentId" IS NULL
+    GROUP BY g.s, cat.id, cat.name, cat."sortOrder"
     ORDER BY g.s, cat."sortOrder"
   `;
 
