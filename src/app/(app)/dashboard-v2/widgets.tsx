@@ -16,14 +16,12 @@ import {
   LabelList,
   PieChart,
   Pie,
-  ReferenceLine,
 } from "recharts";
 import { Info, TrendingUp, TrendingDown, Minus, ChevronRight } from "lucide-react";
 import { formatNumber, formatUZS } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { ExpandableCard } from "@/components/ui/expandable-card";
 import type {
-  DailyByBranchSeries,
   MarjaRow,
   MarjaGroupNode,
   KpiByBranchRow,
@@ -31,9 +29,6 @@ import type {
   CategorySalesDayRow,
   GroupPlanDayRow,
 } from "@/lib/analytics-v2";
-
-// Barqaror grafik palitra — faqat chiziq/bar ranglari uchun
-const PALETTE = ["#10b981", "#facc15", "#fb923c", "#6366f1", "#0ea5e9", "#f87171", "#a855f7", "#14b8a6"];
 
 function shortDate(iso: string): string {
   const m = iso.match(/^\d{4}-(\d{2})-(\d{2})$/);
@@ -108,59 +103,6 @@ function WidgetTitle({ title, trend }: { title: React.ReactNode; trend?: number 
   );
 }
 
-// ============ 2 & 3. Daily by branch (line chart) ============
-
-export function DailyByBranchWidget({
-  title,
-  data,
-  unit = "",
-  format = "number",
-  trend,
-}: {
-  title: string;
-  data: DailyByBranchSeries;
-  unit?: string;
-  format?: "number" | "uzs-compact";
-  trend?: number | null;
-}) {
-  const fmt =
-    format === "uzs-compact"
-      ? (v: number) => (v === 0 ? "—" : formatUZS(v, { compact: true }))
-      : (v: number) => `${formatNumber(v)}${unit ? " " + unit : ""}`;
-  const chartData = data.values.map((v) => ({
-    ...v,
-    _label: shortDate(v.date as string),
-  }));
-  return (
-    <ExpandableCard title={<WidgetTitle title={title} trend={trend} />} className="rounded-2xl">
-      <ResponsiveContainer width="100%" height={280}>
-        <LineChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_STROKE} />
-          <XAxis dataKey="_label" tick={{ fontSize: 11, fill: CHART_TICK_FILL }} interval="preserveStartEnd" />
-          <YAxis tick={{ fontSize: 11, fill: CHART_TICK_FILL }} tickFormatter={(v) => fmt(Number(v))} />
-          <Tooltip
-            contentStyle={tooltipStyle}
-            formatter={(value) => [fmt(Number(value)), ""]}
-          />
-          <Legend wrapperStyle={{ fontSize: 12 }} />
-          {data.branches.map((b, i) => (
-            <Line
-              key={b.id}
-              type="monotone"
-              dataKey={`b${b.id}`}
-              name={b.name}
-              stroke={PALETTE[i % PALETTE.length]}
-              strokeWidth={2}
-              dot={false}
-              activeDot={{ r: 4 }}
-            />
-          ))}
-        </LineChart>
-      </ResponsiveContainer>
-    </ExpandableCard>
-  );
-}
-
 // ============ Kunlik son dinamikasi (Tashriflar + Cheklar) ============
 
 export function CountDynamicsWidget({
@@ -192,47 +134,7 @@ export function CountDynamicsWidget({
   );
 }
 
-// ============ Reja vs Fakt — kunlik bajarilish % ============
-
-export function PlanFactWidget({
-  title,
-  data,
-  trend,
-}: {
-  title: string;
-  data: { label: string; pct: number | null }[];
-  trend?: number | null;
-}) {
-  const hasData = data.some((d) => d.pct != null);
-  if (!hasData) {
-    return (
-      <ExpandableCard title={<WidgetTitle title={title} trend={trend} />} className="rounded-2xl">
-        <p className="py-10 text-center text-xs italic text-muted-foreground">
-          Reja kiritilmagan — <a href="/rejalar" className="underline underline-offset-2">Rejalar</a> bo&apos;limidan kiriting va prognoz yarating.
-        </p>
-      </ExpandableCard>
-    );
-  }
-  return (
-    <ExpandableCard title={<WidgetTitle title={title} trend={trend} />} className="rounded-2xl">
-      <ResponsiveContainer width="100%" height={280}>
-        <LineChart data={data} margin={{ top: 10, right: 24, left: 0, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_STROKE} />
-          <XAxis dataKey="label" tick={{ fontSize: 11, fill: CHART_TICK_FILL }} interval="preserveStartEnd" />
-          <YAxis tick={{ fontSize: 11, fill: CHART_TICK_FILL }} tickFormatter={(v) => `${Math.round(Number(v))}%`} />
-          <Tooltip
-            contentStyle={tooltipStyle}
-            formatter={(value) => [value == null ? "—" : `${Number(value).toFixed(1)}%`, "Bajarilish"]}
-          />
-          <ReferenceLine y={100} stroke="#94a3b8" strokeDasharray="4 4" />
-          <Line type="monotone" dataKey="pct" name="Bajarilish %" stroke="#6366f1" strokeWidth={2} dot={false} activeDot={{ r: 4 }} connectNulls />
-        </LineChart>
-      </ResponsiveContainer>
-    </ExpandableCard>
-  );
-}
-
-// ============ 4. Marja breakdown ============
+// ============ Marja breakdown ============
 
 function MarjaInfoTooltip() {
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -358,20 +260,6 @@ export function MarjaByBranchWidget({ data }: { data: MarjaRow[] }) {
   );
 }
 
-export function MarjaByCategoryWidget({ data }: { data: MarjaRow[] }) {
-  return (
-    <MarjaBaseWidget
-      title={
-        <div className="flex items-center gap-2">
-          <span>Marja: Kategoriyalar</span>
-          <MarjaInfoTooltip />
-        </div>
-      }
-      rows={data}
-    />
-  );
-}
-
 // ============ Marja iyerarxiyasi: Guruh → Kategoriya (default yig'iq) ============
 
 function marjaColor(m: number | null): string {
@@ -456,7 +344,6 @@ export function MarjaHierarchyWidget({ data }: { data: MarjaGroupNode[] }) {
 
 type KpiByBranchTrendRow = KpiByBranchRow & {
   conversionTrend?: number | null;
-  avgItemsTrend?: number | null;
 };
 
 export function ConversionWidget({

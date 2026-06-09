@@ -4,13 +4,6 @@ import { unstable_cache } from "next/cache";
 
 export const ANALYTICS_CACHE_TAG = "analytics";
 
-/**
- * UTC kun boshi sifatida Date qaytaradi.
- */
-export function utcDate(year: number, month: number, day: number): Date {
-  return new Date(Date.UTC(year, month - 1, day));
-}
-
 export function startOfMonth(d: Date): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
 }
@@ -20,18 +13,6 @@ export function endOfMonth(d: Date): Date {
 
 export function diffDaysInclusive(start: Date, end: Date): number {
   return Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1;
-}
-
-export function overlapDays(
-  rangeStart: Date,
-  rangeEnd: Date,
-  pStart: Date,
-  pEnd: Date
-): number {
-  const s = Math.max(rangeStart.getTime(), pStart.getTime());
-  const e = Math.min(rangeEnd.getTime(), pEnd.getTime());
-  if (e < s) return 0;
-  return Math.round((e - s) / 86_400_000) + 1;
 }
 
 export type DateRange = { start: Date; end: Date };
@@ -353,7 +334,7 @@ export type CategoryRow = {
   categoryId: number;
   categoryName: string;
   fact: number;
-  /** (sotuv - tannarx) / tannarx * 100. Tannarx ma'lumoti yo'q bo'lsa null. */
+  /** (sotuv - tannarx) / sotuv * 100. Tannarx ma'lumoti yo'q yoki sotuv 0 bo'lsa null. */
   marja: number | null;
 };
 
@@ -500,7 +481,7 @@ export type BranchReportRow = {
   /** Tannarx — CategorySales.costAmount dan. */
   cost: number;
   hasCost: boolean;
-  /** Marja = (categorySales - cost) / cost * 100 (CategorySales asosida). */
+  /** Marja = (categorySales - cost) / categorySales * 100 (CategorySales asosida). */
   marja: number | null;
   receipts: number;
   avgReceipt: number;
@@ -575,7 +556,7 @@ export const branchReport = (range: DateRange) =>
   )();
 
 export type MissingDays = {
-  sales: string[];   // ISO YYYY-MM-DD — DailyMetrics yo'q yoki barchasi 0
+  sales: string[];   // ISO YYYY-MM-DD — CategorySales yo'q yoki barchasi 0
   visits: string[];  // ISO YYYY-MM-DD — DailyVisits yo'q yoki barchasi 0
 };
 

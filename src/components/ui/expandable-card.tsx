@@ -127,8 +127,8 @@ export function ExpandableCard({
 
               {/* Content — kengaytirilganda grafiklar modalni to'liq egallaydi.
                   Uch xil holatni qamraydi:
-                  1) To'g'ridan-to'g'ri bola ResponsiveContainer (v2: DailyByBranch,
-                     CountDynamics, PlanFact) → flex-1 bilan to'liq cho'ziladi.
+                  1) To'g'ridan-to'g'ri bola ResponsiveContainer (v2: CountDynamics)
+                     → flex-1 bilan to'liq cho'ziladi.
                   2) O'ralgan/ko'p grafik (v2: MarjaBase `<div className="pt-2">`,
                      GroupSales grid) → naslli (descendant) ResponsiveContainer'larga
                      katta beton min-balandlik (`!min-h-[60vh]`) berilib, inline

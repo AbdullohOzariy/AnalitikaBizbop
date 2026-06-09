@@ -50,26 +50,6 @@ async function _dailyReceiptsByBranch(range: DateRange): Promise<DailyByBranchSe
   return buildSeries(range, branches, rows);
 }
 
-// O'rt. chek (kunlik) = kunlik SKU sotuv ÷ kunlik chek soni (qo'lda)
-async function _dailyAvgReceiptByBranch(range: DateRange): Promise<DailyByBranchSeries> {
-  const [branches, rows] = await Promise.all([
-    prisma.branch.findMany({ orderBy: { sortOrder: "asc" } }),
-    prisma.$queryRaw<{ d: Date; branchId: number; v: number }[]>`
-      SELECT rm.date AS d, rm."branchId",
-        (CASE WHEN rm."receiptCount" > 0 THEN COALESCE(cs.sales, 0) / rm."receiptCount" ELSE 0 END)::float8 AS v
-      FROM "DailyReceiptMetric" rm
-      LEFT JOIN (
-        SELECT "branchId", "periodStart" AS d, SUM("amount") AS sales
-        FROM "CategorySales"
-        WHERE "periodStart" BETWEEN ${range.start} AND ${range.end}
-        GROUP BY "branchId", "periodStart"
-      ) cs ON cs."branchId" = rm."branchId" AND cs.d = rm.date
-      WHERE rm.date BETWEEN ${range.start} AND ${range.end}
-    `,
-  ]);
-  return buildSeries(range, branches, rows);
-}
-
 function buildSeries(
   range: DateRange,
   branches: { id: number; name: string }[],
@@ -107,13 +87,6 @@ export const dailyReceiptsByBranch = (range: DateRange) =>
     { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
   )();
 
-export const dailyAvgReceiptByBranch = (range: DateRange) =>
-  unstable_cache(
-    () => _dailyAvgReceiptByBranch(range),
-    ["v2_dailyAvgReceipt", ...makeKey(range)],
-    { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
-  )();
-
 // ============ Marja breakdown (category + branch) ============
 
 export type MarjaRow = {
@@ -121,7 +94,7 @@ export type MarjaRow = {
   name: string;
   sales: number;
   cost: number;
-  /** Marja % = (sales - cost) / cost * 100. Cost == 0 bo'lsa null. */
+  /** Marja % = (sales - cost) / sales * 100. Sales == 0 bo'lsa null. */
   marja: number | null;
 };
 

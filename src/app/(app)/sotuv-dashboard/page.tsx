@@ -67,7 +67,7 @@ export default async function SotuvDashboardPage({
   const [branches, branchRows, dailyActual, dailyForecast, profit] = await Promise.all([
     prisma.branch.findMany({ orderBy: { sortOrder: "asc" }, select: { id: true, name: true } }),
 
-    // Filial bo'yicha: reja = ForecastDay (tanlangan kunlar) yoki SalesPlan proratsiyasi; fakt = DailyMetrics
+    // Filial bo'yicha: reja = ForecastDay (tanlangan kunlar) yoki SalesPlan proratsiyasi; fakt = CategorySales (proratsiyalangan)
     prisma.$queryRaw<{ id: number; name: string; plan: number; actual: number }[]>`
       SELECT b.id, b.name,
         COALESCE(
