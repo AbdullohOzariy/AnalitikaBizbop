@@ -151,7 +151,7 @@ export function ReceiptMetricsEditor({
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-border/60">
-        <table className="min-w-[700px] w-full border-collapse text-sm">
+        <table className="w-max border-collapse text-sm">
           <thead>
             <tr className="bg-muted/40">
               <th rowSpan={2} className="sticky left-0 z-10 bg-muted/40 px-3 py-2 text-left text-xs font-medium text-muted-foreground">Sana</th>
