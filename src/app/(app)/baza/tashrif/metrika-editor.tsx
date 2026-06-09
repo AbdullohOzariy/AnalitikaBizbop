@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useMemo, useTransition } from "react";
+import { Fragment, useState, useRef, useEffect, useMemo, useTransition } from "react";
 import { Loader2, Check, AlertCircle, CalendarDays } from "lucide-react";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -161,14 +161,11 @@ export function ReceiptMetricsEditor({
             </tr>
             <tr className="bg-muted/40">
               {branches.map((b) => (
-                <th key={b.id} className="border-l border-border/60 px-2 py-1 text-center text-[11px] font-medium text-muted-foreground">
-                  <div className="flex items-center gap-1">
-                    <span className="w-11 shrink-0 text-center">Chek</span>
-                    <span className="w-11 shrink-0 text-center">Tovar</span>
-                    <span className="w-12 shrink-0 text-center">O&apos;rt</span>
-                    <span className="w-3 shrink-0" />
-                  </div>
-                </th>
+                <Fragment key={b.id}>
+                  <th className="w-16 border-l border-border/60 px-1.5 py-1 text-center text-[11px] font-medium text-muted-foreground">Chek</th>
+                  <th className="w-16 px-1.5 py-1 text-center text-[11px] font-medium text-muted-foreground">Tovar</th>
+                  <th className="w-20 px-1.5 py-1 text-center text-[11px] font-medium text-muted-foreground whitespace-nowrap">O&apos;rt</th>
+                </Fragment>
               ))}
             </tr>
           </thead>
@@ -188,39 +185,42 @@ export function ReceiptMetricsEditor({
                     const avg = cnt > 0 ? daySales / cnt : null; // o'rt. chek = sotuv / chek soni (avto)
                     const avgTxt = avg != null ? formatUZS(avg, { compact: true }) : "—";
                     return (
-                      <td key={b.id} className="border-l border-border/60 px-1.5 py-1">
-                        <div className="flex items-center gap-1">
+                      <Fragment key={b.id}>
+                        <td className="border-l border-border/60 px-1.5 py-1">
                           {canEdit ? (
-                            <>
-                              <input
-                                type="text" inputMode="numeric"
-                                aria-label={`${d}-kun — ${b.name} chek soni`}
-                                value={c.count}
-                                onChange={(e) => onCount(b.id, d, e.target.value)}
-                                placeholder="0"
-                                className="h-7 w-11 shrink-0 rounded-md border border-input/60 bg-background px-1 text-right text-xs tabular-nums focus:outline-none focus:ring-1 focus:ring-ring"
-                              />
-                              <input
-                                type="text" inputMode="decimal"
-                                aria-label={`${d}-kun — ${b.name} chekdagi tovar soni`}
-                                value={c.items}
-                                onChange={(e) => onItems(b.id, d, e.target.value)}
-                                placeholder="0"
-                                className="h-7 w-11 shrink-0 rounded-md border border-input/60 bg-background px-1 text-right text-xs tabular-nums focus:outline-none focus:ring-1 focus:ring-ring"
-                              />
-                              <span className="w-12 shrink-0 text-right text-xs tabular-nums text-muted-foreground" title={avg != null ? `${Math.round(avg).toLocaleString()} so'm` : "Chek soni kiriting"}>{avgTxt}</span>
-                              <StatusIcon st={c.st} />
-                            </>
+                            <input
+                              type="text" inputMode="numeric"
+                              aria-label={`${d}-kun — ${b.name} chek soni`}
+                              value={c.count}
+                              onChange={(e) => onCount(b.id, d, e.target.value)}
+                              placeholder="0"
+                              className="h-7 w-full rounded-md border border-input/60 bg-background px-1 text-right text-xs tabular-nums focus:outline-none focus:ring-1 focus:ring-ring"
+                            />
                           ) : (
-                            <div className="flex items-center gap-1 text-right text-xs tabular-nums text-foreground/80">
-                              <span className="w-11 shrink-0">{c.count || "—"}</span>
-                              <span className="w-11 shrink-0">{c.items || "—"}</span>
-                              <span className="w-12 shrink-0 text-muted-foreground">{avgTxt}</span>
-                              <span className="w-3 shrink-0" />
-                            </div>
+                            <span className="block text-right text-xs tabular-nums text-foreground/80">{c.count || "—"}</span>
                           )}
-                        </div>
-                      </td>
+                        </td>
+                        <td className="px-1.5 py-1">
+                          {canEdit ? (
+                            <input
+                              type="text" inputMode="decimal"
+                              aria-label={`${d}-kun — ${b.name} chekdagi tovar soni`}
+                              value={c.items}
+                              onChange={(e) => onItems(b.id, d, e.target.value)}
+                              placeholder="0"
+                              className="h-7 w-full rounded-md border border-input/60 bg-background px-1 text-right text-xs tabular-nums focus:outline-none focus:ring-1 focus:ring-ring"
+                            />
+                          ) : (
+                            <span className="block text-right text-xs tabular-nums text-foreground/80">{c.items || "—"}</span>
+                          )}
+                        </td>
+                        <td className="px-1.5 py-1">
+                          <div className="flex items-center justify-end gap-1">
+                            <span className="text-right text-xs tabular-nums text-muted-foreground" title={avg != null ? `${Math.round(avg).toLocaleString()} so'm` : "Chek soni kiriting"}>{avgTxt}</span>
+                            {canEdit && <StatusIcon st={c.st} />}
+                          </div>
+                        </td>
+                      </Fragment>
                     );
                   })}
                 </tr>
@@ -235,14 +235,11 @@ export function ReceiptMetricsEditor({
                 const avgItems = t.sumCount > 0 ? t.sumItemsW / t.sumCount : 0;
                 const avgReceipt = t.sumCount > 0 ? t.sumSales / t.sumCount : 0;
                 return (
-                  <td key={b.id} className="border-l border-border/60 px-1.5 py-1.5 text-xs tabular-nums">
-                    <div className="flex items-center gap-1 text-right">
-                      <span className="w-11 shrink-0" title="Oylik jami chek">{t.sumCount > 0 ? NF.format(t.sumCount) : "—"}</span>
-                      <span className="w-11 shrink-0 text-muted-foreground" title="O'rtacha tovar (chekka vaznlangan)">{avgItems > 0 ? avgItems.toFixed(2) : "—"}</span>
-                      <span className="w-12 shrink-0 text-muted-foreground" title="O'rtacha chek (oylik sotuv / chek)">{avgReceipt > 0 ? formatUZS(avgReceipt, { compact: true }) : "—"}</span>
-                      <span className="w-3 shrink-0" />
-                    </div>
-                  </td>
+                  <Fragment key={b.id}>
+                    <td className="border-l border-border/60 px-1.5 py-1.5 text-right text-xs tabular-nums" title="Oylik jami chek">{t.sumCount > 0 ? NF.format(t.sumCount) : "—"}</td>
+                    <td className="px-1.5 py-1.5 text-right text-xs tabular-nums text-muted-foreground" title="O'rtacha tovar (chekka vaznlangan)">{avgItems > 0 ? avgItems.toFixed(2) : "—"}</td>
+                    <td className="px-1.5 py-1.5 text-right text-xs tabular-nums text-muted-foreground" title="O'rtacha chek (oylik sotuv / chek)">{avgReceipt > 0 ? formatUZS(avgReceipt, { compact: true }) : "—"}</td>
+                  </Fragment>
                 );
               })}
             </tr>
