@@ -18,12 +18,14 @@ import {
   Pie,
   ReferenceLine,
 } from "recharts";
-import { Info, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { Info, TrendingUp, TrendingDown, Minus, ChevronRight } from "lucide-react";
 import { formatNumber, formatUZS } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { ExpandableCard } from "@/components/ui/expandable-card";
 import type {
   DailyByBranchSeries,
   MarjaRow,
+  MarjaGroupNode,
   KpiByBranchRow,
   GroupSalesDayRow,
   CategorySalesDayRow,
@@ -369,6 +371,86 @@ export function MarjaByCategoryWidget({ data }: { data: MarjaRow[] }) {
   );
 }
 
+// ============ Marja iyerarxiyasi: Guruh → Kategoriya (default yig'iq) ============
+
+function marjaColor(m: number | null): string {
+  if (m == null) return "text-muted-foreground";
+  return m >= 30 ? "text-emerald-600 dark:text-emerald-400" : m >= 15 ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400";
+}
+function marjaBar(m: number | null): string {
+  if (m == null) return "bg-muted";
+  return m >= 30 ? "bg-emerald-500" : m >= 15 ? "bg-amber-500" : "bg-red-500";
+}
+function MarjaMiniBar({ marja, small }: { marja: number | null; small?: boolean }) {
+  const pct = marja == null ? 0 : Math.max(0, Math.min(100, (marja / 50) * 100)); // 50% = to'la
+  return (
+    <div className={cn("shrink-0 overflow-hidden rounded-full bg-muted", small ? "h-1.5 w-14" : "h-2 w-24")}>
+      <div className={cn("h-full rounded-full", marjaBar(marja))} style={{ width: `${pct}%` }} />
+    </div>
+  );
+}
+
+export function MarjaHierarchyWidget({ data }: { data: MarjaGroupNode[] }) {
+  const [open, setOpen] = useState<Set<number>>(new Set());
+  const toggle = (id: number) =>
+    setOpen((p) => {
+      const n = new Set(p);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
+
+  return (
+    <ExpandableCard
+      title={
+        <div className="flex items-center gap-2">
+          <span>Marja: Guruhlar</span>
+          <MarjaInfoTooltip />
+        </div>
+      }
+      className="rounded-2xl border-border/50"
+    >
+      {data.length === 0 ? (
+        <p className="py-6 text-center text-xs italic text-muted-foreground">Ma&apos;lumot yo&apos;q</p>
+      ) : (
+        <div className="space-y-0.5 pt-1">
+          {data.map((g) => {
+            const isOpen = open.has(g.id);
+            return (
+              <div key={g.id}>
+                <button
+                  onClick={() => toggle(g.id)}
+                  aria-expanded={isOpen}
+                  className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors hover:bg-muted/50"
+                >
+                  <ChevronRight className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", isOpen && "rotate-90")} />
+                  <span className="flex-1 truncate text-sm font-semibold">{g.name}</span>
+                  <MarjaMiniBar marja={g.marja} />
+                  <span className={cn("w-14 text-right text-sm font-bold tabular-nums", marjaColor(g.marja))}>
+                    {g.marja != null ? `${g.marja.toFixed(1)}%` : "—"}
+                  </span>
+                </button>
+                {isOpen && (
+                  <div className="mb-1 ml-[19px] space-y-0.5 border-l border-border/50 pl-4">
+                    {g.categories.map((c) => (
+                      <div key={c.id} className="flex items-center gap-2 py-1">
+                        <span className="flex-1 truncate text-xs text-muted-foreground">{c.name}</span>
+                        <MarjaMiniBar marja={c.marja} small />
+                        <span className={cn("w-12 text-right text-xs tabular-nums", marjaColor(c.marja))}>
+                          {c.marja != null ? `${c.marja.toFixed(1)}%` : "—"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </ExpandableCard>
+  );
+}
+
 // ============ 5 & 6. KPI by branch (cards) ============
 
 type KpiByBranchTrendRow = KpiByBranchRow & {
@@ -426,14 +508,18 @@ export function GroupSalesDynamicsWidget({
   days,
   groups,
   categoryDataMap,
+  dailyPlan = [],
 }: {
   days: GroupSalesDayRow[];
   groups: GroupMeta[];
   categoryDataMap: Map<number, { days: CategorySalesDayRow[]; categories: { id: number; name: string }[] }>;
+  /** Kunlik reja (ForecastDay) — Fakt vs Reja chizig'i uchun */
+  dailyPlan?: { date: string; value: number }[];
 }) {
   const [activeGroup, setActiveGroup] = useState<number | null>(null);
+  const planByDate = new Map(dailyPlan.map((p) => [p.date, p.value]));
 
-  // Guruhlar bo'yicha chart data + kunlik jami (_total)
+  // Guruhlar bo'yicha chart data + kunlik jami (_total=Fakt, _plan=Reja)
   const groupChartData = days.map((d) => {
     const row: Record<string, string | number> = { _label: shortDate(d.date) };
     let total = 0;
@@ -442,8 +528,10 @@ export function GroupSalesDynamicsWidget({
       total += g.amount;
     }
     row["_total"] = total;
+    row["_plan"] = planByDate.get(d.date) ?? 0;
     return row;
   });
+  const hasPlan = dailyPlan.some((p) => p.value > 0);
 
   // Tanlangan guruh uchun kategoriya chart data
   const catData = activeGroup != null ? categoryDataMap.get(activeGroup) : null;
@@ -531,14 +619,16 @@ export function GroupSalesDynamicsWidget({
             <Tooltip
               contentStyle={tooltipStyle}
               formatter={(value, name) => {
-                if (name === "_total") return [fmtUZS(Number(value)), "Jami"];
+                if (name === "_total") return [fmtUZS(Number(value)), "Fakt"];
+                if (name === "_plan") return [fmtUZS(Number(value)), "Reja"];
                 const g = groups.find((g) => `g${g.id}` === name);
                 return [fmtUZS(Number(value)), g?.name ?? String(name)];
               }}
             />
             <Legend
               formatter={(value) => {
-                if (value === "_total") return "Jami";
+                if (value === "_total") return "Fakt";
+                if (value === "_plan") return "Reja";
                 const g = groups.find((g) => `g${g.id}` === value);
                 return g?.name ?? value;
               }}
@@ -557,7 +647,7 @@ export function GroupSalesDynamicsWidget({
                 activeDot={{ r: 4 }}
               />
             ))}
-            {/* Umumiy jami chizig'i — faqat "Barcha guruhlar" rejimida */}
+            {/* Fakt (jami) — yashil; Reja — to'q sariq punktir. Faqat "Barcha guruhlar" rejimida */}
             {showTotal && (
               <Line
                 type="monotone"
@@ -565,9 +655,20 @@ export function GroupSalesDynamicsWidget({
                 name="_total"
                 stroke={TOTAL_LINE_COLOR}
                 strokeWidth={3}
-                strokeDasharray="0"
                 dot={false}
                 activeDot={{ r: 5 }}
+              />
+            )}
+            {showTotal && hasPlan && (
+              <Line
+                type="monotone"
+                dataKey="_plan"
+                name="_plan"
+                stroke="#fb923c"
+                strokeWidth={2}
+                strokeDasharray="5 4"
+                dot={false}
+                activeDot={{ r: 4 }}
               />
             )}
           </LineChart>

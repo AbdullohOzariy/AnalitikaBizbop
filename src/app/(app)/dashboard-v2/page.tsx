@@ -7,6 +7,7 @@ import {
   dailyVisitsByBranch,
   dailyReceiptsByBranch,
   marjaBreakdown,
+  marjaHierarchy,
   kpiByBranch,
   dailySalesByGroup,
   dailySalesByCategory,
@@ -19,7 +20,7 @@ import { FiltersBar } from "./filters";
 import {
   CountDynamicsWidget,
   MarjaByBranchWidget,
-  MarjaByCategoryWidget,
+  MarjaHierarchyWidget,
   ConversionWidget,
   PlanFactWidget,
   GroupSalesDynamicsWidget,
@@ -98,6 +99,7 @@ async function WidgetsSection({
     visits,
     receipts,
     marja,
+    marjaHier,
     kpi,
     prevKpi,
     groupSales,
@@ -109,6 +111,7 @@ async function WidgetsSection({
     dailyVisitsByBranch(range),
     dailyReceiptsByBranch(range),
     marjaBreakdown(range, branchId),
+    marjaHierarchy(range, branchId),
     kpiByBranch(range),
     kpiByBranch(previousRange),
     dailySalesByGroup(range, branchId),
@@ -217,7 +220,7 @@ async function WidgetsSection({
       {/* Widgetlar */}
       <div className="grid gap-4 md:grid-cols-2">
         <MarjaByBranchWidget data={marja.byBranch} />
-        <MarjaByCategoryWidget data={marja.byCategory} />
+        <MarjaHierarchyWidget data={marjaHier} />
         <CountDynamicsWidget title="Kunlik son: tashrif va chek" data={countDaily} trend={countTrend} />
         <ConversionWidget rows={kpiWithTrends} trend={conversionTrend} />
         <div className="md:col-span-2">
@@ -228,6 +231,7 @@ async function WidgetsSection({
             days={groupSales.days}
             groups={groupSales.groups}
             categoryDataMap={categoryDataMap}
+            dailyPlan={dailyPlan}
           />
         </div>
       </div>

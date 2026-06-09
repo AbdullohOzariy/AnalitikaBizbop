@@ -190,6 +190,59 @@ export const marjaBreakdown = (range: DateRange, branchId?: number) =>
     { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
   )();
 
+// ============ Marja iyerarxiyasi: Guruh → Kategoriya ============
+
+export type MarjaGroupNode = MarjaRow & { categories: MarjaRow[] };
+
+async function _marjaHierarchy(range: DateRange, branchId?: number): Promise<MarjaGroupNode[]> {
+  const branchSql = branchId ? Prisma.sql`AND cs."branchId" = ${branchId}` : Prisma.empty;
+  const frac = Prisma.sql`(
+    (LEAST(cs."periodEnd", ${range.end}::date) - GREATEST(cs."periodStart", ${range.start}::date) + 1)::float8
+    / NULLIF((cs."periodEnd" - cs."periodStart" + 1)::float8, 0)
+  )`;
+
+  // CategorySales (subkat darajasi) → ota-kategoriya → guruh
+  const rows = await prisma.$queryRaw<
+    { gid: number; gname: string; cid: number; cname: string; sales: number | null; cost: number | null }[]
+  >`
+    SELECT g.id AS gid, g.name AS gname, par.id AS cid, par.name AS cname,
+           COALESCE(SUM(cs.amount::numeric * ${frac}), 0)::float8 AS sales,
+           COALESCE(SUM(cs."costAmount"::numeric * ${frac}), 0)::float8 AS cost
+    FROM "CategorySales" cs
+    JOIN "Category" sub ON sub.id = cs."categoryId"
+    JOIN "Category" par ON par.id = sub."parentId"
+    JOIN "CategoryGroup" g ON g.id = par."groupId"
+    WHERE cs."periodEnd" >= ${range.start} AND cs."periodStart" <= ${range.end}    ${branchSql}
+    GROUP BY g.id, g.name, g."sortOrder", par.id, par.name, par."sortOrder"
+    ORDER BY g."sortOrder" ASC, par."sortOrder" ASC
+  `;
+
+  const mk = (id: number, name: string, sales: number, cost: number): MarjaRow => ({
+    id, name, sales, cost, marja: sales > 0 ? ((sales - cost) / sales) * 100 : null,
+  });
+
+  const groupMap = new Map<number, { name: string; sales: number; cost: number; cats: MarjaRow[] }>();
+  for (const r of rows) {
+    const sales = Number(r.sales ?? 0), cost = Number(r.cost ?? 0);
+    if (sales <= 0) continue;
+    let g = groupMap.get(r.gid);
+    if (!g) { g = { name: r.gname, sales: 0, cost: 0, cats: [] }; groupMap.set(r.gid, g); }
+    g.sales += sales; g.cost += cost;
+    g.cats.push(mk(r.cid, r.cname, sales, cost));
+  }
+  return [...groupMap.entries()].map(([gid, g]) => ({
+    ...mk(gid, g.name, g.sales, g.cost),
+    categories: g.cats.sort((a, b) => (b.marja ?? -100) - (a.marja ?? -100)),
+  }));
+}
+
+export const marjaHierarchy = (range: DateRange, branchId?: number) =>
+  unstable_cache(
+    () => _marjaHierarchy(range, branchId),
+    ["v2_marjaHierarchy", ...makeKey(range, branchId)],
+    { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
+  )();
+
 // ============ KPI by branch (conversion + avg items per receipt) ============
 
 export type KpiByBranchRow = {

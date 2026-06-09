@@ -151,7 +151,7 @@ export function ReceiptMetricsEditor({
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-border/60">
-        <table className="min-w-[820px] w-full border-collapse text-sm">
+        <table className="min-w-[700px] w-full border-collapse text-sm">
           <thead>
             <tr className="bg-muted/40">
               <th rowSpan={2} className="sticky left-0 z-10 bg-muted/40 px-3 py-2 text-left text-xs font-medium text-muted-foreground">Sana</th>
@@ -163,9 +163,9 @@ export function ReceiptMetricsEditor({
               {branches.map((b) => (
                 <th key={b.id} className="border-l border-border/60 px-2 py-1 text-center text-[11px] font-medium text-muted-foreground">
                   <div className="flex items-center gap-1">
-                    <span className="flex-1">Chek</span>
-                    <span className="flex-1">Tovar</span>
-                    <span className="flex-1">O&apos;rt.chek</span>
+                    <span className="w-11 shrink-0 text-center">Chek</span>
+                    <span className="w-11 shrink-0 text-center">Tovar</span>
+                    <span className="w-12 shrink-0 text-center">O&apos;rt</span>
                     <span className="w-3 shrink-0" />
                   </div>
                 </th>
@@ -198,7 +198,7 @@ export function ReceiptMetricsEditor({
                                 value={c.count}
                                 onChange={(e) => onCount(b.id, d, e.target.value)}
                                 placeholder="0"
-                                className="h-7 w-full min-w-11 flex-1 rounded-md border border-input/60 bg-background px-1.5 text-right text-xs tabular-nums focus:outline-none focus:ring-1 focus:ring-ring"
+                                className="h-7 w-11 shrink-0 rounded-md border border-input/60 bg-background px-1 text-right text-xs tabular-nums focus:outline-none focus:ring-1 focus:ring-ring"
                               />
                               <input
                                 type="text" inputMode="decimal"
@@ -206,16 +206,16 @@ export function ReceiptMetricsEditor({
                                 value={c.items}
                                 onChange={(e) => onItems(b.id, d, e.target.value)}
                                 placeholder="0"
-                                className="h-7 w-full min-w-11 flex-1 rounded-md border border-input/60 bg-background px-1.5 text-right text-xs tabular-nums focus:outline-none focus:ring-1 focus:ring-ring"
+                                className="h-7 w-11 shrink-0 rounded-md border border-input/60 bg-background px-1 text-right text-xs tabular-nums focus:outline-none focus:ring-1 focus:ring-ring"
                               />
-                              <span className="min-w-11 flex-1 text-right text-xs tabular-nums text-muted-foreground" title={avg != null ? `${Math.round(avg).toLocaleString()} so'm` : "Chek soni kiriting"}>{avgTxt}</span>
+                              <span className="w-12 shrink-0 text-right text-xs tabular-nums text-muted-foreground" title={avg != null ? `${Math.round(avg).toLocaleString()} so'm` : "Chek soni kiriting"}>{avgTxt}</span>
                               <StatusIcon st={c.st} />
                             </>
                           ) : (
-                            <div className="flex w-full items-center gap-1 text-right text-xs tabular-nums text-foreground/80">
-                              <span className="flex-1">{c.count || "—"}</span>
-                              <span className="flex-1">{c.items || "—"}</span>
-                              <span className="flex-1 text-muted-foreground">{avgTxt}</span>
+                            <div className="flex items-center gap-1 text-right text-xs tabular-nums text-foreground/80">
+                              <span className="w-11 shrink-0">{c.count || "—"}</span>
+                              <span className="w-11 shrink-0">{c.items || "—"}</span>
+                              <span className="w-12 shrink-0 text-muted-foreground">{avgTxt}</span>
                               <span className="w-3 shrink-0" />
                             </div>
                           )}
@@ -237,9 +237,9 @@ export function ReceiptMetricsEditor({
                 return (
                   <td key={b.id} className="border-l border-border/60 px-1.5 py-1.5 text-xs tabular-nums">
                     <div className="flex items-center gap-1 text-right">
-                      <span className="flex-1" title="Oylik jami chek">{t.sumCount > 0 ? NF.format(t.sumCount) : "—"}</span>
-                      <span className="flex-1 text-muted-foreground" title="O'rtacha tovar (chekka vaznlangan)">{avgItems > 0 ? avgItems.toFixed(2) : "—"}</span>
-                      <span className="flex-1 text-muted-foreground" title="O'rtacha chek (oylik sotuv / chek)">{avgReceipt > 0 ? formatUZS(avgReceipt, { compact: true }) : "—"}</span>
+                      <span className="w-11 shrink-0" title="Oylik jami chek">{t.sumCount > 0 ? NF.format(t.sumCount) : "—"}</span>
+                      <span className="w-11 shrink-0 text-muted-foreground" title="O'rtacha tovar (chekka vaznlangan)">{avgItems > 0 ? avgItems.toFixed(2) : "—"}</span>
+                      <span className="w-12 shrink-0 text-muted-foreground" title="O'rtacha chek (oylik sotuv / chek)">{avgReceipt > 0 ? formatUZS(avgReceipt, { compact: true }) : "—"}</span>
                       <span className="w-3 shrink-0" />
                     </div>
                   </td>

@@ -125,8 +125,11 @@ export function ExpandableCard({
                 </Button>
               </div>
 
-              {/* Content */}
-              <div className="flex-1 overflow-auto p-6 min-h-0">{children}</div>
+              {/* Content — to'g'ridan-to'g'ri grafik (ResponsiveContainer) bo'lsa
+                  modalni to'liq egallaydi (height={280} qotib qolmaydi). */}
+              <div className="flex flex-1 flex-col overflow-auto p-6 min-h-0 [&>.recharts-responsive-container]:!h-auto [&>.recharts-responsive-container]:min-h-0 [&>.recharts-responsive-container]:flex-1">
+                {children}
+              </div>
             </div>
           </div>,
           document.body
