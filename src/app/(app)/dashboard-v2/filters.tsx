@@ -15,19 +15,9 @@ import {
 } from "@/components/ui/select";
 import { ChevronLeft, ChevronRight, Building2, Calendar, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { shiftPeriod } from "@/lib/period";
 
 type Branch = { id: number; name: string };
-
-function shiftDays(start: string, end: string, dir: 1 | -1): { start: string; end: string } {
-  const s = new Date(start + "T00:00:00.000Z");
-  const e = new Date(end + "T00:00:00.000Z");
-  const dayMs = 86_400_000;
-  const len = Math.round((e.getTime() - s.getTime()) / dayMs) + 1;
-  return {
-    start: new Date(s.getTime() + dir * len * dayMs).toISOString().slice(0, 10),
-    end:   new Date(e.getTime() + dir * len * dayMs).toISOString().slice(0, 10),
-  };
-}
 
 export function FiltersBar({
   branches,
@@ -70,8 +60,8 @@ export function FiltersBar({
     });
   };
   const shift = (dir: 1 | -1) => {
-    const next = shiftDays(start, end, dir);
-    navigate({ start: next.start, end: next.end });
+    const next = shiftPeriod(start, end, dir);
+    if (next) navigate({ start: next.start, end: next.end });
   };
   const prefetchBranch = (nextBranchId: string | undefined) => {
     router.prefetch(hrefFor({ branchId: nextBranchId }));

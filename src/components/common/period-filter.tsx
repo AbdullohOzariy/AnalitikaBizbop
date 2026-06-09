@@ -5,6 +5,7 @@ import { useMemo, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -12,8 +13,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { CalendarDays, Building2, GitCompareArrows, X } from "lucide-react";
+import { CalendarDays, Building2, GitCompareArrows, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { shiftPeriod } from "@/lib/period";
 
 type Branch = { id: number; name: string };
 
@@ -124,6 +126,14 @@ export function PeriodFilter({
     navigate({ start: r.start, end: r.end });
   };
 
+  const shift = (dir: 1 | -1) => {
+    const next = shiftPeriod(localStart, localEnd, dir);
+    if (!next) return;
+    setLocalStart(next.start);
+    setLocalEnd(next.end);
+    navigate({ start: next.start, end: next.end });
+  };
+
   const setCompare = (mode: string | undefined) => {
     if (!mode) navigate({ compare: "none", cstart: undefined, cend: undefined });
     else navigate({ compare: mode });
@@ -152,6 +162,15 @@ export function PeriodFilter({
               <CalendarDays className="h-3.5 w-3.5" /> Davr
             </Label>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <Button
+                variant="outline"
+                onClick={() => shift(-1)}
+                className="h-11 w-11 shrink-0 rounded-xl border-border bg-background p-0 shadow-sm"
+                title="Oldingi davr"
+                aria-label="Oldingi davr"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
               <div className="relative">
                 <Input
                   id="d-start"
@@ -175,6 +194,15 @@ export function PeriodFilter({
                   className="h-11 w-full rounded-xl border-border bg-background text-sm shadow-sm transition-colors focus-visible:ring-2 focus-visible:ring-ring/40 sm:w-40 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-60"
                 />
               </div>
+              <Button
+                variant="outline"
+                onClick={() => shift(1)}
+                className="h-11 w-11 shrink-0 rounded-xl border-border bg-background p-0 shadow-sm"
+                title="Keyingi davr"
+                aria-label="Keyingi davr"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
             </div>
           </div>
 

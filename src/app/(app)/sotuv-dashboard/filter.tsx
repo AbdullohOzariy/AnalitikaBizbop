@@ -4,10 +4,13 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { shiftPeriod } from "@/lib/period";
 
 function ymd(d: Date) { return d.toISOString().slice(0, 10); }
 const PRESETS: { key: string; label: string; range: () => { start: string; end: string } }[] = [
@@ -44,12 +47,21 @@ export function SotuvFilter({
     if (which === "start") setS(v); else setE(v);
     if (/^\d{4}-\d{2}-\d{2}$/.test(v)) nav({ [which]: v });
   };
+  const shift = (dir: 1 | -1) => {
+    const next = shiftPeriod(s, e, dir);
+    if (!next) return;
+    setS(next.start); setE(next.end);
+    nav({ start: next.start, end: next.end });
+  };
   const branchItems = { all: "Barcha filiallar", ...Object.fromEntries(branches.map((b) => [String(b.id), b.name])) };
   const activePreset = PRESETS.find((p) => { const r = p.range(); return r.start === s && r.end === e; })?.key;
 
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-end gap-3">
+        <Button variant="outline" onClick={() => shift(-1)} className="h-9 w-9 shrink-0 p-0" title="Oldingi davr" aria-label="Oldingi davr">
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
         <div className="space-y-1">
           <Label className="text-xs text-muted-foreground">Boshlanish</Label>
           <Input type="date" value={s} onChange={(ev) => onDate("start", ev.target.value)} className="h-9 w-40" />
@@ -58,6 +70,9 @@ export function SotuvFilter({
           <Label className="text-xs text-muted-foreground">Tugash</Label>
           <Input type="date" value={e} onChange={(ev) => onDate("end", ev.target.value)} className="h-9 w-40" />
         </div>
+        <Button variant="outline" onClick={() => shift(1)} className="h-9 w-9 shrink-0 p-0" title="Keyingi davr" aria-label="Keyingi davr">
+          <ChevronRight className="h-4 w-4" />
+        </Button>
         <div className="space-y-1">
           <Label className="text-xs text-muted-foreground">Filial</Label>
           <Select items={branchItems} value={branchId ? String(branchId) : "all"} onValueChange={(v) => nav({ branchId: v ?? "all" })}>
