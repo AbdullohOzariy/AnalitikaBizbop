@@ -41,7 +41,7 @@ async function fetchGroupDailyHistory(
   end: Date
 ): Promise<{ date: string; amount: number }[]> {
   return prisma.$queryRaw<{ date: string; amount: number }[]>`
-    SELECT g.s::text AS date,
+    SELECT g.s::date::text AS date,
       COALESCE(SUM(
         cs.amount::numeric * (
           (LEAST(cs."periodEnd", ${end}::date) - GREATEST(cs."periodStart", g.s::date) + 1)::float8

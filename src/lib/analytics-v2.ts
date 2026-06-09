@@ -288,7 +288,7 @@ async function _dailySalesByGroup(
     { d: string; groupId: number; groupName: string; amount: number }[]
   >`
     SELECT
-      g.s::text                           AS d,
+      g.s::date::text                     AS d,
       cg.id                               AS "groupId",
       cg.name                             AS "groupName",
       COALESCE(SUM(
@@ -312,11 +312,12 @@ async function _dailySalesByGroup(
   for (const r of rows) groupMap.set(r.groupId, r.groupName);
   const groups = [...groupMap.entries()].map(([id, name]) => ({ id, name }));
 
-  // Kunlar bo'yicha birlashtirish
+  // Kunlar bo'yicha birlashtirish (kalit — toza YYYY-MM-DD, isoDay bilan mos)
   const dayMap = new Map<string, Map<number, number>>();
   for (const r of rows) {
-    if (!dayMap.has(r.d)) dayMap.set(r.d, new Map());
-    dayMap.get(r.d)!.set(r.groupId, Number(r.amount));
+    const dk = r.d.slice(0, 10);
+    if (!dayMap.has(dk)) dayMap.set(dk, new Map());
+    dayMap.get(dk)!.set(r.groupId, Number(r.amount));
   }
 
   const days: GroupSalesDayRow[] = [];
