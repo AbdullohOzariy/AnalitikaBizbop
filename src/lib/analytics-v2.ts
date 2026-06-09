@@ -438,3 +438,144 @@ export const dailySalesByCategory = (range: DateRange, groupId: number, branchId
     ["v2_dailySalesByCategory", ...makeKey(range, branchId, `g${groupId}`)],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
   )();
+
+// ============ Guruh bo'yicha kunlik REJA (Reja vs Fakt dinamikasi uchun) ============
+//
+// Fakt (dailySalesByGroup) bilan yonma-yon ishlatish uchun har guruhning kunlik
+// rejasini hisoblaymiz. Manbalar:
+//   • SalesPlan (subkat, oylik) → ota(parentId) → guruh(groupId) bo'yicha rollup
+//     = guruh oylik rejasi (gruh, year, month).
+//   • ForecastDay (filial, kunlik JAMI reja) → kunlik "shakl".
+// Formula: reja[guruh][kun] = forecastDay_jami[kun] × (guruh_oy_reja / jami_oy_reja[oy]).
+// Fallback (oy uchun ForecastDay yo'q): guruh_oy_reja ni oy kunlariga TENG taqsimla.
+// branchId filtri SalesPlan va ForecastDay ikkalasiga ham qo'llanadi.
+
+export type GroupPlanDayRow = {
+  date: string;                                       // ISO YYYY-MM-DD
+  total: number;                                      // barcha guruhlar jami reja
+  groups: { groupId: number; groupName: string; plan: number }[];
+};
+
+function daysInMonthUTC(year: number, month1: number): number {
+  // month1: 1–12
+  return new Date(Date.UTC(year, month1, 0)).getUTCDate();
+}
+
+async function _dailyPlanByGroup(
+  range: DateRange,
+  branchId?: number
+): Promise<{ days: GroupPlanDayRow[]; groups: { id: number; name: string }[] }> {
+  const planBranchSql = branchId ? Prisma.sql`AND sp."branchId" = ${branchId}` : Prisma.empty;
+  const fdBranchSql = branchId ? Prisma.sql`AND fd."branchId" = ${branchId}` : Prisma.empty;
+
+  // 1) Guruh oylik rejasi: SalesPlan (subkat) → ota → guruh.
+  //    forecast.ts kabi COALESCE(par.groupId, sub.groupId) — reja to'g'ridan-to'g'ri
+  //    top-kat'ga kiritilgan bo'lsa ham guruhni topamiz.
+  //    Faqat range bilan kesishadigan (year, month) larni olamiz.
+  const [planRows, groupRows, fdRows] = await Promise.all([
+    prisma.$queryRaw<
+      { gid: number; gname: string; year: number; month: number; amt: number }[]
+    >`
+      SELECT g.id AS gid, g.name AS gname, sp.year AS year, sp.month AS month,
+             SUM(sp.amount)::float8 AS amt
+      FROM "SalesPlan" sp
+      JOIN "Category" sub ON sub.id = sp."categoryId"
+      LEFT JOIN "Category" par ON par.id = sub."parentId"
+      JOIN "CategoryGroup" g ON g.id = COALESCE(par."groupId", sub."groupId")
+      WHERE make_date(sp.year, sp.month, 1) <= ${range.end}::date
+        AND (make_date(sp.year, sp.month, 1) + interval '1 month' - interval '1 day')::date >= ${range.start}::date
+        ${planBranchSql}
+      GROUP BY g.id, g.name, g."sortOrder", sp.year, sp.month
+      ORDER BY g."sortOrder" ASC
+    `,
+    // Guruhlar ro'yxati/tartibi — fakt bilan bir xil bo'lsin (CategoryGroup sortOrder).
+    prisma.$queryRaw<{ id: number; name: string }[]>`
+      SELECT id, name FROM "CategoryGroup" ORDER BY "sortOrder" ASC
+    `,
+    // ForecastDay kunlik jami (filiallar bo'yicha SUM yoki bitta filial).
+    prisma.$queryRaw<{ d: string; year: number; month: number; v: number }[]>`
+      SELECT fd."date"::text AS d, fd.year AS year, fd.month AS month,
+             COALESCE(SUM(fd.amount), 0)::float8 AS v
+      FROM "ForecastDay" fd
+      WHERE fd."date" BETWEEN ${range.start}::date AND ${range.end}::date
+        ${fdBranchSql}
+      GROUP BY fd."date", fd.year, fd.month
+    `,
+  ]);
+
+  const groups = groupRows.map((g) => ({ id: g.id, name: g.name }));
+  const groupName = new Map(groups.map((g) => [g.id, g.name]));
+
+  // Guruh oylik rejasi: monthKey "YYYY-MM" → groupId → amount
+  const monthGroupPlan = new Map<string, Map<number, number>>();
+  // Oylik jami reja: monthKey → amount (taqsimot ulushini hisoblash uchun)
+  const monthTotalPlan = new Map<string, number>();
+  for (const r of planRows) {
+    const mk = `${r.year}-${String(r.month).padStart(2, "0")}`;
+    const amt = Number(r.amt);
+    if (!monthGroupPlan.has(mk)) monthGroupPlan.set(mk, new Map());
+    const gm = monthGroupPlan.get(mk)!;
+    gm.set(r.gid, (gm.get(r.gid) ?? 0) + amt);
+    monthTotalPlan.set(mk, (monthTotalPlan.get(mk) ?? 0) + amt);
+  }
+
+  // ForecastDay kunlik jami: ISO date → amount; va oy bo'yicha jami (ulush kaliti).
+  const fdByDate = new Map<string, number>();
+  const monthForecastTotal = new Map<string, number>();
+  for (const r of fdRows) {
+    const iso = isoDay(new Date(r.d));
+    const mk = `${r.year}-${String(r.month).padStart(2, "0")}`;
+    fdByDate.set(iso, Number(r.v));
+    monthForecastTotal.set(mk, (monthForecastTotal.get(mk) ?? 0) + Number(r.v));
+  }
+
+  const days: GroupPlanDayRow[] = [];
+  for (let t = range.start.getTime(); t <= range.end.getTime(); t += dayMs) {
+    const cur = new Date(t);
+    const iso = isoDay(cur);
+    const year = cur.getUTCFullYear();
+    const month1 = cur.getUTCMonth() + 1;
+    const mk = `${year}-${String(month1).padStart(2, "0")}`;
+
+    const gmPlan = monthGroupPlan.get(mk); // guruh → oylik reja
+    const groupPlans: { groupId: number; groupName: string; plan: number }[] = [];
+
+    if (gmPlan && gmPlan.size > 0) {
+      const fdMonthTotal = monthForecastTotal.get(mk) ?? 0;
+      if (fdMonthTotal > 0) {
+        // ForecastDay shakli: kunlik_jami × (guruh_oy_reja / jami_oy_reja).
+        // Ulush = shu kungi ForecastDay jami / oy bo'yicha ForecastDay jami.
+        const dayTotal = fdByDate.get(iso) ?? 0;
+        const dayShare = dayTotal / fdMonthTotal; // kun ulushi (oy ichida)
+        for (const g of groups) {
+          const monthly = gmPlan.get(g.id) ?? 0;
+          groupPlans.push({ groupId: g.id, groupName: g.name, plan: monthly * dayShare });
+        }
+      } else {
+        // Fallback: oylik rejani oy kunlariga teng taqsimla.
+        const nDays = daysInMonthUTC(year, month1);
+        for (const g of groups) {
+          const monthly = gmPlan.get(g.id) ?? 0;
+          groupPlans.push({ groupId: g.id, groupName: g.name, plan: nDays > 0 ? monthly / nDays : 0 });
+        }
+      }
+    } else {
+      // Bu oy uchun umuman reja yo'q — barcha guruhlar 0.
+      for (const g of groups) {
+        groupPlans.push({ groupId: g.id, groupName: groupName.get(g.id) ?? g.name, plan: 0 });
+      }
+    }
+
+    const total = groupPlans.reduce((s, g) => s + g.plan, 0);
+    days.push({ date: iso, total, groups: groupPlans });
+  }
+
+  return { days, groups };
+}
+
+export const dailyPlanByGroup = (range: DateRange, branchId?: number) =>
+  unstable_cache(
+    () => _dailyPlanByGroup(range, branchId),
+    ["v2_dailyPlanByGroup", ...makeKey(range, branchId)],
+    { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
+  )();

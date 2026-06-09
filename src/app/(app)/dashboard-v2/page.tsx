@@ -11,6 +11,7 @@ import {
   kpiByBranch,
   dailySalesByGroup,
   dailySalesByCategory,
+  dailyPlanByGroup,
 } from "@/lib/analytics-v2";
 import { dailyForecastSeries } from "@/lib/forecast";
 import { Sparkles, Target, TrendingUp, Users, ReceiptText } from "lucide-react";
@@ -102,6 +103,7 @@ async function WidgetsSection({
     kpi,
     prevKpi,
     groupSales,
+    groupPlan,
     dailyFact,
     dailyPlan,
   ] = await Promise.all([
@@ -112,6 +114,7 @@ async function WidgetsSection({
     kpiByBranch(range),
     kpiByBranch(previousRange),
     dailySalesByGroup(range, branchId),
+    dailyPlanByGroup(range, branchId),
     dailySalesSeries(range, branchId),
     dailyForecastSeries(range, branchId),
   ]);
@@ -213,6 +216,7 @@ async function WidgetsSection({
             groups={groupSales.groups}
             categoryDataMap={categoryDataMap}
             dailyPlan={dailyPlan}
+            planDays={groupPlan.days}
           />
         </div>
       </div>
