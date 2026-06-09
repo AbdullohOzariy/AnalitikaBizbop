@@ -16,6 +16,7 @@ import {
   LabelList,
   PieChart,
   Pie,
+  ReferenceLine,
 } from "recharts";
 import { Info, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { formatNumber, formatUZS } from "@/lib/format";
@@ -157,6 +158,77 @@ export function DailyByBranchWidget({
   );
 }
 
+// ============ Kunlik son dinamikasi (Tashriflar + Cheklar) ============
+
+export function CountDynamicsWidget({
+  title,
+  data,
+  trend,
+}: {
+  title: string;
+  data: { label: string; tashrif: number; chek: number }[];
+  trend?: number | null;
+}) {
+  return (
+    <ExpandableCard title={<WidgetTitle title={title} trend={trend} />} className="rounded-2xl">
+      <ResponsiveContainer width="100%" height={280}>
+        <LineChart data={data} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_STROKE} />
+          <XAxis dataKey="label" tick={{ fontSize: 11, fill: CHART_TICK_FILL }} interval="preserveStartEnd" />
+          <YAxis tick={{ fontSize: 11, fill: CHART_TICK_FILL }} tickFormatter={(v) => formatNumber(Number(v))} />
+          <Tooltip
+            contentStyle={tooltipStyle}
+            formatter={(value, name) => [formatNumber(Number(value)), name === "tashrif" ? "Tashriflar" : "Cheklar"]}
+          />
+          <Legend wrapperStyle={{ fontSize: 12 }} />
+          <Line type="monotone" dataKey="tashrif" name="Tashriflar" stroke="#0ea5e9" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+          <Line type="monotone" dataKey="chek" name="Cheklar" stroke="#10b981" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+        </LineChart>
+      </ResponsiveContainer>
+    </ExpandableCard>
+  );
+}
+
+// ============ Reja vs Fakt — kunlik bajarilish % ============
+
+export function PlanFactWidget({
+  title,
+  data,
+  trend,
+}: {
+  title: string;
+  data: { label: string; pct: number | null }[];
+  trend?: number | null;
+}) {
+  const hasData = data.some((d) => d.pct != null);
+  if (!hasData) {
+    return (
+      <ExpandableCard title={<WidgetTitle title={title} trend={trend} />} className="rounded-2xl">
+        <p className="py-10 text-center text-xs italic text-muted-foreground">
+          Reja kiritilmagan — <a href="/rejalar" className="underline underline-offset-2">Rejalar</a> bo&apos;limidan kiriting va prognoz yarating.
+        </p>
+      </ExpandableCard>
+    );
+  }
+  return (
+    <ExpandableCard title={<WidgetTitle title={title} trend={trend} />} className="rounded-2xl">
+      <ResponsiveContainer width="100%" height={280}>
+        <LineChart data={data} margin={{ top: 10, right: 24, left: 0, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_STROKE} />
+          <XAxis dataKey="label" tick={{ fontSize: 11, fill: CHART_TICK_FILL }} interval="preserveStartEnd" />
+          <YAxis tick={{ fontSize: 11, fill: CHART_TICK_FILL }} tickFormatter={(v) => `${Math.round(Number(v))}%`} />
+          <Tooltip
+            contentStyle={tooltipStyle}
+            formatter={(value) => [value == null ? "—" : `${Number(value).toFixed(1)}%`, "Bajarilish"]}
+          />
+          <ReferenceLine y={100} stroke="#94a3b8" strokeDasharray="4 4" />
+          <Line type="monotone" dataKey="pct" name="Bajarilish %" stroke="#6366f1" strokeWidth={2} dot={false} activeDot={{ r: 4 }} connectNulls />
+        </LineChart>
+      </ResponsiveContainer>
+    </ExpandableCard>
+  );
+}
+
 // ============ 4. Marja breakdown ============
 
 function MarjaInfoTooltip() {
@@ -274,7 +346,7 @@ export function MarjaByBranchWidget({ data }: { data: MarjaRow[] }) {
     <MarjaBaseWidget
       title={
         <div className="flex items-center gap-2">
-          <span>Marja foizi: Filiallar</span>
+          <span>Marja: Filiallar</span>
           <MarjaInfoTooltip />
         </div>
       }
@@ -288,7 +360,7 @@ export function MarjaByCategoryWidget({ data }: { data: MarjaRow[] }) {
     <MarjaBaseWidget
       title={
         <div className="flex items-center gap-2">
-          <span>Marja foizi: Kategoriyalar</span>
+          <span>Marja: Kategoriyalar</span>
           <MarjaInfoTooltip />
         </div>
       }
@@ -324,33 +396,6 @@ export function ConversionWidget({
               {formatNumber(r.receipts)} chek / {formatNumber(r.visits)} tashrif
             </div>
             <TrendIndicator value={r.conversionTrend} />
-          </div>
-        ))}
-      </div>
-    </ExpandableCard>
-  );
-}
-
-export function AvgItemsWidget({
-  rows,
-  trend,
-}: {
-  rows: KpiByBranchTrendRow[];
-  trend?: number | null;
-}) {
-  return (
-    <ExpandableCard title={<WidgetTitle title="Chekdagi o'rt. tovar soni" trend={trend} />} className="rounded-2xl">
-      <div className="grid grid-cols-2 gap-3">
-        {rows.map((r) => (
-          <div key={r.branchId} className="rounded-xl bg-muted/40 p-3">
-            <div className="text-xs text-muted-foreground truncate">{r.branchName}</div>
-            <div className="text-2xl font-bold tabular-nums mt-1">
-              {r.avgItemsPerReceipt != null ? r.avgItemsPerReceipt.toFixed(2) : "—"}
-            </div>
-            <div className="text-xs text-muted-foreground mt-1">
-              {formatNumber(r.receipts)} chekdan
-            </div>
-            <TrendIndicator value={r.avgItemsTrend} />
           </div>
         ))}
       </div>

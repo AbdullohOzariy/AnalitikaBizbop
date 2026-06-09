@@ -2,26 +2,26 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { getDefaultRange } from "@/lib/analytics";
+import { getDefaultRange, dailySalesSeries } from "@/lib/analytics";
 import {
   dailyVisitsByBranch,
   dailyReceiptsByBranch,
-  dailyAvgReceiptByBranch,
   marjaBreakdown,
   kpiByBranch,
   dailySalesByGroup,
   dailySalesByCategory,
 } from "@/lib/analytics-v2";
-import { Sparkles, ShoppingCart, TrendingUp, Users, ReceiptText } from "lucide-react";
+import { dailyForecastSeries } from "@/lib/forecast";
+import { Sparkles, Target, TrendingUp, Users, ReceiptText } from "lucide-react";
 import { PageHeader, StatCard } from "@/components/common/page";
-import { formatUZS, formatNumber } from "@/lib/format";
+import { formatNumber } from "@/lib/format";
 import { FiltersBar } from "./filters";
 import {
-  DailyByBranchWidget,
+  CountDynamicsWidget,
   MarjaByBranchWidget,
   MarjaByCategoryWidget,
   ConversionWidget,
-  AvgItemsWidget,
+  PlanFactWidget,
   GroupSalesDynamicsWidget,
 } from "./widgets";
 
@@ -46,27 +46,16 @@ function calcDelta(curr: number | null | undefined, prev: number | null | undefi
   return ((curr - prev) / Math.abs(prev)) * 100;
 }
 
-function seriesTotal(series: BranchSeries): number {
-  return series.values.reduce((sum, row) => {
-    return sum + series.branches.reduce((branchSum, branch) => {
-      return branchSum + Number(row[`b${branch.id}`] ?? 0);
-    }, 0);
-  }, 0);
+// Filial bo'yicha kunlik seriyani kunlik JAMI ga aylantirish (label bilan)
+function sumSeriesByDay(series: BranchSeries): { date: string; total: number }[] {
+  return series.values.map((row) => ({
+    date: row.date as string,
+    total: series.branches.reduce((s, b) => s + Number(row[`b${b.id}`] ?? 0), 0),
+  }));
 }
-
-function seriesAverage(series: BranchSeries): number | null {
-  let sum = 0;
-  let count = 0;
-  for (const row of series.values) {
-    for (const branch of series.branches) {
-      const value = Number(row[`b${branch.id}`] ?? 0);
-      if (value > 0) {
-        sum += value;
-        count += 1;
-      }
-    }
-  }
-  return count > 0 ? sum / count : null;
+function shortDate(iso: string): string {
+  const m = iso.match(/^\d{4}-(\d{2})-(\d{2})$/);
+  return m ? `${m[2]}.${m[1]}` : iso;
 }
 
 function WidgetsSkeleton() {
@@ -108,26 +97,28 @@ async function WidgetsSection({
   const [
     visits,
     receipts,
-    avgReceipt,
     marja,
     kpi,
-    prevReceipts,
-    prevAvgReceipt,
     prevKpi,
     groupSales,
+    dailyFact,
+    dailyPlan,
+    prevFact,
+    prevPlan,
   ] = await Promise.all([
     dailyVisitsByBranch(range),
     dailyReceiptsByBranch(range),
-    dailyAvgReceiptByBranch(range),
     marjaBreakdown(range, branchId),
     kpiByBranch(range),
-    dailyReceiptsByBranch(previousRange),
-    dailyAvgReceiptByBranch(previousRange),
     kpiByBranch(previousRange),
     dailySalesByGroup(range, branchId),
+    dailySalesSeries(range, branchId),
+    dailyForecastSeries(range, branchId),
+    dailySalesSeries(previousRange, branchId),
+    dailyForecastSeries(previousRange, branchId),
   ]);
 
-  // Har bir guruh uchun kategoriya dinamikasini parallel olish
+  // Har bir guruh uchun kategoriya dinamikasi (parallel)
   const catDataEntries = await Promise.all(
     groupSales.groups.map(async (g) => {
       const data = await dailySalesByCategory(range, g.id, branchId);
@@ -138,64 +129,69 @@ async function WidgetsSection({
 
   const filterByBranch = (s: typeof visits) =>
     branchId == null ? s : { ...s, branches: s.branches.filter((b) => b.id === branchId) };
+  const visibleVisits = filterByBranch(visits);
   const visibleReceipts = filterByBranch(receipts);
-  const visiblePrevReceipts = filterByBranch(prevReceipts);
-  const visibleAvgReceipt = filterByBranch(avgReceipt);
-  const visiblePrevAvgReceipt = filterByBranch(prevAvgReceipt);
+
+  // ── Chek/tashrif KPI (kpiByBranch'dan) + konversiya ──
   const visibleKpi = branchId ? kpi.filter((r) => r.branchId === branchId) : kpi;
   const previousVisibleKpi = branchId ? prevKpi.filter((r) => r.branchId === branchId) : prevKpi;
   const prevKpiMap = new Map(prevKpi.map((r) => [r.branchId, r]));
   const kpiWithTrends = visibleKpi.map((r) => {
-    const prev = prevKpiMap.get(r.branchId);
-    return {
-      ...r,
-      conversionTrend: calcDelta(r.conversion, prev?.conversion),
-      avgItemsTrend: calcDelta(r.avgItemsPerReceipt, prev?.avgItemsPerReceipt),
-    };
+    const p = prevKpiMap.get(r.branchId);
+    return { ...r, conversionTrend: calcDelta(r.conversion, p?.conversion) };
   });
   const sumKpi = (rows: typeof visibleKpi) =>
-    rows.reduce(
-      (acc, r) => ({
-        receipts: acc.receipts + r.receipts,
-        visits: acc.visits + r.visits,
-        avgItemsSum: acc.avgItemsSum + (r.avgItemsPerReceipt ?? 0) * r.receipts,
-      }),
-      { receipts: 0, visits: 0, avgItemsSum: 0 }
-    );
-  const currentKpiTotals = sumKpi(visibleKpi);
-  const previousKpiTotals = sumKpi(previousVisibleKpi);
-  const conversionTrend = calcDelta(
-    currentKpiTotals.visits > 0 ? (currentKpiTotals.receipts / currentKpiTotals.visits) * 100 : null,
-    previousKpiTotals.visits > 0 ? (previousKpiTotals.receipts / previousKpiTotals.visits) * 100 : null
-  );
-  const avgItemsTrend = calcDelta(
-    currentKpiTotals.receipts > 0 ? currentKpiTotals.avgItemsSum / currentKpiTotals.receipts : null,
-    previousKpiTotals.receipts > 0 ? previousKpiTotals.avgItemsSum / previousKpiTotals.receipts : null
-  );
-
-  // ── KPI hero row uchun jami hisoblar ──────────────────────────────
-  // Umumiy savdo: GroupSalesDayRow.total yig'indisi (mavjud ma'lumotdan)
-  const totalSales = groupSales.days.reduce((s, d) => s + d.total, 0);
-  // Umumiy marja: marja.byBranch dan weighted average
-  const marjaTotalSales = marja.byBranch.reduce((s, r) => s + r.sales, 0);
-  const marjaTotalCost  = marja.byBranch.reduce((s, r) => s + r.cost, 0);
-  const overallMarja    = marjaTotalSales > 0
-    ? ((marjaTotalSales - marjaTotalCost) / marjaTotalSales) * 100
-    : null;
-  // Umumiy tashriflar va cheklar
-  const totalVisits   = currentKpiTotals.visits;
-  const totalReceipts = currentKpiTotals.receipts;
+    rows.reduce((acc, r) => ({ receipts: acc.receipts + r.receipts, visits: acc.visits + r.visits }), { receipts: 0, visits: 0 });
+  const cur = sumKpi(visibleKpi);
+  const prev = sumKpi(previousVisibleKpi);
+  const totalVisits = cur.visits;
+  const totalReceipts = cur.receipts;
   const overallConversion = totalVisits > 0 ? (totalReceipts / totalVisits) * 100 : null;
+  const conversionTrend = calcDelta(
+    totalVisits > 0 ? (totalReceipts / totalVisits) * 100 : null,
+    prev.visits > 0 ? (prev.receipts / prev.visits) * 100 : null
+  );
+  const countTrend = calcDelta(cur.visits + cur.receipts, prev.visits + prev.receipts);
+
+  // ── Marja % (weighted) ──
+  const marjaTotalSales = marja.byBranch.reduce((s, r) => s + r.sales, 0);
+  const marjaTotalCost = marja.byBranch.reduce((s, r) => s + r.cost, 0);
+  const overallMarja = marjaTotalSales > 0 ? ((marjaTotalSales - marjaTotalCost) / marjaTotalSales) * 100 : null;
+
+  // ── Reja bajarilishi (fakt ÷ reja) — summasiz ──
+  const totalFact = dailyFact.reduce((s, p) => s + p.value, 0);
+  const totalPlan = dailyPlan.reduce((s, p) => s + p.value, 0);
+  const execution = totalPlan > 0 ? (totalFact / totalPlan) * 100 : null;
+  const prevFactTotal = prevFact.reduce((s, p) => s + p.value, 0);
+  const prevPlanTotal = prevPlan.reduce((s, p) => s + p.value, 0);
+  const prevExecution = prevPlanTotal > 0 ? (prevFactTotal / prevPlanTotal) * 100 : null;
+  const executionTrend = calcDelta(execution, prevExecution);
+
+  // ── Kunlik son dinamikasi (Tashriflar + Cheklar, jami) ──
+  const receiptsByDay = new Map(sumSeriesByDay(visibleReceipts).map((d) => [d.date, d.total]));
+  const countDaily = sumSeriesByDay(visibleVisits).map((d) => ({
+    label: shortDate(d.date),
+    tashrif: d.total,
+    chek: receiptsByDay.get(d.date) ?? 0,
+  }));
+
+  // ── Reja vs Fakt — kunlik bajarilish % ──
+  const planByDate = new Map(dailyPlan.map((p) => [p.date, p.value]));
+  const planFactDaily = dailyFact.map((f) => {
+    const plan = planByDate.get(f.date) ?? 0;
+    return { label: shortDate(f.date), pct: plan > 0 ? (f.value / plan) * 100 : null };
+  });
 
   return (
     <div className="space-y-4">
-      {/* KPI Hero qatori */}
+      {/* KPI Hero — summasiz, faqat dinamika */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard
-          label="Umumiy savdo"
-          value={totalSales > 0 ? formatUZS(totalSales, { compact: true }) : "—"}
-          icon={ShoppingCart}
-          tone="green"
+          label="Reja bajarilishi"
+          value={execution == null ? "—" : `${execution.toFixed(1)}%`}
+          icon={Target}
+          tone={execution == null ? "default" : execution >= 100 ? "green" : execution >= 90 ? "orange" : "red"}
+          hint={execution == null ? "reja yo'q" : "fakt ÷ reja"}
         />
         <StatCard
           label="Marja"
@@ -204,43 +200,36 @@ async function WidgetsSection({
           tone={overallMarja != null && overallMarja >= 30 ? "green" : overallMarja != null && overallMarja >= 15 ? "orange" : "default"}
         />
         <StatCard
+          label="Konversiya"
+          value={overallConversion != null ? `${overallConversion.toFixed(1)}%` : "—"}
+          icon={ReceiptText}
+          tone="default"
+          hint={totalReceipts > 0 ? `${formatNumber(totalReceipts)} chek` : undefined}
+        />
+        <StatCard
           label="Tashriflar"
           value={totalVisits > 0 ? formatNumber(totalVisits) : "—"}
           icon={Users}
           tone="blue"
         />
-        <StatCard
-          label="Konversiya"
-          value={overallConversion != null ? `${overallConversion.toFixed(1)}%` : "—"}
-          icon={ReceiptText}
-          hint={totalReceipts > 0 ? `${formatNumber(totalReceipts)} chek` : undefined}
-          tone="default"
-        />
       </div>
 
-      {/* Widgetlar gridi */}
+      {/* Widgetlar */}
       <div className="grid gap-4 md:grid-cols-2">
         <MarjaByBranchWidget data={marja.byBranch} />
         <MarjaByCategoryWidget data={marja.byCategory} />
-        <DailyByBranchWidget title="Tashriflar (kunlik)" data={filterByBranch(visits)} />
-        <DailyByBranchWidget
-          title="Chek soni (kunlik)"
-          data={visibleReceipts}
-          trend={calcDelta(seriesTotal(visibleReceipts), seriesTotal(visiblePrevReceipts))}
-        />
-        <DailyByBranchWidget
-          title="O'rtacha chek (kunlik)"
-          data={visibleAvgReceipt}
-          format="uzs-compact"
-          trend={calcDelta(seriesAverage(visibleAvgReceipt), seriesAverage(visiblePrevAvgReceipt))}
-        />
+        <CountDynamicsWidget title="Kunlik son: tashrif va chek" data={countDaily} trend={countTrend} />
         <ConversionWidget rows={kpiWithTrends} trend={conversionTrend} />
-        <AvgItemsWidget rows={kpiWithTrends} trend={avgItemsTrend} />
-        <GroupSalesDynamicsWidget
-          days={groupSales.days}
-          groups={groupSales.groups}
-          categoryDataMap={categoryDataMap}
-        />
+        <div className="md:col-span-2">
+          <PlanFactWidget title="Reja vs Fakt — kunlik bajarilish" data={planFactDaily} trend={executionTrend} />
+        </div>
+        <div className="md:col-span-2">
+          <GroupSalesDynamicsWidget
+            days={groupSales.days}
+            groups={groupSales.groups}
+            categoryDataMap={categoryDataMap}
+          />
+        </div>
       </div>
     </div>
   );
@@ -268,7 +257,7 @@ export default async function DashboardV2Page({
       <PageHeader
         icon={Sparkles}
         title="Dashboard v2"
-        description="Asosiy KPI'lar — filial va davr kesimida"
+        description="Dinamika — bajarilish, marja, konversiya va kunlik trendlar (summasiz)"
       />
 
       <FiltersBar
