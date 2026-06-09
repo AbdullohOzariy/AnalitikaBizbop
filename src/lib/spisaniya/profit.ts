@@ -134,7 +134,7 @@ export function computeProfitTree(range: ChiqimRange, branchId?: number): Promis
         : undefined;
       return _computeProfitTree(range, branchId, branchName);
     },
-    ["computeProfitTree", isoDay(range.start), isoDay(range.end), branchId ? String(branchId) : "all"],
+    ["computeProfitTree_v2", isoDay(range.start), isoDay(range.end), branchId ? String(branchId) : "all"],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
   )();
 }

@@ -214,7 +214,7 @@ async function _computeKPI(range: DateRange, branchId?: number): Promise<KPI> {
 export const computeKPI = (range: DateRange, branchId?: number) =>
   unstable_cache(
     () => _computeKPI(range, branchId),
-    ["computeKPI", ...makeKey(range, branchId)],
+    ["computeKPI_v2", ...makeKey(range, branchId)],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
   )();
 
@@ -245,7 +245,7 @@ async function _dailySalesSeries(
 export const dailySalesSeries = (range: DateRange, branchId?: number) =>
   unstable_cache(
     () => _dailySalesSeries(range, branchId),
-    ["dailySalesSeries", ...makeKey(range, branchId)],
+    ["dailySalesSeries_v2", ...makeKey(range, branchId)],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
   )();
 
@@ -271,7 +271,7 @@ async function _dailyReceiptsSeries(
 export const dailyReceiptsSeries = (range: DateRange, branchId?: number) =>
   unstable_cache(
     () => _dailyReceiptsSeries(range, branchId),
-    ["dailyReceiptsSeries", ...makeKey(range, branchId)],
+    ["dailyReceiptsSeries_v2", ...makeKey(range, branchId)],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
   )();
 
@@ -409,7 +409,7 @@ async function _branchPerformance(range: DateRange): Promise<BranchPerformanceRo
 export const branchPerformance = (range: DateRange) =>
   unstable_cache(
     () => _branchPerformance(range),
-    ["branchPerformance", ...makeKey(range)],
+    ["branchPerformance_v2", ...makeKey(range)],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
   )();
 
@@ -551,7 +551,7 @@ async function _branchReport(range: DateRange): Promise<BranchReportRow[]> {
 export const branchReport = (range: DateRange) =>
   unstable_cache(
     () => _branchReport(range),
-    ["branchReport", ...makeKey(range)],
+    ["branchReport_v2", ...makeKey(range)],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
   )();
 

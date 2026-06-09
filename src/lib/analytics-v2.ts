@@ -77,13 +77,13 @@ function buildSeries(
 export const dailyVisitsByBranch = (range: DateRange) =>
   unstable_cache(
     () => _dailyVisitsByBranch(range),
-    ["v2_dailyVisits", ...makeKey(range)],
+    ["v3_dailyVisits", ...makeKey(range)],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
   )();
 export const dailyReceiptsByBranch = (range: DateRange) =>
   unstable_cache(
     () => _dailyReceiptsByBranch(range),
-    ["v2_dailyReceipts", ...makeKey(range)],
+    ["v3_dailyReceipts", ...makeKey(range)],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
   )();
 
@@ -159,7 +159,7 @@ async function _marjaBreakdown(range: DateRange, branchId?: number): Promise<{
 export const marjaBreakdown = (range: DateRange, branchId?: number) =>
   unstable_cache(
     () => _marjaBreakdown(range, branchId),
-    ["v2_marja", ...makeKey(range, branchId)],
+    ["v3_marja", ...makeKey(range, branchId)],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
   )();
 
@@ -212,7 +212,7 @@ async function _marjaHierarchy(range: DateRange, branchId?: number): Promise<Mar
 export const marjaHierarchy = (range: DateRange, branchId?: number) =>
   unstable_cache(
     () => _marjaHierarchy(range, branchId),
-    ["v2_marjaHierarchy", ...makeKey(range, branchId)],
+    ["v3_marjaHierarchy", ...makeKey(range, branchId)],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
   )();
 
@@ -268,7 +268,7 @@ async function _kpiByBranch(range: DateRange): Promise<KpiByBranchRow[]> {
 export const kpiByBranch = (range: DateRange) =>
   unstable_cache(
     () => _kpiByBranch(range),
-    ["v2_kpiByBranch", ...makeKey(range)],
+    ["v3_kpiByBranch", ...makeKey(range)],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
   )();
 
@@ -342,7 +342,7 @@ async function _dailySalesByGroup(
 export const dailySalesByGroup = (range: DateRange, branchId?: number) =>
   unstable_cache(
     () => _dailySalesByGroup(range, branchId),
-    ["v2_dailySalesByGroup", ...makeKey(range, branchId)],
+    ["v3_dailySalesByGroup", ...makeKey(range, branchId)],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
   )();
 
@@ -408,7 +408,7 @@ async function _dailySalesByCategory(
 export const dailySalesByCategory = (range: DateRange, groupId: number, branchId?: number) =>
   unstable_cache(
     () => _dailySalesByCategory(range, groupId, branchId),
-    ["v2_dailySalesByCategory", ...makeKey(range, branchId, `g${groupId}`)],
+    ["v3_dailySalesByCategory", ...makeKey(range, branchId, `g${groupId}`)],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
   )();
 
@@ -549,6 +549,6 @@ async function _dailyPlanByGroup(
 export const dailyPlanByGroup = (range: DateRange, branchId?: number) =>
   unstable_cache(
     () => _dailyPlanByGroup(range, branchId),
-    ["v2_dailyPlanByGroup", ...makeKey(range, branchId)],
+    ["v3_dailyPlanByGroup", ...makeKey(range, branchId)],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
   )();
