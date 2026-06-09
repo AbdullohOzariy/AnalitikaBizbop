@@ -483,3 +483,66 @@ export function GroupSalesDynamicsWidget({
     </div>
   );
 }
+
+/**
+ * Savdo ulushi — ichma-ich (nested) donut: ichki halqa = guruhlar, tashqi = top
+ * kategoriyalar. Har slice umumiy savdoga nisbatan % (hover). marjaHierarchy ma'lumotidan.
+ */
+export function SalesShareWidget({ data }: { data: MarjaGroupNode[] }) {
+  const groupData = data
+    .map((g) => ({ name: g.name, value: g.sales, color: GROUP_COLORS[g.name] ?? "#94a3b8" }))
+    .filter((x) => x.value > 0);
+  const total = groupData.reduce((s, x) => s + x.value, 0);
+
+  // Kategoriya rangi = guruh rangi + kamayuvchi shaffoflik (guruh bo'yicha gruppalangan)
+  const ALPHA = ["", "DD", "BB", "99", "80", "66", "55", "44"];
+  const catData = data.flatMap((g) => {
+    const base = GROUP_COLORS[g.name] ?? "#94a3b8";
+    return g.categories
+      .filter((c) => c.sales > 0)
+      .map((c, i) => ({ name: c.name, value: c.sales, color: base + (ALPHA[i % ALPHA.length] ?? "") }));
+  });
+
+  const pct = (v: number) => (total > 0 ? `${((v / total) * 100).toFixed(1)}%` : "0%");
+
+  return (
+    <div className="col-span-2">
+      <ExpandableCard title="Savdo ulushi — guruh va kategoriyalar" className="rounded-2xl">
+        {total === 0 ? (
+          <p className="py-10 text-center text-xs italic text-muted-foreground">Tanlangan davrda savdo ma&apos;lumoti yo&apos;q.</p>
+        ) : (
+          <div className="grid gap-4 lg:grid-cols-3">
+            <div className="lg:col-span-2">
+              <ResponsiveContainer width="100%" height={360}>
+                <PieChart>
+                  {/* Ichki halqa — guruhlar */}
+                  <Pie data={groupData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={48} outerRadius={84} paddingAngle={1} stroke="var(--card)">
+                    {groupData.map((e, i) => <Cell key={`g${i}`} fill={e.color} />)}
+                  </Pie>
+                  {/* Tashqi halqa — kategoriyalar */}
+                  <Pie data={catData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={90} outerRadius={132} paddingAngle={0.5} stroke="var(--card)">
+                    {catData.map((e, i) => <Cell key={`c${i}`} fill={e.color} />)}
+                  </Pie>
+                  <Tooltip contentStyle={tooltipStyle} formatter={(v, n) => [pct(Number(v)), String(n)]} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            {/* Guruh ulushlari */}
+            <div className="flex flex-col justify-center gap-2">
+              {groupData.map((g) => (
+                <div key={g.name} className="flex items-center gap-2 text-sm">
+                  <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: g.color }} />
+                  <span className="flex-1 truncate font-medium">{g.name}</span>
+                  <span className="font-semibold tabular-nums">{pct(g.value)}</span>
+                </div>
+              ))}
+              <p className="mt-1 border-t border-border/60 pt-2 text-[11px] text-muted-foreground">
+                Ichki halqa — guruhlar, tashqi — kategoriyalar. Hover: umumiyga nisbatan ulush %.
+              </p>
+            </div>
+          </div>
+        )}
+      </ExpandableCard>
+    </div>
+  );
+}

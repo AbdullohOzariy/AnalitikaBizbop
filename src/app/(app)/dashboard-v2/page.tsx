@@ -22,6 +22,7 @@ import {
   MarjaByBranchWidget,
   MarjaHierarchyWidget,
   ConversionWidget,
+  SalesShareWidget,
   GroupSalesDynamicsWidget,
 } from "./widgets";
 
@@ -200,6 +201,9 @@ async function WidgetsSection({
         <MarjaHierarchyWidget data={marjaHier} />
         <CountDynamicsWidget title="Kunlik son: tashrif va chek" data={countDaily} trend={countTrend} />
         <ConversionWidget rows={kpiWithTrends} trend={conversionTrend} />
+        <div className="md:col-span-2">
+          <SalesShareWidget data={marjaHier} />
+        </div>
         <div className="md:col-span-2">
           <GroupSalesDynamicsWidget
             days={groupSales.days}
