@@ -48,7 +48,7 @@ function buildBot(): Telegraf | null {
 
     // Ruxsat yo'q — foydalanuvchi ID'sini xabar qilamiz (adminga yuborish uchun).
     return ctx.reply(
-      `Salom, ${ism}!\n🆔 Sizning ID: <code>${id}</code>\n\n` +
+      `Salom, ${ism.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}!\n🆔 Sizning ID: <code>${id}</code>\n\n` +
         `Botdan foydalanish uchun ruxsat kerak. Iltimos, shu ID'ni adminga yuborib, ruxsat oling.`,
       { parse_mode: "HTML" }
     );

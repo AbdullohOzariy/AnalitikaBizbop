@@ -4,7 +4,8 @@ import { headers } from "next/headers";
 import { signIn } from "@/auth";
 import { AuthError } from "next-auth";
 
-// In-memory token bucket: har IP uchun 5 urinish / 15 daqiqa
+// In-memory token bucket: 5 urinish / 15 daqiqa — IP bo'yicha HAM, login bo'yicha HAM.
+// Faqat IP kifoya emas: XFF spoof yoki ko'p IP'dan bitta akkauntga brute-force mumkin.
 const attempts = new Map<string, { count: number; resetAt: number }>();
 const MAX_ATTEMPTS = 5;
 const WINDOW_MS = 15 * 60 * 1000;
@@ -31,7 +32,12 @@ export async function signInAction(input: {
   const xff = hdrs.get("x-forwarded-for");
   const ip = xff?.split(",").pop()?.trim() || hdrs.get("x-real-ip") || "unknown";
 
-  if (!checkRateLimit(ip)) {
+  const ipKey = `ip:${ip}`;
+  const loginKey = `login:${input.login.trim().toLowerCase()}`;
+  // Ikkalasi ham hisoblansin (qisqa tutashuv bo'lmasin), keyin tekshiramiz.
+  const ipOk = checkRateLimit(ipKey);
+  const loginOk = checkRateLimit(loginKey);
+  if (!ipOk || !loginOk) {
     return { error: "Juda ko'p urinish. 15 daqiqadan so'ng qayta urinib ko'ring." };
   }
 
@@ -47,6 +53,10 @@ export async function signInAction(input: {
       password: input.password,
       redirect: false,
     });
+    // Muvaffaqiyatli kirish — hisoblagichlarni tozalaymiz (halol foydalanuvchi
+    // qayta-qayta kirsa limitga tiqilib qolmasin).
+    attempts.delete(ipKey);
+    attempts.delete(loginKey);
     return { redirectTo: safeRedirect };
   } catch (error) {
     if (error instanceof AuthError) {

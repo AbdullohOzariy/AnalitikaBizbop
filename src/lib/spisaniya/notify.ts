@@ -15,6 +15,12 @@ import {
   type VozvratYozuv,
 } from "./db";
 
+/** parse_mode:"HTML" uchun foydalanuvchi matnini eskeyplash — aks holda tovar/sabab
+ * ichidagi `<`/`&` xabar formatini buzadi yoki soxta teg kiritishga yo'l ochadi. */
+function esc(s: string | null | undefined): string {
+  return (s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 const TUR_EMOJI: Record<string, string> = {
   spisaniya: "🗑",
   vozvrat: "↩️",
@@ -45,14 +51,14 @@ export async function guruhgaYuborish(d: YozuvKirim, yozuvId: number): Promise<v
 
   let matn =
     `${TUR_EMOJI[d.tur] || "📦"} <b>${TUR_UZ[d.tur] || d.tur.toUpperCase()}</b>\n\n` +
-    `📦 <b>Tovar:</b> ${d.tovar}\n` +
-    `📏 <b>Miqdor:</b> ${d.miqdor} ${d.birlik || "dona"}\n` +
+    `📦 <b>Tovar:</b> ${esc(d.tovar)}\n` +
+    `📏 <b>Miqdor:</b> ${d.miqdor} ${esc(d.birlik || "dona")}\n` +
     `💰 <b>Summa:</b> ${Number(d.summa).toLocaleString("uz-UZ")} so'm\n`;
-  if (d.sabab) matn += `📝 <b>Sabab:</b> ${d.sabab}\n`;
-  if (d.firma) matn += `🏢 <b>Firma:</b> ${d.firma}\n`;
+  if (d.sabab) matn += `📝 <b>Sabab:</b> ${esc(d.sabab)}\n`;
+  if (d.firma) matn += `🏢 <b>Firma:</b> ${esc(d.firma)}\n`;
   matn +=
-    `📍 <b>Filial:</b> ${d.filial}\n` +
-    `👤 <b>Xodim:</b> ${d.xodim_ism}${d.xodim_username ? ` (@${d.xodim_username})` : ""}\n` +
+    `📍 <b>Filial:</b> ${esc(d.filial)}\n` +
+    `👤 <b>Xodim:</b> ${esc(d.xodim_ism)}${d.xodim_username ? ` (@${esc(d.xodim_username)})` : ""}\n` +
     `🕐 <b>Vaqt:</b> ${vaqt}`;
 
   const opts = {
@@ -94,19 +100,19 @@ export async function vozvratGuruhgaYuborish(v: VozvratKirim, vozvratId: number)
 
   let matn =
     `🔁 <b>VOZVRAT</b>\n\n` +
-    `📦 <b>Tovar:</b> ${v.tovar}\n` +
-    `📏 <b>Miqdor:</b> ${v.miqdor} ${v.birlik || "dona"}\n` +
+    `📦 <b>Tovar:</b> ${esc(v.tovar)}\n` +
+    `📏 <b>Miqdor:</b> ${v.miqdor} ${esc(v.birlik || "dona")}\n` +
     `💰 <b>Summa:</b> ${Number(v.summa).toLocaleString("uz-UZ")} so'm\n`;
-  if (v.sabab) matn += `📝 <b>Sabab:</b> ${v.sabab}\n`;
-  matn += `➡️ <b>Yo'nalish:</b> ${VOZVRAT_YONALISH_LABEL[v.yonalish] || v.yonalish}`;
-  if (v.yonalish === "taminotchi" && v.taminotchi) matn += ` (${v.taminotchi})`;
+  if (v.sabab) matn += `📝 <b>Sabab:</b> ${esc(v.sabab)}\n`;
+  matn += `➡️ <b>Yo'nalish:</b> ${VOZVRAT_YONALISH_LABEL[v.yonalish] || esc(v.yonalish)}`;
+  if (v.yonalish === "taminotchi" && v.taminotchi) matn += ` (${esc(v.taminotchi)})`;
   matn += `\n`;
-  matn += `📊 <b>Holat:</b> ${VOZVRAT_HOLAT_EMOJI[holat] || ""} ${VOZVRAT_HOLAT_LABEL[holat] || holat}\n`;
+  matn += `📊 <b>Holat:</b> ${VOZVRAT_HOLAT_EMOJI[holat] || ""} ${VOZVRAT_HOLAT_LABEL[holat] || esc(holat)}\n`;
   if (holat === "qaytarilmadi" && v.qaytarilmadi_sabab)
-    matn += `❗ <b>Qaytarilmadi sababi:</b> ${v.qaytarilmadi_sabab}\n`;
+    matn += `❗ <b>Qaytarilmadi sababi:</b> ${esc(v.qaytarilmadi_sabab)}\n`;
   matn +=
-    `📍 <b>Filial:</b> ${v.filial}\n` +
-    `👤 <b>Xodim:</b> ${v.xodim_ism}${v.xodim_username ? ` (@${v.xodim_username})` : ""}\n` +
+    `📍 <b>Filial:</b> ${esc(v.filial)}\n` +
+    `👤 <b>Xodim:</b> ${esc(v.xodim_ism)}${v.xodim_username ? ` (@${esc(v.xodim_username)})` : ""}\n` +
     `🕐 <b>Vaqt:</b> ${new Date().toLocaleString("uz-UZ")}`;
 
   const opts = { parse_mode: "HTML" as const, ...(threadId ? { message_thread_id: threadId } : {}) };
@@ -134,10 +140,10 @@ export async function vozvratHolatGuruhXabar(
   const opts = { parse_mode: "HTML" as const, ...(threadId ? { message_thread_id: threadId } : {}) };
   let matn =
     `🔁 <b>Vozvrat yangilandi</b>\n` +
-    `📦 ${v.tovar} — ${Number(v.summa).toLocaleString("uz-UZ")} so'm\n` +
-    `📊 Holat: ${VOZVRAT_HOLAT_EMOJI[v.status] || ""} ${VOZVRAT_HOLAT_LABEL[v.status] || v.status}\n`;
-  if (qoshimcha) matn += `${qoshimcha}\n`;
-  matn += `👤 ${yangilaganIsm} · ${new Date().toLocaleString("uz-UZ")}`;
+    `📦 ${esc(v.tovar)} — ${Number(v.summa).toLocaleString("uz-UZ")} so'm\n` +
+    `📊 Holat: ${VOZVRAT_HOLAT_EMOJI[v.status] || ""} ${VOZVRAT_HOLAT_LABEL[v.status] || esc(v.status)}\n`;
+  if (qoshimcha) matn += `${esc(qoshimcha)}\n`;
+  matn += `👤 ${esc(yangilaganIsm)} · ${new Date().toLocaleString("uz-UZ")}`;
   try {
     await bot.telegram.sendMessage(chatId, matn, opts);
   } catch (err) {
