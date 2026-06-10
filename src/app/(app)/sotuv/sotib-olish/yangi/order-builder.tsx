@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { skuRowBg, skuBadgeCls, skuBadgeLabel } from "@/lib/sku-rang";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -146,8 +148,18 @@ export function OrderBuilder() {
                     const l = lines.get(it.productId) ?? { qty: "", price: "" };
                     const sum = (Number(l.qty) || 0) * (Number(l.price) || 0);
                     return (
-                      <TableRow key={it.productId} className="text-sm">
-                        <TableCell className="font-mono text-xs text-muted-foreground">{it.code}</TableCell>
+                      // Fon — SKU'ning ABC×XYZ matritsa holatiga ko'ra (AX buyurtmada ustuvor!)
+                      <TableRow key={it.productId} className={cn("text-sm", skuRowBg(it.abc, it.xyz))}>
+                        <TableCell className="font-mono text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1.5">
+                            {it.code}
+                            {skuBadgeLabel(it.abc, it.xyz) && (
+                              <span className={cn("rounded border px-1 py-px text-[9px] font-bold leading-none", skuBadgeCls(it.abc, it.xyz))}>
+                                {skuBadgeLabel(it.abc, it.xyz)}
+                              </span>
+                            )}
+                          </span>
+                        </TableCell>
                         <TableCell className="max-w-[260px] truncate" title={it.name}>{it.name}</TableCell>
                         <TableCell className="text-right tabular-nums text-xs text-muted-foreground">{it.stock.toLocaleString("uz-UZ")}</TableCell>
                         <TableCell className="text-right tabular-nums text-xs text-muted-foreground">{it.sold.toLocaleString("uz-UZ")}</TableCell>

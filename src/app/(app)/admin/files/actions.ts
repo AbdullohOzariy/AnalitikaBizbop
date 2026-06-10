@@ -3,6 +3,7 @@
 import { revalidatePath, revalidateTag } from "next/cache";
 import { after } from "next/server";
 import { warmAnalyticsCaches } from "@/lib/warm";
+import { updateProductMatrixClasses } from "@/lib/abc-xyz";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { actionError } from "@/lib/action-error";
@@ -17,7 +18,10 @@ export async function deleteFileAction(
     revalidatePath("/admin/files");
     revalidatePath("/dashboard");
     revalidateTag(ANALYTICS_CACHE_TAG, "max");
-    after(() => warmAnalyticsCaches("file-delete"));
+    after(async () => {
+      await updateProductMatrixClasses();
+      await warmAnalyticsCaches("file-delete");
+    });
     return { ok: true };
   } catch (err) {
     return actionError(err, "files");

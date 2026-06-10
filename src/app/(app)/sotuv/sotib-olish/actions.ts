@@ -17,6 +17,8 @@ export type BuilderItem = {
   stock: number;
   sold: number;
   suggested: number;
+  abc: string | null; // ABC×XYZ matritsa holati — rang uchun
+  xyz: string | null;
 };
 
 /** Joriy foydalanuvchi qamrovidagi kategoriya id'lari (admin — barchasi = null). */
@@ -70,7 +72,7 @@ export async function supplierItemsAction(
     // ProductSales tarixini skanlamaymiz, bir zumda o'qiymiz.
     const products = await prisma.product.findMany({
       where: { supplierId: sid, ...scopeProductWhere(scope) },
-      select: { id: true, code: true, name: true, currentStock: true, currentSold: true, category: { select: { name: true } } },
+      select: { id: true, code: true, name: true, currentStock: true, currentSold: true, abcClass: true, xyzClass: true, category: { select: { name: true } } },
       orderBy: { name: "asc" },
       take: 2000,
     });
@@ -78,7 +80,7 @@ export async function supplierItemsAction(
       const stock = Math.round(Number(p.currentStock ?? 0)); // so'nggi davr qoldig'i
       const sold = Math.round(Number(p.currentSold ?? 0)); // so'nggi davr sotuvi (talab)
       const suggested = Math.max(0, sold - stock);
-      return { productId: p.id, code: p.code, name: p.name, sub: p.category?.name ?? null, stock, sold, suggested };
+      return { productId: p.id, code: p.code, name: p.name, sub: p.category?.name ?? null, stock, sold, suggested, abc: p.abcClass, xyz: p.xyzClass };
     });
     return { ok: true, items };
   } catch (err) {

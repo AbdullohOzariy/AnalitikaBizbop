@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Pill } from "@/components/common/page";
 import { cn } from "@/lib/utils";
 import { formatUZS } from "@/lib/format";
+import { skuRowBg } from "@/lib/sku-rang";
 import { toast } from "sonner";
 import type {
   AnalizGroupLite, SkuAnaliz, AbcClass, XyzClass, ClassCounts,
@@ -43,7 +44,8 @@ function CountChips({ counts, mode }: { counts: ClassCounts; mode: Mode }) {
 
 function SkuRow({ s, mode, showPath }: { s: SkuAnaliz; mode: Mode; showPath?: boolean }) {
   return (
-    <tr className="border-b border-border/30 text-xs hover:bg-muted/10">
+    // Fon — SKU'ning matritsa holatiga ko'ra (butun tizimdagi rang tili bilan bir xil)
+    <tr className={cn("border-b border-border/30 text-xs", skuRowBg(s.abc, s.xyz) || "hover:bg-muted/10")}>
       <td className={cn("py-1.5 pr-3", showPath ? "pl-3" : "pl-[5.5rem]")}>
         <span className="flex items-baseline gap-2">
           <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{s.code}</span>

@@ -17,6 +17,8 @@ export type SkuRow = {
   cat: string | null;
   sub: string | null;
   subId: number | null;
+  abc: string | null; // ABC×XYZ matritsa holati — rang uchun
+  xyz: string | null;
 };
 
 const SKU_PAGE = 50;
@@ -51,6 +53,7 @@ export async function searchSkusAction(input: {
         where,
         select: {
           id: true, code: true, name: true,
+          abcClass: true, xyzClass: true,
           category: {
             select: {
               id: true, name: true,
@@ -73,6 +76,8 @@ export async function searchSkusAction(input: {
         cat: c?.parent?.name ?? null,
         sub: c?.name ?? null,
         subId: c?.id ?? null,
+        abc: r.abcClass,
+        xyz: r.xyzClass,
       };
     });
     return { ok: true, rows: out, total, page, pageSize: SKU_PAGE };

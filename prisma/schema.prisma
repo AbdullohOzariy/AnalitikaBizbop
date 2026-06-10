@@ -276,6 +276,8 @@ model Product {
   // ProductSales tarixini skanlamasligi uchun). Manba — eng so'nggi davr.
   currentStock   Decimal?  @db.Decimal(20, 3) // so'nggi davrdagi qoldiq (filiallar yig'indisi)
   currentSold    Decimal?  @db.Decimal(20, 3) // so'nggi davrdagi sotuv (dona)
+  abcClass       String?   @db.Char(1) // ABC sinfi (standart 3 oylik oyna) — sotuv yuklashda yangilanadi
+  xyzClass       String?   @db.Char(1) // XYZ sinfi (talab barqarorligi) — sotuv yuklashda yangilanadi
   lastSalePeriod DateTime? @db.Date // so'nggi yuklangan davr (eskini bosib o'tmaslik uchun)
 
   category     Category?            @relation(fields: [categoryId], references: [id], onDelete: SetNull)

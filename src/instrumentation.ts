@@ -6,11 +6,16 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
 
-  // Kesh isitish — deploy/restart'dan keyin birinchi tashrifchi og'ir hisobni
-  // kutmasin. Fonda (startup'ni bloklamaydi), xato bo'lsa faqat log.
-  import("@/lib/warm")
-    .then((m) => m.warmAnalyticsCaches("server-start"))
-    .catch((err) => console.warn("[instrumentation] warm xatosi:", err instanceof Error ? err.message : err));
+  // Deploy/restart'dan keyin fonda: (1) SKU matritsa sinflari (backfill ham shu yerda),
+  // (2) kesh isitish — birinchi tashrifchi og'ir hisobni kutmasin. Startup bloklanmaydi.
+  (async () => {
+    const { updateProductMatrixClasses } = await import("@/lib/abc-xyz");
+    await updateProductMatrixClasses();
+    const { warmAnalyticsCaches } = await import("@/lib/warm");
+    await warmAnalyticsCaches("server-start");
+  })().catch((err) =>
+    console.warn("[instrumentation] warm/sinf xatosi:", err instanceof Error ? err.message : err)
+  );
 
   const token = process.env.BOT_TOKEN;
   const base = (process.env.WEBHOOK_URL || "").replace(/\/$/, "");

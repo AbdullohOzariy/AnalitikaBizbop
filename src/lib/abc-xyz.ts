@@ -10,7 +10,7 @@
 import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
-import { ANALYTICS_CACHE_TAG } from "@/lib/analytics";
+import { ANALYTICS_CACHE_TAG, getDefaultRange } from "@/lib/analytics";
 
 export type AbcClass = "A" | "B" | "C";
 export type XyzClass = "X" | "Y" | "Z";
@@ -210,6 +210,48 @@ export function buildAnalizTree(result: AbcXyzResult): AnalizGroup[] {
   }
   out.sort((a, b) => b.total - a.total);
   return out;
+}
+
+// ─── Product.abcClass/xyzClass denormalizatsiyasi ──────────────────────────────
+// SKU'ning matritsa holati butun tizimda (iyerarxiya, OOS, buyurtma...) rang sifatida
+// ko'rinadi. Kanonik sinf — STANDART oyna (oxirgi 3 oy, barcha filiallar) bo'yicha;
+// har sotuv yuklashdan keyin va deploy'da yangilanadi.
+
+export async function updateProductMatrixClasses(): Promise<void> {
+  const t0 = Date.now();
+  try {
+    const def = await getDefaultRange();
+    const endStr = def.end.toISOString().slice(0, 10);
+    const startStr = new Date(Date.UTC(def.end.getUTCFullYear(), def.end.getUTCMonth() - 2, 1))
+      .toISOString()
+      .slice(0, 10);
+    const { rows } = await computeAbcXyz(startStr, endStr);
+
+    const BATCH = 1000;
+    for (let i = 0; i < rows.length; i += BATCH) {
+      const chunk = rows.slice(i, i + BATCH);
+      // ::int MAJBURIY — FROM (VALUES ...) da tipsiz parametr text bo'ladi (42883 saboq)
+      const vals = chunk.map((r) => Prisma.sql`(${r.id}::int, ${r.abc}, ${r.xyz})`);
+      await prisma.$executeRaw`
+        UPDATE "Product" p SET "abcClass" = v.abc, "xyzClass" = v.xyz
+        FROM (VALUES ${Prisma.join(vals)}) AS v(pid, abc, xyz)
+        WHERE p.id = v.pid
+          AND (p."abcClass" IS DISTINCT FROM v.abc OR p."xyzClass" IS DISTINCT FROM v.xyz)
+      `;
+    }
+
+    // Tahlilga kirmaganlar (davrda savdosi yo'q) — sinfsiz (neytral rang)
+    const ids = rows.map((r) => r.id);
+    await prisma.$executeRaw`
+      UPDATE "Product" SET "abcClass" = NULL, "xyzClass" = NULL
+      WHERE ("abcClass" IS NOT NULL OR "xyzClass" IS NOT NULL)
+        AND NOT (id = ANY(${ids}::int[]))
+    `;
+
+    console.log(`[abc-xyz] Product sinflari yangilandi: ${rows.length} SKU, ${Date.now() - t0}ms`);
+  } catch (err) {
+    console.warn("[abc-xyz] sinf yangilash xatosi:", err instanceof Error ? err.message : err);
+  }
 }
 
 // ─── "Lite" daraxt: SKU'larsiz (sahifa payload'i uchun) ────────────────────────

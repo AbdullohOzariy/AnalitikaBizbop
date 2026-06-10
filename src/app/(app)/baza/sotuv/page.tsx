@@ -19,6 +19,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { skuRowBg } from "@/lib/sku-rang";
 import { BazaFilter } from "../baza-filter";
 import { BazaPagination } from "../baza-pagination";
 
@@ -64,6 +65,7 @@ type SalesRow = {
   id: number; pcode: number; pname: string; cname: string | null; bname: string;
   periodStart: string; periodEnd: string;
   stockQty: string | null; soldQty: string | null; amount: string; costAmount: string | null;
+  abc: string | null; xyz: string | null; // matritsa holati — qator rangi
 };
 
 /** Saralash uchun ustun sarlavhasi — joriy filtrlarni saqlab, yo'nalishni almashtiradi. */
@@ -162,6 +164,7 @@ export default async function BazaSotuvPage({
   const [rows, countRes, aggRes, branches, catGroups] = await Promise.all([
     prisma.$queryRaw<SalesRow[]>(Prisma.sql`
       SELECT ps.id, p."code" AS pcode, p."name" AS pname, c."name" AS cname, b."name" AS bname,
+             p."abcClass" AS abc, p."xyzClass" AS xyz,
              ps."periodStart"::text AS "periodStart", ps."periodEnd"::text AS "periodEnd",
              ps."stockQty", ps."soldQty", ps."amount", ps."costAmount"
       ${baseFrom}
@@ -298,7 +301,7 @@ export default async function BazaSotuvPage({
                         "text-destructive";
                       const isOos = r.stockQty != null && Number(r.stockQty) <= 0;
                       return (
-                        <TableRow key={r.id} className={cn("text-sm", isOos && "bg-destructive/5")}>
+                        <TableRow key={r.id} className={cn("text-sm", isOos ? "bg-destructive/5" : skuRowBg(r.abc, r.xyz))}>
                           <TableCell className="font-mono text-xs text-muted-foreground">{r.pcode}</TableCell>
                           <TableCell className="max-w-[200px]">
                             <span className="line-clamp-2 leading-snug">{r.pname}</span>

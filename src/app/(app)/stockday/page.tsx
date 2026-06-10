@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
+import { skuRowBg } from "@/lib/sku-rang";
 import { BazaFilter } from "../baza/baza-filter";
 import { BazaPagination } from "../baza/baza-pagination";
 
@@ -248,7 +249,8 @@ async function StockdayData({
                   </TableHeader>
                   <TableBody>
                     {rows.map((r) => (
-                      <TableRow key={`${r.productId}-${r.branchId}`} className="text-sm">
+                      // Fon — SKU'ning ABC×XYZ matritsa holatiga ko'ra
+                      <TableRow key={`${r.productId}-${r.branchId}`} className={cn("text-sm", skuRowBg(r.abc, r.xyz))}>
                         <TableCell className="font-mono text-xs text-muted-foreground">{r.code}</TableCell>
                         <TableCell className="max-w-[200px]">
                           <span className="line-clamp-2 leading-snug">{r.pname}</span>

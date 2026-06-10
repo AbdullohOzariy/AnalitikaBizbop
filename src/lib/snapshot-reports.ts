@@ -44,6 +44,7 @@ export type OosRow = {
   productId: number; branchId: number;
   code: number; pname: string; bname: string; cname: string | null;
   stockQty: string | null; soldQty: string | null; amount: string; periodEnd: string | Date;
+  abc: string | null; xyz: string | null; // matritsa holati — qator rangi uchun
 };
 
 // Eng so'nggi snapshot CTE (DISTINCT ON productId, branchId) — 731k qatorli
@@ -53,7 +54,8 @@ function latestCte(f: SnapshotFilters): Prisma.Sql {
     latest AS (
       SELECT DISTINCT ON (ps."productId", ps."branchId")
              ps."productId", ps."branchId", ps."stockQty", ps."soldQty", ps."amount", ps."periodEnd",
-             p.code, p.name AS pname, p."categoryId", b.name AS bname
+             p.code, p.name AS pname, p."categoryId", b.name AS bname,
+             p."abcClass" AS abc, p."xyzClass" AS xyz
       FROM "ProductSales" ps
       JOIN "Product" p ON p.id = ps."productId"
       JOIN "Branch"  b ON b.id = ps."branchId"
@@ -93,7 +95,7 @@ export const oosRows = (f: SnapshotFilters, view: OosView, page: number, pageSiz
       return prisma.$queryRaw<OosRow[]>(Prisma.sql`
         WITH ${latestCte(f)}
         SELECT l."productId", l."branchId", l.code, l.pname, l.bname, l."stockQty", l."soldQty", l."amount", l."periodEnd",
-               c.name AS cname
+               l.abc, l.xyz, c.name AS cname
         FROM latest l
         LEFT JOIN "Category" c ON c.id = l."categoryId"
         WHERE ${OOS_VIEW_COND[view]}
@@ -101,7 +103,7 @@ export const oosRows = (f: SnapshotFilters, view: OosView, page: number, pageSiz
         LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}
       `);
     },
-    ["oosRows_v1", filterKey(f), view, String(page), String(pageSize)],
+    ["oosRows_v2", filterKey(f), view, String(page), String(pageSize)],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
   )();
 
@@ -123,6 +125,7 @@ export type StockdayRow = {
   code: number; pname: string; bname: string; cname: string | null;
   stockQty: string | null; avgDaily: string | null; stockDays: string | null; stockValue: string | null;
   periodEnd: string | Date;
+  abc: string | null; xyz: string | null; // matritsa holati — qator rangi uchun
 };
 
 // Zaxira kunlari CTE — latest (qoldiq) + agg (davrdagi o'rtacha kunlik sotuv).
@@ -131,7 +134,8 @@ function sdCte(f: SnapshotFilters): Prisma.Sql {
     base AS (
       SELECT ps."productId", ps."branchId", ps."stockQty", ps."soldQty", ps."costAmount",
              ps."periodStart", ps."periodEnd",
-             p.code, p.name AS pname, p."categoryId", b.name AS bname
+             p.code, p.name AS pname, p."categoryId", b.name AS bname,
+             p."abcClass" AS abc, p."xyzClass" AS xyz
       FROM "ProductSales" ps
       JOIN "Product" p ON p.id = ps."productId"
       JOIN "Branch"  b ON b.id = ps."branchId"
@@ -139,7 +143,7 @@ function sdCte(f: SnapshotFilters): Prisma.Sql {
     ),
     latest AS (
       SELECT DISTINCT ON ("productId", "branchId")
-             "productId", "branchId", "stockQty", "periodEnd", code, pname, "categoryId", bname
+             "productId", "branchId", "stockQty", "periodEnd", code, pname, "categoryId", bname, abc, xyz
       FROM base
       ORDER BY "productId", "branchId", "periodEnd" DESC
     ),
@@ -153,6 +157,7 @@ function sdCte(f: SnapshotFilters): Prisma.Sql {
     ),
     sd AS (
       SELECT l."productId", l."branchId", l.code, l.pname, l."categoryId", l.bname, l."periodEnd",
+             l.abc, l.xyz,
              l."stockQty",
              (a.sold_total / NULLIF(a.tracked_days, 0)) AS avg_daily,
              CASE
@@ -208,6 +213,7 @@ export const stockdayRows = (f: SnapshotFilters, view: StockView, page: number, 
       return prisma.$queryRaw<StockdayRow[]>(Prisma.sql`
         WITH ${sdCte(f)}
         SELECT sd."productId", sd."branchId", sd.code, sd.pname, sd.bname, sd."periodEnd",
+               sd.abc, sd.xyz,
                sd."stockQty", sd.avg_daily AS "avgDaily", sd.stock_days AS "stockDays", sd.stock_value AS "stockValue",
                c.name AS cname
         FROM sd
@@ -217,6 +223,6 @@ export const stockdayRows = (f: SnapshotFilters, view: StockView, page: number, 
         LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}
       `);
     },
-    ["stockdayRows_v1", filterKey(f), view, String(page), String(pageSize)],
+    ["stockdayRows_v2", filterKey(f), view, String(page), String(pageSize)],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
   )();

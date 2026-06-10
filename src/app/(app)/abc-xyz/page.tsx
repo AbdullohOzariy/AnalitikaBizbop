@@ -16,6 +16,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { formatUZS } from "@/lib/format";
 import { Skeleton } from "@/components/ui/skeleton";
+import { MATRIX_CELL_CLS } from "@/lib/sku-rang";
 import { BazaFilter } from "../baza/baza-filter";
 import { AnalizTree } from "./analiz-tree";
 
@@ -39,24 +40,8 @@ function pct(v: number, digits = 1): string {
   return (v * 100).toFixed(digits) + "%";
 }
 
-// ABC×XYZ matritsa katagi ohanglari: yashil — barqaror daromad, qizil — muammoli zona
-const CELL_TONE: Record<AbcClass, Record<XyzClass, string>> = {
-  A: {
-    X: "border-emerald-500/40 bg-emerald-500/10",
-    Y: "border-emerald-500/30 bg-emerald-500/5",
-    Z: "border-amber-500/40 bg-amber-500/10",
-  },
-  B: {
-    X: "border-emerald-500/30 bg-emerald-500/5",
-    Y: "border-amber-500/30 bg-amber-500/5",
-    Z: "border-orange-500/40 bg-orange-500/10",
-  },
-  C: {
-    X: "border-amber-500/30 bg-amber-500/5",
-    Y: "border-orange-500/40 bg-orange-500/10",
-    Z: "border-destructive/40 bg-destructive/10",
-  },
-};
+// Matritsa katagi ranglari — markazlashgan (SKU qator/badge ranglari bilan bir manba)
+// src/lib/sku-rang.ts dagi MATRIX_CELL_CLS ishlatiladi.
 
 const CELL_HINT: Record<AbcClass, Record<XyzClass, string>> = {
   A: {
@@ -244,7 +229,7 @@ async function AbcData({
                         <div
                           key={xc}
                           title={CELL_HINT[ac][xc]}
-                          className={cn("rounded-xl border p-3 text-center", CELL_TONE[ac][xc])}
+                          className={cn("rounded-xl border p-3 text-center", MATRIX_CELL_CLS[`${ac}${xc}`])}
                         >
                           <div className="text-lg font-bold tabular-nums">{cell.count.toLocaleString("uz-UZ")}</div>
                           <div className="text-[11px] text-muted-foreground">SKU</div>

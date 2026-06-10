@@ -15,6 +15,8 @@ import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import { Search, X, Loader2, Pencil, ChevronLeft, ChevronRight } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { skuRowBg, skuBadgeCls, skuBadgeLabel } from "@/lib/sku-rang";
 import { toast } from "sonner";
 import type { HGroup } from "./iyerarxiya-client";
 import { searchSkusAction, updateProductAction, type SkuRow } from "./actions";
@@ -136,8 +138,18 @@ export function SkuList({ groups }: { groups: HGroup[] }) {
                 </TableCell></TableRow>
               ) : (
                 rows.map((r) => (
-                  <TableRow key={r.id} className="text-sm">
-                    <TableCell className="font-mono text-xs text-muted-foreground">{r.code}</TableCell>
+                  // Fon — SKU'ning ABC×XYZ matritsa holatiga ko'ra (tizim bo'ylab bir xil rang tili)
+                  <TableRow key={r.id} className={cn("text-sm", skuRowBg(r.abc, r.xyz))}>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1.5">
+                        {r.code}
+                        {skuBadgeLabel(r.abc, r.xyz) && (
+                          <span className={cn("rounded border px-1 py-px text-[9px] font-bold leading-none", skuBadgeCls(r.abc, r.xyz))}>
+                            {skuBadgeLabel(r.abc, r.xyz)}
+                          </span>
+                        )}
+                      </span>
+                    </TableCell>
                     <TableCell className="max-w-[280px] truncate" title={r.name}>{r.name}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{r.group ?? "—"}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{r.cat ?? "—"}</TableCell>
