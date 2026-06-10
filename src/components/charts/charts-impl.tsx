@@ -334,3 +334,56 @@ export function TopCategoriesChart({
     </div>
   );
 }
+
+// ─── Kumulyativ S-egri: yig'ilgan Reja vs yig'ilgan Fakt ───────────────────────
+// Oy davomida qayerdan orqada qola boshlaganini ko'rsatadi: fakt chizig'i reja
+// chizig'idan pastga tushgan kundan e'tiboran farq ochila boshlagan.
+function buildCumulative(
+  actual: { date: string; value: number }[],
+  plan?: { date: string; value: number }[]
+): { date: string; fakt: number; reja: number | null }[] {
+  const planByDate = new Map((plan ?? []).map((p) => [p.date, p.value]));
+  let cumA = 0;
+  let cumP = 0;
+  return actual.map((a) => {
+    cumA += a.value;
+    cumP += planByDate.get(a.date) ?? 0;
+    return {
+      date: shortDate(a.date),
+      fakt: Math.round(cumA),
+      reja: plan && plan.length > 0 ? Math.round(cumP) : null,
+    };
+  });
+}
+
+export function CumulativeChart({
+  actual,
+  plan,
+}: {
+  actual: { date: string; value: number }[];
+  plan?: { date: string; value: number }[];
+}) {
+  const data = buildCumulative(actual, plan);
+  if (data.length === 0) {
+    return <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">Ma&apos;lumot yo&apos;q</div>;
+  }
+  return (
+    <ResponsiveContainer width="100%" height={280}>
+      <ComposedChart data={data} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+        {CHART_GRADIENTS}
+        <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.15)" vertical={false} />
+        <XAxis dataKey="date" fontSize={12} fill={GRAY} tickLine={false} axisLine={false} tickMargin={10} fontFamily="Sora" interval="preserveStartEnd" />
+        <YAxis fontSize={12} fill={GRAY} tickLine={false} axisLine={false} fontFamily="Sora" tickFormatter={(v) => formatUZS(Number(v), { compact: true })} />
+        <Tooltip
+          contentStyle={tooltipStyle}
+          formatter={(v, name) => [formatUZS(Number(v)) + " so'm", name as string]}
+          labelFormatter={(v) => `Sana: ${v}`}
+        />
+        <Legend iconType="circle" wrapperStyle={{ fontSize: "13px", fontFamily: "Sora", paddingTop: "12px" }} />
+        <Line type="monotone" dataKey="fakt" name="Fakt (yig'ilgan)" stroke={BRAND_GREEN} strokeWidth={3} dot={false}
+          activeDot={{ r: 5, fill: BRAND_GREEN, strokeWidth: 3, stroke: "#fff" }} />
+        <Line type="monotone" dataKey="reja" name="Reja (yig'ilgan)" stroke={GRAY} strokeWidth={2} strokeDasharray="6 4" dot={false} />
+      </ComposedChart>
+    </ResponsiveContainer>
+  );
+}

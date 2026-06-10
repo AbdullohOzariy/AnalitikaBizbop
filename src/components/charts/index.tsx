@@ -32,3 +32,8 @@ export const DailyReceiptsChart = dynamic(
   () => import("./charts-impl").then((m) => m.DailyReceiptsChart),
   { ssr: false, loading: () => fallback("h-64") }
 );
+
+export const CumulativeChart = dynamic(
+  () => import("./charts-impl").then((m) => m.CumulativeChart),
+  { ssr: false, loading: () => fallback("h-64") }
+);
