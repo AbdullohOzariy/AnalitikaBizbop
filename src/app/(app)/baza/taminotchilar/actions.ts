@@ -316,3 +316,31 @@ export async function updateSkuPurchaseAction(
     return actionError(err, "updateSkuPurchase");
   }
 }
+
+
+/**
+ * Yetkazib beruvchini o'chirish (SUPPLYCHAIN/SYSTEM_ADMIN).
+ * Zakazlari bor bo'lsa BLOKLANADI (PurchaseOrder cascade — tarix yo'qoladi);
+ * SKU'lar yo'qolmaydi (supplierId NULL bo'ladi), shartnomalar o'chadi.
+ */
+export async function deleteSupplierAction(
+  id: number
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    await requireSupplierEditor();
+    const sid = z.coerce.number().int().positive().parse(id);
+    const orderCount = await prisma.purchaseOrder.count({ where: { supplierId: sid } });
+    if (orderCount > 0) {
+      return {
+        ok: false,
+        error: `O'chirib bo'lmaydi: ${orderCount} ta zakaz tarixi bor. Avval zakazlarni ko'rib chiqing.`,
+      };
+    }
+    await prisma.supplier.delete({ where: { id: sid } });
+    revalidateTag(SUPPLIERS_TAG, "max");
+    revalidatePath("/baza/taminotchilar");
+    return { ok: true };
+  } catch (err) {
+    return actionError(err, "deleteSupplier");
+  }
+}

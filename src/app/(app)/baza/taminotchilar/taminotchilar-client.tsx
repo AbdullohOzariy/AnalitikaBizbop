@@ -6,12 +6,12 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Plus, Loader2 as Loader2b } from "lucide-react";
+import { Plus, Loader2 as Loader2b, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { StatCard, EmptyState } from "@/components/common/page";
 import { Search, ChevronRight, X, Loader2, Truck, Package, Tags, IdCard } from "lucide-react";
 import {
-  supplierSubcatsAction, supplierSkusAction, createSupplierAction, type SupSub, type SupSku,
+  supplierSubcatsAction, supplierSkusAction, createSupplierAction, deleteSupplierAction, type SupSub, type SupSku,
 } from "./actions";
 
 export type SupplierRow = { id: number; name: string; skuCount: number };
@@ -23,6 +23,15 @@ export function TaminotchilarClient({ suppliers, canEdit = false }: { suppliers:
   const router = useRouter();
   const [newName, setNewName] = useState("");
   const [creating, startCreate] = useTransition();
+  const removeSupplier = (sup: SupplierRow) => {
+    if (!confirm(`"${sup.name}" o'chirilsinmi?\n\nSKU'lari yo'qolmaydi (yetkazib beruvchisiz qoladi), profil va shartnomalar o'chadi. Zakaz tarixi bo'lsa o'chirish bloklanadi.`)) return;
+    startCreate(async () => {
+      const res = await deleteSupplierAction(sup.id);
+      if (res.ok) { toast.success("O'chirildi."); router.refresh(); }
+      else toast.error(res.error);
+    });
+  };
+
   const addSupplier = () => {
     const nm = newName.trim();
     if (!nm) { toast.error("Yetkazib beruvchi nomini kiriting."); return; }
@@ -134,10 +143,21 @@ export function TaminotchilarClient({ suppliers, canEdit = false }: { suppliers:
                   </button>
                   <Link
                     href={`/baza/taminotchilar/${sup.id}`}
-                    className="mr-2 inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                    className="mr-1 inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
                   >
                     <IdCard className="h-3.5 w-3.5" /> Profil
                   </Link>
+                  {canEdit && (
+                    <button
+                      onClick={() => removeSupplier(sup)}
+                      disabled={creating}
+                      aria-label={`${sup.name} ni o'chirish`}
+                      title="O'chirish (zakaz tarixi bo'lsa bloklanadi)"
+                      className="mr-2 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </div>
 
                 {sOpen && (

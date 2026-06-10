@@ -21,6 +21,7 @@ import {
   deleteContractAction,
   updateSkuPurchaseAction,
   bulkLeadTimeAction,
+  deleteSupplierAction,
   type ContractRow,
 } from "../actions";
 
@@ -126,10 +127,27 @@ export function ProfilHeader({
           </div>
         </div>
 
-        <Button onClick={saveInfo} disabled={isPending || !dirty || !canEdit} className="h-9 gap-1.5">
-          {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          Saqlash
-        </Button>
+        <span className="flex flex-col gap-1.5">
+          <Button onClick={saveInfo} disabled={isPending || !dirty || !canEdit} className="h-9 gap-1.5">
+            {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Saqlash
+          </Button>
+          {canEdit && (
+            <Button variant="outline" disabled={isPending}
+              className="h-8 gap-1.5 text-xs text-destructive hover:bg-destructive/10"
+              title="Zakaz tarixi bo'lsa bloklanadi; SKU'lar yo'qolmaydi"
+              onClick={() => {
+                if (!confirm(`"${nom || name}" o'chirilsinmi?\n\nSKU'lari yo'qolmaydi (yetkazib beruvchisiz qoladi), profil va shartnomalar o'chadi. Zakaz tarixi bo'lsa o'chirish bloklanadi.`)) return;
+                start(async () => {
+                  const res = await deleteSupplierAction(supplierId);
+                  if (res.ok) { toast.success("O'chirildi."); router.push("/baza/taminotchilar"); router.refresh(); }
+                  else toast.error(res.error);
+                });
+              }}>
+              <Trash2 className="h-3.5 w-3.5" /> O'chirish
+            </Button>
+          )}
+        </span>
       </CardContent>
     </Card>
   );
