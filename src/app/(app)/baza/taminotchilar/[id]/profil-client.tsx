@@ -19,7 +19,7 @@ import {
   setOrderWeekdaysAction,
   saveContractAction,
   deleteContractAction,
-  setLeadTimeAction,
+  updateSkuPurchaseAction,
   bulkLeadTimeAction,
   type ContractRow,
 } from "../actions";
@@ -35,6 +35,8 @@ export type ProfilSku = {
   abc: string | null;
   xyz: string | null;
   leadTimeDays: number | null;
+  packSize: number | null; // pachkadagi dona
+  purchasePrice: number | null; // kelishilgan dona narxi
   arxiv: boolean; // no-aktiv (arxivlangan)
 };
 
@@ -260,29 +262,41 @@ export function OrderDaysCalendar({
   );
 }
 
-// ─── Lead time editor (ketma-ket kiritish) ────────────────────────────────────
-// Enter → saqlanadi va fokus KEYINGI qatorga o'tadi. O'zgartirish 700ms dan keyin
-// avtomatik saqlanadi. Subkat bo'yicha guruhlangan, ABC×XYZ rang fonlari bilan.
+// ─── SKU sotib olish sozlamalari (lead · pachka · narx) — ketma-ket kiritish ──
+// Enter → saqlanadi va fokus KEYINGI qatorning O'SHA ustuniga o'tadi. O'zgartirish
+// 700ms dan keyin avtomatik saqlanadi. Subkat bo'yicha guruhlangan, ABC×XYZ ranglar.
 
 type CellSt = "idle" | "saving" | "saved" | "error";
+type SkuField = "lead" | "pack" | "price";
+
+const FIELD_CFG: Record<SkuField, { label: string; max: number; int: boolean }> = {
+  lead: { label: "Lead (kun)", max: 365, int: true },
+  pack: { label: "Pachka (dona)", max: 100_000, int: true },
+  price: { label: "Narx (dona)", max: 1_000_000_000_000, int: false },
+};
 
 export function LeadTimeEditor({ supplierId, skus, canEdit = true }: { supplierId: number; skus: ProfilSku[]; canEdit?: boolean }) {
   const router = useRouter();
-  const [vals, setVals] = useState<Record<number, string>>(() => {
-    const o: Record<number, string> = {};
-    for (const s of skus) o[s.id] = s.leadTimeDays != null ? String(s.leadTimeDays) : "";
+  const [vals, setVals] = useState<Record<number, Record<SkuField, string>>>(() => {
+    const o: Record<number, Record<SkuField, string>> = {};
+    for (const s of skus) {
+      o[s.id] = {
+        lead: s.leadTimeDays != null ? String(s.leadTimeDays) : "",
+        pack: s.packSize != null ? String(s.packSize) : "",
+        price: s.purchasePrice != null ? String(s.purchasePrice) : "",
+      };
+    }
     return o;
   });
-  const [st, setSt] = useState<Record<number, CellSt>>({});
-  const timers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
-  const inputs = useRef<Map<number, HTMLInputElement>>(new Map());
+  const [st, setSt] = useState<Record<string, CellSt>>({}); // `${pid}:${field}`
+  const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const inputs = useRef<Map<string, HTMLInputElement>>(new Map());
   const [, startT] = useTransition();
 
-  // Bulk
+  // Bulk (faqat lead uchun)
   const [bulkDays, setBulkDays] = useState("");
   const [bulkPending, startBulk] = useTransition();
 
-  // Subkat bo'yicha guruhlash (savdo tartibini saqlab — skus allaqachon tartiblangan)
   const groups = useMemo(() => {
     const m = new Map<number, { name: string; items: ProfilSku[] }>();
     for (const s of skus) {
@@ -294,36 +308,44 @@ export function LeadTimeEditor({ supplierId, skus, canEdit = true }: { supplierI
   const flatOrder = useMemo(() => skus.map((s) => s.id), [skus]);
   const [openSubs, setOpenSubs] = useState<Set<number>>(() => new Set(groups.map(([id]) => id)));
 
-  const save = (pid: number, raw: string) => {
-    clearTimeout(timers.current[pid]);
-    const days = raw.trim() === "" ? null : parseInt(raw, 10);
-    if (days !== null && (!Number.isInteger(days) || days < 0 || days > 365)) {
-      setSt((p) => ({ ...p, [pid]: "error" }));
-      return;
-    }
-    setSt((p) => ({ ...p, [pid]: "saving" }));
+  const save = (pid: number, field: SkuField, raw: string) => {
+    const key = `${pid}:${field}`;
+    clearTimeout(timers.current[key]);
+    const cfg = FIELD_CFG[field];
+    const num = raw.trim() === "" ? null : Number(raw);
+    const bad =
+      num !== null &&
+      (!isFinite(num) || num < 0 || num > cfg.max || (cfg.int && !Number.isInteger(num)) || (field === "pack" && num === 0));
+    if (bad) { setSt((p) => ({ ...p, [key]: "error" })); return; }
+    setSt((p) => ({ ...p, [key]: "saving" }));
     startT(async () => {
-      const res = await setLeadTimeAction({ productId: pid, days });
-      setSt((p) => ({ ...p, [pid]: res.ok ? "saved" : "error" }));
+      const res = await updateSkuPurchaseAction({
+        productId: pid,
+        ...(field === "lead" ? { leadTimeDays: num } : {}),
+        ...(field === "pack" ? { packSize: num } : {}),
+        ...(field === "price" ? { purchasePrice: num } : {}),
+      });
+      setSt((p) => ({ ...p, [key]: res.ok ? "saved" : "error" }));
       if (!res.ok) toast.error(res.error);
     });
   };
 
-  const onChange = (pid: number, v: string) => {
-    setVals((p) => ({ ...p, [pid]: v }));
-    setSt((p) => ({ ...p, [pid]: "idle" }));
-    clearTimeout(timers.current[pid]);
-    timers.current[pid] = setTimeout(() => save(pid, v), 700);
+  const onChange = (pid: number, field: SkuField, v: string) => {
+    setVals((p) => ({ ...p, [pid]: { ...p[pid], [field]: v } }));
+    const key = `${pid}:${field}`;
+    setSt((p) => ({ ...p, [key]: "idle" }));
+    clearTimeout(timers.current[key]);
+    timers.current[key] = setTimeout(() => save(pid, field, v), 700);
   };
 
-  // Enter — saqla va keyingi inputga o't (ketma-ket tez kiritish)
-  const onKeyDown = (pid: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+  // Enter — saqla va o'sha USTUN bo'ylab keyingi qatorga o't
+  const onKeyDown = (pid: number, field: SkuField, e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== "Enter") return;
     e.preventDefault();
-    save(pid, vals[pid] ?? "");
+    save(pid, field, vals[pid]?.[field] ?? "");
     const idx = flatOrder.indexOf(pid);
     for (let j = idx + 1; j < flatOrder.length; j++) {
-      const el = inputs.current.get(flatOrder[j]);
+      const el = inputs.current.get(`${flatOrder[j]}:${field}`);
       if (el) { el.focus(); el.select(); break; }
     }
   };
@@ -337,7 +359,9 @@ export function LeadTimeEditor({ supplierId, skus, canEdit = true }: { supplierI
         toast.success(`${res.count} ta SKU yangilandi.`);
         setVals((prev) => {
           const next = { ...prev };
-          for (const s of skus) if (!onlyEmpty || prev[s.id] === "") next[s.id] = String(d);
+          for (const s of skus) {
+            if (!onlyEmpty || (prev[s.id]?.lead ?? "") === "") next[s.id] = { ...next[s.id], lead: String(d) };
+          }
           return next;
         });
         router.refresh();
@@ -352,34 +376,43 @@ export function LeadTimeEditor({ supplierId, skus, canEdit = true }: { supplierI
     return <span className="inline-block h-3 w-3" />;
   };
 
-  const filled = skus.filter((s) => (vals[s.id] ?? "") !== "").length;
+  const rowSt = (pid: number): CellSt | undefined => {
+    const states = (["lead", "pack", "price"] as SkuField[]).map((f) => st[`${pid}:${f}`]);
+    if (states.includes("error")) return "error";
+    if (states.includes("saving")) return "saving";
+    if (states.includes("saved")) return "saved";
+    return undefined;
+  };
+
+  const filledLead = skus.filter((s) => (vals[s.id]?.lead ?? "") !== "").length;
 
   return (
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-base">
-          <span>SKU lead time (zakazdan kelguncha, kun)</span>
+          <span>SKU sozlamalari — lead time · pachka · narx</span>
           <span className="text-xs font-normal text-muted-foreground">
-            kiritilgan: {filled.toLocaleString("uz-UZ")}/{skus.length.toLocaleString("uz-UZ")}
+            lead kiritilgan: {filledLead.toLocaleString("uz-UZ")}/{skus.length.toLocaleString("uz-UZ")}
           </span>
         </CardTitle>
         <p className="text-xs text-muted-foreground">
-          Enter — saqlaydi va keyingi qatorga o&apos;tadi. Fon rangi — SKU&apos;ning ABC×XYZ holati.
+          Enter — saqlaydi va o'sha ustun bo'ylab keyingi qatorga o'tadi. Pachka va narx zakaz
+          oynasida avtomatik to'lib turadi (zakazdan ham eslab qolinadi).
         </p>
       </CardHeader>
       <CardContent className="space-y-3 p-0">
-        {/* Bulk */}
+        {/* Bulk — lead uchun */}
         <div className="flex flex-wrap items-end gap-2 border-b border-border/60 px-4 pb-3">
           <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Barchasiga kun</Label>
+            <Label className="text-xs text-muted-foreground">Barchasiga lead (kun)</Label>
             <Input type="number" min={0} max={365} value={bulkDays} onChange={(e) => setBulkDays(e.target.value)}
               placeholder="masalan 3" className="h-8 w-28 text-xs" />
           </div>
           <Button variant="outline" size="sm" className="h-8 text-xs" disabled={bulkPending || !canEdit} onClick={() => runBulk(true)}>
-            {bulkPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null} Bo&apos;shlarga qo&apos;llash
+            {bulkPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null} Bo'shlarga qo'llash
           </Button>
           <Button variant="outline" size="sm" className="h-8 text-xs" disabled={bulkPending || !canEdit} onClick={() => runBulk(false)}>
-            Hammasiga qo&apos;llash
+            Hammasiga qo'llash
           </Button>
         </div>
 
@@ -388,8 +421,10 @@ export function LeadTimeEditor({ supplierId, skus, canEdit = true }: { supplierI
             <thead className="sticky top-0 z-10 bg-card">
               <tr className="border-b border-border text-xs text-muted-foreground">
                 <th className="px-4 py-2 font-semibold">SKU</th>
-                <th className="w-[130px] px-2 py-2 text-right font-semibold">Lead time (kun)</th>
-                <th className="w-[40px]" />
+                <th className="w-[90px] px-1 py-2 text-right font-semibold">Lead (kun)</th>
+                <th className="w-[95px] px-1 py-2 text-right font-semibold" title="Blok/yashikdagi dona soni">Pachka</th>
+                <th className="w-[120px] px-1 py-2 text-right font-semibold" title="Kelishilgan dona narxi">Narx</th>
+                <th className="w-[36px]" />
               </tr>
             </thead>
             <tbody>
@@ -403,7 +438,7 @@ export function LeadTimeEditor({ supplierId, skus, canEdit = true }: { supplierI
                       tabIndex={0} role="button" aria-expanded={open}
                       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpenSubs((p) => { const n = new Set(p); if (n.has(subId)) n.delete(subId); else n.add(subId); return n; }); } }}
                     >
-                      <td className="px-4 py-2" colSpan={3}>
+                      <td className="px-4 py-2" colSpan={5}>
                         <span className="flex items-center gap-1.5">
                           <ChevronRight className={cn("h-3.5 w-3.5 text-muted-foreground/60 transition-transform", open && "rotate-90")} />
                           {g.name}
@@ -431,20 +466,22 @@ export function LeadTimeEditor({ supplierId, skus, canEdit = true }: { supplierI
                             )}
                           </span>
                         </td>
-                        <td className="px-2 py-1">
-                          <Input
-                            ref={(el) => { if (el) inputs.current.set(s.id, el); else inputs.current.delete(s.id); }}
-                            type="number" min={0} max={365} inputMode="numeric"
-                            value={vals[s.id] ?? ""}
-                            onChange={(e) => onChange(s.id, e.target.value)}
-                            onKeyDown={(e) => onKeyDown(s.id, e)}
-                            onBlur={(e) => { if (st[s.id] !== "saved") save(s.id, e.target.value); }}
-                            disabled={!canEdit}
-                            placeholder="—"
-                            className="h-7 w-full text-right text-xs tabular-nums"
-                          />
-                        </td>
-                        <td className="pr-3 text-center"><StatusIcon s={st[s.id]} /></td>
+                        {(["lead", "pack", "price"] as SkuField[]).map((field) => (
+                          <td key={field} className="px-1 py-1">
+                            <Input
+                              ref={(el) => { const k = `${s.id}:${field}`; if (el) inputs.current.set(k, el); else inputs.current.delete(k); }}
+                              type="number" min={0} inputMode={FIELD_CFG[field].int ? "numeric" : "decimal"}
+                              value={vals[s.id]?.[field] ?? ""}
+                              onChange={(e) => onChange(s.id, field, e.target.value)}
+                              onKeyDown={(e) => onKeyDown(s.id, field, e)}
+                              onBlur={(e) => { if (st[`${s.id}:${field}`] !== "saved") save(s.id, field, e.target.value); }}
+                              disabled={!canEdit}
+                              placeholder="—"
+                              className="h-7 w-full text-right text-xs tabular-nums"
+                            />
+                          </td>
+                        ))}
+                        <td className="pr-3 text-center"><StatusIcon s={rowSt(s.id)} /></td>
                       </tr>
                     ))}
                   </FragmentRows>

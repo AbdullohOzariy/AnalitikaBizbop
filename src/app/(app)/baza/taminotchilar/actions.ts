@@ -289,3 +289,30 @@ export async function createSupplierAction(
     return actionError(err, "createSupplier");
   }
 }
+
+
+const skuParamSchema = z.object({
+  productId: z.coerce.number().int().positive(),
+  leadTimeDays: z.coerce.number().int().min(0).max(365).nullable().optional(),
+  packSize: z.coerce.number().int().positive().max(100_000).nullable().optional(),
+  purchasePrice: z.coerce.number().nonnegative().max(1_000_000_000_000).nullable().optional(),
+});
+
+/** SKU sotib olish parametrlari (lead time / pachka / narx) — qisman yangilash. */
+export async function updateSkuPurchaseAction(
+  input: z.input<typeof skuParamSchema>
+): Promise<Result> {
+  try {
+    await requireSupplierEditor();
+    const p = skuParamSchema.parse(input);
+    const data: Record<string, unknown> = {};
+    if (p.leadTimeDays !== undefined) data.leadTimeDays = p.leadTimeDays;
+    if (p.packSize !== undefined) data.packSize = p.packSize;
+    if (p.purchasePrice !== undefined) data.purchasePrice = p.purchasePrice;
+    if (Object.keys(data).length === 0) return { ok: true };
+    await prisma.product.update({ where: { id: p.productId }, data });
+    return { ok: true };
+  } catch (err) {
+    return actionError(err, "updateSkuPurchase");
+  }
+}

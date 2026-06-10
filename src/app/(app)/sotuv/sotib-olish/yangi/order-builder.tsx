@@ -48,7 +48,7 @@ export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number
         const m = new Map<number, Line>();
         for (const it of res.items) {
           if (it.suggested > 0) {
-            m.set(it.productId, { qty: String(it.suggested), price: "", blok: "", pack: it.packSize != null ? String(it.packSize) : "" });
+            m.set(it.productId, { qty: String(it.suggested), price: it.purchasePrice != null ? String(it.purchasePrice) : "", blok: "", pack: it.packSize != null ? String(it.packSize) : "" });
           }
         }
         setLines(m);
@@ -94,10 +94,13 @@ export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number
     [items, Q]
   );
 
+  const itemByPid = useMemo(() => new Map(items.map((i) => [i.productId, i])), [items]);
   const chosen = useMemo(() => {
     const out: { productId: number; quantity: number; price: number; packCount: number | null; packSize: number | null }[] = [];
     for (const [pid, l] of lines) {
-      const qty = Number(l.qty); const price = Number(l.price) || 0;
+      const qty = Number(l.qty);
+      // Narx kiritilmagan bo'lsa — eslab qolingan narx (placeholder'da ko'rinadi)
+      const price = Number(l.price) || itemByPid.get(pid)?.purchasePrice || 0;
       const blok = Number(l.blok); const pack = Number(l.pack);
       if (qty > 0) {
         out.push({
@@ -108,7 +111,7 @@ export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number
       }
     }
     return out;
-  }, [lines]);
+  }, [lines, itemByPid]);
   const total = useMemo(() => chosen.reduce((s, c) => s + c.quantity * c.price, 0), [chosen]);
 
   // Tanlangan ta'minotchining zakaz kunlari hinti (profilda belgilanadi).
@@ -211,7 +214,7 @@ export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number
                 <TableBody>
                   {shown.map((it) => {
                     const l = lines.get(it.productId) ?? { qty: "", price: "", blok: "", pack: "" };
-                    const sum = (Number(l.qty) || 0) * (Number(l.price) || 0);
+                    const sum = (Number(l.qty) || 0) * (Number(l.price) || it.purchasePrice || 0);
                     return (
                       // Fon — SKU'ning ABC×XYZ matritsa holatiga ko'ra (AX buyurtmada ustuvor!)
                       <TableRow key={it.productId} className={cn("text-sm", skuRowBg(it.abc, it.xyz))}>
@@ -271,7 +274,8 @@ export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number
                             onChange={(e) => setLine(it.productId, { qty: e.target.value })} className="h-8 w-24 text-xs" />
                         </TableCell>
                         <TableCell>
-                          <Input type="number" inputMode="decimal" value={l.price} placeholder="narx"
+                          <Input type="number" inputMode="decimal" value={l.price}
+                            placeholder={it.purchasePrice != null ? String(it.purchasePrice) : "narx"}
                             onChange={(e) => setLine(it.productId, { price: e.target.value })} className="h-8 w-28 text-xs" />
                         </TableCell>
                         <TableCell className="text-right tabular-nums text-xs font-medium">{sum > 0 ? formatUZS(sum) : "—"}</TableCell>

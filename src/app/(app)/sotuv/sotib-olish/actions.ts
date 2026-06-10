@@ -37,6 +37,7 @@ export type BuilderItem = {
   arxiv: boolean; // no-aktiv (arxivlangan) — ro'yxatda belgisi bilan ko'rinadi
   dailyAvg: number; // kunlik o'rtacha sotuv (oxirgi ma'lumot oynasi, filiallar yig'indisi)
   packSize: number | null; // blok/pachkadagi dona soni (Product'da eslab qolinadi)
+  purchasePrice: number | null; // oxirgi kelishilgan dona narxi (eslab qolinadi)
   minStock: number | null; // kunlik × (zakaz oralig'i + lead) × XYZ buferi; lead yo'q — null
 };
 
@@ -103,7 +104,7 @@ export async function supplierItemsAction(
     const [products, supplier, range] = await Promise.all([
       prisma.product.findMany({
         where: { supplierId: sid, ...scopeProductWhere(scope) },
-        select: { id: true, code: true, name: true, currentStock: true, currentSold: true, abcClass: true, xyzClass: true, leadTimeDays: true, archivedAt: true, packSize: true, category: { select: { name: true } } },
+        select: { id: true, code: true, name: true, currentStock: true, currentSold: true, abcClass: true, xyzClass: true, leadTimeDays: true, archivedAt: true, packSize: true, purchasePrice: true, category: { select: { name: true } } },
         orderBy: { name: "asc" },
         take: 2000,
       }),
@@ -148,6 +149,7 @@ export async function supplierItemsAction(
         stock, sold, suggested, abc: p.abcClass, xyz: p.xyzClass, lead: p.leadTimeDays,
         arxiv: p.archivedAt != null, dailyAvg: Math.round(dailyAvg * 10) / 10, minStock,
         packSize: p.packSize,
+        purchasePrice: p.purchasePrice != null ? Number(p.purchasePrice) : null,
       };
     });
     return { ok: true, items };
@@ -164,16 +166,16 @@ const itemSchema = z.object({
   packSize: z.coerce.number().int().positive().max(100_000).nullable().optional(),
 });
 
-/** Kiritilgan pachka hajmlarini Product'da eslab qolamiz (keyingi zakazda tayyor). */
-async function rememberPackSizes(items: { productId: number; packSize?: number | null }[]) {
-  const updates = items.filter((i) => i.packSize != null);
-  for (const u of updates) {
-    await prisma.product
-      .updateMany({
-        where: { id: u.productId, NOT: { packSize: u.packSize! } },
-        data: { packSize: u.packSize! },
-      })
-      .catch(() => null);
+/** Pachka hajmi va kelishilgan narxni Product'da eslab qolamiz (keyingi zakazda tayyor). */
+async function rememberOrderParams(
+  items: { productId: number; packSize?: number | null; price: number }[]
+) {
+  for (const i of items) {
+    const data: { packSize?: number; purchasePrice?: number } = {};
+    if (i.packSize != null) data.packSize = i.packSize;
+    if (i.price > 0) data.purchasePrice = i.price;
+    if (Object.keys(data).length === 0) continue;
+    await prisma.product.update({ where: { id: i.productId }, data }).catch(() => null);
   }
 }
 
@@ -216,7 +218,7 @@ export async function createOrderAction(input: {
       },
       select: { id: true },
     });
-    await rememberPackSizes(items);
+    await rememberOrderParams(items);
     revalidatePath("/sotuv/sotib-olish");
     return { ok: true, id: order.id };
   } catch (err) {
@@ -245,7 +247,7 @@ export async function updateOrderItemsAction(
       prisma.purchaseOrderItem.createMany({ data: parsed.map((i) => ({ orderId: oid, productId: i.productId, quantity: i.quantity, price: i.price, packCount: i.packCount ?? null, packSize: i.packSize ?? null })) }),
       prisma.purchaseOrder.update({ where: { id: oid }, data: { note: note?.trim() || null } }),
     ]);
-    await rememberPackSizes(parsed);
+    await rememberOrderParams(parsed);
     revalidatePath(`/sotuv/sotib-olish/${oid}`);
     revalidatePath("/sotuv/sotib-olish");
     return { ok: true };

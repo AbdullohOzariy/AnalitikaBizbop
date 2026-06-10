@@ -282,6 +282,7 @@ model Product {
   leadTimeDays   Int? // zakazdan kelguncha kunlar — ta'minotchi profilida kiritiladi
   archivedAt     DateTime? // no-aktiv (arxiv) — buyurtma/OOS/Stockday'dan chiqadi, tarix saqlanadi
   packSize       Int? // blok/yashik/pachkadagi dona soni — buyurtmada eslab qolinadi
+  purchasePrice  Decimal? @db.Decimal(20, 2) // kelishilgan sotib olish narxi (dona) — zakazdan eslab qolinadi
   lastSalePeriod DateTime? @db.Date // so'nggi yuklangan davr (eskini bosib o'tmaslik uchun)
 
   category     Category?            @relation(fields: [categoryId], references: [id], onDelete: SetNull)

@@ -33,7 +33,7 @@ export default async function SupplierProfilePage({
     prisma.product.findMany({
       where: { supplierId },
       select: {
-        id: true, code: true, name: true, leadTimeDays: true,
+        id: true, code: true, name: true, leadTimeDays: true, packSize: true, purchasePrice: true,
         abcClass: true, xyzClass: true, currentSold: true, archivedAt: true,
         category: { select: { id: true, name: true } },
       },
@@ -53,6 +53,8 @@ export default async function SupplierProfilePage({
     abc: p.abcClass,
     xyz: p.xyzClass,
     leadTimeDays: p.leadTimeDays,
+    packSize: p.packSize,
+    purchasePrice: p.purchasePrice != null ? Number(p.purchasePrice) : null,
     arxiv: p.archivedAt != null,
   }));
 
