@@ -104,7 +104,14 @@ Tekshiruv qamrovi: xavfsizlik (auth, server actions, API, Telegram), backend man
 ### Har bosqichdan keyin
 `npx tsc --noEmit && npx eslint src && npm run build` — barcha bosqichlardan soʻng toza.
 
-### Qolgan ishlar
-- ⚠️ Migratsiyani jonli DB'ga qoʻllash: `railway run npx prisma migrate deploy`
-- Tuzatishlar commit qilinmagan
-- Ixtiyoriy (PAST, qoldirildi): P8 login yil, P9 baza-filter derived-state, P10 Suspense, P11 mayda sifat, P12 epsilon-qoldiq; O4/O5 (hujjatlash darajasida), O9-IDOR hujjati
+### 5-bosqich — PAST qoldiqlar ✅ BAJARILDI (2026-06-10)
+- ✅ P10: 9 ta `useSearchParams` komponenti ichki `<Suspense>` wrapper bilan (statik prerender'ga tayyor)
+- ✅ P11: metrika-editor `key={m}`; oos/stockday `role="tab"` olib tashlandi (`aria-current` qoldi); dashboard-v2 skeleton inline style → Tailwind. `chiqim-row-actions` type annotation — YOLGʻON-POZITIV (Base UI Select'da qiymat haqiqatan nullable), oʻzgartirilmadi
+- ✅ P8: login yili — `CurrentYear` client komponenti (`suppressHydrationWarning`), statik keshda qotmaydi
+- ✅ O4/O5: hujjatlash izohlari (dailyPlanByGroup taxmini; computeProfitTree branchName/kesh ogohlantirishi)
+- Atayin qoldirilganlar: P9 (render-vaqtida setState — bu React hujjatlari tavsiya qilgan rasmiy "adjust state during render" naqshi, anti-pattern emas), P12 (epsilon-qoldiq mantiqi toʻgʻri ishlaydi)
+
+### Holat
+- Migratsiya: Railway start buyrugʻi `npx prisma migrate deploy && npm run start` — deploy'da avtomatik qoʻllanadi ✅
+- Barcha tuzatishlar commit + push qilingan ✅
+- **Audit toʻliq yopildi: 39 topilmadan 37 tasi tuzatildi, 2 tasi asosli ravishda qoldirildi (P9, P12), 1 tasi yolgʻon-pozitiv deb topildi.**

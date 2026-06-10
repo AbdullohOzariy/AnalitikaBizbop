@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { Suspense, useState, type ComponentProps } from "react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,7 @@ const PRESETS: { key: string; label: string; range: () => { start: string; end: 
   { key: "lastMonth", label: "O'tgan oy", range: () => { const n = new Date(); return { start: ymd(new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth()-1, 1))), end: ymd(new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), 0))) }; } },
 ];
 
-export function SotuvFilter({
+function SotuvFilterInner({
   branches, start, end, branchId,
 }: {
   branches: { id: number; name: string }[];
@@ -98,5 +98,15 @@ export function SotuvFilter({
         })}
       </div>
     </div>
+  );
+}
+
+// useSearchParams Suspense chegarasini talab qiladi (statik prerender'da xato) —
+// wrapper barcha ishlatish joylarini qamraydi.
+export function SotuvFilter(props: ComponentProps<typeof SotuvFilterInner>) {
+  return (
+    <Suspense fallback={null}>
+      <SotuvFilterInner {...props} />
+    </Suspense>
   );
 }

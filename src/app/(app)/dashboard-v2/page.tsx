@@ -65,8 +65,7 @@ function WidgetsSkeleton() {
       {Array.from({ length: 6 }).map((_, i) => (
         <div
           key={i}
-          className="rounded-2xl border border-border bg-card p-5 animate-pulse"
-          style={{ minHeight: i < 2 ? 320 : 280 }}
+          className={`rounded-2xl border border-border bg-card p-5 animate-pulse ${i < 2 ? "min-h-[320px]" : "min-h-[280px]"}`}
         >
           <div className="h-4 w-40 rounded bg-muted mb-4" />
           <div className="space-y-2">

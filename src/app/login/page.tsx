@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import Image from "next/image";
 import { TrendingUp, ArrowDownUp, Target, ShieldCheck } from "lucide-react";
 import { LoginForm } from "./login-form";
+import { CurrentYear } from "./current-year";
 
 const FEATURES = [
   { icon: TrendingUp, title: "Savdo analitikasi", desc: "Filial × kategoriya × davr kesimida" },
@@ -60,7 +61,7 @@ export default function LoginPage() {
             </ul>
           </div>
 
-          <p className="text-xs text-white/60">analitika.oilagroup.uz · © {new Date().getFullYear()} BizBop · by #Bozorov</p>
+          <p className="text-xs text-white/60">analitika.oilagroup.uz · © <CurrentYear /> BizBop · by #Bozorov</p>
         </div>
       </div>
 
@@ -82,7 +83,7 @@ export default function LoginPage() {
           </div>
 
           <p className="mt-6 text-center text-xs text-muted-foreground lg:hidden">
-            © {new Date().getFullYear()} BizBop Analitika · by #Bozorov
+            © <CurrentYear /> BizBop Analitika · by #Bozorov
           </p>
         </div>
       </div>

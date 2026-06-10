@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useRef, useState } from "react";
+import { Suspense, useRef, useState, type ComponentProps } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -32,7 +32,7 @@ const PRESETS: { key: string; label: string; range: () => { start: string; end: 
   { key: "lastMonth", label: "O'tgan oy", range: () => { const n = new Date(); const s = new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth() - 1, 1)); const e = new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), 0)); return { start: ymd(s), end: ymd(e) }; } },
 ];
 
-export function BazaFilter({
+function BazaFilterInner({
   basePath,
   branches,
   categories,
@@ -226,5 +226,15 @@ export function BazaFilter({
         })}
       </div>
     </div>
+  );
+}
+
+// useSearchParams Suspense chegarasini talab qiladi (statik prerender'da xato) —
+// wrapper barcha ishlatish joylarini qamraydi.
+export function BazaFilter(props: ComponentProps<typeof BazaFilterInner>) {
+  return (
+    <Suspense fallback={null}>
+      <BazaFilterInner {...props} />
+    </Suspense>
   );
 }

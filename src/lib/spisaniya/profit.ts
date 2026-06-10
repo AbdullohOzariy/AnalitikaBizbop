@@ -126,6 +126,10 @@ async function _computeProfitTree(
 
 // Keshlangan (ANALYTICS_CACHE_TAG bilan) — reja/chiqim o'zgarganda invalidatsiya bo'ladi.
 // 731k ProductSales bo'yicha og'ir so'rov har yuklashda emas, faqat cache miss'da bajariladi.
+// DIQQAT: kesh kaliti branchId'ga asoslangan; branchName undan DB orqali olinadi va
+// chiqimByKategoriya bizbop bazasida NOM bo'yicha filtrlaydi. Analitika'dagi filial nomi
+// bizbop'dagi nom bilan aynan mos bo'lishi shart — farq bo'lsa chiqim 0 chiqadi va shu
+// noto'g'ri natija keshda qoladi (Branch nomi o'zgartirilsa keshni ham invalidatsiya qiling).
 export function computeProfitTree(range: ChiqimRange, branchId?: number): Promise<ProfitTree> {
   return unstable_cache(
     async () => {

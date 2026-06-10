@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useTransition } from "react";
+import { Suspense, useMemo, useTransition, type ComponentProps } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -19,7 +19,7 @@ import { shiftPeriod } from "@/lib/period";
 
 type Branch = { id: number; name: string };
 
-export function FiltersBar({
+function FiltersBarInner({
   branches,
   branchId,
   start,
@@ -194,5 +194,15 @@ export function FiltersBar({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+// useSearchParams Suspense chegarasini talab qiladi (statik prerender'da xato) —
+// wrapper barcha ishlatish joylarini qamraydi.
+export function FiltersBar(props: ComponentProps<typeof FiltersBarInner>) {
+  return (
+    <Suspense fallback={null}>
+      <FiltersBarInner {...props} />
+    </Suspense>
   );
 }

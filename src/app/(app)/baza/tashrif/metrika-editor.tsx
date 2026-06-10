@@ -135,7 +135,7 @@ export function ReceiptMetricsEditor({
           <label className="text-xs text-muted-foreground">Oy</label>
           <Select items={Object.fromEntries(MONTHS.map((m, i) => [String(i + 1), m]))} value={String(month)} onValueChange={(v) => onMonth(Number(v))}>
             <SelectTrigger className="h-9 w-36"><SelectValue /></SelectTrigger>
-            <SelectContent>{MONTHS.map((m, i) => <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>)}</SelectContent>
+            <SelectContent>{MONTHS.map((m, i) => <SelectItem key={m} value={String(i + 1)}>{m}</SelectItem>)}</SelectContent>
           </Select>
         </div>
         <div className="space-y-1">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useMemo, useTransition, useEffect } from "react";
+import { Suspense, useState, useRef, useMemo, useTransition, useEffect, type ComponentProps } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import {
   ChevronRight, Loader2, Check, AlertCircle, TrendingUp, Percent,
@@ -102,7 +102,7 @@ function StatusIcon({ st }: { st: CellSt }) {
 }
 
 // ─── Asosiy komponent ─────────────────────────────────────────────────────────
-export function PlanEditor({
+function PlanEditorInner({
   branches,
   groups,
   initSalesPlans,
@@ -737,5 +737,15 @@ function Chip({
       <span className="text-xs font-medium opacity-80">{label}:</span>
       <span className="text-sm font-bold tabular-nums">{value}</span>
     </div>
+  );
+}
+
+// useSearchParams Suspense chegarasini talab qiladi (statik prerender'da xato) —
+// wrapper barcha ishlatish joylarini qamraydi.
+export function PlanEditor(props: ComponentProps<typeof PlanEditorInner>) {
+  return (
+    <Suspense fallback={null}>
+      <PlanEditorInner {...props} />
+    </Suspense>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState, type ComponentProps } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { shiftPeriod, isFullMonthRange } from "@/lib/period";
 
-export function PeriodFilter({
+function PeriodFilterInner({
   defaultStart,
   defaultEnd,
 }: {
@@ -87,5 +87,15 @@ export function PeriodFilter({
         Ko'rish
       </Button>
     </div>
+  );
+}
+
+// useSearchParams Suspense chegarasini talab qiladi (statik prerender'da xato) —
+// wrapper barcha ishlatish joylarini qamraydi.
+export function PeriodFilter(props: ComponentProps<typeof PeriodFilterInner>) {
+  return (
+    <Suspense fallback={null}>
+      <PeriodFilterInner {...props} />
+    </Suspense>
   );
 }

@@ -442,6 +442,9 @@ async function _dailyPlanByGroup(
       if (fdMonthTotal > 0) {
         // ForecastDay shakli: kunlik_jami × (guruh_oy_reja / jami_oy_reja).
         // Ulush = shu kungi ForecastDay jami / oy bo'yicha ForecastDay jami.
+        // TAXMIN: ForecastDay va SalesPlan sinxron (reja o'zgargach prognoz qayta
+        // generatsiya qilingan). Desinxron bo'lsa guruh chizig'i kun shaklini to'g'ri,
+        // lekin masshtabni eski reja bo'yicha ko'rsatadi — bu xato emas, eskirgan prognoz.
         const dayTotal = fdByDate.get(iso) ?? 0;
         const dayShare = dayTotal / fdMonthTotal; // kun ulushi (oy ichida)
         for (const g of groups) {

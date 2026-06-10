@@ -1,10 +1,11 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, type ComponentProps } from "react";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
-export function BazaPagination({
+function BazaPaginationInner({
   page,
   totalPages,
   basePath,
@@ -80,5 +81,15 @@ export function BazaPagination({
         <ChevronRight className="h-4 w-4" />
       </Button>
     </div>
+  );
+}
+
+// useSearchParams Suspense chegarasini talab qiladi (statik prerender'da xato) —
+// wrapper barcha ishlatish joylarini qamraydi.
+export function BazaPagination(props: ComponentProps<typeof BazaPaginationInner>) {
+  return (
+    <Suspense fallback={null}>
+      <BazaPaginationInner {...props} />
+    </Suspense>
   );
 }

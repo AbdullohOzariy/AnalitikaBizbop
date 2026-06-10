@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useRef, useState } from "react";
+import { Suspense, useRef, useState, type ComponentProps } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -25,7 +25,7 @@ const TURS: [string, string][] = [
   ["ichki_sotuv", "Ichki sotuv"],
 ];
 
-export function ChiqimFilter({
+function ChiqimFilterInner({
   filials,
   defaultStart,
   defaultEnd,
@@ -198,5 +198,15 @@ export function ChiqimFilter({
         </Button>
       )}
     </div>
+  );
+}
+
+// useSearchParams Suspense chegarasini talab qiladi (statik prerender'da xato) —
+// wrapper barcha ishlatish joylarini qamraydi.
+export function ChiqimFilter(props: ComponentProps<typeof ChiqimFilterInner>) {
+  return (
+    <Suspense fallback={null}>
+      <ChiqimFilterInner {...props} />
+    </Suspense>
   );
 }

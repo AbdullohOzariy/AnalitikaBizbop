@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useMemo, useRef, useState } from "react";
+import { Suspense, useMemo, useRef, useState, type ComponentProps } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -58,7 +58,7 @@ function presetRange(preset: string): { start: string; end: string } | null {
   return { start: fmtInput(s), end: fmtInput(e) };
 }
 
-export function PeriodFilter({
+function PeriodFilterInner({
   start,
   end,
   branchId,
@@ -318,5 +318,15 @@ export function PeriodFilter({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+// useSearchParams Suspense chegarasini talab qiladi (sahifa statik prerender
+// bo'lsa xato) — wrapper barcha ishlatish joylarini bir joyda qamraydi.
+export function PeriodFilter(props: ComponentProps<typeof PeriodFilterInner>) {
+  return (
+    <Suspense fallback={null}>
+      <PeriodFilterInner {...props} />
+    </Suspense>
   );
 }

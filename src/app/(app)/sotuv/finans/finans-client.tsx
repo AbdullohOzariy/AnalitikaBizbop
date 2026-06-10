@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { Suspense, useState, useTransition, type ComponentProps } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { Plus, Loader2, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -74,7 +74,7 @@ export function ExpenseForm() {
 }
 
 // ─── Sana filtri ───────────────────────────────────────────────────────────────
-export function ExpenseFilter({ start, end }: { start: string; end: string }) {
+function ExpenseFilterInner({ start, end }: { start: string; end: string }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -118,5 +118,15 @@ export function DeleteExpenseButton({ id }: { id: number }) {
     <Button variant="ghost" size="icon" onClick={onDelete} disabled={isPending} className="h-8 w-8">
       {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5 text-destructive" />}
     </Button>
+  );
+}
+
+// useSearchParams Suspense chegarasini talab qiladi (statik prerender'da xato) —
+// wrapper barcha ishlatish joylarini qamraydi.
+export function ExpenseFilter(props: ComponentProps<typeof ExpenseFilterInner>) {
+  return (
+    <Suspense fallback={null}>
+      <ExpenseFilterInner {...props} />
+    </Suspense>
   );
 }

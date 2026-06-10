@@ -196,8 +196,6 @@ export default async function OosPage({
           const Icon = m.icon;
           return (
             <Link key={v} href={tabHref(v)} scroll={false}
-              role="tab"
-              aria-selected={active}
               aria-current={active ? "page" : undefined}
               className={cn(
                 "inline-flex items-center gap-2 rounded-xl border px-3.5 py-2 text-sm font-medium transition-colors",
