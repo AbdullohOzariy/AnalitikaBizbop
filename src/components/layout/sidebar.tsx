@@ -31,6 +31,7 @@ import {
   Target,
   Wallet,
   Tags,
+  LayoutGrid,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -105,6 +106,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/dashboard-v2",    label: "Dashboard v2",    icon: Sparkles,        roles: [SA, A, "CAT_MANAGER", "CEO"] },
       { href: "/oos",             label: "OOS",             icon: PackageX,        roles: [SA, A, "CAT_MANAGER", "CEO"] },
       { href: "/stockday",        label: "Stockday",        icon: Hourglass,       roles: [SA, A, "CAT_MANAGER", "CEO"] },
+      { href: "/abc-xyz",         label: "ABC/XYZ",         icon: LayoutGrid,      roles: [SA, A, "CAT_MANAGER", "CEO"] },
       { href: "/report",          label: "Hisobot",         icon: Table2,          roles: [SA, A] },
       { href: "/rejalar",         label: "Rejalar",         icon: ClipboardList,   roles: [SA, A, "CAT_MANAGER", "CEO"] },
     ],
