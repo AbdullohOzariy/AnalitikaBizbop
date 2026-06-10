@@ -32,6 +32,7 @@ import {
   Wallet,
   Tags,
   LayoutGrid,
+  CalendarCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -114,6 +115,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "Sotuv",
     items: [
+      { href: "/sotuv/bugun",       label: "Bugun",       icon: CalendarCheck, roles: [SA, A, "CAT_MANAGER", "SUPPLYCHAIN"] },
       { href: "/sotuv/sotib-olish", label: "Sotib olish", icon: ShoppingCart, roles: [SA, A, "CAT_MANAGER", "SUPPLYCHAIN"] },
       { href: "/sotuv/finans",      label: "Finans",      icon: Wallet,       roles: [SA, A, "CEO"] },
     ],

@@ -6,10 +6,16 @@ import { OrderBuilder } from "./order-builder";
 
 export const dynamic = "force-dynamic";
 
-export default async function YangiZakazPage() {
+export default async function YangiZakazPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
   const session = await auth();
   const role = session?.user?.role;
   if (!session?.user || (role !== "SYSTEM_ADMIN" && role !== "CAT_MANAGER")) redirect("/dashboard-v2");
+  const sp = await searchParams;
+  const initialSupplierId = sp.supplier ? Number(sp.supplier) || undefined : undefined;
 
   return (
     <div className="space-y-5">
@@ -18,7 +24,7 @@ export default async function YangiZakazPage() {
         title="Yangi zakaz"
         description="Ta'minotchini tanlang — SKU'lar qoldiq/sotuv asosida taklif bilan chiqadi"
       />
-      <OrderBuilder />
+      <OrderBuilder initialSupplierId={initialSupplierId} />
     </div>
   );
 }

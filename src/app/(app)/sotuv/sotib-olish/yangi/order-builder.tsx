@@ -23,7 +23,7 @@ import {
 
 type Line = { qty: string; price: string };
 
-export function OrderBuilder() {
+export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number }) {
   const router = useRouter();
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
   const [supplierId, setSupplierId] = useState("");
@@ -34,14 +34,6 @@ export function OrderBuilder() {
   const [loadingSup, startSup] = useTransition();
   const [loadingItems, startItems] = useTransition();
   const [saving, startSave] = useTransition();
-
-  useEffect(() => {
-    startSup(async () => {
-      const res = await suppliersForOrderAction();
-      if (res.ok) setSuppliers(res.suppliers);
-      else toast.error(res.error);
-    });
-  }, []);
 
   const onSupplier = (v: string) => {
     setSupplierId(v);
@@ -58,6 +50,21 @@ export function OrderBuilder() {
       } else toast.error(res.error);
     });
   };
+
+  useEffect(() => {
+    startSup(async () => {
+      const res = await suppliersForOrderAction();
+      if (res.ok) {
+        setSuppliers(res.suppliers);
+        // "Bugun" sahifasidan kelganda ta'minotchi oldindan tanlanadi
+        if (initialSupplierId && res.suppliers.some((s) => s.id === initialSupplierId)) {
+          onSupplier(String(initialSupplierId));
+        }
+      } else toast.error(res.error);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- faqat mount'da
+  }, []);
+
 
   const setLine = (pid: number, patch: Partial<Line>) =>
     setLines((prev) => {
