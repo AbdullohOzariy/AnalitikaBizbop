@@ -140,7 +140,7 @@ export function computeAbcXyz(
   return unstable_cache(
     () => _computeAbcXyz(startStr, endStr, branchId),
     ["abcXyz_v1", startStr, endStr, branchId ? String(branchId) : "all"],
-    { tags: [ANALYTICS_CACHE_TAG], revalidate: 300 }
+    { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
   )();
 }
 

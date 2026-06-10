@@ -365,6 +365,7 @@ model ProductSales {
   @@index([periodStart, periodEnd])
   @@index([branchId, periodStart, periodEnd])
   @@index([productId, periodStart, periodEnd])
+  @@index([productId, branchId, periodEnd(sort: Desc)]) // OOS/Stockday "latest snapshot" DISTINCT ON tartibi
   @@index([uploadedFileId])
 }
 

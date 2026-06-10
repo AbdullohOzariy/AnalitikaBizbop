@@ -25,10 +25,12 @@ const pool =
   new Pool({
     connectionString,
     ssl: isLocal ? false : { rejectUnauthorized: true },
-    // Neon pooler limiti (free ~10) — margin qoldiramiz; ulanish o'rnatish qimmat
-    // bo'lgani uchun idle ulanishni uzoqroq ushlaymiz.
+    // Neon pooler limiti (free ~10) — margin qoldiramiz.
     max: 5,
-    idleTimeoutMillis: 30_000,
+    // Yangi ulanish (TLS + pooler auth) ~0.7-1.3s turadi — o'lchangan. 30s idle'da
+    // deyarli har tashrif shu solig'ni to'lardi; 10 daqiqa ushlab turamiz.
+    idleTimeoutMillis: 600_000,
+    keepAlive: true,
     connectionTimeoutMillis: 5_000,
   });
 

@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { unstable_cache } from "next/cache";
 import { auth } from "@/auth";
 import { canSeeAnalytics } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
-import { getDefaultRange } from "@/lib/analytics";
+import { getDefaultRange, ANALYTICS_CACHE_TAG } from "@/lib/analytics";
 import { Hourglass, Flame, AlertTriangle, PackageCheck, Boxes, Layers, Download } from "lucide-react";
 import { PageHeader, StatCard, EmptyState, Pill } from "@/components/common/page";
 import { Card, CardContent } from "@/components/ui/card";
@@ -65,44 +66,21 @@ type Row = {
   periodEnd: string | Date;
 };
 
-export default async function StockdayPage({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | undefined>>;
-}) {
-  const session = await auth();
-  if (!session) redirect("/login");
-  const role = session.user.role;
-  if (!canSeeAnalytics(role)) redirect("/dashboard");
+type Kpi = { faol: number; kritik: number; kam: number; normal: number; ortiqcha: number; ortiqcha_value: number };
 
-  const sp = await searchParams;
-  const view: View =
-    sp.view === "kam" || sp.view === "normal" || sp.view === "ortiqcha" ? sp.view : "kritik";
-  const page = Math.max(1, parseInt(sp.page ?? "1") || 1);
-  const offset = (page - 1) * PAGE_SIZE;
+type Filters = { startStr: string; endStr: string; branchId?: number; categoryId?: number; q: string };
 
-  const def = await getDefaultRange();
-  const startDate = parseDate(sp.start) ?? def.start;
-  const endDate = parseDate(sp.end) ?? def.end;
-  const startStr = startDate.toISOString().slice(0, 10);
-  const endStr = endDate.toISOString().slice(0, 10);
-  const branchId = sp.branchId ? parseInt(sp.branchId) : undefined;
-  const categoryId = sp.categoryId ? parseInt(sp.categoryId) : undefined;
-  const q = sp.q?.trim() ?? "";
-
-  // ── Davr ichidagi xom ma'lumot (range, filial, kategoriya, qidiruv) ──
+// Zaxira kunlari CTE — 731k qatorli ProductSales ustidan og'ir so'rov;
+// pastdagi keshlar tufayli faqat cache-miss'da yuradi.
+function sdCte(f: Filters): Prisma.Sql {
   const inner: Prisma.Sql[] = [
-    Prisma.sql`ps."periodStart" >= ${startStr}::date`,
-    Prisma.sql`ps."periodEnd" <= ${endStr}::date`,
+    Prisma.sql`ps."periodStart" >= ${f.startStr}::date`,
+    Prisma.sql`ps."periodEnd" <= ${f.endStr}::date`,
   ];
-  if (branchId) inner.push(Prisma.sql`ps."branchId" = ${branchId}`);
-  if (categoryId) inner.push(Prisma.sql`p."categoryId" = ${categoryId}`);
-  if (q) inner.push(Prisma.sql`(p.name ILIKE ${"%" + q + "%"} OR p.code::text = ${q})`);
-  const innerWhere = Prisma.join(inner, " AND ");
-
-  // Zaxira kunlari = joriy qoldiq ÷ o'rtacha kunlik sotuv (tanlangan davrdan).
-  // latest — eng so'nggi snapshot (qoldiq); agg — davrdagi o'rtacha kunlik sotuv.
-  const sdCte = Prisma.sql`
+  if (f.branchId) inner.push(Prisma.sql`ps."branchId" = ${f.branchId}`);
+  if (f.categoryId) inner.push(Prisma.sql`p."categoryId" = ${f.categoryId}`);
+  if (f.q) inner.push(Prisma.sql`(p.name ILIKE ${"%" + f.q + "%"} OR p.code::text = ${f.q})`);
+  return Prisma.sql`
     base AS (
       SELECT ps."productId", ps."branchId", ps."stockQty", ps."soldQty", ps."costAmount",
              ps."periodStart", ps."periodEnd",
@@ -110,7 +88,7 @@ export default async function StockdayPage({
       FROM "ProductSales" ps
       JOIN "Product" p ON p.id = ps."productId"
       JOIN "Branch"  b ON b.id = ps."branchId"
-      WHERE ${innerWhere}
+      WHERE ${Prisma.join(inner, " AND ")}
     ),
     latest AS (
       SELECT DISTINCT ON ("productId", "branchId")
@@ -144,51 +122,94 @@ export default async function StockdayPage({
       FROM latest l
       JOIN agg a ON a."productId" = l."productId" AND a."branchId" = l."branchId"
     )`;
+}
 
-  const viewCond: Record<View, Prisma.Sql> = {
-    kritik:   Prisma.sql`sd.stock_days IS NOT NULL AND sd.stock_days <= ${CRITICAL}`,
-    kam:      Prisma.sql`sd.stock_days > ${CRITICAL} AND sd.stock_days <= ${LOW}`,
-    normal:   Prisma.sql`sd.stock_days > ${LOW} AND sd.stock_days <= ${NORMAL}`,
-    ortiqcha: Prisma.sql`sd.stock_days > ${NORMAL}`,
-  };
-  // Kritik/Kam/Normal — eng tez tugaydigani yuqorida; Ortiqcha — eng ko'pi yuqorida
-  const orderRaw = view === "ortiqcha"
-    ? Prisma.raw(`sd.stock_days DESC`)
-    : Prisma.raw(`sd.stock_days ASC`);
+const VIEW_COND: Record<View, Prisma.Sql> = {
+  kritik:   Prisma.sql`sd.stock_days IS NOT NULL AND sd.stock_days <= ${CRITICAL}`,
+  kam:      Prisma.sql`sd.stock_days > ${CRITICAL} AND sd.stock_days <= ${LOW}`,
+  normal:   Prisma.sql`sd.stock_days > ${LOW} AND sd.stock_days <= ${NORMAL}`,
+  ortiqcha: Prisma.sql`sd.stock_days > ${NORMAL}`,
+};
 
-  // KPI'lar (bitta so'rov)
-  const kpiRes = await prisma.$queryRaw<
-    { faol: number; kritik: number; kam: number; normal: number; ortiqcha: number; ortiqcha_value: number }[]
-  >(Prisma.sql`
-    WITH ${sdCte}
-    SELECT
-      count(*) FILTER (WHERE sd.stock_days IS NOT NULL)::int AS faol,
-      count(*) FILTER (WHERE sd.stock_days IS NOT NULL AND sd.stock_days <= ${CRITICAL})::int AS kritik,
-      count(*) FILTER (WHERE sd.stock_days > ${CRITICAL} AND sd.stock_days <= ${LOW})::int AS kam,
-      count(*) FILTER (WHERE sd.stock_days > ${LOW} AND sd.stock_days <= ${NORMAL})::int AS normal,
-      count(*) FILTER (WHERE sd.stock_days > ${NORMAL})::int AS ortiqcha,
-      COALESCE(SUM(sd.stock_value) FILTER (WHERE sd.stock_days > ${NORMAL}), 0)::float8 AS ortiqcha_value
-    FROM sd
-  `);
-  const kpi = kpiRes[0] ?? { faol: 0, kritik: 0, kam: 0, normal: 0, ortiqcha: 0, ortiqcha_value: 0 };
+const filterKey = (f: Filters) =>
+  [f.startStr, f.endStr, f.branchId ?? "all", f.categoryId ?? "all", f.q].join("|");
 
-  // Jadval + sahifalash uchun soni
-  const [rows, countRes, branches, categories] = await Promise.all([
-    prisma.$queryRaw<Row[]>(Prisma.sql`
-      WITH ${sdCte}
-      SELECT sd."productId", sd."branchId", sd.code, sd.pname, sd.bname, sd."periodEnd",
-             sd."stockQty", sd.avg_daily AS "avgDaily", sd.stock_days AS "stockDays", sd.stock_value AS "stockValue",
-             c.name AS cname
-      FROM sd
-      LEFT JOIN "Category" c ON c.id = sd."categoryId"
-      WHERE ${viewCond[view]}
-      ORDER BY ${orderRaw}
-      LIMIT ${PAGE_SIZE} OFFSET ${offset}
-    `),
-    prisma.$queryRaw<{ n: number }[]>(Prisma.sql`
-      WITH ${sdCte}
-      SELECT count(*)::int AS n FROM sd WHERE ${viewCond[view]}
-    `),
+// Ma'lumot faqat fayl yuklanganda o'zgaradi — kesh tag orqali invalidatsiya bo'ladi.
+const cachedKpi = (f: Filters) =>
+  unstable_cache(
+    async (): Promise<Kpi> => {
+      const res = await prisma.$queryRaw<Kpi[]>(Prisma.sql`
+        WITH ${sdCte(f)}
+        SELECT
+          count(*) FILTER (WHERE sd.stock_days IS NOT NULL)::int AS faol,
+          count(*) FILTER (WHERE ${VIEW_COND.kritik})::int AS kritik,
+          count(*) FILTER (WHERE ${VIEW_COND.kam})::int AS kam,
+          count(*) FILTER (WHERE ${VIEW_COND.normal})::int AS normal,
+          count(*) FILTER (WHERE ${VIEW_COND.ortiqcha})::int AS ortiqcha,
+          COALESCE(SUM(sd.stock_value) FILTER (WHERE ${VIEW_COND.ortiqcha}), 0)::float8 AS ortiqcha_value
+        FROM sd
+      `);
+      return res[0] ?? { faol: 0, kritik: 0, kam: 0, normal: 0, ortiqcha: 0, ortiqcha_value: 0 };
+    },
+    ["stockdayKpi_v1", filterKey(f)],
+    { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
+  )();
+
+const cachedRows = (f: Filters, view: View, page: number) =>
+  unstable_cache(
+    async (): Promise<Row[]> => {
+      // Kritik/Kam/Normal — eng tez tugaydigani yuqorida; Ortiqcha — eng ko'pi yuqorida
+      const orderRaw = view === "ortiqcha"
+        ? Prisma.raw(`sd.stock_days DESC`)
+        : Prisma.raw(`sd.stock_days ASC`);
+      return prisma.$queryRaw<Row[]>(Prisma.sql`
+        WITH ${sdCte(f)}
+        SELECT sd."productId", sd."branchId", sd.code, sd.pname, sd.bname, sd."periodEnd",
+               sd."stockQty", sd.avg_daily AS "avgDaily", sd.stock_days AS "stockDays", sd.stock_value AS "stockValue",
+               c.name AS cname
+        FROM sd
+        LEFT JOIN "Category" c ON c.id = sd."categoryId"
+        WHERE ${VIEW_COND[view]}
+        ORDER BY ${orderRaw}
+        LIMIT ${PAGE_SIZE} OFFSET ${(page - 1) * PAGE_SIZE}
+      `);
+    },
+    ["stockdayRows_v1", filterKey(f), view, String(page)],
+    { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
+  )();
+
+export default async function StockdayPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
+  const session = await auth();
+  if (!session) redirect("/login");
+  const role = session.user.role;
+  if (!canSeeAnalytics(role)) redirect("/dashboard");
+
+  const sp = await searchParams;
+  const view: View =
+    sp.view === "kam" || sp.view === "normal" || sp.view === "ortiqcha" ? sp.view : "kritik";
+  const page = Math.max(1, parseInt(sp.page ?? "1") || 1);
+  const offset = (page - 1) * PAGE_SIZE;
+
+  const def = await getDefaultRange();
+  const startDate = parseDate(sp.start) ?? def.start;
+  const endDate = parseDate(sp.end) ?? def.end;
+  const startStr = startDate.toISOString().slice(0, 10);
+  const endStr = endDate.toISOString().slice(0, 10);
+  const branchId = sp.branchId ? parseInt(sp.branchId) : undefined;
+  const categoryId = sp.categoryId ? parseInt(sp.categoryId) : undefined;
+  const q = sp.q?.trim() ?? "";
+
+  const filters: Filters = { startStr, endStr, branchId, categoryId, q };
+
+  // KPI + jadval keshlangan; alohida count so'rovi YO'Q — tab soni KPI'da allaqachon bor
+  // (oldin bir xil og'ir CTE 3 marta yurardi: KPI, jadval, count).
+  const [kpi, rows, branches, categories] = await Promise.all([
+    cachedKpi(filters),
+    cachedRows(filters, view, page),
     prisma.branch.findMany({ orderBy: { sortOrder: "asc" }, select: { id: true, name: true } }),
     prisma.category.findMany({
       orderBy: { sortOrder: "asc" },
@@ -197,7 +218,7 @@ export default async function StockdayPage({
     }),
   ]);
 
-  const total = countRes[0]?.n ?? 0;
+  const total = kpi[view];
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const kritikRate = kpi.faol > 0 ? (kpi.kritik / kpi.faol) * 100 : 0;
 

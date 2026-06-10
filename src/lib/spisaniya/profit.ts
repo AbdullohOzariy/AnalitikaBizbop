@@ -139,6 +139,8 @@ export function computeProfitTree(range: ChiqimRange, branchId?: number): Promis
       return _computeProfitTree(range, branchId, branchName);
     },
     ["computeProfitTree_v2", isoDay(range.start), isoDay(range.end), branchId ? String(branchId) : "all"],
-    { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
+    // revalidate: false EMAS — chiqim komponenti bizbop (bot) bazasidan keladi va
+    // u yerdagi yozuvlar revalidateTag chaqirmaydi; 5 daqiqalik yangilanish yetarli.
+    { tags: [ANALYTICS_CACHE_TAG], revalidate: 300 }
   )();
 }

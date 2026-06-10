@@ -78,13 +78,13 @@ export const dailyVisitsByBranch = (range: DateRange) =>
   unstable_cache(
     () => _dailyVisitsByBranch(range),
     ["v3_dailyVisits", ...makeKey(range)],
-    { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
+    { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
   )();
 export const dailyReceiptsByBranch = (range: DateRange) =>
   unstable_cache(
     () => _dailyReceiptsByBranch(range),
     ["v3_dailyReceipts", ...makeKey(range)],
-    { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
+    { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
   )();
 
 // ============ Marja breakdown (category + branch) ============
@@ -160,7 +160,7 @@ export const marjaBreakdown = (range: DateRange, branchId?: number) =>
   unstable_cache(
     () => _marjaBreakdown(range, branchId),
     ["v3_marja", ...makeKey(range, branchId)],
-    { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
+    { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
   )();
 
 // ============ Marja iyerarxiyasi: Guruh → Kategoriya ============
@@ -266,7 +266,7 @@ export const kpiByBranch = (range: DateRange) =>
   unstable_cache(
     () => _kpiByBranch(range),
     ["v3_kpiByBranch", ...makeKey(range)],
-    { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
+    { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
   )();
 
 // ============ Guruh/Kategoriya bo'yicha kunlik savdo dinamikasi ============

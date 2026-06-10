@@ -70,7 +70,7 @@ export const sumCategorySalesProRated = (
   unstable_cache(
     () => _sumCategorySalesProRated(range, branchId, categoryId),
     ["sumCategorySalesProRated", ...makeKey(range, branchId, categoryId ? `c${categoryId}` : undefined)],
-    { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
+    { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
   )();
 
 /** Filiallar bo'yicha pro-rated savdo summasi — bitta query. */
@@ -215,7 +215,7 @@ export const computeKPI = (range: DateRange, branchId?: number) =>
   unstable_cache(
     () => _computeKPI(range, branchId),
     ["computeKPI_v2", ...makeKey(range, branchId)],
-    { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
+    { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
   )();
 
 export type DailyPoint = { date: string; value: number };
@@ -246,7 +246,7 @@ export const dailySalesSeries = (range: DateRange, branchId?: number) =>
   unstable_cache(
     () => _dailySalesSeries(range, branchId),
     ["dailySalesSeries_v2", ...makeKey(range, branchId)],
-    { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
+    { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
   )();
 
 async function _dailyReceiptsSeries(
@@ -272,7 +272,7 @@ export const dailyReceiptsSeries = (range: DateRange, branchId?: number) =>
   unstable_cache(
     () => _dailyReceiptsSeries(range, branchId),
     ["dailyReceiptsSeries_v2", ...makeKey(range, branchId)],
-    { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
+    { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
   )();
 
 async function _dailyVisitsSeries(
@@ -299,7 +299,7 @@ export const dailyVisitsSeries = (range: DateRange, branchId?: number) =>
     () => _dailyVisitsSeries(range, branchId),
     // _v2: eski stale kesh yozuvlari ishlatilmasin (boshqa funksiyalar kabi versiyalangan)
     ["dailyVisitsSeries_v2", ...makeKey(range, branchId)],
-    { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
+    { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
   )();
 
 export type BranchShareRow = {
@@ -328,7 +328,7 @@ export const branchShare = (range: DateRange) =>
   unstable_cache(
     () => _branchShare(range),
     ["branchShare", ...makeKey(range)],
-    { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
+    { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
   )();
 
 export type CategoryRow = {
@@ -368,7 +368,7 @@ export const topCategories = (range: DateRange, branchId?: number, limit = 10) =
   unstable_cache(
     () => _topCategories(range, branchId, limit),
     ["topCategories", ...makeKey(range, branchId, `l${limit}`)],
-    { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
+    { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
   )();
 
 export type BranchPerformanceRow = {
@@ -411,7 +411,7 @@ export const branchPerformance = (range: DateRange) =>
   unstable_cache(
     () => _branchPerformance(range),
     ["branchPerformance_v2", ...makeKey(range)],
-    { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
+    { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
   )();
 
 /** Filial × kategoriya bo'yicha pro-rated sotuv (2D map). */
@@ -553,7 +553,7 @@ export const branchReport = (range: DateRange) =>
   unstable_cache(
     () => _branchReport(range),
     ["branchReport_v2", ...makeKey(range)],
-    { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
+    { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
   )();
 
 export type MissingDays = {
@@ -602,7 +602,7 @@ export const findMissingDays = (range: DateRange) =>
   unstable_cache(
     () => _findMissingDays(range),
     ["missingDays", ...makeKey(range)],
-    { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
+    { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
   )();
 
 /** Mavjud ma'lumot davri (default range hisoblash uchun). */
@@ -622,7 +622,7 @@ const _cachedDefaultRange = unstable_cache(
     return { start: isoDay(startOfMonth(ref)), end: isoDay(endOfMonth(ref)) };
   },
   ["defaultRange"],
-  { tags: [ANALYTICS_CACHE_TAG], revalidate: 3600 }
+  { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
 );
 
 export async function getDefaultRange(): Promise<DateRange> {

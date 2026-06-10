@@ -6,6 +6,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { actionError } from "@/lib/action-error";
+import { ANALYTICS_CACHE_TAG } from "@/lib/analytics";
 import { normalizeName } from "@/lib/parsers/utils";
 
 export type SkuRow = {
@@ -103,6 +104,8 @@ export async function updateProductAction(input: {
     await prisma.product.update({ where: { id: pid }, data });
     revalidatePath("/iyerarxiya");
     revalidateTag("iyerarxiya", "max");
+    // Mahsulot nomi/kategoriyasi marja/savdo keshlarida ko'rinadi
+    revalidateTag(ANALYTICS_CACHE_TAG, "max");
     return { ok: true };
   } catch (err) {
     return actionError(err, "updateProduct");
@@ -279,6 +282,7 @@ export async function saveGroupAction(input: {
       });
     }
     revalidatePath("/iyerarxiya");
+    revalidateTag(ANALYTICS_CACHE_TAG, "max"); // guruh/kategoriya nomi-tartibi analitika keshlarida
     return { ok: true };
   } catch (err) {
     return fail(err);
@@ -294,6 +298,7 @@ export async function deleteGroupAction(id: number): Promise<Result> {
     }
     await prisma.categoryGroup.delete({ where: { id } });
     revalidatePath("/iyerarxiya");
+    revalidateTag(ANALYTICS_CACHE_TAG, "max"); // guruh/kategoriya nomi-tartibi analitika keshlarida
     return { ok: true };
   } catch (err) {
     return fail(err);
@@ -344,6 +349,7 @@ export async function saveCategoryAction(input: {
       });
     }
     revalidatePath("/iyerarxiya");
+    revalidateTag(ANALYTICS_CACHE_TAG, "max"); // guruh/kategoriya nomi-tartibi analitika keshlarida
     return { ok: true };
   } catch (err) {
     return fail(err);
@@ -365,6 +371,7 @@ export async function deleteCategoryAction(id: number): Promise<Result> {
     }
     await prisma.category.delete({ where: { id } });
     revalidatePath("/iyerarxiya");
+    revalidateTag(ANALYTICS_CACHE_TAG, "max"); // guruh/kategoriya nomi-tartibi analitika keshlarida
     return { ok: true };
   } catch (err) {
     return fail(err);

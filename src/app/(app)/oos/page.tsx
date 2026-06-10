@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { unstable_cache } from "next/cache";
 import { auth } from "@/auth";
 import { canSeeAnalytics } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
-import { getDefaultRange } from "@/lib/analytics";
+import { getDefaultRange, ANALYTICS_CACHE_TAG } from "@/lib/analytics";
 import { PackageX, AlertTriangle, Boxes, Layers, TrendingDown } from "lucide-react";
 import { PageHeader, StatCard, EmptyState, Pill } from "@/components/common/page";
 import { Card, CardContent } from "@/components/ui/card";
@@ -47,6 +48,80 @@ type Row = {
   stockQty: string | null; soldQty: string | null; amount: string; periodEnd: string | Date;
 };
 
+type Kpi = { jami: number; oos: number; low: number; dead: number; oos_amount: number };
+
+type Filters = { startStr: string; endStr: string; branchId?: number; categoryId?: number; q: string };
+
+// ── Eng so'nggi snapshot CTE (DISTINCT ON productId, branchId) — 731k qatorli
+// ProductSales ustidan og'ir so'rov; pastdagi keshlar tufayli faqat cache-miss'da yuradi.
+function latestCte(f: Filters): Prisma.Sql {
+  const inner: Prisma.Sql[] = [
+    Prisma.sql`ps."periodStart" >= ${f.startStr}::date`,
+    Prisma.sql`ps."periodEnd" <= ${f.endStr}::date`,
+  ];
+  if (f.branchId) inner.push(Prisma.sql`ps."branchId" = ${f.branchId}`);
+  if (f.categoryId) inner.push(Prisma.sql`p."categoryId" = ${f.categoryId}`);
+  if (f.q) inner.push(Prisma.sql`(p.name ILIKE ${"%" + f.q + "%"} OR p.code::text = ${f.q})`);
+  return Prisma.sql`
+    latest AS (
+      SELECT DISTINCT ON (ps."productId", ps."branchId")
+             ps."productId", ps."branchId", ps."stockQty", ps."soldQty", ps."amount", ps."periodEnd",
+             p.code, p.name AS pname, p."categoryId", b.name AS bname
+      FROM "ProductSales" ps
+      JOIN "Product" p ON p.id = ps."productId"
+      JOIN "Branch"  b ON b.id = ps."branchId"
+      WHERE ${Prisma.join(inner, " AND ")}
+      ORDER BY ps."productId", ps."branchId", ps."periodEnd" DESC
+    )`;
+}
+
+const VIEW_COND: Record<View, Prisma.Sql> = {
+  oos:  Prisma.sql`l."stockQty" IS NOT NULL AND l."stockQty" <= 0`,
+  low:  Prisma.sql`l."stockQty" > 0 AND l."soldQty" IS NOT NULL AND l."soldQty" > 0 AND l."stockQty" < l."soldQty"`,
+  dead: Prisma.sql`l."stockQty" > 0 AND (l."soldQty" IS NULL OR l."soldQty" = 0)`,
+};
+
+const filterKey = (f: Filters) =>
+  [f.startStr, f.endStr, f.branchId ?? "all", f.categoryId ?? "all", f.q].join("|");
+
+// Ma'lumot faqat fayl yuklanganda o'zgaradi — kesh tag orqali invalidatsiya bo'ladi.
+const cachedKpi = (f: Filters) =>
+  unstable_cache(
+    async (): Promise<Kpi> => {
+      const res = await prisma.$queryRaw<Kpi[]>(Prisma.sql`
+        WITH ${latestCte(f)}
+        SELECT
+          count(*)::int AS jami,
+          count(*) FILTER (WHERE ${VIEW_COND.oos})::int  AS oos,
+          count(*) FILTER (WHERE ${VIEW_COND.low})::int  AS low,
+          count(*) FILTER (WHERE ${VIEW_COND.dead})::int AS dead,
+          COALESCE(SUM(l."amount") FILTER (WHERE ${VIEW_COND.oos}), 0)::float8 AS oos_amount
+        FROM latest l
+      `);
+      return res[0] ?? { jami: 0, oos: 0, low: 0, dead: 0, oos_amount: 0 };
+    },
+    ["oosKpi_v1", filterKey(f)],
+    { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
+  )();
+
+const cachedRows = (f: Filters, view: View, page: number) =>
+  unstable_cache(
+    async (): Promise<Row[]> => {
+      return prisma.$queryRaw<Row[]>(Prisma.sql`
+        WITH ${latestCte(f)}
+        SELECT l."productId", l."branchId", l.code, l.pname, l.bname, l."stockQty", l."soldQty", l."amount", l."periodEnd",
+               c.name AS cname
+        FROM latest l
+        LEFT JOIN "Category" c ON c.id = l."categoryId"
+        WHERE ${VIEW_COND[view]}
+        ORDER BY l."amount" DESC
+        LIMIT ${PAGE_SIZE} OFFSET ${(page - 1) * PAGE_SIZE}
+      `);
+    },
+    ["oosRows_v1", filterKey(f), view, String(page)],
+    { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
+  )();
+
 export default async function OosPage({
   searchParams,
 }: {
@@ -71,65 +146,13 @@ export default async function OosPage({
   const categoryId = sp.categoryId ? parseInt(sp.categoryId) : undefined;
   const q = sp.q?.trim() ?? "";
 
-  // ── Eng so'nggi snapshot uchun ichki filtr (DISTINCT ON productId, branchId) ──
-  const inner: Prisma.Sql[] = [
-    Prisma.sql`ps."periodStart" >= ${startStr}::date`,
-    Prisma.sql`ps."periodEnd" <= ${endStr}::date`,
-  ];
-  if (branchId) inner.push(Prisma.sql`ps."branchId" = ${branchId}`);
-  if (categoryId) inner.push(Prisma.sql`p."categoryId" = ${categoryId}`);
-  if (q) inner.push(Prisma.sql`(p.name ILIKE ${"%" + q + "%"} OR p.code::text = ${q})`);
-  const innerWhere = Prisma.join(inner, " AND ");
+  const filters: Filters = { startStr, endStr, branchId, categoryId, q };
 
-  const latestCte = Prisma.sql`
-    latest AS (
-      SELECT DISTINCT ON (ps."productId", ps."branchId")
-             ps."productId", ps."branchId", ps."stockQty", ps."soldQty", ps."amount", ps."periodEnd",
-             p.code, p.name AS pname, p."categoryId", b.name AS bname
-      FROM "ProductSales" ps
-      JOIN "Product" p ON p.id = ps."productId"
-      JOIN "Branch"  b ON b.id = ps."branchId"
-      WHERE ${innerWhere}
-      ORDER BY ps."productId", ps."branchId", ps."periodEnd" DESC
-    )`;
-
-  const viewCond: Record<View, Prisma.Sql> = {
-    oos:  Prisma.sql`l."stockQty" IS NOT NULL AND l."stockQty" <= 0`,
-    low:  Prisma.sql`l."stockQty" > 0 AND l."soldQty" IS NOT NULL AND l."soldQty" > 0 AND l."stockQty" < l."soldQty"`,
-    dead: Prisma.sql`l."stockQty" > 0 AND (l."soldQty" IS NULL OR l."soldQty" = 0)`,
-  };
-
-  // KPI'lar (bitta so'rov)
-  const kpiRes = await prisma.$queryRaw<
-    { jami: number; oos: number; low: number; dead: number; oos_amount: number }[]
-  >(Prisma.sql`
-    WITH ${latestCte}
-    SELECT
-      count(*)::int AS jami,
-      count(*) FILTER (WHERE l."stockQty" IS NOT NULL AND l."stockQty" <= 0)::int AS oos,
-      count(*) FILTER (WHERE l."stockQty" > 0 AND l."soldQty" IS NOT NULL AND l."soldQty" > 0 AND l."stockQty" < l."soldQty")::int AS low,
-      count(*) FILTER (WHERE l."stockQty" > 0 AND (l."soldQty" IS NULL OR l."soldQty" = 0))::int AS dead,
-      COALESCE(SUM(l."amount") FILTER (WHERE l."stockQty" IS NOT NULL AND l."stockQty" <= 0), 0)::float8 AS oos_amount
-    FROM latest l
-  `);
-  const kpi = kpiRes[0] ?? { jami: 0, oos: 0, low: 0, dead: 0, oos_amount: 0 };
-
-  // Jadval + sahifalash uchun soni
-  const [rows, countRes, branches, categories] = await Promise.all([
-    prisma.$queryRaw<Row[]>(Prisma.sql`
-      WITH ${latestCte}
-      SELECT l."productId", l."branchId", l.code, l.pname, l.bname, l."stockQty", l."soldQty", l."amount", l."periodEnd",
-             c.name AS cname
-      FROM latest l
-      LEFT JOIN "Category" c ON c.id = l."categoryId"
-      WHERE ${viewCond[view]}
-      ORDER BY l."amount" DESC
-      LIMIT ${PAGE_SIZE} OFFSET ${offset}
-    `),
-    prisma.$queryRaw<{ n: number }[]>(Prisma.sql`
-      WITH ${latestCte}
-      SELECT count(*)::int AS n FROM latest l WHERE ${viewCond[view]}
-    `),
+  // KPI + jadval keshlangan; alohida count so'rovi YO'Q — tab soni KPI'da allaqachon bor
+  // (oldin bir xil og'ir CTE 3 marta yurardi: KPI, jadval, count).
+  const [kpi, rows, branches, categories] = await Promise.all([
+    cachedKpi(filters),
+    cachedRows(filters, view, page),
     prisma.branch.findMany({ orderBy: { sortOrder: "asc" }, select: { id: true, name: true } }),
     prisma.category.findMany({
       orderBy: { sortOrder: "asc" },
@@ -138,7 +161,7 @@ export default async function OosPage({
     }),
   ]);
 
-  const total = countRes[0]?.n ?? 0;
+  const total = view === "oos" ? kpi.oos : view === "low" ? kpi.low : kpi.dead;
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const oosRate = kpi.jami > 0 ? (kpi.oos / kpi.jami) * 100 : 0;
 

@@ -346,7 +346,7 @@ export const dailyForecastSeries = (range: DateRange, branchId?: number) =>
   unstable_cache(
     () => _dailyForecastSeries(range, branchId),
     ["dailyForecastSeries", isoDay(range.start), isoDay(range.end), branchId ? String(branchId) : "all"],
-    { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
+    { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
   )();
 
 // ─── Oy bo'yicha prognoz holati (Rejalar UI uchun) ─────────────────────────────

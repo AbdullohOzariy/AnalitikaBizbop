@@ -34,7 +34,13 @@ function getPool(): Pool | null {
   const url = process.env.BOT_DATABASE_URL;
   if (!url) return null;
   if (!globalForBotPool.botPool) {
-    globalForBotPool.botPool = new Pool({ connectionString: url, max: 5, idleTimeoutMillis: 10_000 });
+    // idleTimeout 10s edi — har so'rov yangi TLS ulanish (~1s) to'lardi; 10 daqiqa ushlaymiz.
+    globalForBotPool.botPool = new Pool({
+      connectionString: url,
+      max: 5,
+      idleTimeoutMillis: 600_000,
+      keepAlive: true,
+    });
   }
   return globalForBotPool.botPool;
 }

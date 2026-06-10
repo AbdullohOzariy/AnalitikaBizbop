@@ -1,9 +1,11 @@
 "use server";
 
+import { revalidateTag } from "next/cache";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { isAdminTier, isSystemAdmin } from "@/lib/roles";
+import { ANALYTICS_CACHE_TAG } from "@/lib/analytics";
 
 export type ReceiptMetricCell = { receiptCount: number; itemsPerReceipt: number };
 
@@ -90,6 +92,8 @@ export async function upsertReceiptMetricAction(
 
     if (p.receiptCount === 0 && p.itemsPerReceipt === 0) {
       await prisma.dailyReceiptMetric.deleteMany({ where: { branchId: p.branchId, date } });
+      // Chek metrikalari dashboard keshlarida (receiptSeries, kpiByBranch) ishlatiladi
+      revalidateTag(ANALYTICS_CACHE_TAG, "max");
       return { ok: true };
     }
     await prisma.dailyReceiptMetric.upsert({
@@ -103,6 +107,7 @@ export async function upsertReceiptMetricAction(
       },
       update: { receiptCount: p.receiptCount, itemsPerReceipt: p.itemsPerReceipt },
     });
+    revalidateTag(ANALYTICS_CACHE_TAG, "max");
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Noma'lum xato" };
