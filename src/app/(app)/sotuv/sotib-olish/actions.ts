@@ -7,6 +7,8 @@ import { requireCatManagerOrAdmin } from "@/lib/auth-helpers";
 import { isSystemAdmin } from "@/lib/roles";
 import { actionError } from "@/lib/action-error";
 import { scopeParentIds, scopeProductWhere } from "@/lib/scope";
+import { getDefaultRange } from "@/lib/analytics";
+import { Prisma } from "@/generated/prisma/client";
 
 export type OrderItemInput = { productId: number; quantity: number; price: number };
 export type SupplierOption = {
@@ -27,7 +29,26 @@ export type BuilderItem = {
   xyz: string | null;
   lead: number | null; // lead time (kun) — ta'minotchi profilida kiritiladi
   arxiv: boolean; // no-aktiv (arxivlangan) — ro'yxatda belgisi bilan ko'rinadi
+  dailyAvg: number; // kunlik o'rtacha sotuv (oxirgi ma'lumot oynasi, filiallar yig'indisi)
+  minStock: number | null; // kunlik × (zakaz oralig'i + lead) × XYZ buferi; lead yo'q — null
 };
+
+// Zakaz kunlari orasidagi MAKSIMAL interval (eng yomon stsenariy himoyasi).
+// Bo'sh — istalgan kuni zakaz (1); bitta kun — haftada bir (7).
+function maxOrderGapDays(weekdays: number[]): number {
+  const uniq = [...new Set(weekdays)].sort((a, b) => a - b);
+  if (uniq.length === 0) return 1;
+  if (uniq.length === 1) return 7;
+  let max = 0;
+  for (let i = 0; i < uniq.length; i++) {
+    const next = i + 1 === uniq.length ? uniq[0] + 7 : uniq[i + 1];
+    max = Math.max(max, next - uniq[i]);
+  }
+  return max;
+}
+
+// Xavfsizlik buferi — talab notekisligi (XYZ) bo'yicha: notekisga ko'proq zaxira
+const XYZ_BUFFER: Record<string, number> = { X: 1.1, Y: 1.25, Z: 1.5 };
 
 /** Joriy foydalanuvchi qamrovidagi kategoriya id'lari (admin — barchasi = null). */
 // Qamrov helperlari markazlashgan: src/lib/scope.ts
@@ -72,17 +93,54 @@ export async function supplierItemsAction(
     if (scope !== null && scope.length === 0) return { ok: true, items: [] };
     // Joriy holat Product'ga denormalizatsiya qilingan (har yuklashda yangilanadi) —
     // ProductSales tarixini skanlamaymiz, bir zumda o'qiymiz.
-    const products = await prisma.product.findMany({
-      where: { supplierId: sid, ...scopeProductWhere(scope) },
-      select: { id: true, code: true, name: true, currentStock: true, currentSold: true, abcClass: true, xyzClass: true, leadTimeDays: true, archivedAt: true, category: { select: { name: true } } },
-      orderBy: { name: "asc" },
-      take: 2000,
-    });
+    const [products, supplier, range] = await Promise.all([
+      prisma.product.findMany({
+        where: { supplierId: sid, ...scopeProductWhere(scope) },
+        select: { id: true, code: true, name: true, currentStock: true, currentSold: true, abcClass: true, xyzClass: true, leadTimeDays: true, archivedAt: true, category: { select: { name: true } } },
+        orderBy: { name: "asc" },
+        take: 2000,
+      }),
+      prisma.supplier.findUnique({ where: { id: sid }, select: { orderWeekdays: true } }),
+      getDefaultRange(),
+    ]);
+
+    // Kunlik o'rtacha sotuv — oxirgi ma'lumot oynasida (filiallar yig'indisi),
+    // Stockday "Sotuv/kun" bilan bir xil hisob: jami sotilgan ÷ ma'lumotli kunlar.
+    const pids = products.map((p) => p.id);
+    const dailyRows = pids.length
+      ? await prisma.$queryRaw<{ pid: number; sold: number; days: number }[]>(Prisma.sql`
+          SELECT ps."productId" AS pid,
+                 COALESCE(SUM(ps."soldQty"), 0)::float8 AS sold,
+                 COUNT(DISTINCT ps."periodStart")::int AS days
+          FROM "ProductSales" ps
+          WHERE ps."productId" = ANY(${pids}::int[])
+            AND ps."periodStart" >= ${range.start.toISOString().slice(0, 10)}::date
+            AND ps."periodEnd" <= ${range.end.toISOString().slice(0, 10)}::date
+          GROUP BY 1
+        `)
+      : [];
+    const dailyByPid = new Map(dailyRows.map((r) => [r.pid, r.days > 0 ? r.sold / r.days : 0]));
+    const orderGap = maxOrderGapDays(supplier?.orderWeekdays ?? []);
+
     const items: BuilderItem[] = products.map((p) => {
       const stock = Math.round(Number(p.currentStock ?? 0)); // so'nggi davr qoldig'i
-      const sold = Math.round(Number(p.currentSold ?? 0)); // so'nggi davr sotuvi (talab)
-      const suggested = Math.max(0, sold - stock);
-      return { productId: p.id, code: p.code, name: p.name, sub: p.category?.name ?? null, stock, sold, suggested, abc: p.abcClass, xyz: p.xyzClass, lead: p.leadTimeDays, arxiv: p.archivedAt != null };
+      const sold = Math.round(Number(p.currentSold ?? 0)); // so'nggi davr sotuvi
+      const dailyAvg = dailyByPid.get(p.id) ?? 0;
+      // Min stock = kunlik × (zakaz oralig'i + lead) × XYZ buferi —
+      // "bugun zakaz bermasangiz, keyingi imkoniyat + yetib kelish davrini qoplaydigan zaxira"
+      const buffer = XYZ_BUFFER[p.xyzClass ?? ""] ?? 1.25;
+      const minStock = p.leadTimeDays != null
+        ? Math.ceil(dailyAvg * (orderGap + p.leadTimeDays) * buffer)
+        : null;
+      // Taklif: min stock'gacha to'ldirish; lead kiritilmagan — eski qo'pol formula
+      const suggested = minStock != null
+        ? Math.max(0, minStock - stock)
+        : Math.max(0, sold - stock);
+      return {
+        productId: p.id, code: p.code, name: p.name, sub: p.category?.name ?? null,
+        stock, sold, suggested, abc: p.abcClass, xyz: p.xyzClass, lead: p.leadTimeDays,
+        arxiv: p.archivedAt != null, dailyAvg: Math.round(dailyAvg * 10) / 10, minStock,
+      };
     });
     return { ok: true, items };
   } catch (err) {

@@ -155,6 +155,13 @@ export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number
         </div>
       )}
 
+      {items.length > 0 && (
+        <p className="text-[11px] text-muted-foreground">
+          Min stock = kunlik sotuv × (zakaz oralig'i + lead time) × XYZ buferi (X 1.1 · Y 1.25 · Z 1.5).
+          Miqdor taklifi — min stock'gacha to'ldirish. ⚠ — qoldiq min stock'dan past.
+        </p>
+      )}
+
       {loadingItems ? (
         <p className="flex items-center gap-1.5 py-6 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> SKU'lar yuklanmoqda…</p>
       ) : !supplierId ? (
@@ -171,7 +178,8 @@ export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number
                     <TableHead className="w-[80px]">Kod</TableHead>
                     <TableHead>SKU</TableHead>
                     <TableHead className="text-right w-[80px]">Qoldiq</TableHead>
-                    <TableHead className="text-right w-[80px]">Sotuv</TableHead>
+                    <TableHead className="text-right w-[80px]" title="Kunlik o'rtacha sotuv (oxirgi ma'lumot oynasi, filiallar yig'indisi)">Kunlik</TableHead>
+                    <TableHead className="text-right w-[90px]" title="Min stock = kunlik sotuv × (zakaz oralig'i + lead time) × XYZ buferi">Min stock</TableHead>
                     <TableHead className="text-right w-[70px]" title="Lead time — zakazdan kelguncha kunlar">Lead</TableHead>
                     <TableHead className="w-[110px]">Miqdor</TableHead>
                     <TableHead className="w-[120px]">Narx</TableHead>
@@ -208,7 +216,20 @@ export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number
                           </span>
                         </TableCell>
                         <TableCell className="text-right tabular-nums text-xs text-muted-foreground">{it.stock.toLocaleString("uz-UZ")}</TableCell>
-                        <TableCell className="text-right tabular-nums text-xs text-muted-foreground">{it.sold.toLocaleString("uz-UZ")}</TableCell>
+                        <TableCell className="text-right tabular-nums text-xs text-muted-foreground">
+                          {it.dailyAvg > 0 ? it.dailyAvg.toLocaleString("uz-UZ", { maximumFractionDigits: 1 }) : "—"}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums text-xs">
+                          {it.minStock == null ? (
+                            <span className="text-muted-foreground" title="Lead time kiritilmagan — ta'minotchi profilida to'ldiring">—</span>
+                          ) : it.stock < it.minStock ? (
+                            <span className="font-bold text-destructive" title="Qoldiq min stock'dan past — buyurtma shart!">
+                              ⚠ {it.minStock.toLocaleString("uz-UZ")}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">{it.minStock.toLocaleString("uz-UZ")}</span>
+                          )}
+                        </TableCell>
                         <TableCell className="text-right tabular-nums text-xs text-muted-foreground">{it.lead != null ? `${it.lead} kun` : "—"}</TableCell>
                         <TableCell>
                           <Input type="number" inputMode="decimal" value={l.qty} placeholder={String(it.suggested)}
