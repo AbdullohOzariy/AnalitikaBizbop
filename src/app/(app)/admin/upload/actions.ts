@@ -495,7 +495,9 @@ async function uploadV3(
     const ppEntries = [...perProduct.entries()];
     for (let i = 0; i < ppEntries.length; i += BATCH) {
       const chunk = ppEntries.slice(i, i + BATCH);
-      const vals = chunk.map(([pid, a]) => Prisma.sql`(${pid}, ${a.stock}::numeric, ${a.sold}::numeric)`);
+      // ${pid}::int MAJBURIY: FROM (VALUES ...) da kontekst yo'q — tipsiz parametr
+      // text bo'lib, `p.id = v.pid` "operator does not exist: integer = text" beradi.
+      const vals = chunk.map(([pid, a]) => Prisma.sql`(${pid}::int, ${a.stock}::numeric, ${a.sold}::numeric)`);
       await prisma.$executeRaw`
         UPDATE "Product" p SET
           "currentStock" = v.stock, "currentSold" = v.sold, "lastSalePeriod" = ${result.periodEnd}::date
