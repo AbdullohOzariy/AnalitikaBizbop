@@ -27,7 +27,7 @@ export default async function ZakazDetailPage({
       supplier: { select: { name: true } },
       createdBy: { select: { name: true } },
       items: {
-        select: { productId: true, quantity: true, price: true, product: { select: { code: true, name: true, category: { select: { name: true } } } } },
+        select: { productId: true, quantity: true, price: true, packCount: true, packSize: true, product: { select: { code: true, name: true, category: { select: { name: true } } } } },
         orderBy: { product: { name: "asc" } },
       },
     },
@@ -51,6 +51,8 @@ export default async function ZakazDetailPage({
       sub: i.product.category?.name ?? null,
       quantity: Number(i.quantity),
       price: Number(i.price),
+      packCount: i.packCount,
+      packSize: i.packSize,
     })),
   };
 

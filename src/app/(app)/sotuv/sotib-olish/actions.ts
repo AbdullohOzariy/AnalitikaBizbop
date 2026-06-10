@@ -10,7 +10,13 @@ import { scopeParentIds, scopeProductWhere } from "@/lib/scope";
 import { getDefaultRange } from "@/lib/analytics";
 import { Prisma } from "@/generated/prisma/client";
 
-export type OrderItemInput = { productId: number; quantity: number; price: number };
+export type OrderItemInput = {
+  productId: number;
+  quantity: number; // dona
+  price: number; // dona narxi
+  packCount?: number | null; // blok/yashik soni (kiritilgan bo'lsa)
+  packSize?: number | null; // pachka hajmi (dona)
+};
 export type SupplierOption = {
   id: number;
   name: string;
@@ -30,6 +36,7 @@ export type BuilderItem = {
   lead: number | null; // lead time (kun) — ta'minotchi profilida kiritiladi
   arxiv: boolean; // no-aktiv (arxivlangan) — ro'yxatda belgisi bilan ko'rinadi
   dailyAvg: number; // kunlik o'rtacha sotuv (oxirgi ma'lumot oynasi, filiallar yig'indisi)
+  packSize: number | null; // blok/pachkadagi dona soni (Product'da eslab qolinadi)
   minStock: number | null; // kunlik × (zakaz oralig'i + lead) × XYZ buferi; lead yo'q — null
 };
 
@@ -96,7 +103,7 @@ export async function supplierItemsAction(
     const [products, supplier, range] = await Promise.all([
       prisma.product.findMany({
         where: { supplierId: sid, ...scopeProductWhere(scope) },
-        select: { id: true, code: true, name: true, currentStock: true, currentSold: true, abcClass: true, xyzClass: true, leadTimeDays: true, archivedAt: true, category: { select: { name: true } } },
+        select: { id: true, code: true, name: true, currentStock: true, currentSold: true, abcClass: true, xyzClass: true, leadTimeDays: true, archivedAt: true, packSize: true, category: { select: { name: true } } },
         orderBy: { name: "asc" },
         take: 2000,
       }),
@@ -140,6 +147,7 @@ export async function supplierItemsAction(
         productId: p.id, code: p.code, name: p.name, sub: p.category?.name ?? null,
         stock, sold, suggested, abc: p.abcClass, xyz: p.xyzClass, lead: p.leadTimeDays,
         arxiv: p.archivedAt != null, dailyAvg: Math.round(dailyAvg * 10) / 10, minStock,
+        packSize: p.packSize,
       };
     });
     return { ok: true, items };
@@ -152,7 +160,22 @@ const itemSchema = z.object({
   productId: z.coerce.number().int().positive(),
   quantity: z.coerce.number().positive().max(1_000_000),
   price: z.coerce.number().nonnegative().max(1_000_000_000_000),
+  packCount: z.coerce.number().int().positive().max(100_000).nullable().optional(),
+  packSize: z.coerce.number().int().positive().max(100_000).nullable().optional(),
 });
+
+/** Kiritilgan pachka hajmlarini Product'da eslab qolamiz (keyingi zakazda tayyor). */
+async function rememberPackSizes(items: { productId: number; packSize?: number | null }[]) {
+  const updates = items.filter((i) => i.packSize != null);
+  for (const u of updates) {
+    await prisma.product
+      .updateMany({
+        where: { id: u.productId, NOT: { packSize: u.packSize! } },
+        data: { packSize: u.packSize! },
+      })
+      .catch(() => null);
+  }
+}
 
 type ActorUser = { id: string | number; role: string };
 
@@ -189,10 +212,11 @@ export async function createOrderAction(input: {
         createdById: Number(user.id),
         note: input.note?.trim() || null,
         status: "DRAFT",
-        items: { create: items.map((i) => ({ productId: i.productId, quantity: i.quantity, price: i.price })) },
+        items: { create: items.map((i) => ({ productId: i.productId, quantity: i.quantity, price: i.price, packCount: i.packCount ?? null, packSize: i.packSize ?? null })) },
       },
       select: { id: true },
     });
+    await rememberPackSizes(items);
     revalidatePath("/sotuv/sotib-olish");
     return { ok: true, id: order.id };
   } catch (err) {
@@ -218,9 +242,10 @@ export async function updateOrderItemsAction(
     if (scopeErr) return { ok: false, error: scopeErr };
     await prisma.$transaction([
       prisma.purchaseOrderItem.deleteMany({ where: { orderId: oid } }),
-      prisma.purchaseOrderItem.createMany({ data: parsed.map((i) => ({ orderId: oid, productId: i.productId, quantity: i.quantity, price: i.price })) }),
+      prisma.purchaseOrderItem.createMany({ data: parsed.map((i) => ({ orderId: oid, productId: i.productId, quantity: i.quantity, price: i.price, packCount: i.packCount ?? null, packSize: i.packSize ?? null })) }),
       prisma.purchaseOrder.update({ where: { id: oid }, data: { note: note?.trim() || null } }),
     ]);
+    await rememberPackSizes(parsed);
     revalidatePath(`/sotuv/sotib-olish/${oid}`);
     revalidatePath("/sotuv/sotib-olish");
     return { ok: true };

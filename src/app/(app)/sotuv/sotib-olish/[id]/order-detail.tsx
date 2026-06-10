@@ -26,7 +26,7 @@ export type OrderData = {
   createdAt: string;
   sentAt: string | null;
   receivedAt: string | null;
-  items: { productId: number; code: number; name: string; sub: string | null; quantity: number; price: number }[];
+  items: { productId: number; code: number; name: string; sub: string | null; quantity: number; price: number; packCount: number | null; packSize: number | null }[];
 };
 
 type Line = { qty: string; price: string };
@@ -56,7 +56,7 @@ export function OrderDetail({ order }: { order: OrderData }) {
 
   const saveItems = () => {
     const payload = items
-      .map((i) => { const l = lines.get(i.productId)!; return { productId: i.productId, quantity: Number(l.qty) || 0, price: Number(l.price) || 0 }; })
+      .map((i) => { const l = lines.get(i.productId)!; const qty = Number(l.qty) || 0; return { productId: i.productId, quantity: qty, price: Number(l.price) || 0, packCount: qty === i.quantity ? i.packCount : null, packSize: i.packSize }; })
       .filter((x) => x.quantity > 0);
     if (payload.length === 0) { toast.error("Kamida bitta SKU miqdori kerak."); return; }
     startSave(async () => {
@@ -145,6 +145,9 @@ export function OrderDetail({ order }: { order: OrderData }) {
                     <TableCell>
                       <Input type="number" inputMode="decimal" value={l.qty} disabled={!editable || busy}
                         onChange={(e) => setLine(i.productId, { qty: e.target.value })} className="h-8 w-24 text-xs" />
+                      {i.packCount != null && i.packSize != null && Number(l.qty) === i.quantity && (
+                        <p className="mt-0.5 text-[10px] text-muted-foreground">{i.packCount} blok × {i.packSize} dona</p>
+                      )}
                     </TableCell>
                     <TableCell>
                       <Input type="number" inputMode="decimal" value={l.price} disabled={!editable || busy}

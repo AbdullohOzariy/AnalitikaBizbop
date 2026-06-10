@@ -21,7 +21,8 @@ import {
   type SupplierOption, type BuilderItem,
 } from "../actions";
 
-type Line = { qty: string; price: string };
+// qty (dona) — saqlanadigan asosiy qiymat; blok×pack kiritilsa qty avtomatik hisoblanadi
+type Line = { qty: string; price: string; blok: string; pack: string };
 
 export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number }) {
   const router = useRouter();
@@ -45,7 +46,11 @@ export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number
         setItems(res.items);
         // taklif miqdorini oldindan to'ldiramiz (narx bo'sh)
         const m = new Map<number, Line>();
-        for (const it of res.items) if (it.suggested > 0) m.set(it.productId, { qty: String(it.suggested), price: "" });
+        for (const it of res.items) {
+          if (it.suggested > 0) {
+            m.set(it.productId, { qty: String(it.suggested), price: "", blok: "", pack: it.packSize != null ? String(it.packSize) : "" });
+          }
+        }
         setLines(m);
       } else toast.error(res.error);
     });
@@ -69,8 +74,17 @@ export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number
   const setLine = (pid: number, patch: Partial<Line>) =>
     setLines((prev) => {
       const n = new Map(prev);
-      const cur = n.get(pid) ?? { qty: "", price: "" };
-      n.set(pid, { ...cur, ...patch });
+      const cur = n.get(pid) ?? { qty: "", price: "", blok: "", pack: "" };
+      const next = { ...cur, ...patch };
+      // Blok × Pachka kiritilsa — dona avtomatik (masalan 5 × 12 = 60)
+      if (patch.blok !== undefined || patch.pack !== undefined) {
+        const b = Number(next.blok);
+        const p = Number(next.pack);
+        if (b > 0 && p > 0) next.qty = String(b * p);
+      }
+      // Dona qo'lda kiritilsa — blok hisobi eskiradi, tozalaymiz (pachka qoladi)
+      if (patch.qty !== undefined) next.blok = "";
+      n.set(pid, next);
       return n;
     });
 
@@ -81,10 +95,17 @@ export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number
   );
 
   const chosen = useMemo(() => {
-    const out: { productId: number; quantity: number; price: number }[] = [];
+    const out: { productId: number; quantity: number; price: number; packCount: number | null; packSize: number | null }[] = [];
     for (const [pid, l] of lines) {
       const qty = Number(l.qty); const price = Number(l.price) || 0;
-      if (qty > 0) out.push({ productId: pid, quantity: qty, price });
+      const blok = Number(l.blok); const pack = Number(l.pack);
+      if (qty > 0) {
+        out.push({
+          productId: pid, quantity: qty, price,
+          packCount: blok > 0 ? blok : null,
+          packSize: pack > 0 ? pack : null,
+        });
+      }
     }
     return out;
   }, [lines]);
@@ -181,14 +202,15 @@ export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number
                     <TableHead className="text-right w-[80px]" title="Kunlik o'rtacha sotuv (oxirgi ma'lumot oynasi, filiallar yig'indisi)">Kunlik</TableHead>
                     <TableHead className="text-right w-[90px]" title="Min stock = kunlik sotuv × (zakaz oralig'i + lead time) × XYZ buferi">Min stock</TableHead>
                     <TableHead className="text-right w-[70px]" title="Lead time — zakazdan kelguncha kunlar">Lead</TableHead>
-                    <TableHead className="w-[110px]">Miqdor</TableHead>
+                    <TableHead className="w-[150px]" title="Blok/yashik soni × pachkadagi dona — Miqdor avtomatik hisoblanadi">Blok × Pachka</TableHead>
+                    <TableHead className="w-[110px]">Miqdor (dona)</TableHead>
                     <TableHead className="w-[120px]">Narx</TableHead>
                     <TableHead className="text-right w-[120px]">Summa</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {shown.map((it) => {
-                    const l = lines.get(it.productId) ?? { qty: "", price: "" };
+                    const l = lines.get(it.productId) ?? { qty: "", price: "", blok: "", pack: "" };
                     const sum = (Number(l.qty) || 0) * (Number(l.price) || 0);
                     return (
                       // Fon — SKU'ning ABC×XYZ matritsa holatiga ko'ra (AX buyurtmada ustuvor!)
@@ -231,6 +253,19 @@ export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number
                           )}
                         </TableCell>
                         <TableCell className="text-right tabular-nums text-xs text-muted-foreground">{it.lead != null ? `${it.lead} kun` : "—"}</TableCell>
+                        <TableCell>
+                          <span className="flex items-center gap-1">
+                            <Input type="number" inputMode="numeric" value={l.blok}
+                              placeholder={it.packSize && it.suggested > 0 ? String(Math.ceil(it.suggested / it.packSize)) : "blok"}
+                              onChange={(e) => setLine(it.productId, { blok: e.target.value })}
+                              className="h-8 w-16 text-right text-xs" title="Blok/yashik soni" />
+                            <span className="text-xs text-muted-foreground">×</span>
+                            <Input type="number" inputMode="numeric" value={l.pack}
+                              placeholder={it.packSize != null ? String(it.packSize) : "dona"}
+                              onChange={(e) => setLine(it.productId, { pack: e.target.value })}
+                              className="h-8 w-16 text-right text-xs" title="Pachkadagi dona soni (SKU'da eslab qolinadi)" />
+                          </span>
+                        </TableCell>
                         <TableCell>
                           <Input type="number" inputMode="decimal" value={l.qty} placeholder={String(it.suggested)}
                             onChange={(e) => setLine(it.productId, { qty: e.target.value })} className="h-8 w-24 text-xs" />
