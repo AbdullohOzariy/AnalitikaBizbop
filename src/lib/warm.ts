@@ -41,6 +41,7 @@ export async function warmAnalyticsCaches(reason: string): Promise<void> {
     // ABC/XYZ default davri — sahifadagi bilan bir xil: oxirgi 3 oy
     const abcStart = isoDay(new Date(Date.UTC(def.end.getUTCFullYear(), def.end.getUTCMonth() - 2, 1)));
     const snap = { startStr, endStr, q: "" };
+    const todayStr = isoDay(new Date());
 
     const results = await Promise.allSettled([
       // Dashboard v1
@@ -66,8 +67,8 @@ export async function warmAnalyticsCaches(reason: string): Promise<void> {
       // OOS / Stockday — KPI + birinchi sahifa (default tab)
       oosKpi(snap),
       oosRows(snap, "oos", 1, 50),
-      stockdayKpi(snap),
-      stockdayRows(snap, "kritik", 1, 50),
+      stockdayKpi(snap, todayStr),
+      stockdayRows(snap, "kritik", 1, 50, todayStr),
     ]);
 
     const failed = results.filter((r) => r.status === "rejected").length;

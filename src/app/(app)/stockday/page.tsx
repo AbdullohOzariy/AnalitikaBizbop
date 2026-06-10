@@ -6,7 +6,7 @@ import { canSeeAnalytics } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { getDefaultRange } from "@/lib/analytics";
 import { stockdayKpi, stockdayRows, type StockView, type SnapshotFilters } from "@/lib/snapshot-reports";
-import { Hourglass, Flame, AlertTriangle, PackageCheck, Boxes, Layers, Download } from "lucide-react";
+import { Hourglass, Flame, AlertTriangle, PackageCheck, Boxes, Layers, Download, TimerOff } from "lucide-react";
 import { PageHeader, StatCard, EmptyState, Pill } from "@/components/common/page";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -84,6 +84,8 @@ export default async function StockdayPage({
   const q = sp.q?.trim() ?? "";
 
   const filters: SnapshotFilters = { startStr, endStr, branchId, categoryId, q };
+  // Kechikish xavfi "bugun"ga bog'liq (keyingi zakaz kunigacha hisob) — kunlik kesh kaliti
+  const todayStr = new Date().toISOString().slice(0, 10);
 
   // Yengil so'rovlar (filtr ro'yxatlari) — shell darhol chiqadi; og'ir qism Suspense'da oqib keladi.
   const [branches, categories] = await Promise.all([
@@ -121,7 +123,7 @@ export default async function StockdayPage({
         key={[startStr, endStr, branchId ?? "all", categoryId ?? "all", q, view, page].join("|")}
         fallback={<StockdayDataSkeleton />}
       >
-        <StockdayData filters={filters} view={view} page={page} sp={sp} />
+        <StockdayData filters={filters} view={view} page={page} sp={sp} todayStr={todayStr} />
       </Suspense>
     </div>
   );
@@ -141,14 +143,15 @@ function StockdayDataSkeleton() {
 
 // Og'ir qism — KPI + tablar + jadval (keshlangan so'rovlar). Suspense ichida oqib keladi.
 async function StockdayData({
-  filters, view, page, sp,
+  filters, view, page, sp, todayStr,
 }: {
   filters: SnapshotFilters; view: View; page: number; sp: Record<string, string | undefined>;
+  todayStr: string;
 }) {
   const offset = (page - 1) * PAGE_SIZE;
   const [kpi, rows] = await Promise.all([
-    stockdayKpi(filters),
-    stockdayRows(filters, view, page, PAGE_SIZE),
+    stockdayKpi(filters, todayStr),
+    stockdayRows(filters, view, page, PAGE_SIZE, todayStr),
   ]);
 
   const total = kpi[view];
@@ -177,9 +180,12 @@ async function StockdayData({
   return (
     <>
       {/* KPI */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard label="Faol SKU (qoldiq+sotuv)" value={kpi.faol.toLocaleString("uz-UZ")} icon={Layers} tone="default"
           hint="qoldiq va davr sotuvi bor" />
+        <StatCard label="Kechikish xavfi" value={kpi.xavf.toLocaleString("uz-UZ")} icon={TimerOff}
+          tone={kpi.xavf > 0 ? "red" : "default"}
+          hint="keyingi zakazda ham yetib kelguncha tugaydi" />
         <StatCard label="Kritik (≤3 kun)" value={kpi.kritik.toLocaleString("uz-UZ")} icon={Flame} tone="red"
           hint={`${kritikRate.toFixed(1)}% · zudlik bilan buyurtma`} />
         <StatCard label="Kam (4–7 kun)" value={kpi.kam.toLocaleString("uz-UZ")} icon={AlertTriangle} tone="orange"
@@ -244,6 +250,7 @@ async function StockdayData({
                       <TableHead className="text-right w-[90px]">Qoldiq</TableHead>
                       <TableHead className="text-right w-[110px]">Sotuv/kun</TableHead>
                       <TableHead className="text-right w-[120px]">Zaxira kunlari</TableHead>
+                      <TableHead className="text-right w-[110px]" title="Keyingi zakaz kunigacha + lead time (ta'minotchi profilida kiritiladi)">Keladi</TableHead>
                       <TableHead className="text-right w-[130px]">Qoldiq qiymati</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -264,6 +271,16 @@ async function StockdayData({
                         <TableCell className="text-right tabular-nums text-xs text-muted-foreground">{fmtQty(r.avgDaily)}</TableCell>
                         <TableCell className="text-right">
                           <Pill tone={VIEW_META[view].pill}>{fmtDays(r.stockDays)}</Pill>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {r.arrivalDays == null ? (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          ) : r.stockDays != null && Number(r.stockDays) < r.arrivalDays ? (
+                            // Xavf: keyingi zakazda ham buyurtma yetib kelguncha zaxira tugaydi
+                            <Pill tone="red" className="gap-1 px-2 py-0 text-[10px] font-bold">⚠ {r.arrivalDays} kun</Pill>
+                          ) : (
+                            <span className="tabular-nums text-xs text-muted-foreground">{r.arrivalDays} kun</span>
+                          )}
                         </TableCell>
                         <TableCell className="text-right tabular-nums text-xs">{fmtAmount(r.stockValue)}</TableCell>
                       </TableRow>

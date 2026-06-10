@@ -118,6 +118,7 @@ export const STOCK_NORMAL = 30;  // ≤ 30 kun — yetarli; > 30 — ortiqcha
 
 export type StockdayKpi = {
   faol: number; kritik: number; kam: number; normal: number; ortiqcha: number; ortiqcha_value: number;
+  xavf: number; // kechikish xavfi: zaxira kunlari < yetib kelish kunlari
 };
 
 export type StockdayRow = {
@@ -126,16 +127,18 @@ export type StockdayRow = {
   stockQty: string | null; avgDaily: string | null; stockDays: string | null; stockValue: string | null;
   periodEnd: string | Date;
   abc: string | null; xyz: string | null; // matritsa holati — qator rangi uchun
+  arrivalDays: number | null; // keyingi zakaz kunigacha + lead time (lead kiritilmagan — null)
 };
 
 // Zaxira kunlari CTE — latest (qoldiq) + agg (davrdagi o'rtacha kunlik sotuv).
-function sdCte(f: SnapshotFilters): Prisma.Sql {
+function sdCte(f: SnapshotFilters, todayDow: number): Prisma.Sql {
   return Prisma.sql`
     base AS (
       SELECT ps."productId", ps."branchId", ps."stockQty", ps."soldQty", ps."costAmount",
              ps."periodStart", ps."periodEnd",
              p.code, p.name AS pname, p."categoryId", b.name AS bname,
-             p."abcClass" AS abc, p."xyzClass" AS xyz
+             p."abcClass" AS abc, p."xyzClass" AS xyz,
+             p."leadTimeDays" AS lead, p."supplierId" AS supid
       FROM "ProductSales" ps
       JOIN "Product" p ON p.id = ps."productId"
       JOIN "Branch"  b ON b.id = ps."branchId"
@@ -143,7 +146,7 @@ function sdCte(f: SnapshotFilters): Prisma.Sql {
     ),
     latest AS (
       SELECT DISTINCT ON ("productId", "branchId")
-             "productId", "branchId", "stockQty", "periodEnd", code, pname, "categoryId", bname, abc, xyz
+             "productId", "branchId", "stockQty", "periodEnd", code, pname, "categoryId", bname, abc, xyz, lead, supid
       FROM base
       ORDER BY "productId", "branchId", "periodEnd" DESC
     ),
@@ -157,7 +160,16 @@ function sdCte(f: SnapshotFilters): Prisma.Sql {
     ),
     sd AS (
       SELECT l."productId", l."branchId", l.code, l.pname, l."categoryId", l.bname, l."periodEnd",
-             l.abc, l.xyz,
+             l.abc, l.xyz, l.lead,
+             -- Yetib kelish kunlari = keyingi zakaz kunigacha (ta'minotchi haftalik jadvalidan,
+             -- belgilanmagan bo'lsa 0 — istalgan kuni) + SKU lead time. Lead kiritilmagan — NULL.
+             CASE WHEN l.lead IS NOT NULL THEN
+               COALESCE((
+                 SELECT MIN((((wd - ${todayDow}) % 7) + 7) % 7)
+                 FROM "Supplier" sup, unnest(sup."orderWeekdays") AS wd
+                 WHERE sup.id = l.supid
+               ), 0) + l.lead
+             END AS arrival_days,
              l."stockQty",
              (a.sold_total / NULLIF(a.tracked_days, 0)) AS avg_daily,
              CASE
@@ -183,37 +195,42 @@ const STOCK_VIEW_COND: Record<StockView, Prisma.Sql> = {
   ortiqcha: Prisma.sql`sd.stock_days > ${STOCK_NORMAL}`,
 };
 
-export const stockdayKpi = (f: SnapshotFilters) =>
+// todayStr — kechikish xavfi "bugun"ga bog'liq; kesh kalitiga kiradi (kunlik yangilanish)
+export const stockdayKpi = (f: SnapshotFilters, todayStr: string) =>
   unstable_cache(
     async (): Promise<StockdayKpi> => {
+      const todayDow = new Date(todayStr + "T00:00:00.000Z").getUTCDay();
       const res = await prisma.$queryRaw<StockdayKpi[]>(Prisma.sql`
-        WITH ${sdCte(f)}
+        WITH ${sdCte(f, todayDow)}
         SELECT
           count(*) FILTER (WHERE sd.stock_days IS NOT NULL)::int AS faol,
           count(*) FILTER (WHERE ${STOCK_VIEW_COND.kritik})::int AS kritik,
           count(*) FILTER (WHERE ${STOCK_VIEW_COND.kam})::int AS kam,
           count(*) FILTER (WHERE ${STOCK_VIEW_COND.normal})::int AS normal,
           count(*) FILTER (WHERE ${STOCK_VIEW_COND.ortiqcha})::int AS ortiqcha,
-          COALESCE(SUM(sd.stock_value) FILTER (WHERE ${STOCK_VIEW_COND.ortiqcha}), 0)::float8 AS ortiqcha_value
+          COALESCE(SUM(sd.stock_value) FILTER (WHERE ${STOCK_VIEW_COND.ortiqcha}), 0)::float8 AS ortiqcha_value,
+          count(*) FILTER (WHERE sd.stock_days IS NOT NULL AND sd.arrival_days IS NOT NULL
+                             AND sd.stock_days < sd.arrival_days)::int AS xavf
         FROM sd
       `);
-      return res[0] ?? { faol: 0, kritik: 0, kam: 0, normal: 0, ortiqcha: 0, ortiqcha_value: 0 };
+      return res[0] ?? { faol: 0, kritik: 0, kam: 0, normal: 0, ortiqcha: 0, ortiqcha_value: 0, xavf: 0 };
     },
-    ["stockdayKpi_v1", filterKey(f)],
+    ["stockdayKpi_v2", filterKey(f), todayStr],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
   )();
 
-export const stockdayRows = (f: SnapshotFilters, view: StockView, page: number, pageSize: number) =>
+export const stockdayRows = (f: SnapshotFilters, view: StockView, page: number, pageSize: number, todayStr: string) =>
   unstable_cache(
     async (): Promise<StockdayRow[]> => {
+      const todayDow = new Date(todayStr + "T00:00:00.000Z").getUTCDay();
       // Kritik/Kam/Normal — eng tez tugaydigani yuqorida; Ortiqcha — eng ko'pi yuqorida
       const orderRaw = view === "ortiqcha"
         ? Prisma.raw(`sd.stock_days DESC`)
         : Prisma.raw(`sd.stock_days ASC`);
       return prisma.$queryRaw<StockdayRow[]>(Prisma.sql`
-        WITH ${sdCte(f)}
+        WITH ${sdCte(f, todayDow)}
         SELECT sd."productId", sd."branchId", sd.code, sd.pname, sd.bname, sd."periodEnd",
-               sd.abc, sd.xyz,
+               sd.abc, sd.xyz, sd.arrival_days::int AS "arrivalDays",
                sd."stockQty", sd.avg_daily AS "avgDaily", sd.stock_days AS "stockDays", sd.stock_value AS "stockValue",
                c.name AS cname
         FROM sd
@@ -223,6 +240,6 @@ export const stockdayRows = (f: SnapshotFilters, view: StockView, page: number, 
         LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}
       `);
     },
-    ["stockdayRows_v2", filterKey(f), view, String(page), String(pageSize)],
+    ["stockdayRows_v3", filterKey(f), view, String(page), String(pageSize), todayStr],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
   )();
