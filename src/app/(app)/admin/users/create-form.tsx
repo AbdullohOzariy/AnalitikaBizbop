@@ -44,7 +44,7 @@ function InputField({
 
 const ROLE_OPTIONS = [
   { value: "CAT_MANAGER",  label: "Kategoriya menejeri", desc: "Dashboard V2, Spisaniya, OOS — faqat ko'rish" },
-  { value: "SUPPLYCHAIN",  label: "Ta'minot zanjiri",    desc: "Analitika/sotuv/spisaniya — ko'rish; Ta'minotchilar — to'liq boshqarish" },
+  { value: "SUPPLYCHAIN",  label: "Supplychain",    desc: "Analitika/sotuv/spisaniya — ko'rish; Ta'minotchilar — to'liq boshqarish" },
   { value: "CEO",          label: "CEO",                 desc: "Dashboard V1+V2, Spisaniya, OOS — faqat ko'rish" },
   { value: "ADMIN",        label: "Admin (ko'rish)",     desc: "Tizimdan boshqa hammasi — faqat ko'rish, tahrir yo'q" },
   { value: "SYSTEM_ADMIN", label: "System Admin",        desc: "To'liq huquq — barcha tahrir + Tizim bo'limi" },

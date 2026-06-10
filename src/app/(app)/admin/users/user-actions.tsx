@@ -30,7 +30,7 @@ const ROLE_OPTS = [
   { v: "SYSTEM_ADMIN", l: "System Admin", d: "To'liq huquq + Tizim" },
   { v: "ADMIN",        l: "Admin (ko'rish)", d: "Tizimdan boshqa hammasi — faqat ko'rish" },
   { v: "CAT_MANAGER",  l: "Kategoriya menejeri", d: "O'z kategoriyalari" },
-  { v: "SUPPLYCHAIN",  l: "Ta'minot zanjiri", d: "Analitika ko'rish + Ta'minotchilar boshqaruvi" },
+  { v: "SUPPLYCHAIN",  l: "Supplychain", d: "Analitika ko'rish + Ta'minotchilar boshqaruvi" },
   { v: "CEO",          l: "CEO", d: "Ko'rish (Dashboard V1+V2)" },
 ] as const;
 const ROLE_LABEL: Record<string, string> = Object.fromEntries(ROLE_OPTS.map((o) => [o.v, o.l]));

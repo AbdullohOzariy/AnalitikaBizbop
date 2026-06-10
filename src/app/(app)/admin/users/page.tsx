@@ -24,6 +24,7 @@ const ROLE_CONFIG: Record<
   ADMIN:        { label: "Admin (ko'rish)",     tone: "blue",   icon: "A" },
   CEO:          { label: "CEO",                  tone: "blue",   icon: "C" },
   CAT_MANAGER:  { label: "Kategoriya menejeri", tone: "blue",   icon: "K" },
+  SUPPLYCHAIN:  { label: "Supplychain",         tone: "blue",   icon: "S" },
   VIEWER:       { label: "Ko'ruvchi",           tone: "muted",  icon: "V" },
 };
 
