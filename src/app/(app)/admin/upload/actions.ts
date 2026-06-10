@@ -1,12 +1,14 @@
 "use server";
 
 import { revalidatePath, revalidateTag } from "next/cache";
+import { after } from "next/server";
 import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
 import { FileType, AliasSource, UploadStatus } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
 import { requireAdminUser } from "@/lib/auth-helpers";
 import { ANALYTICS_CACHE_TAG } from "@/lib/analytics";
+import { warmAnalyticsCaches } from "@/lib/warm";
 import { sha256 } from "@/lib/parsers/utils";
 import { parseSalesWorkbook } from "@/lib/parsers/sales";
 import { parseVisitsWorkbook } from "@/lib/parsers/visits";
@@ -287,6 +289,8 @@ export async function uploadSalesAction(formData: FormData): Promise<UploadResul
     revalidatePath("/admin/files");
     revalidatePath("/dashboard");
     revalidateTag(ANALYTICS_CACHE_TAG, "max");
+    // Javob qaytgach fonda keshlarni qayta isitamiz — birinchi tashrifchi kutmasin
+    after(() => warmAnalyticsCaches("upload"));
 
     const branchCount = uniqueAliases.length;
     return {
@@ -530,6 +534,8 @@ async function uploadV3(
   revalidatePath("/admin/files");
   revalidatePath("/dashboard");
   revalidateTag(ANALYTICS_CACHE_TAG, "max");
+    // Javob qaytgach fonda keshlarni qayta isitamiz — birinchi tashrifchi kutmasin
+    after(() => warmAnalyticsCaches("upload"));
 
   const uniqueProdCount = new Set(result.productRows.map((r) => r.productCode)).size;
 
@@ -689,6 +695,8 @@ export async function uploadVisitsAction(formData: FormData): Promise<UploadResu
     revalidatePath("/admin/files");
     revalidatePath("/dashboard");
     revalidateTag(ANALYTICS_CACHE_TAG, "max");
+    // Javob qaytgach fonda keshlarni qayta isitamiz — birinchi tashrifchi kutmasin
+    after(() => warmAnalyticsCaches("upload"));
 
     return {
       ok: true,

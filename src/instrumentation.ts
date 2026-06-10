@@ -6,6 +6,12 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
 
+  // Kesh isitish — deploy/restart'dan keyin birinchi tashrifchi og'ir hisobni
+  // kutmasin. Fonda (startup'ni bloklamaydi), xato bo'lsa faqat log.
+  import("@/lib/warm")
+    .then((m) => m.warmAnalyticsCaches("server-start"))
+    .catch((err) => console.warn("[instrumentation] warm xatosi:", err instanceof Error ? err.message : err));
+
   const token = process.env.BOT_TOKEN;
   const base = (process.env.WEBHOOK_URL || "").replace(/\/$/, "");
   if (!token || !base) {

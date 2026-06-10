@@ -1,11 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { unstable_cache } from "next/cache";
 import { auth } from "@/auth";
 import { canSeeAnalytics } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@/generated/prisma/client";
-import { getDefaultRange, ANALYTICS_CACHE_TAG } from "@/lib/analytics";
+import { getDefaultRange } from "@/lib/analytics";
+import { stockdayKpi, stockdayRows, type StockView, type SnapshotFilters } from "@/lib/snapshot-reports";
 import { Hourglass, Flame, AlertTriangle, PackageCheck, Boxes, Layers, Download } from "lucide-react";
 import { PageHeader, StatCard, EmptyState, Pill } from "@/components/common/page";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,12 +16,7 @@ import { BazaFilter } from "../baza/baza-filter";
 import { BazaPagination } from "../baza/baza-pagination";
 
 const PAGE_SIZE = 50;
-type View = "kritik" | "kam" | "normal" | "ortiqcha";
-
-// Zaxira kunlari oraliqlari (Days of Supply): qoldiq ÷ o'rtacha kunlik sotuv
-const CRITICAL = 3;   // ≤ 3 kun  — zudlik bilan buyurtma
-const LOW = 7;        // ≤ 7 kun  — tez orada buyurtma
-const NORMAL = 30;    // ≤ 30 kun — yetarli; > 30 — ortiqcha
+type View = StockView;
 
 function parseDate(s: string | undefined): Date | undefined {
   if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return undefined;
@@ -59,124 +53,8 @@ const VIEW_META: Record<View, {
   ortiqcha: { label: "Ortiqcha (>30 kun)", short: "Ortiqcha", icon: Boxes,         tone: "blue",   pill: "blue" },
 };
 
-type Row = {
-  productId: number; branchId: number;
-  code: number; pname: string; bname: string; cname: string | null;
-  stockQty: string | null; avgDaily: string | null; stockDays: string | null; stockValue: string | null;
-  periodEnd: string | Date;
-};
 
-type Kpi = { faol: number; kritik: number; kam: number; normal: number; ortiqcha: number; ortiqcha_value: number };
-
-type Filters = { startStr: string; endStr: string; branchId?: number; categoryId?: number; q: string };
-
-// Zaxira kunlari CTE — 731k qatorli ProductSales ustidan og'ir so'rov;
-// pastdagi keshlar tufayli faqat cache-miss'da yuradi.
-function sdCte(f: Filters): Prisma.Sql {
-  const inner: Prisma.Sql[] = [
-    Prisma.sql`ps."periodStart" >= ${f.startStr}::date`,
-    Prisma.sql`ps."periodEnd" <= ${f.endStr}::date`,
-  ];
-  if (f.branchId) inner.push(Prisma.sql`ps."branchId" = ${f.branchId}`);
-  if (f.categoryId) inner.push(Prisma.sql`p."categoryId" = ${f.categoryId}`);
-  if (f.q) inner.push(Prisma.sql`(p.name ILIKE ${"%" + f.q + "%"} OR p.code::text = ${f.q})`);
-  return Prisma.sql`
-    base AS (
-      SELECT ps."productId", ps."branchId", ps."stockQty", ps."soldQty", ps."costAmount",
-             ps."periodStart", ps."periodEnd",
-             p.code, p.name AS pname, p."categoryId", b.name AS bname
-      FROM "ProductSales" ps
-      JOIN "Product" p ON p.id = ps."productId"
-      JOIN "Branch"  b ON b.id = ps."branchId"
-      WHERE ${Prisma.join(inner, " AND ")}
-    ),
-    latest AS (
-      SELECT DISTINCT ON ("productId", "branchId")
-             "productId", "branchId", "stockQty", "periodEnd", code, pname, "categoryId", bname
-      FROM base
-      ORDER BY "productId", "branchId", "periodEnd" DESC
-    ),
-    agg AS (
-      SELECT "productId", "branchId",
-             COALESCE(SUM("soldQty"), 0) AS sold_total,
-             COALESCE(SUM("costAmount"), 0) AS cost_total,
-             COUNT(DISTINCT "periodStart") AS tracked_days
-      FROM base
-      GROUP BY "productId", "branchId"
-    ),
-    sd AS (
-      SELECT l."productId", l."branchId", l.code, l.pname, l."categoryId", l.bname, l."periodEnd",
-             l."stockQty",
-             (a.sold_total / NULLIF(a.tracked_days, 0)) AS avg_daily,
-             CASE
-               WHEN l."stockQty" > 0 AND a.sold_total > 0 AND a.tracked_days > 0
-               THEN l."stockQty" / (a.sold_total / a.tracked_days)
-               ELSE NULL
-             END AS stock_days,
-             -- Muzlagan kapital: qoldiq × o'rtacha dona tannarxi (davr tannarxi ÷ sotilgan dona)
-             CASE
-               WHEN l."stockQty" > 0 AND a.sold_total > 0 AND a.cost_total > 0
-               THEN l."stockQty" * (a.cost_total / a.sold_total)
-               ELSE NULL
-             END AS stock_value
-      FROM latest l
-      JOIN agg a ON a."productId" = l."productId" AND a."branchId" = l."branchId"
-    )`;
-}
-
-const VIEW_COND: Record<View, Prisma.Sql> = {
-  kritik:   Prisma.sql`sd.stock_days IS NOT NULL AND sd.stock_days <= ${CRITICAL}`,
-  kam:      Prisma.sql`sd.stock_days > ${CRITICAL} AND sd.stock_days <= ${LOW}`,
-  normal:   Prisma.sql`sd.stock_days > ${LOW} AND sd.stock_days <= ${NORMAL}`,
-  ortiqcha: Prisma.sql`sd.stock_days > ${NORMAL}`,
-};
-
-const filterKey = (f: Filters) =>
-  [f.startStr, f.endStr, f.branchId ?? "all", f.categoryId ?? "all", f.q].join("|");
-
-// Ma'lumot faqat fayl yuklanganda o'zgaradi — kesh tag orqali invalidatsiya bo'ladi.
-const cachedKpi = (f: Filters) =>
-  unstable_cache(
-    async (): Promise<Kpi> => {
-      const res = await prisma.$queryRaw<Kpi[]>(Prisma.sql`
-        WITH ${sdCte(f)}
-        SELECT
-          count(*) FILTER (WHERE sd.stock_days IS NOT NULL)::int AS faol,
-          count(*) FILTER (WHERE ${VIEW_COND.kritik})::int AS kritik,
-          count(*) FILTER (WHERE ${VIEW_COND.kam})::int AS kam,
-          count(*) FILTER (WHERE ${VIEW_COND.normal})::int AS normal,
-          count(*) FILTER (WHERE ${VIEW_COND.ortiqcha})::int AS ortiqcha,
-          COALESCE(SUM(sd.stock_value) FILTER (WHERE ${VIEW_COND.ortiqcha}), 0)::float8 AS ortiqcha_value
-        FROM sd
-      `);
-      return res[0] ?? { faol: 0, kritik: 0, kam: 0, normal: 0, ortiqcha: 0, ortiqcha_value: 0 };
-    },
-    ["stockdayKpi_v1", filterKey(f)],
-    { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
-  )();
-
-const cachedRows = (f: Filters, view: View, page: number) =>
-  unstable_cache(
-    async (): Promise<Row[]> => {
-      // Kritik/Kam/Normal — eng tez tugaydigani yuqorida; Ortiqcha — eng ko'pi yuqorida
-      const orderRaw = view === "ortiqcha"
-        ? Prisma.raw(`sd.stock_days DESC`)
-        : Prisma.raw(`sd.stock_days ASC`);
-      return prisma.$queryRaw<Row[]>(Prisma.sql`
-        WITH ${sdCte(f)}
-        SELECT sd."productId", sd."branchId", sd.code, sd.pname, sd.bname, sd."periodEnd",
-               sd."stockQty", sd.avg_daily AS "avgDaily", sd.stock_days AS "stockDays", sd.stock_value AS "stockValue",
-               c.name AS cname
-        FROM sd
-        LEFT JOIN "Category" c ON c.id = sd."categoryId"
-        WHERE ${VIEW_COND[view]}
-        ORDER BY ${orderRaw}
-        LIMIT ${PAGE_SIZE} OFFSET ${(page - 1) * PAGE_SIZE}
-      `);
-    },
-    ["stockdayRows_v1", filterKey(f), view, String(page)],
-    { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
-  )();
+// So'rovlar (keshlangan) lib'da — src/lib/snapshot-reports.ts (kesh isitish ham o'shandan foydalanadi).
 
 export default async function StockdayPage({
   searchParams,
@@ -203,13 +81,13 @@ export default async function StockdayPage({
   const categoryId = sp.categoryId ? parseInt(sp.categoryId) : undefined;
   const q = sp.q?.trim() ?? "";
 
-  const filters: Filters = { startStr, endStr, branchId, categoryId, q };
+  const filters: SnapshotFilters = { startStr, endStr, branchId, categoryId, q };
 
   // KPI + jadval keshlangan; alohida count so'rovi YO'Q — tab soni KPI'da allaqachon bor
   // (oldin bir xil og'ir CTE 3 marta yurardi: KPI, jadval, count).
   const [kpi, rows, branches, categories] = await Promise.all([
-    cachedKpi(filters),
-    cachedRows(filters, view, page),
+    stockdayKpi(filters),
+    stockdayRows(filters, view, page, PAGE_SIZE),
     prisma.branch.findMany({ orderBy: { sortOrder: "asc" }, select: { id: true, name: true } }),
     prisma.category.findMany({
       orderBy: { sortOrder: "asc" },

@@ -1,6 +1,7 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
+import { USER_ROLES_TAG } from "@/auth";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { Role } from "@/generated/prisma/enums";
@@ -104,6 +105,8 @@ export async function updateUserAction(
         : []),
     ]);
     revalidatePath("/admin/users");
+    // Rol o'zgardi — auth() dagi 60s rol keshi darhol yangilansin
+    revalidateTag(USER_ROLES_TAG, "max");
     return { ok: true };
   } catch (err) {
     return actionError(err, "users");
@@ -132,6 +135,8 @@ export async function deleteUserAction(
       prisma.user.delete({ where: { id } }),
     ]);
     revalidatePath("/admin/users");
+    // O'chirilgan foydalanuvchi sessiyasi keyingi tekshiruvda VIEWER bo'lib qolsin
+    revalidateTag(USER_ROLES_TAG, "max");
     return { ok: true };
   } catch (err) {
     return actionError(err, "users");
