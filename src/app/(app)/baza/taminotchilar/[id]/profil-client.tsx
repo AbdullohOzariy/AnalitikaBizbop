@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Pill } from "@/components/common/page";
 import { cn } from "@/lib/utils";
-import { skuRowBg, skuBadgeCls, skuBadgeLabel } from "@/lib/sku-rang";
+import { skuRowBg, skuBadgeCls, skuBadgeLabel, skuBadgeTitle } from "@/lib/sku-rang";
 import {
   updateSupplierProfileAction,
   setOrderWeekdaysAction,
@@ -409,11 +409,12 @@ export function LeadTimeEditor({ supplierId, skus }: { supplierId: number; skus:
                         <td className="px-4 py-1.5">
                           <span className="flex items-baseline gap-2">
                             <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{s.code}</span>
-                            {skuBadgeLabel(s.abc, s.xyz) && (
-                              <span className={cn("shrink-0 rounded border px-1 py-px text-[9px] font-bold leading-none", skuBadgeCls(s.abc, s.xyz))}>
-                                {skuBadgeLabel(s.abc, s.xyz)}
-                              </span>
-                            )}
+                            <span
+                              title={skuBadgeTitle(s.abc, s.xyz)}
+                              className={cn("shrink-0 rounded border px-1 py-px text-[9px] font-bold leading-none", skuBadgeCls(s.abc, s.xyz))}
+                            >
+                              {skuBadgeLabel(s.abc, s.xyz)}
+                            </span>
                             <span className="line-clamp-1">{s.name}</span>
                           </span>
                         </td>

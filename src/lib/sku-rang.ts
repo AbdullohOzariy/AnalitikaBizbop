@@ -54,19 +54,32 @@ export const MATRIX_CELL_CLS: Record<string, string> = {
   CZ: "border-red-500/65 bg-red-500/25",
 };
 
-/** Qator foni klassi; sinf yo'q (savdosiz/yangi SKU) — bo'sh satr (neytral). */
+// Sinfsiz SKU (so'nggi 3 oyda savdo yo'q — ABC/XYZ hisoblab bo'lmaydi):
+// oq qoldirmaymiz, aniq kulrang indikator beramiz — bu o'zi signal (chiqarish nomzodi).
+const NO_CLASS_BG = "bg-zinc-400/15 hover:bg-zinc-400/20 dark:bg-zinc-500/10";
+const NO_CLASS_BADGE = "border-border bg-muted text-muted-foreground";
+
+/** Qator foni klassi; sinf yo'q (savdosiz SKU) — kulrang neytral indikator. */
 export function skuRowBg(abc?: string | null, xyz?: string | null): string {
   const k = key(abc, xyz);
-  return k ? ROW_BG[k] ?? "" : "";
+  return k ? ROW_BG[k] ?? NO_CLASS_BG : NO_CLASS_BG;
 }
 
 /** "AX" badge klassi (umumiy pill bilan ishlatish uchun). */
-export function skuBadgeCls(abc?: string | null, xyz?: string | null): string | null {
+export function skuBadgeCls(abc?: string | null, xyz?: string | null): string {
   const k = key(abc, xyz);
-  return k ? BADGE_CLS[k] ?? null : null;
+  return k ? BADGE_CLS[k] ?? NO_CLASS_BADGE : NO_CLASS_BADGE;
 }
 
-/** Badge matni: "AX" yoki null. */
-export function skuBadgeLabel(abc?: string | null, xyz?: string | null): string | null {
-  return key(abc, xyz);
+/** Badge matni: "AX" yoki sinfsizlar uchun "—". */
+export function skuBadgeLabel(abc?: string | null, xyz?: string | null): string {
+  return key(abc, xyz) ?? "—";
+}
+
+/** Tooltip matni — badge ustiga borganda. */
+export function skuBadgeTitle(abc?: string | null, xyz?: string | null): string {
+  const k = key(abc, xyz);
+  return k
+    ? `ABC×XYZ matritsa holati: ${k}`
+    : "So'nggi 3 oyda savdo yo'q — sinf aniqlanmagan (chiqarish nomzodi)";
 }

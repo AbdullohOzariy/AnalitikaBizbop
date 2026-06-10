@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { skuRowBg, skuBadgeCls, skuBadgeLabel } from "@/lib/sku-rang";
+import { skuRowBg, skuBadgeCls, skuBadgeLabel, skuBadgeTitle } from "@/lib/sku-rang";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -181,11 +181,12 @@ export function OrderBuilder() {
                         <TableCell className="font-mono text-xs text-muted-foreground">
                           <span className="flex items-center gap-1.5">
                             {it.code}
-                            {skuBadgeLabel(it.abc, it.xyz) && (
-                              <span className={cn("rounded border px-1 py-px text-[9px] font-bold leading-none", skuBadgeCls(it.abc, it.xyz))}>
-                                {skuBadgeLabel(it.abc, it.xyz)}
-                              </span>
-                            )}
+                            <span
+                              title={skuBadgeTitle(it.abc, it.xyz)}
+                              className={cn("rounded border px-1 py-px text-[9px] font-bold leading-none", skuBadgeCls(it.abc, it.xyz))}
+                            >
+                              {skuBadgeLabel(it.abc, it.xyz)}
+                            </span>
                           </span>
                         </TableCell>
                         <TableCell className="max-w-[260px] truncate" title={it.name}>{it.name}</TableCell>

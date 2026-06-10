@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Search, X, Loader2, Pencil, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { skuRowBg, skuBadgeCls, skuBadgeLabel } from "@/lib/sku-rang";
+import { skuRowBg, skuBadgeCls, skuBadgeLabel, skuBadgeTitle } from "@/lib/sku-rang";
 import { toast } from "sonner";
 import type { HGroup } from "./iyerarxiya-client";
 import { searchSkusAction, updateProductAction, type SkuRow } from "./actions";
@@ -143,11 +143,12 @@ export function SkuList({ groups }: { groups: HGroup[] }) {
                     <TableCell className="font-mono text-xs text-muted-foreground">
                       <span className="flex items-center gap-1.5">
                         {r.code}
-                        {skuBadgeLabel(r.abc, r.xyz) && (
-                          <span className={cn("rounded border px-1 py-px text-[9px] font-bold leading-none", skuBadgeCls(r.abc, r.xyz))}>
-                            {skuBadgeLabel(r.abc, r.xyz)}
-                          </span>
-                        )}
+                        <span
+                          title={skuBadgeTitle(r.abc, r.xyz)}
+                          className={cn("rounded border px-1 py-px text-[9px] font-bold leading-none", skuBadgeCls(r.abc, r.xyz))}
+                        >
+                          {skuBadgeLabel(r.abc, r.xyz)}
+                        </span>
                       </span>
                     </TableCell>
                     <TableCell className="max-w-[280px] truncate" title={r.name}>{r.name}</TableCell>
