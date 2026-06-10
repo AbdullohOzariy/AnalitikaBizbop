@@ -1,0 +1,125 @@
+/**
+ * Sverka — Telegram Mini App orqali kiritilgan solishtirish yozuvlari.
+ * Filtri: davr + firma/kontragent qidiruv. O'chirish — SA va SUPPLYCHAIN.
+ */
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+import { Prisma } from "@/generated/prisma/client";
+import { isSystemAdmin, isSupplyChain } from "@/lib/roles";
+import { FileCheck2, Wallet, ListChecks, CalendarDays } from "lucide-react";
+import { PageHeader, StatCard, EmptyState } from "@/components/common/page";
+import { Card, CardContent } from "@/components/ui/card";
+import { formatUZS, formatDateTimeUZ } from "@/lib/format";
+import { BazaFilter } from "../baza/baza-filter";
+import { SverkaJadval, type SverkaRow } from "./sverka-client";
+
+export const dynamic = "force-dynamic";
+
+export default async function SverkaPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
+  const session = await auth();
+  const role = session?.user?.role;
+  if (
+    !session?.user ||
+    (role !== "SYSTEM_ADMIN" && role !== "ADMIN" && role !== "SUPPLYCHAIN" && role !== "CEO")
+  ) {
+    redirect("/dashboard-v2");
+  }
+  const canDelete = isSystemAdmin(role) || isSupplyChain(role);
+
+  const sp = await searchParams;
+  // Standart davr: joriy oy (server komponent — purity qoidasi client uchun)
+  // eslint-disable-next-line react-hooks/purity
+  const now = new Date(Date.now() + 5 * 3_600_000);
+  const defStart = `${now.toISOString().slice(0, 7)}-01`;
+  const defEnd = now.toISOString().slice(0, 10);
+  const startStr = /^\d{4}-\d{2}-\d{2}$/.test(sp.start ?? "") ? sp.start! : defStart;
+  const endStr = /^\d{4}-\d{2}-\d{2}$/.test(sp.end ?? "") ? sp.end! : defEnd;
+  const q = (sp.q ?? "").trim().slice(0, 80);
+
+  const where: Prisma.SverkaRecordWhereInput = {
+    sana: { gte: new Date(startStr + "T00:00:00.000Z"), lte: new Date(endStr + "T00:00:00.000Z") },
+    ...(q
+      ? {
+          OR: [
+            { firmaNomi: { contains: q, mode: "insensitive" } },
+            { kontragent: { contains: q, mode: "insensitive" } },
+            { dagavor: { contains: q, mode: "insensitive" } },
+            { sklad: { contains: q, mode: "insensitive" } },
+          ],
+        }
+      : {}),
+  };
+
+  const [records, agg] = await Promise.all([
+    prisma.sverkaRecord.findMany({ where, orderBy: [{ sana: "desc" }, { id: "desc" }], take: 300 }),
+    prisma.sverkaRecord.aggregate({ where, _sum: { summa: true }, _count: { _all: true } }),
+  ]);
+
+  const rows: SverkaRow[] = records.map((r) => ({
+    id: r.id,
+    sana: r.sana.toISOString().slice(0, 10),
+    firmaNomi: r.firmaNomi,
+    supplierId: r.supplierId,
+    sklad: r.sklad,
+    kontragent: r.kontragent,
+    dagavor: r.dagavor,
+    summa: Number(r.summa),
+    rasmFileId: r.rasmFileId,
+    kiritdi: r.tgUserName ?? `TG:${r.tgUserId}`,
+    createdAt: formatDateTimeUZ(r.createdAt),
+  }));
+
+  const total = Number(agg._sum.summa ?? 0);
+  const days = Math.max(1, Math.round((new Date(endStr).getTime() - new Date(startStr).getTime()) / 86_400_000) + 1);
+
+  return (
+    <div className="space-y-5">
+      <PageHeader
+        icon={FileCheck2}
+        title="Sverka"
+        description="Telegram Mini App orqali kiritilgan solishtirish yozuvlari (nakladnoy bilan)"
+      >
+        <BazaFilter
+          basePath="/sverka"
+          branches={[]}
+          defaultStart={startStr}
+          defaultEnd={endStr}
+          defaultSearch={q}
+          showSearch
+        />
+      </PageHeader>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <StatCard label="Yozuvlar" value={agg._count._all.toLocaleString("uz-UZ")} icon={ListChecks}
+          hint={q ? `"${q}" filtri bilan` : "tanlangan davrda"} />
+        <StatCard label="Jami summa" value={formatUZS(total, { compact: true })} icon={Wallet}
+          hint={`${formatUZS(total)} so'm`} />
+        <StatCard label="Davr" value={`${days} kun`} icon={CalendarDays} hint={`${startStr} – ${endStr}`} />
+      </div>
+
+      <Card className="overflow-hidden">
+        <CardContent className="p-0">
+          {rows.length === 0 ? (
+            <EmptyState
+              icon={FileCheck2}
+              title="Yozuv yo'q"
+              description="Bu davrda sverka kiritilmagan. Bot orqali (📑 Sverka kiritish) qo'shiladi."
+            />
+          ) : (
+            <div className="overflow-x-auto">
+              <SverkaJadval rows={rows} canDelete={canDelete} />
+            </div>
+          )}
+        </CardContent>
+      </Card>
+      {records.length === 300 && (
+        <p className="text-xs italic text-muted-foreground">Birinchi 300 ta ko&apos;rsatildi — davrni qisqartiring yoki qidiruv ishlating.</p>
+      )}
+    </div>
+  );
+}

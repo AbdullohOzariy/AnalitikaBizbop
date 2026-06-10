@@ -324,6 +324,7 @@ model Supplier {
   products  Product[]
   orders    PurchaseOrder[]
   contracts SupplierContract[]
+  sverkalar SverkaRecord[]
 }
 
 // Yetkazib beruvchi bilan shartnoma — hujjat fayli tashqi havola (Drive va h.k.) sifatida.
@@ -555,4 +556,28 @@ model AnketaSubmission {
   createdAt   DateTime @default(now())
 
   @@index([status, createdAt])
+}
+
+// ─── Sverka — yetkazib beruvchi bilan solishtirish yozuvi (Telegram Mini App) ──
+// Kiritish tartibi: sana → firma (Supplier'dan tanlanadi) → sklad → kontragent →
+// dagavor → summa + nakladnoy rasmi (Telegram file_id, rasm-yukla sxemasi).
+model SverkaRecord {
+  id         Int      @id @default(autoincrement())
+  sana       DateTime @db.Date
+  supplierId Int? // firma — yetkazib beruvchilar bazasidan (o'chsa NULL, nom qoladi)
+  firmaNomi  String // tanlash paytidagi nom (snapshot)
+  sklad      String
+  kontragent String
+  dagavor    String
+  summa      Decimal  @db.Decimal(20, 2)
+  rasmFileId String // nakladnoy rasmi — Telegram file_id
+  tgUserId   BigInt // kim kiritdi (Telegram ID)
+  tgUserName String?
+  createdAt  DateTime @default(now())
+
+  supplier Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+
+  @@index([sana])
+  @@index([supplierId])
+  @@index([createdAt])
 }

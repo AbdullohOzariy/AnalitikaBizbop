@@ -40,9 +40,13 @@ function buildBot(): Telegraf | null {
     const allowed = id ? await ruxsatBormi(id) : false;
     if (allowed) {
       const url = miniAppUrl();
+      const base = (process.env.WEBHOOK_URL || "").replace(/\/$/, "");
       return ctx.reply(
-        `Salom, ${ism}!\n🆔 Sizning ID: ${id}\n\nYangi yozuv qo'shish uchun tugmani bosing.`,
-        Markup.inlineKeyboard([[Markup.button.webApp("📝 Yangi yozuv", url)]])
+        `Salom, ${ism}!\n🆔 Sizning ID: ${id}\n\nBo'limni tanlang:`,
+        Markup.inlineKeyboard([
+          [Markup.button.webApp("📝 Spisaniya yozuvi", url)],
+          [Markup.button.webApp("📑 Sverka kiritish", `${base}/miniapp/sverka`)],
+        ])
       );
     }
 
