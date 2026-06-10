@@ -247,6 +247,7 @@ export type YozuvKirim = {
   xodim_username?: string | null;
   xodim_id: number | string;
   rasm_file_id?: string | null;
+  qr_file_id?: string | null; // QR kod rasmi (ixtiyoriy)
 };
 
 /**
@@ -262,7 +263,7 @@ export async function rasmFileIdMavjud(fileId: string): Promise<boolean> {
   if (!p) return false;
   try {
     const { rows } = await p.query(
-      `SELECT 1 FROM yozuvlar WHERE rasm_file_id = $1
+      `SELECT 1 FROM yozuvlar WHERE rasm_file_id = $1 OR qr_file_id = $1
        UNION ALL
        SELECT 1 FROM vozvratlar WHERE rasm_file_id = $1
        LIMIT 1`,
@@ -284,13 +285,14 @@ export async function insertYozuv(d: YozuvKirim): Promise<number> {
     const { rows } = await client.query(
       `INSERT INTO yozuvlar
         (tur, tovar, miqdor, birlik, summa, sabab, filial,
-         firma, kafe_nomi, xodim_ism, xodim_username, xodim_id, rasm_file_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+         firma, kafe_nomi, xodim_ism, xodim_username, xodim_id, rasm_file_id, qr_file_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
        RETURNING id`,
       [
         d.tur, d.tovar, d.miqdor, d.birlik || "kg", d.summa,
         d.sabab || null, d.filial, d.firma || null, d.kafe_nomi || null,
         d.xodim_ism, d.xodim_username || null, d.xodim_id, d.rasm_file_id || null,
+        d.qr_file_id || null,
       ]
     );
     const yozuvId = rows[0].id as number;
@@ -455,6 +457,8 @@ export async function ensureSozlamalarSchema(): Promise<void> {
     kalit TEXT PRIMARY KEY, qiymat TEXT NOT NULL, yangilangan TIMESTAMPTZ DEFAULT NOW()
   )`);
   await p.query(`ALTER TABLE filialar ADD COLUMN IF NOT EXISTS topic_id BIGINT`).catch(() => {});
+  // QR kod rasmi — ixtiyoriy (QR kodli tovarlar uchun xodim joylaydi)
+  await p.query(`ALTER TABLE yozuvlar ADD COLUMN IF NOT EXISTS qr_file_id VARCHAR(500)`).catch(() => {});
   // yozuvlar.tur CHECK — 'ichki_sotuv' qo'shamiz. DROP+ADD bitta DO-blokda (atomik):
   // ADD muvaffaqiyatsiz bo'lsa DROP ham qaytariladi, jadval constraintsiz qolmaydi.
   await p.query(`

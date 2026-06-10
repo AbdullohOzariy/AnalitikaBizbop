@@ -8,9 +8,15 @@ interface Props {
   loading: boolean
   onFile: (file: File, base64: string) => void
   onClear: () => void
+  title?: string
+  hint?: string
 }
 
-export default function PhotoUpload({ base64, fileSize, loading, onFile, onClear }: Props) {
+export default function PhotoUpload({
+  base64, fileSize, loading, onFile, onClear,
+  title = "Tovar rasmini qo'shing",
+  hint = 'Galereya yoki kameradan',
+}: Props) {
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const raw = e.target.files?.[0]
     if (!raw) return
@@ -59,8 +65,8 @@ export default function PhotoUpload({ base64, fileSize, loading, onFile, onClear
             <ImageIcon className="h-5 w-5 text-brand" />
           </div>
           <div className="text-center">
-            <p className="text-[14px] font-semibold text-tg-text">Tovar rasmini qo&apos;shing</p>
-            <p className="mt-0.5 text-[12px] text-tg-hint">Galereya yoki kameradan</p>
+            <p className="text-[14px] font-semibold text-tg-text">{title}</p>
+            <p className="mt-0.5 text-[12px] text-tg-hint">{hint}</p>
           </div>
           <label className="flex cursor-pointer items-center gap-1.5 rounded-xl bg-gradient-to-b from-brand-400 to-brand-600 px-5 py-2 text-[13px] font-semibold text-white shadow-brand transition-transform active:scale-95">
             <ImageIcon className="w-3.5 h-3.5" />

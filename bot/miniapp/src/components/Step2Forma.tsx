@@ -15,6 +15,10 @@ export interface FormData {
   photo: File | null
   photoBase64: string | null
   photoSize: number
+  // QR kod rasmi — IXTIYORIY (QR kodli tovar bo'lsa xodim joylaydi)
+  qrPhoto: File | null
+  qrPhotoBase64: string | null
+  qrPhotoSize: number
   tovarNomi: string
   miqdor: string
   birlik: 'kg' | 'dona' | 'litr'
@@ -77,6 +81,7 @@ export default function Step2Forma({ tur, onBack, onNext }: Props) {
   const [filialOpen, setFilialOpen] = useState(false)
   const [form, setForm] = useState<FormData>({
     photo: null, photoBase64: null, photoSize: 0,
+    qrPhoto: null, qrPhotoBase64: null, qrPhotoSize: 0,
     tovarNomi: '', miqdor: '', birlik: 'dona', summa: '', sabab: '',
     filial: '', firmaNomi: '', kafeNomi: '',
     yonalish: 'asosiy_filial', taminotchi: '', vozvratStatus: 'xabar_berildi', qaytarilmadiSabab: '',
@@ -91,6 +96,12 @@ export default function Step2Forma({ tur, onBack, onNext }: Props) {
     set('photo', file)
     set('photoBase64', base64)
     set('photoSize', file.size)
+  }
+
+  function handleQrFile(file: File, base64: string) {
+    set('qrPhoto', file)
+    set('qrPhotoBase64', base64)
+    set('qrPhotoSize', file.size)
   }
 
   const vozvratOk =
@@ -127,6 +138,25 @@ export default function Step2Forma({ tur, onBack, onNext }: Props) {
             onClear={() => { set('photo', null); set('photoBase64', null); set('photoSize', 0) }}
           />
         </motion.div>
+
+        {/* QR kod rasmi — ixtiyoriy (faqat yozuv turlari; qaytarish alohida jadval) */}
+        {tur !== 'qaytarish' && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.03, type: 'spring' as const, stiffness: 340, damping: 30 }}
+          >
+            <PhotoUpload
+              base64={form.qrPhotoBase64}
+              fileSize={form.qrPhotoSize}
+              loading={false}
+              onFile={handleQrFile}
+              onClear={() => { set('qrPhoto', null); set('qrPhotoBase64', null); set('qrPhotoSize', 0) }}
+              title="QR kod rasmi (ixtiyoriy)"
+              hint="QR kodli tovar bo'lsa joylang"
+            />
+          </motion.div>
+        )}
 
         {/* Tovar nomi */}
         <Field label="Tovar nomi" icon={<Package className="w-3.5 h-3.5" />} delay={0.06} required>

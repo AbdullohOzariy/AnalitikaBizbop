@@ -71,6 +71,17 @@ export async function guruhgaYuborish(d: YozuvKirim, yozuvId: number): Promise<v
       ? await bot.telegram.sendPhoto(chatId, d.rasm_file_id, { caption: matn, ...opts })
       : await bot.telegram.sendMessage(chatId, matn, opts);
     await setGuruhMessageId(yozuvId, msg.message_id);
+    // QR kod rasmi (ixtiyoriy) — asosiy xabarga javob sifatida, o'sha topikda
+    if (d.qr_file_id) {
+      await bot.telegram
+        .sendPhoto(chatId, d.qr_file_id, {
+          caption: `📷 QR kod — ${esc(d.tovar)} (yozuv #${yozuvId})`,
+          parse_mode: "HTML",
+          reply_parameters: { message_id: msg.message_id },
+          ...(threadId ? { message_thread_id: threadId } : {}),
+        })
+        .catch((e) => console.error(`[guruh] QR rasm xato #${yozuvId}:`, e instanceof Error ? e.message : e));
+    }
     console.log(`[guruh] Yozuv #${yozuvId} guruhga yuborildi (message_id=${msg.message_id})`);
   } catch (err) {
     console.error(`[guruh] XATO — yozuv #${yozuvId}:`, err instanceof Error ? err.message : err);

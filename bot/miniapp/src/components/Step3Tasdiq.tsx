@@ -68,6 +68,22 @@ export default function Step3Tasdiq({ tur, form, onBack, onDone }: Props) {
         fileId = json.file_id
       }
 
+      // QR kod rasmi — ixtiyoriy; yuklanmasa ham yozuv ketaveradi
+      let qrFileId: string | null = null
+      if (tur !== 'qaytarish' && form.qrPhoto) {
+        try {
+          const fd = new FormData()
+          fd.append('rasm', form.qrPhoto)
+          const res = await fetch('/api/rasm-yukla', {
+            method: 'POST',
+            headers: { 'x-telegram-init-data': initData },
+            body: fd,
+          })
+          const json = await res.json().catch(() => ({}))
+          if (res.ok && json.file_id) qrFileId = json.file_id
+        } catch { /* ixtiyoriy — jim */ }
+      }
+
       const tgUser = tg?.initDataUnsafe?.user
       const miqdor = Number(form.miqdor.replace(',', '.')) || 1
       const summa = Number(form.summa) || 0
@@ -101,6 +117,7 @@ export default function Step3Tasdiq({ tur, form, onBack, onDone }: Props) {
           sabab: form.sabab,
           filial: form.filial,
           rasm_file_id: fileId,
+          qr_file_id: qrFileId,
           xodim_id: tgUser?.id ?? 0,
           xodim_ism: tgUser ? `${tgUser.first_name}${tgUser.last_name ? ' ' + tgUser.last_name : ''}` : 'Nomalum',
           xodim_username: tgUser?.username ?? null,
@@ -137,6 +154,9 @@ export default function Step3Tasdiq({ tur, form, onBack, onDone }: Props) {
     { icon: <DollarSign className="w-3.5 h-3.5" />, label: 'Summa',  value: form.summa ? formatSum(Number(form.summa)) : '—' },
     { icon: <AlignLeft className="w-3.5 h-3.5" />,  label: 'Sabab',  value: form.sabab },
     { icon: <MapPin className="w-3.5 h-3.5" />,     label: 'Filial', value: form.filial },
+    ...(form.qrPhotoBase64
+      ? [{ icon: <ImageIcon className="w-3.5 h-3.5" />, label: 'QR kod', value: '✓ biriktirildi' }]
+      : []),
     ...(tur === 'vozvrat' && form.firmaNomi
       ? [{ icon: <Building2 className="w-3.5 h-3.5" />, label: 'Firma', value: form.firmaNomi }]
       : []),

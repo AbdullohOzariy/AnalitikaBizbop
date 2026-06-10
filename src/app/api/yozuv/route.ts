@@ -23,6 +23,7 @@ const schema = z.object({
   sabab: z.string().trim().max(255).optional().nullable(),
   filial: z.string().trim().min(1).max(100),
   rasm_file_id: z.string().max(500).optional().nullable(),
+  qr_file_id: z.string().max(500).optional().nullable(),
   firma: z.string().trim().max(255).optional().nullable(),
 });
 
