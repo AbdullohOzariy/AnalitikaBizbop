@@ -30,12 +30,15 @@ export async function searchSkusAction(input: {
   catId?: number;
   subId?: number;
   page?: number;
+  holat?: "aktiv" | "arxiv"; // standart: aktiv (arxivlanganlar ko'rinmaydi)
 }): Promise<{ ok: true; rows: SkuRow[]; total: number; page: number; pageSize: number } | { ok: false; error: string }> {
   try {
     await requireAdmin();
     const q = (input.q ?? "").trim();
     const page = Math.max(1, Math.floor(input.page ?? 1));
-    const where: Prisma.ProductWhereInput = {};
+    const where: Prisma.ProductWhereInput = {
+      archivedAt: input.holat === "arxiv" ? { not: null } : null,
+    };
     if (q) {
       const num = /^\d+$/.test(q) ? parseInt(q, 10) : undefined;
       where.OR = [
@@ -380,5 +383,82 @@ export async function deleteCategoryAction(id: number): Promise<Result> {
     return { ok: true };
   } catch (err) {
     return fail(err);
+  }
+}
+
+
+// ═══════════════════ No-aktiv SKU arxivi ═══════════════════
+// "No-aktiv" = abcClass NULL (so'nggi 3 oylik standart oynada savdo yo'q —
+// updateProductMatrixClasses shu semantikani saqlaydi).
+
+/** Arxivlash nomzodlari soni: qoldiqsizlar va qoldiqlilar alohida. */
+export async function inactiveSkuCountsAction(): Promise<
+  { ok: true; stockZero: number; withStock: number } | { ok: false; error: string }
+> {
+  try {
+    await requireAdmin();
+    const base: Prisma.ProductWhereInput = { abcClass: null, archivedAt: null };
+    const noStock: Prisma.ProductWhereInput = {
+      ...base,
+      OR: [{ currentStock: null }, { currentStock: { lte: 0 } }],
+    };
+    const [total, stockZero] = await Promise.all([
+      prisma.product.count({ where: base }),
+      prisma.product.count({ where: noStock }),
+    ]);
+    return { ok: true, stockZero, withStock: total - stockZero };
+  } catch (err) {
+    return actionError(err, "inactiveCounts");
+  }
+}
+
+/**
+ * 3 oy savdosiz SKU'larni ommaviy arxivlash.
+ * includeWithStock=false — faqat qoldiqsizlar (qoldiqlilar avval sotib
+ * tugatilishi/spisaniya qilinishi kerak — ular OOS "o'lik qoldiq"da turadi).
+ */
+export async function archiveInactiveSkusAction(input: {
+  includeWithStock: boolean;
+}): Promise<{ ok: true; count: number } | { ok: false; error: string }> {
+  try {
+    await requireAdmin();
+    const res = await prisma.product.updateMany({
+      where: {
+        abcClass: null,
+        archivedAt: null,
+        ...(input.includeWithStock
+          ? {}
+          : { OR: [{ currentStock: null }, { currentStock: { lte: 0 } }] }),
+      },
+      data: { archivedAt: new Date() },
+    });
+    revalidatePath("/iyerarxiya");
+    revalidateTag("iyerarxiya", "max");
+    // OOS/Stockday va boshqa SKU ro'yxatlari keshlari yangilansin
+    revalidateTag(ANALYTICS_CACHE_TAG, "max");
+    return { ok: true, count: res.count };
+  } catch (err) {
+    return actionError(err, "archiveInactive");
+  }
+}
+
+/** Bitta SKU'ni arxivlash/qaytarish. */
+export async function setSkuArchivedAction(
+  productId: number,
+  archived: boolean
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    await requireAdmin();
+    const pid = z.coerce.number().int().positive().parse(productId);
+    await prisma.product.update({
+      where: { id: pid },
+      data: { archivedAt: archived ? new Date() : null },
+    });
+    revalidatePath("/iyerarxiya");
+    revalidateTag("iyerarxiya", "max");
+    revalidateTag(ANALYTICS_CACHE_TAG, "max");
+    return { ok: true };
+  } catch (err) {
+    return actionError(err, "setSkuArchived");
   }
 }

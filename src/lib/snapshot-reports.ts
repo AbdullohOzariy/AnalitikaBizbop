@@ -32,6 +32,8 @@ function innerWhere(f: SnapshotFilters): Prisma.Sql {
   const inner: Prisma.Sql[] = [
     Prisma.sql`ps."periodStart" >= ${f.startStr}::date`,
     Prisma.sql`ps."periodEnd" <= ${f.endStr}::date`,
+    // Arxivlangan (no-aktiv) SKU monitoring ro'yxatlarida ko'rinmaydi
+    Prisma.sql`p."archivedAt" IS NULL`,
   ];
   if (f.branchId) inner.push(Prisma.sql`ps."branchId" = ${f.branchId}`);
   if (f.categoryId) inner.push(Prisma.sql`p."categoryId" = ${f.categoryId}`);

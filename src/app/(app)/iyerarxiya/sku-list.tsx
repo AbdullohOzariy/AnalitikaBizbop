@@ -14,12 +14,15 @@ import {
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
-import { Search, X, Loader2, Pencil, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, X, Loader2, Pencil, ChevronLeft, ChevronRight, Archive, ArchiveRestore } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { skuRowBg, skuBadgeCls, skuBadgeLabel, skuBadgeTitle } from "@/lib/sku-rang";
 import { toast } from "sonner";
 import type { HGroup } from "./iyerarxiya-client";
-import { searchSkusAction, updateProductAction, type SkuRow } from "./actions";
+import {
+  searchSkusAction, updateProductAction, archiveInactiveSkusAction,
+  setSkuArchivedAction, inactiveSkuCountsAction, type SkuRow,
+} from "./actions";
 
 const ALL = "all";
 
@@ -31,6 +34,10 @@ export function SkuList({ groups }: { groups: HGroup[] }) {
   const [subId, setSubId] = useState<string>(ALL);
   const [page, setPage] = useState(1);
 
+  const [holat, setHolat] = useState<"aktiv" | "arxiv">("aktiv");
+  const [refreshKey, setRefreshKey] = useState(0); // bulk arxivdan keyin ro'yxatni qayta yuklash
+  const [inactive, setInactive] = useState<{ stockZero: number; withStock: number } | null>(null);
+  const [archPending, startArch] = useTransition();
   const [rows, setRows] = useState<SkuRow[]>([]);
   const [total, setTotal] = useState(0);
   const [pageSize, setPageSize] = useState(50);
@@ -76,12 +83,51 @@ export function SkuList({ groups }: { groups: HGroup[] }) {
         catId: catId !== ALL ? Number(catId) : undefined,
         subId: subId !== ALL ? Number(subId) : undefined,
         page,
+        holat,
       });
       if (myId !== reqId.current) return; // yangiroq so'rov bor — bu javobni tashlaymiz
       if (res.ok) { setRows(res.rows); setTotal(res.total); setPageSize(res.pageSize); }
       else { toast.error(res.error); setRows([]); setTotal(0); }
     });
-  }, [q, groupId, catId, subId, page]);
+  }, [q, groupId, catId, subId, page, holat, refreshKey]);
+
+  // Arxiv nomzodlari soni (banner uchun)
+  useEffect(() => {
+    let alive = true;
+    inactiveSkuCountsAction().then((res) => {
+      if (alive && res.ok) setInactive({ stockZero: res.stockZero, withStock: res.withStock });
+    });
+    return () => { alive = false; };
+  }, [holat]);
+
+  const runArchive = (includeWithStock: boolean) => {
+    const n = includeWithStock
+      ? (inactive?.stockZero ?? 0) + (inactive?.withStock ?? 0)
+      : inactive?.stockZero ?? 0;
+    if (!confirm(`${n.toLocaleString("uz-UZ")} ta SKU arxivlanadi (buyurtma/OOS/Stockday ro'yxatlaridan chiqadi, sotuv tarixi saqlanadi). Davom etasizmi?`)) return;
+    startArch(async () => {
+      const res = await archiveInactiveSkusAction({ includeWithStock });
+      if (res.ok) {
+        toast.success(`${res.count.toLocaleString("uz-UZ")} ta SKU arxivlandi.`);
+        setInactive(null);
+        const cnt = await inactiveSkuCountsAction();
+        if (cnt.ok) setInactive({ stockZero: cnt.stockZero, withStock: cnt.withStock });
+        setPage(1);
+        setRefreshKey((k) => k + 1);
+      } else toast.error(res.error);
+    });
+  };
+
+  const toggleArchive = (r: SkuRow, archived: boolean) => {
+    startArch(async () => {
+      const res = await setSkuArchivedAction(r.id, archived);
+      if (res.ok) {
+        toast.success(archived ? "Arxivlandi." : "Qaytarildi.");
+        setRows((prev) => prev.filter((x) => x.id !== r.id));
+        setTotal((t) => Math.max(0, t - 1));
+      } else toast.error(res.error);
+    });
+  };
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const resetFrom = (level: "group" | "cat") => {
@@ -111,7 +157,40 @@ export function SkuList({ groups }: { groups: HGroup[] }) {
           options={catOptions} allLabel="Barcha kategoriyalar" />
         <FilterSelect label="Subkategoriya" value={subId} onChange={(v) => { setSubId(v); setPage(1); }}
           options={subOptions} allLabel="Barcha subkat" />
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Holat</Label>
+          <Select value={holat} onValueChange={(v) => { setHolat(v === "arxiv" ? "arxiv" : "aktiv"); setPage(1); }}>
+            <SelectTrigger className="h-9 w-32 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="aktiv">Aktiv</SelectItem>
+              <SelectItem value="arxiv">Arxiv</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
+
+      {/* No-aktiv SKU'lar banneri — ommaviy arxivlash */}
+      {holat === "aktiv" && inactive && inactive.stockZero + inactive.withStock > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-zinc-400/40 bg-zinc-400/10 px-3 py-2 text-sm">
+          <Archive className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span>
+            So&apos;nggi 3 oyda savdosiz: <b>{(inactive.stockZero + inactive.withStock).toLocaleString("uz-UZ")}</b> ta SKU
+            <span className="text-muted-foreground"> (qoldiqsiz: {inactive.stockZero.toLocaleString("uz-UZ")}, qoldiqli: {inactive.withStock.toLocaleString("uz-UZ")})</span>
+          </span>
+          <span className="ml-auto flex gap-2">
+            <Button size="sm" variant="outline" className="h-8 text-xs" disabled={archPending || inactive.stockZero === 0}
+              onClick={() => runArchive(false)}>
+              {archPending ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+              Qoldiqsizlarni arxivlash
+            </Button>
+            <Button size="sm" variant="outline" className="h-8 text-xs text-destructive" disabled={archPending}
+              onClick={() => runArchive(true)}
+              title="Qoldiqli SKU ham arxivlanadi — ular OOS 'o'lik qoldiq' nazoratidan chiqadi!">
+              Hammasini arxivlash
+            </Button>
+          </span>
+        </div>
+      )}
 
       {/* Jadval */}
       <div className="overflow-hidden rounded-xl border border-border bg-card">
@@ -156,9 +235,24 @@ export function SkuList({ groups }: { groups: HGroup[] }) {
                     <TableCell className="text-xs text-muted-foreground">{r.cat ?? "—"}</TableCell>
                     <TableCell className="text-xs">{r.sub ?? <span className="text-amber-600 dark:text-amber-400">moslanmagan</span>}</TableCell>
                     <TableCell className="text-right">
-                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEdit(r)} aria-label="Tahrirlash">
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
+                      <span className="inline-flex gap-0.5">
+                        {holat === "aktiv" ? (
+                          <>
+                            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEdit(r)} aria-label="Tahrirlash">
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button size="icon" variant="ghost" className="h-7 w-7" disabled={archPending}
+                              onClick={() => toggleArchive(r, true)} aria-label="Arxivlash" title="Arxivlash (no-aktiv)">
+                              <Archive className="h-3.5 w-3.5 text-muted-foreground" />
+                            </Button>
+                          </>
+                        ) : (
+                          <Button size="icon" variant="ghost" className="h-7 w-7" disabled={archPending}
+                            onClick={() => toggleArchive(r, false)} aria-label="Qaytarish" title="Aktivga qaytarish">
+                            <ArchiveRestore className="h-3.5 w-3.5 text-emerald-600" />
+                          </Button>
+                        )}
+                      </span>
                     </TableCell>
                   </TableRow>
                 ))

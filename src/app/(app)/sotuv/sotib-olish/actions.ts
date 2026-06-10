@@ -41,7 +41,7 @@ export async function suppliersForOrderAction(): Promise<
     if (scope !== null && scope.length === 0) return { ok: true, suppliers: [] };
     const grouped = await prisma.product.groupBy({
       by: ["supplierId"],
-      where: { supplierId: { not: null }, ...scopeProductWhere(scope) },
+      where: { supplierId: { not: null }, archivedAt: null, ...scopeProductWhere(scope) },
       _count: { _all: true },
     });
     const ids = grouped.map((g) => g.supplierId).filter((x): x is number => x != null);
@@ -72,7 +72,7 @@ export async function supplierItemsAction(
     // Joriy holat Product'ga denormalizatsiya qilingan (har yuklashda yangilanadi) —
     // ProductSales tarixini skanlamaymiz, bir zumda o'qiymiz.
     const products = await prisma.product.findMany({
-      where: { supplierId: sid, ...scopeProductWhere(scope) },
+      where: { supplierId: sid, archivedAt: null, ...scopeProductWhere(scope) },
       select: { id: true, code: true, name: true, currentStock: true, currentSold: true, abcClass: true, xyzClass: true, leadTimeDays: true, category: { select: { name: true } } },
       orderBy: { name: "asc" },
       take: 2000,

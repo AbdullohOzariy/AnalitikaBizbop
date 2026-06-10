@@ -279,6 +279,7 @@ model Product {
   abcClass       String?   @db.Char(1) // ABC sinfi (standart 3 oylik oyna) — sotuv yuklashda yangilanadi
   xyzClass       String?   @db.Char(1) // XYZ sinfi (talab barqarorligi) — sotuv yuklashda yangilanadi
   leadTimeDays   Int? // zakazdan kelguncha kunlar — ta'minotchi profilida kiritiladi
+  archivedAt     DateTime? // no-aktiv (arxiv) — buyurtma/OOS/Stockday'dan chiqadi, tarix saqlanadi
   lastSalePeriod DateTime? @db.Date // so'nggi yuklangan davr (eskini bosib o'tmaslik uchun)
 
   category     Category?            @relation(fields: [categoryId], references: [id], onDelete: SetNull)

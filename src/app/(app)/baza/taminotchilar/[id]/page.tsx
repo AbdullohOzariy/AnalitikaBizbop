@@ -30,7 +30,7 @@ export default async function SupplierProfilePage({
       include: { contracts: { orderBy: [{ signedAt: "desc" }, { id: "desc" }] } },
     }),
     prisma.product.findMany({
-      where: { supplierId },
+      where: { supplierId, archivedAt: null },
       select: {
         id: true, code: true, name: true, leadTimeDays: true,
         abcClass: true, xyzClass: true, currentSold: true,
