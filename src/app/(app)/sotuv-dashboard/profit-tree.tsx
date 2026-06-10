@@ -13,13 +13,18 @@ function netClass(n: number) {
   return n > 0 ? "text-emerald-600 dark:text-emerald-400" : n < 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground";
 }
 
-// Sotuv | Tannarx | Yalpi | Chiqim | Sof foyda
+// Sotuv | Tannarx | Marja | Ustama | Chiqim | Sof foyda
 function Cells({ sales, cost, gross, writeoff, net }: { sales: number; cost: number; gross: number; writeoff: number; net: number }) {
+  // Ustama % = (sotuv − tannarx) ÷ tannarx — "tannarx ustiga necha foiz qo'yilgan".
+  // Marja'dan farqi: marja sotuvga nisbatan, ustama tannarxga nisbatan
+  // (masalan, tannarx 100, sotuv 130 → marja 23.1%, ustama 30%).
+  const ustama = cost > 0 ? (gross / cost) * 100 : null;
   return (
     <>
       <td className="px-2 py-1.5 text-right tabular-nums">{money(sales)}</td>
       <td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground">{money(cost)}</td>
       <td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground">{sales > 0 ? `${((gross / sales) * 100).toFixed(1)}%` : "—"}</td>
+      <td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground">{ustama != null ? `${ustama.toFixed(1)}%` : "—"}</td>
       <td className="px-2 py-1.5 text-right tabular-nums text-red-600/80 dark:text-red-400/80">{writeoff > 0 ? `−${money(writeoff)}` : "—"}</td>
       <td className={cn("px-3 py-1.5 text-right font-semibold tabular-nums", netClass(net))}>{money(net)}</td>
     </>
@@ -34,13 +39,14 @@ export function ProfitTree({ tree }: { tree: ProfitTree }) {
 
   return (
     <div className="overflow-x-auto rounded-xl border border-border">
-      <table className="w-full min-w-[680px] text-sm">
+      <table className="w-full min-w-[760px] text-sm">
         <thead>
           <tr className="border-b border-border bg-muted text-xs uppercase tracking-wider text-muted-foreground">
             <th className="px-3 py-2.5 text-left font-semibold">Bo&apos;lim / Kategoriya / Subkat</th>
             <th className="px-2 py-2.5 text-right font-semibold">Sotuv</th>
             <th className="px-2 py-2.5 text-right font-semibold">Tannarx</th>
             <th className="px-2 py-2.5 text-right font-semibold">Marja %</th>
+            <th className="px-2 py-2.5 text-right font-semibold" title="Ustama = (sotuv − tannarx) ÷ tannarx — tannarx ustiga necha % qo'yilgan">Ustama %</th>
             <th className="px-2 py-2.5 text-right font-semibold">Chiqim</th>
             <th className="px-3 py-2.5 text-right font-semibold">Sof foyda</th>
           </tr>
