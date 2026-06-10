@@ -83,6 +83,25 @@ export function OrderBuilder() {
   }, [lines]);
   const total = useMemo(() => chosen.reduce((s, c) => s + c.quantity * c.price, 0), [chosen]);
 
+  // Tanlangan ta'minotchining zakaz kunlari hinti (profilda belgilanadi).
+  // Joriy vaqt faqat mount'da o'qiladi (render purity); hisob arzon — memo shart emas.
+  const [hintNow] = useState(() => new Date());
+  const orderDayHint = (() => {
+    const sup = suppliers.find((s) => String(s.id) === supplierId);
+    if (!sup || sup.orderWeekdays.length === 0) return null;
+    const WD = ["Yakshanba", "Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba"];
+    for (let off = 0; off < 7; off++) {
+      const d = new Date(hintNow.getFullYear(), hintNow.getMonth(), hintNow.getDate() + off);
+      if (sup.orderWeekdays.includes(d.getDay())) {
+        return {
+          today: off === 0,
+          label: off === 0 ? "Bugun zakaz kuni" : `Keyingi zakaz kuni: ${off === 1 ? "ertaga" : WD[d.getDay()]} (${d.getDate()}.${String(d.getMonth() + 1).padStart(2, "0")})`,
+        };
+      }
+    }
+    return null;
+  })();
+
   const save = () => {
     if (!supplierId) { toast.error("Ta'minotchi tanlang."); return; }
     if (chosen.length === 0) { toast.error("Kamida bitta SKU uchun miqdor kiriting."); return; }
@@ -121,6 +140,14 @@ export function OrderBuilder() {
         )}
       </div>
 
+      {orderDayHint && (
+        <div className={orderDayHint.today
+          ? "rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-800 dark:text-emerald-300"
+          : "rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-300"}>
+          {orderDayHint.today ? "✓ " : "⏳ "}{orderDayHint.label}
+        </div>
+      )}
+
       {loadingItems ? (
         <p className="flex items-center gap-1.5 py-6 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> SKU'lar yuklanmoqda…</p>
       ) : !supplierId ? (
@@ -138,6 +165,7 @@ export function OrderBuilder() {
                     <TableHead>SKU</TableHead>
                     <TableHead className="text-right w-[80px]">Qoldiq</TableHead>
                     <TableHead className="text-right w-[80px]">Sotuv</TableHead>
+                    <TableHead className="text-right w-[70px]" title="Lead time — zakazdan kelguncha kunlar">Lead</TableHead>
                     <TableHead className="w-[110px]">Miqdor</TableHead>
                     <TableHead className="w-[120px]">Narx</TableHead>
                     <TableHead className="text-right w-[120px]">Summa</TableHead>
@@ -163,6 +191,7 @@ export function OrderBuilder() {
                         <TableCell className="max-w-[260px] truncate" title={it.name}>{it.name}</TableCell>
                         <TableCell className="text-right tabular-nums text-xs text-muted-foreground">{it.stock.toLocaleString("uz-UZ")}</TableCell>
                         <TableCell className="text-right tabular-nums text-xs text-muted-foreground">{it.sold.toLocaleString("uz-UZ")}</TableCell>
+                        <TableCell className="text-right tabular-nums text-xs text-muted-foreground">{it.lead != null ? `${it.lead} kun` : "—"}</TableCell>
                         <TableCell>
                           <Input type="number" inputMode="decimal" value={l.qty} placeholder={String(it.suggested)}
                             onChange={(e) => setLine(it.productId, { qty: e.target.value })} className="h-8 w-24 text-xs" />

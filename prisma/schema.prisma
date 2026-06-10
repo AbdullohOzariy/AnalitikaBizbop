@@ -278,6 +278,7 @@ model Product {
   currentSold    Decimal?  @db.Decimal(20, 3) // so'nggi davrdagi sotuv (dona)
   abcClass       String?   @db.Char(1) // ABC sinfi (standart 3 oylik oyna) — sotuv yuklashda yangilanadi
   xyzClass       String?   @db.Char(1) // XYZ sinfi (talab barqarorligi) — sotuv yuklashda yangilanadi
+  leadTimeDays   Int? // zakazdan kelguncha kunlar — ta'minotchi profilida kiritiladi
   lastSalePeriod DateTime? @db.Date // so'nggi yuklangan davr (eskini bosib o'tmaslik uchun)
 
   category     Category?            @relation(fields: [categoryId], references: [id], onDelete: SetNull)
@@ -304,11 +305,38 @@ model ProductNameMismatch {
 
 // Ta'minotchi (POSTAVSHIK) — sku.xlsx'dagi yetkazib beruvchi. Mahsulotga 1:N.
 model Supplier {
-  id        Int             @id @default(autoincrement())
-  name      String          @unique // masalan "2-O'RIKZOR BOZOR"
-  sortOrder Int             @default(0)
+  id            Int     @id @default(autoincrement())
+  name          String  @unique // masalan "2-O'RIKZOR BOZOR"
+  sortOrder     Int     @default(0)
+  // ── Profil ──
+  rating        Int? // 1..5 yulduz (menejer bahosi)
+  ratingNote    String? // baho izohi
+  phone         String?
+  contactName   String? // mas'ul shaxs
+  // Haftalik takrorlanuvchi zakaz qabul kunlari: 0=Yakshanba ... 6=Shanba (JS getUTCDay)
+  orderWeekdays Int[]   @default([])
+
   products  Product[]
   orders    PurchaseOrder[]
+  contracts SupplierContract[]
+}
+
+// Ta'minotchi bilan shartnoma — hujjat fayli tashqi havola (Drive va h.k.) sifatida.
+model SupplierContract {
+  id         Int       @id @default(autoincrement())
+  supplierId Int
+  title      String // masalan "Yetkazib berish shartnomasi 2026"
+  number     String? // shartnoma raqami
+  signedAt   DateTime? @db.Date // imzolangan sana
+  endDate    DateTime? @db.Date // amal qilish muddati
+  amount     Decimal?  @db.Decimal(20, 2) // shartnoma summasi (bo'lsa)
+  url        String? // hujjat havolasi (Google Drive va h.k.)
+  note       String?
+  createdAt  DateTime  @default(now())
+
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@index([supplierId])
 }
 
 // Zakaz — ta'minotchiga sotib olish buyurtmasi (kategoriya menejeri yaratadi).

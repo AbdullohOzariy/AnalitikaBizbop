@@ -1,9 +1,11 @@
 "use client";
 
+import Link from "next/link";
+
 import { useMemo, useState, useTransition } from "react";
 import { Input } from "@/components/ui/input";
 import { StatCard, EmptyState } from "@/components/common/page";
-import { Search, ChevronRight, X, Loader2, Truck, Package, Tags } from "lucide-react";
+import { Search, ChevronRight, X, Loader2, Truck, Package, Tags, IdCard } from "lucide-react";
 import {
   supplierSubcatsAction, supplierSkusAction, type SupSub, type SupSku,
 } from "./actions";
@@ -88,19 +90,27 @@ export function TaminotchilarClient({ suppliers }: { suppliers: SupplierRow[] })
             const sd = subData.get(sup.id);
             return (
               <div key={sup.id} className="rounded-xl border border-border bg-card">
-                <button
-                  onClick={() => toggleSup(sup)}
-                  aria-expanded={sOpen}
-                  aria-label={`${sup.name}, ${sup.skuCount} ta SKU`}
-                  className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left hover:bg-muted/30 transition-colors"
-                >
-                  <ChevronRight className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${sOpen ? "rotate-90" : ""}`} />
-                  <Truck className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium">{sup.name}</span>
-                  <span className="inline-flex items-center gap-1 text-xs text-muted-foreground tabular-nums">
-                    <Package className="h-3 w-3" /> {sup.skuCount.toLocaleString("uz-UZ")}
-                  </span>
-                </button>
+                <div className="flex items-center">
+                  <button
+                    onClick={() => toggleSup(sup)}
+                    aria-expanded={sOpen}
+                    aria-label={`${sup.name}, ${sup.skuCount} ta SKU`}
+                    className="flex min-w-0 flex-1 items-center gap-2.5 px-3 py-2.5 text-left hover:bg-muted/30 transition-colors"
+                  >
+                    <ChevronRight className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${sOpen ? "rotate-90" : ""}`} />
+                    <Truck className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium">{sup.name}</span>
+                    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground tabular-nums">
+                      <Package className="h-3 w-3" /> {sup.skuCount.toLocaleString("uz-UZ")}
+                    </span>
+                  </button>
+                  <Link
+                    href={`/baza/taminotchilar/${sup.id}`}
+                    className="mr-2 inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                  >
+                    <IdCard className="h-3.5 w-3.5" /> Profil
+                  </Link>
+                </div>
 
                 {sOpen && (
                   <div className="border-t border-border/60 px-3 py-2 space-y-1">

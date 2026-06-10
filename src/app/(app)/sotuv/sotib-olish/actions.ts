@@ -8,7 +8,12 @@ import { isAdminTier, isSystemAdmin } from "@/lib/roles";
 import { actionError } from "@/lib/action-error";
 
 export type OrderItemInput = { productId: number; quantity: number; price: number };
-export type SupplierOption = { id: number; name: string; skuCount: number };
+export type SupplierOption = {
+  id: number;
+  name: string;
+  skuCount: number;
+  orderWeekdays: number[]; // zakaz qabul kunlari (0=Yak..6=Sha)
+};
 export type BuilderItem = {
   productId: number;
   code: number;
@@ -19,6 +24,7 @@ export type BuilderItem = {
   suggested: number;
   abc: string | null; // ABC×XYZ matritsa holati — rang uchun
   xyz: string | null;
+  lead: number | null; // lead time (kun) — ta'minotchi profilida kiritiladi
 };
 
 /** Joriy foydalanuvchi qamrovidagi kategoriya id'lari (admin — barchasi = null). */
@@ -47,11 +53,14 @@ export async function suppliersForOrderAction(): Promise<
       _count: { _all: true },
     });
     const ids = grouped.map((g) => g.supplierId).filter((x): x is number => x != null);
-    const sups = await prisma.supplier.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } });
-    const byId = new Map(sups.map((s) => [s.id, s.name]));
+    const sups = await prisma.supplier.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, orderWeekdays: true } });
+    const byId = new Map(sups.map((s) => [s.id, s]));
     const suppliers = grouped
       .filter((g) => g.supplierId != null)
-      .map((g) => ({ id: g.supplierId!, name: byId.get(g.supplierId!) ?? "—", skuCount: g._count._all }))
+      .map((g) => {
+        const s = byId.get(g.supplierId!);
+        return { id: g.supplierId!, name: s?.name ?? "—", skuCount: g._count._all, orderWeekdays: s?.orderWeekdays ?? [] };
+      })
       .sort((a, b) => a.name.localeCompare(b.name, "uz"));
     return { ok: true, suppliers };
   } catch (err) {
@@ -72,7 +81,7 @@ export async function supplierItemsAction(
     // ProductSales tarixini skanlamaymiz, bir zumda o'qiymiz.
     const products = await prisma.product.findMany({
       where: { supplierId: sid, ...scopeProductWhere(scope) },
-      select: { id: true, code: true, name: true, currentStock: true, currentSold: true, abcClass: true, xyzClass: true, category: { select: { name: true } } },
+      select: { id: true, code: true, name: true, currentStock: true, currentSold: true, abcClass: true, xyzClass: true, leadTimeDays: true, category: { select: { name: true } } },
       orderBy: { name: "asc" },
       take: 2000,
     });
@@ -80,7 +89,7 @@ export async function supplierItemsAction(
       const stock = Math.round(Number(p.currentStock ?? 0)); // so'nggi davr qoldig'i
       const sold = Math.round(Number(p.currentSold ?? 0)); // so'nggi davr sotuvi (talab)
       const suggested = Math.max(0, sold - stock);
-      return { productId: p.id, code: p.code, name: p.name, sub: p.category?.name ?? null, stock, sold, suggested, abc: p.abcClass, xyz: p.xyzClass };
+      return { productId: p.id, code: p.code, name: p.name, sub: p.category?.name ?? null, stock, sold, suggested, abc: p.abcClass, xyz: p.xyzClass, lead: p.leadTimeDays };
     });
     return { ok: true, items };
   } catch (err) {
