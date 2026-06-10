@@ -44,7 +44,7 @@ export async function requireUser() {
 export async function requireCatManagerOrAdmin() {
   const session = await auth();
   const role = session?.user?.role;
-  if (!session?.user || (role !== "SYSTEM_ADMIN" && role !== "CAT_MANAGER")) {
+  if (!session?.user || (role !== "SYSTEM_ADMIN" && role !== "CAT_MANAGER" && role !== "HEAD_CAT_MANAGER")) {
     throw new AuthorizationError();
   }
   return session.user;

@@ -20,7 +20,7 @@ export default async function SotibOlishPage({
 }) {
   const session = await auth();
   const role = session?.user?.role;
-  if (!session?.user || (role !== "SYSTEM_ADMIN" && role !== "ADMIN" && role !== "CAT_MANAGER" && role !== "SUPPLYCHAIN")) redirect("/dashboard-v2");
+  if (!session?.user || (role !== "SYSTEM_ADMIN" && role !== "ADMIN" && role !== "CAT_MANAGER" && role !== "SUPPLYCHAIN" && role !== "HEAD_CAT_MANAGER")) redirect("/dashboard-v2");
   const userId = Number(session.user.id);
   const sp = await searchParams;
   const statusFilter = ORDER_STATUSES.includes(sp.status as never) ? (sp.status as string) : undefined;

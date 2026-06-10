@@ -41,7 +41,7 @@ export const authConfig = {
       if (isOnLogin) {
         if (isLoggedIn) {
           const role = (auth as { user?: { role?: string } })?.user?.role;
-          const dest = role === "CAT_MANAGER" || role === "SUPPLYCHAIN" ? "/dashboard-v2" : "/dashboard";
+          const dest = role === "CAT_MANAGER" || role === "SUPPLYCHAIN" || role === "HEAD_CAT_MANAGER" ? "/dashboard-v2" : "/dashboard";
           return Response.redirect(new URL(dest, request.nextUrl));
         }
         return true;

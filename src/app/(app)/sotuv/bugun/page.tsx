@@ -28,12 +28,12 @@ export default async function BugunPage() {
   const role = session?.user?.role;
   if (
     !session?.user ||
-    (role !== "SYSTEM_ADMIN" && role !== "ADMIN" && role !== "CAT_MANAGER" && role !== "SUPPLYCHAIN")
+    (role !== "SYSTEM_ADMIN" && role !== "ADMIN" && role !== "CAT_MANAGER" && role !== "SUPPLYCHAIN" && role !== "HEAD_CAT_MANAGER")
   ) {
     redirect("/dashboard-v2");
   }
   const userId = Number(session.user.id);
-  const canCreateOrder = role === "SYSTEM_ADMIN" || role === "CAT_MANAGER";
+  const canCreateOrder = role === "SYSTEM_ADMIN" || role === "CAT_MANAGER" || role === "HEAD_CAT_MANAGER";
 
   // Toshkent (UTC+5) bo'yicha "bugun" — zakaz kunlari kalendari ham shu asosda.
   // Server komponent: har so'rovda bir marta hisoblanadi (purity qoidasi client uchun).

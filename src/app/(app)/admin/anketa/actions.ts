@@ -5,6 +5,15 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth-helpers";
+import { auth } from "@/auth";
+import { canReviewAnketa } from "@/lib/roles";
+
+// Tasdiqlash — Bo'lim boshlig'i (ADMIN), Supplychain va SYSTEM_ADMIN vazifasi
+async function requireAnketaReviewer() {
+  const session = await auth();
+  if (!session?.user || !canReviewAnketa(session.user.role)) throw new Error("Ruxsat yo'q");
+  return session.user;
+}
 import { actionError } from "@/lib/action-error";
 
 type Result = { ok: true } | { ok: false; error: string };
@@ -60,7 +69,7 @@ export async function setAnketaStatusAction(
   status: "NEW" | "REVIEWED"
 ): Promise<Result> {
   try {
-    await requireAdmin();
+    await requireAnketaReviewer();
     const sid = z.coerce.number().int().positive().parse(id);
     await prisma.anketaSubmission.update({ where: { id: sid }, data: { status } });
     revalidatePath("/admin/anketa");

@@ -6,7 +6,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { isSystemAdmin } from "@/lib/roles";
+import { isSystemAdmin, canReviewAnketa } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { FileText, Inbox, SlidersHorizontal, ExternalLink } from "lucide-react";
 import { PageHeader, StatCard } from "@/components/common/page";
@@ -24,10 +24,12 @@ export default async function AnketaAdminPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const session = await auth();
-  if (!session?.user || !isSystemAdmin(session.user.role)) redirect("/dashboard");
+  if (!session?.user || !canReviewAnketa(session.user.role)) redirect("/dashboard");
+  // Maydon tahriri (forma konfiguratsiyasi) — faqat SYSTEM_ADMIN
+  const fullAccess = isSystemAdmin(session.user.role);
 
   const sp = await searchParams;
-  const tab: Tab = sp.tab === "maydonlar" ? "maydonlar" : "javoblar";
+  const tab: Tab = sp.tab === "maydonlar" && fullAccess ? "maydonlar" : "javoblar";
 
   const [fields, submissions, newCount] = await Promise.all([
     prisma.anketaField.findMany({ orderBy: [{ sortOrder: "asc" }, { id: "asc" }] }),
@@ -74,7 +76,7 @@ export default async function AnketaAdminPage({
       <div role="tablist" className="flex gap-2">
         {([
           { v: "javoblar", l: `Javoblar${newCount > 0 ? ` (${newCount} yangi)` : ""}` },
-          { v: "maydonlar", l: "Maydonlarni tahrirlash" },
+          ...(fullAccess ? [{ v: "maydonlar", l: "Maydonlarni tahrirlash" }] : []),
         ] as { v: Tab; l: string }[]).map((t) => (
           <Link key={t.v} href={`/admin/anketa?tab=${t.v}`} scroll={false}
             aria-current={tab === t.v ? "page" : undefined}
@@ -90,7 +92,7 @@ export default async function AnketaAdminPage({
       </div>
 
       {tab === "javoblar"
-        ? <SubmissionsList rows={subRows} fields={fieldRows} />
+        ? <SubmissionsList rows={subRows} fields={fieldRows} canDelete={fullAccess} />
         : <FieldsEditor fields={fieldRows} />}
     </div>
   );

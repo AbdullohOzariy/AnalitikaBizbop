@@ -17,7 +17,7 @@ export const CAT_SCOPE_TAG = "cat-scope";
 
 /** Biriktirilgan OTA-kategoriya id'lari. Admin — null (cheklovsiz). */
 export function scopeParentIds(userId: number, role: string): Promise<number[] | null> {
-  if (isAdminTier(role) || role === "CEO" || role === "SUPPLYCHAIN") return Promise.resolve(null);
+  if (isAdminTier(role) || role === "CEO" || role === "SUPPLYCHAIN" || role === "HEAD_CAT_MANAGER") return Promise.resolve(null);
   return unstable_cache(
     async () => {
       const rows = await prisma.categoryManager.findMany({
@@ -33,7 +33,7 @@ export function scopeParentIds(userId: number, role: string): Promise<number[] |
 
 /** Qamrovdagi SUBKATEGORIYA id'lari — CategorySales/Product.categoryId filtrlari uchun. */
 export function scopeSubIds(userId: number, role: string): Promise<number[] | null> {
-  if (isAdminTier(role) || role === "CEO" || role === "SUPPLYCHAIN") return Promise.resolve(null);
+  if (isAdminTier(role) || role === "CEO" || role === "SUPPLYCHAIN" || role === "HEAD_CAT_MANAGER") return Promise.resolve(null);
   return unstable_cache(
     async () => {
       const parents = await prisma.categoryManager.findMany({

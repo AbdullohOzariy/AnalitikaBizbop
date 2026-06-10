@@ -38,7 +38,7 @@ const TYPE_LABEL: Record<string, string> = {
 
 // ─── Javoblar ro'yxati ────────────────────────────────────────────────────────
 
-export function SubmissionsList({ rows, fields }: { rows: SubmissionRow[]; fields: FieldRow[] }) {
+export function SubmissionsList({ rows, fields, canDelete = true }: { rows: SubmissionRow[]; fields: FieldRow[]; canDelete?: boolean }) {
   const router = useRouter();
   const [view, setView] = useState<SubmissionRow | null>(null);
   const [isPending, start] = useTransition();
@@ -122,10 +122,12 @@ export function SubmissionsList({ rows, fields }: { rows: SubmissionRow[]; field
                         title={r.status === "NEW" ? "Ko'rildi deb belgilash" : "Yangi deb belgilash"}>
                         <CheckCircle2 className={cn("h-3.5 w-3.5", r.status === "REVIEWED" && "text-emerald-500")} />
                       </Button>
-                      <Button size="icon" variant="ghost" className="h-7 w-7" disabled={isPending}
-                        onClick={() => remove(r.id)} aria-label="O'chirish">
-                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                      </Button>
+                      {canDelete && (
+                        <Button size="icon" variant="ghost" className="h-7 w-7" disabled={isPending}
+                          onClick={() => remove(r.id)} aria-label="O'chirish">
+                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                        </Button>
+                      )}
                     </span>
                   </TableCell>
                 </TableRow>

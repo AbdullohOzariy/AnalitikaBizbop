@@ -17,6 +17,7 @@ enum Role {
   CAT_MANAGER
   CEO
   SUPPLYCHAIN // ta'minot zanjiri: analitika/sotuv/spisaniya ko'radi + yetkazib beruvchilarni boshqaradi
+  HEAD_CAT_MANAGER // kategoriya menejerlari boshi: BARCHA kategoriyalar bo'yicha menejer ishi + yetkazib beruvchilarni ko'rish
 }
 
 // Zakaz (sotib olish buyurtmasi) holati
