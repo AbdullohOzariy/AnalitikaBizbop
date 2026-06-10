@@ -8,6 +8,7 @@
 import crypto from "crypto";
 import { Telegraf, Markup } from "telegraf";
 import { ruxsatBormi } from "./db";
+import { sverkaRuxsatBormi } from "@/lib/sverka/ruxsat";
 
 /**
  * Telegram webhook `secret_token` — BOT_TOKEN'dan hosil qilingan barqaror qiymat
@@ -37,16 +38,21 @@ function buildBot(): Telegraf | null {
     const ism = ctx.from?.first_name || "Xodim";
     const id = ctx.from?.id;
 
-    const allowed = id ? await ruxsatBormi(id) : false;
-    if (allowed) {
-      const url = miniAppUrl();
+    // Rollar ID bo'yicha oldindan beriladi: spisaniya (bot bazasi, eski tartib)
+    // va/yoki sverka (asosiy baza, ERP Sverka sahifasida boshqariladi).
+    const [allowed, sverkaAllowed] = id
+      ? await Promise.all([ruxsatBormi(id), sverkaRuxsatBormi(id).catch(() => false)])
+      : [false, false];
+    if (allowed || sverkaAllowed) {
       const base = (process.env.WEBHOOK_URL || "").replace(/\/$/, "");
+      const buttons = [
+        ...(allowed ? [[Markup.button.webApp("📝 Yangi yozuv", miniAppUrl())]] : []),
+        ...(sverkaAllowed ? [[Markup.button.webApp("📑 Sverka kiritish", `${base}/miniapp/sverka`)]] : []),
+      ];
       return ctx.reply(
-        `Salom, ${ism}!\n🆔 Sizning ID: ${id}\n\nBo'limni tanlang:`,
-        Markup.inlineKeyboard([
-          [Markup.button.webApp("📝 Spisaniya yozuvi", url)],
-          [Markup.button.webApp("📑 Sverka kiritish", `${base}/miniapp/sverka`)],
-        ])
+        `Salom, ${ism}!\n🆔 Sizning ID: ${id}\n\n` +
+          (buttons.length > 1 ? "Bo'limni tanlang:" : "Boshlash uchun tugmani bosing."),
+        Markup.inlineKeyboard(buttons)
       );
     }
 

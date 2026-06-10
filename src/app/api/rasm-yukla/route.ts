@@ -7,6 +7,7 @@ import { NextResponse } from "next/server";
 import { getBot } from "@/lib/spisaniya/bot";
 import { getGroupChatId, ruxsatBormi } from "@/lib/spisaniya/db";
 import { verifyInitData } from "@/lib/spisaniya/telegram-auth";
+import { sverkaRuxsatBormi } from "@/lib/sverka/ruxsat";
 import { rateLimit } from "@/lib/spisaniya/rate-limit";
 
 export const runtime = "nodejs";
@@ -18,7 +19,8 @@ export async function POST(req: Request) {
   if (!rateLimit(`rasm:${user.id}`, 15, 60_000)) {
     return NextResponse.json({ xato: "Juda ko'p rasm. Birozdan keyin urinib ko'ring." }, { status: 429 });
   }
-  if (!(await ruxsatBormi(user.id))) {
+  // Spisaniya YOKI sverka roli yetarli (rasm sxemasi umumiy)
+  if (!(await ruxsatBormi(user.id)) && !(await sverkaRuxsatBormi(user.id).catch(() => false))) {
     return NextResponse.json({ xato: "Ruxsat yo'q. Admindan ruxsat oling." }, { status: 403 });
   }
   try {

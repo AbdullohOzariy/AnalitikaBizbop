@@ -7,7 +7,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { verifyInitData } from "@/lib/spisaniya/telegram-auth";
-import { ruxsatBormi } from "@/lib/spisaniya/db";
+import { sverkaRuxsatBormi } from "@/lib/sverka/ruxsat";
 import { rateLimit } from "@/lib/spisaniya/rate-limit";
 
 export const runtime = "nodejs";
@@ -19,8 +19,8 @@ export async function GET(req: Request) {
   if (!rateLimit(`sverka-q:${user.id}`, 60, 60_000)) {
     return NextResponse.json({ xato: "Juda ko'p so'rov." }, { status: 429 });
   }
-  if (!(await ruxsatBormi(user.id))) {
-    return NextResponse.json({ xato: "Ruxsat yo'q." }, { status: 403 });
+  if (!(await sverkaRuxsatBormi(user.id))) {
+    return NextResponse.json({ xato: "Ruxsat yo'q. ID raqamingizni adminga yuboring." }, { status: 403 });
   }
 
   const url = new URL(req.url);

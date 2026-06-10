@@ -581,3 +581,12 @@ model SverkaRecord {
   @@index([supplierId])
   @@index([createdAt])
 }
+
+// Sverka botiga ruxsat berilgan xodimlar (alohida bot, alohida ro'yxat —
+// ERP Sverka sahifasida SA/SUPPLYCHAIN boshqaradi).
+model SverkaXodim {
+  id        Int      @id @default(autoincrement())
+  tgUserId  BigInt   @unique
+  ism       String?
+  createdAt DateTime @default(now())
+}

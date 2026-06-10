@@ -12,7 +12,7 @@ import { PageHeader, StatCard, EmptyState } from "@/components/common/page";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatUZS, formatDateTimeUZ } from "@/lib/format";
 import { BazaFilter } from "../baza/baza-filter";
-import { SverkaJadval, type SverkaRow } from "./sverka-client";
+import { SverkaJadval, SverkaXodimlar, type SverkaRow, type XodimRow } from "./sverka-client";
 
 export const dynamic = "force-dynamic";
 
@@ -55,9 +55,12 @@ export default async function SverkaPage({
       : {}),
   };
 
-  const [records, agg] = await Promise.all([
+  const [records, agg, xodimlar] = await Promise.all([
     prisma.sverkaRecord.findMany({ where, orderBy: [{ sana: "desc" }, { id: "desc" }], take: 300 }),
     prisma.sverkaRecord.aggregate({ where, _sum: { summa: true }, _count: { _all: true } }),
+    canDelete
+      ? prisma.sverkaXodim.findMany({ orderBy: { createdAt: "desc" } })
+      : Promise.resolve([]),
   ]);
 
   const rows: SverkaRow[] = records.map((r) => ({
@@ -119,6 +122,18 @@ export default async function SverkaPage({
       </Card>
       {records.length === 300 && (
         <p className="text-xs italic text-muted-foreground">Birinchi 300 ta ko&apos;rsatildi — davrni qisqartiring yoki qidiruv ishlating.</p>
+      )}
+
+      {/* Xodimlar (sverka roli) — faqat SA/SUPPLYCHAIN boshqaradi */}
+      {canDelete && (
+        <SverkaXodimlar
+          xodimlar={xodimlar.map((x): XodimRow => ({
+            id: x.id,
+            tgUserId: String(x.tgUserId),
+            ism: x.ism,
+            createdAt: x.createdAt.toISOString().slice(0, 10),
+          }))}
+        />
       )}
     </div>
   );

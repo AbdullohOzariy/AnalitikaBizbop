@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { verifyInitData } from "@/lib/spisaniya/telegram-auth";
-import { ruxsatBormi } from "@/lib/spisaniya/db";
+import { sverkaRuxsatBormi } from "@/lib/sverka/ruxsat";
 import { rateLimit } from "@/lib/spisaniya/rate-limit";
 
 export const runtime = "nodejs";
@@ -29,7 +29,7 @@ export async function POST(req: Request) {
   if (!rateLimit(`sverka-y:${user.id}`, 20, 60_000)) {
     return NextResponse.json({ xato: "Juda ko'p yozuv. Birozdan keyin urinib ko'ring." }, { status: 429 });
   }
-  if (!(await ruxsatBormi(user.id))) {
+  if (!(await sverkaRuxsatBormi(user.id))) {
     return NextResponse.json({ xato: "Ruxsat yo'q. Admindan ruxsat oling." }, { status: 403 });
   }
 

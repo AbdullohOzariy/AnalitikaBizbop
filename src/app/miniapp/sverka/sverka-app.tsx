@@ -79,7 +79,7 @@ export function SverkaApp() {
     tg?.ready(); tg?.expand();
     (async () => {
       try {
-        const r = await api<{ allowed: boolean }>("/api/ruxsat", { method: "POST" });
+        const r = await api<{ allowed: boolean }>("/api/sverka/ruxsat", { method: "POST" });
         setPhase(r.allowed ? "form" : "denied");
       } catch { setPhase("denied"); }
     })();

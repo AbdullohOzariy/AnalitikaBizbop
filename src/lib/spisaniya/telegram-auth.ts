@@ -18,8 +18,12 @@ export type TelegramUser = {
  * @param maxAgeSec — auth_date eskirgan bo'lsa rad etiladi (default 1 soat).
  *   Replay oynasini qisqa tutamiz: ushlangan initData uzoq qayta ishlatilmasin.
  */
-export function verifyInitData(initData: string, maxAgeSec = 3600): TelegramUser | null {
-  const token = process.env.BOT_TOKEN;
+export function verifyInitData(
+  initData: string,
+  maxAgeSec = 3600,
+  botToken?: string // berilmasa — spisaniya boti (BOT_TOKEN)
+): TelegramUser | null {
+  const token = botToken ?? process.env.BOT_TOKEN;
   if (!token || !initData) return null;
 
   let params: URLSearchParams;
