@@ -1,4 +1,4 @@
-import { Fragment } from "react";
+import { Fragment, Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
@@ -15,6 +15,7 @@ import { PageHeader, StatCard, EmptyState, Pill } from "@/components/common/page
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { formatUZS } from "@/lib/format";
+import { Skeleton } from "@/components/ui/skeleton";
 import { BazaFilter } from "../baza/baza-filter";
 import { AnalizTree } from "./analiz-tree";
 
@@ -96,10 +97,56 @@ export default async function AbcXyzPage({
   const endStr = endDate.toISOString().slice(0, 10);
   const branchId = sp.branchId ? parseInt(sp.branchId) : undefined;
 
-  const [result, branches] = await Promise.all([
-    computeAbcXyz(startStr, endStr, branchId),
-    prisma.branch.findMany({ orderBy: { sortOrder: "asc" }, select: { id: true, name: true } }),
-  ]);
+  // Yengil so'rov (filtr ro'yxati) — shell darhol; og'ir hisob Suspense'da oqib keladi.
+  const branches = await prisma.branch.findMany({ orderBy: { sortOrder: "asc" }, select: { id: true, name: true } });
+
+  return (
+    <div className="space-y-5">
+      <PageHeader
+        icon={LayoutGrid}
+        title="ABC / XYZ tahlili"
+        description="SKU bo'yicha daromad ulushi (ABC) va talab barqarorligi (XYZ) — to'liq iyerarxik ko'rinishda"
+      >
+        <BazaFilter
+          basePath="/abc-xyz"
+          branches={branches}
+          defaultStart={startStr}
+          defaultEnd={endStr}
+          defaultBranchId={sp.branchId}
+        />
+      </PageHeader>
+
+      {/* key: filtr/tab o'zgarsa skeleton qayta ko'rinadi */}
+      <Suspense
+        key={[startStr, endStr, branchId ?? "all", tab].join("|")}
+        fallback={<AbcDataSkeleton />}
+      >
+        <AbcData startStr={startStr} endStr={endStr} branchId={branchId} tab={tab} sp={sp} />
+      </Suspense>
+    </div>
+  );
+}
+
+function AbcDataSkeleton() {
+  return (
+    <>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-[104px] w-full rounded-2xl" />)}
+      </div>
+      <Skeleton className="h-9 w-64 rounded-xl" />
+      <Skeleton className="h-96 w-full rounded-2xl" />
+    </>
+  );
+}
+
+// Og'ir qism — hisob + KPI + tablar + daraxt/matritsa. Suspense ichida oqib keladi.
+async function AbcData({
+  startStr, endStr, branchId, tab, sp,
+}: {
+  startStr: string; endStr: string; branchId?: number; tab: Tab;
+  sp: Record<string, string | undefined>;
+}) {
+  const result = await computeAbcXyz(startStr, endStr, branchId);
   // SKU'lar payload'ga kirmaydi (minglab qator) — subkat ochilganda action yuklaydi.
   const tree = stripSkus(buildAnalizTree(result));
   const matrix = buildMatrix(result);
@@ -125,21 +172,7 @@ export default async function AbcXyzPage({
   };
 
   return (
-    <div className="space-y-5">
-      <PageHeader
-        icon={LayoutGrid}
-        title="ABC / XYZ tahlili"
-        description="SKU bo'yicha daromad ulushi (ABC) va talab barqarorligi (XYZ) — to'liq iyerarxik ko'rinishda"
-      >
-        <BazaFilter
-          basePath="/abc-xyz"
-          branches={branches}
-          defaultStart={startStr}
-          defaultEnd={endStr}
-          defaultBranchId={sp.branchId}
-        />
-      </PageHeader>
-
+    <>
       {/* KPI */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Tahlildagi SKU" value={result.rows.length.toLocaleString("uz-UZ")} icon={Layers}
@@ -245,6 +278,6 @@ export default async function AbcXyzPage({
           )}
         </CardContent>
       </Card>
-    </div>
+    </>
   );
 }

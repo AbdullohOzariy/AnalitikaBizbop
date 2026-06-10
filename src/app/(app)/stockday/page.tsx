@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
@@ -12,6 +13,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 import { BazaFilter } from "../baza/baza-filter";
 import { BazaPagination } from "../baza/baza-pagination";
 
@@ -70,7 +72,6 @@ export default async function StockdayPage({
   const view: View =
     sp.view === "kam" || sp.view === "normal" || sp.view === "ortiqcha" ? sp.view : "kritik";
   const page = Math.max(1, parseInt(sp.page ?? "1") || 1);
-  const offset = (page - 1) * PAGE_SIZE;
 
   const def = await getDefaultRange();
   const startDate = parseDate(sp.start) ?? def.start;
@@ -83,17 +84,70 @@ export default async function StockdayPage({
 
   const filters: SnapshotFilters = { startStr, endStr, branchId, categoryId, q };
 
-  // KPI + jadval keshlangan; alohida count so'rovi YO'Q — tab soni KPI'da allaqachon bor
-  // (oldin bir xil og'ir CTE 3 marta yurardi: KPI, jadval, count).
-  const [kpi, rows, branches, categories] = await Promise.all([
-    stockdayKpi(filters),
-    stockdayRows(filters, view, page, PAGE_SIZE),
+  // Yengil so'rovlar (filtr ro'yxatlari) — shell darhol chiqadi; og'ir qism Suspense'da oqib keladi.
+  const [branches, categories] = await Promise.all([
     prisma.branch.findMany({ orderBy: { sortOrder: "asc" }, select: { id: true, name: true } }),
     prisma.category.findMany({
       orderBy: { sortOrder: "asc" },
       select: { id: true, name: true },
       where: { products: { some: {} } },
     }),
+  ]);
+
+  return (
+    <div className="space-y-5">
+      <PageHeader
+        icon={Hourglass}
+        title="Stockday"
+        description="Qoldiq o'rtacha kunlik sotuvga necha kun yetishi — qachon buyurtma berish kerakligi signali"
+      >
+        <BazaFilter
+          basePath="/stockday"
+          branches={branches}
+          categories={categories}
+          defaultStart={startStr}
+          defaultEnd={endStr}
+          defaultBranchId={sp.branchId}
+          defaultCategoryId={sp.categoryId}
+          defaultSearch={sp.q}
+          showCategory
+          showSearch
+        />
+      </PageHeader>
+
+      {/* key: filtr/tab/sahifa o'zgarsa skeleton qayta ko'rinadi */}
+      <Suspense
+        key={[startStr, endStr, branchId ?? "all", categoryId ?? "all", q, view, page].join("|")}
+        fallback={<StockdayDataSkeleton />}
+      >
+        <StockdayData filters={filters} view={view} page={page} sp={sp} />
+      </Suspense>
+    </div>
+  );
+}
+
+function StockdayDataSkeleton() {
+  return (
+    <>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-[104px] w-full rounded-2xl" />)}
+      </div>
+      <Skeleton className="h-9 w-96 rounded-xl" />
+      <Skeleton className="h-96 w-full rounded-2xl" />
+    </>
+  );
+}
+
+// Og'ir qism — KPI + tablar + jadval (keshlangan so'rovlar). Suspense ichida oqib keladi.
+async function StockdayData({
+  filters, view, page, sp,
+}: {
+  filters: SnapshotFilters; view: View; page: number; sp: Record<string, string | undefined>;
+}) {
+  const offset = (page - 1) * PAGE_SIZE;
+  const [kpi, rows] = await Promise.all([
+    stockdayKpi(filters),
+    stockdayRows(filters, view, page, PAGE_SIZE),
   ]);
 
   const total = kpi[view];
@@ -120,26 +174,7 @@ export default async function StockdayPage({
   })();
 
   return (
-    <div className="space-y-5">
-      <PageHeader
-        icon={Hourglass}
-        title="Stockday"
-        description="Qoldiq o'rtacha kunlik sotuvga necha kun yetishi — qachon buyurtma berish kerakligi signali"
-      >
-        <BazaFilter
-          basePath="/stockday"
-          branches={branches}
-          categories={categories}
-          defaultStart={startStr}
-          defaultEnd={endStr}
-          defaultBranchId={sp.branchId}
-          defaultCategoryId={sp.categoryId}
-          defaultSearch={sp.q}
-          showCategory
-          showSearch
-        />
-      </PageHeader>
-
+    <>
       {/* KPI */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Faol SKU (qoldiq+sotuv)" value={kpi.faol.toLocaleString("uz-UZ")} icon={Layers} tone="default"
@@ -245,6 +280,6 @@ export default async function StockdayPage({
           )}
         </CardContent>
       </Card>
-    </div>
+    </>
   );
 }

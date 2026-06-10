@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
@@ -12,6 +13,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 import { BazaFilter } from "../baza/baza-filter";
 import { BazaPagination } from "../baza/baza-pagination";
 
@@ -56,7 +58,6 @@ export default async function OosPage({
   const sp = await searchParams;
   const view: View = sp.view === "low" || sp.view === "dead" ? sp.view : "oos";
   const page = Math.max(1, parseInt(sp.page ?? "1") || 1);
-  const offset = (page - 1) * PAGE_SIZE;
 
   const def = await getDefaultRange();
   const startDate = parseDate(sp.start) ?? def.start;
@@ -69,11 +70,8 @@ export default async function OosPage({
 
   const filters: SnapshotFilters = { startStr, endStr, branchId, categoryId, q };
 
-  // KPI + jadval keshlangan; alohida count so'rovi YO'Q — tab soni KPI'da allaqachon bor
-  // (oldin bir xil og'ir CTE 3 marta yurardi: KPI, jadval, count).
-  const [kpi, rows, branches, categories] = await Promise.all([
-    oosKpi(filters),
-    oosRows(filters, view, page, PAGE_SIZE),
+  // Yengil so'rovlar (filtr ro'yxatlari) — shell darhol chiqadi; og'ir qism Suspense'da oqib keladi.
+  const [branches, categories] = await Promise.all([
     prisma.branch.findMany({ orderBy: { sortOrder: "asc" }, select: { id: true, name: true } }),
     prisma.category.findMany({
       orderBy: { sortOrder: "asc" },
@@ -81,23 +79,6 @@ export default async function OosPage({
       where: { products: { some: {} } },
     }),
   ]);
-
-  const total = view === "oos" ? kpi.oos : view === "low" ? kpi.low : kpi.dead;
-  const totalPages = Math.ceil(total / PAGE_SIZE);
-  const oosRate = kpi.jami > 0 ? (kpi.oos / kpi.jami) * 100 : 0;
-
-  // View tab havolalari (joriy filtrlarni saqlab)
-  const tabHref = (v: View) => {
-    const p = new URLSearchParams();
-    if (sp.start) p.set("start", sp.start);
-    if (sp.end) p.set("end", sp.end);
-    if (sp.branchId) p.set("branchId", sp.branchId);
-    if (sp.categoryId) p.set("categoryId", sp.categoryId);
-    if (sp.q) p.set("q", sp.q);
-    p.set("view", v);
-    return `/oos?${p.toString()}`;
-  };
-  const tabCount: Record<View, number> = { oos: kpi.oos, low: kpi.low, dead: kpi.dead };
 
   return (
     <div className="space-y-5">
@@ -120,6 +101,61 @@ export default async function OosPage({
         />
       </PageHeader>
 
+      {/* key: filtr/tab/sahifa o'zgarsa skeleton qayta ko'rinadi (aks holda eski
+          ma'lumot indikatorsiz qotib turardi) */}
+      <Suspense
+        key={[startStr, endStr, branchId ?? "all", categoryId ?? "all", q, view, page].join("|")}
+        fallback={<OosDataSkeleton />}
+      >
+        <OosData filters={filters} view={view} page={page} sp={sp} />
+      </Suspense>
+    </div>
+  );
+}
+
+function OosDataSkeleton() {
+  return (
+    <>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-[104px] w-full rounded-2xl" />)}
+      </div>
+      <Skeleton className="h-9 w-72 rounded-xl" />
+      <Skeleton className="h-96 w-full rounded-2xl" />
+    </>
+  );
+}
+
+// Og'ir qism — KPI + tablar + jadval (keshlangan so'rovlar). Suspense ichida oqib keladi.
+async function OosData({
+  filters, view, page, sp,
+}: {
+  filters: SnapshotFilters; view: View; page: number; sp: Record<string, string | undefined>;
+}) {
+  const offset = (page - 1) * PAGE_SIZE;
+  const [kpi, rows] = await Promise.all([
+    oosKpi(filters),
+    oosRows(filters, view, page, PAGE_SIZE),
+  ]);
+
+  const total = view === "oos" ? kpi.oos : view === "low" ? kpi.low : kpi.dead;
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+  const oosRate = kpi.jami > 0 ? (kpi.oos / kpi.jami) * 100 : 0;
+
+  // View tab havolalari (joriy filtrlarni saqlab)
+  const tabHref = (v: View) => {
+    const p = new URLSearchParams();
+    if (sp.start) p.set("start", sp.start);
+    if (sp.end) p.set("end", sp.end);
+    if (sp.branchId) p.set("branchId", sp.branchId);
+    if (sp.categoryId) p.set("categoryId", sp.categoryId);
+    if (sp.q) p.set("q", sp.q);
+    p.set("view", v);
+    return `/oos?${p.toString()}`;
+  };
+  const tabCount: Record<View, number> = { oos: kpi.oos, low: kpi.low, dead: kpi.dead };
+
+  return (
+    <>
       {/* KPI */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Faol SKU (so'nggi)" value={kpi.jami.toLocaleString("uz-UZ")} icon={Layers} tone="default"
@@ -221,6 +257,6 @@ export default async function OosPage({
           )}
         </CardContent>
       </Card>
-    </div>
+    </>
   );
 }
