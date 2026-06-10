@@ -35,6 +35,7 @@ export type ProfilSku = {
   abc: string | null;
   xyz: string | null;
   leadTimeDays: number | null;
+  arxiv: boolean; // no-aktiv (arxivlangan)
 };
 
 const WD_UZ = ["Yakshanba", "Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba"];
@@ -416,6 +417,12 @@ export function LeadTimeEditor({ supplierId, skus }: { supplierId: number; skus:
                               {skuBadgeLabel(s.abc, s.xyz)}
                             </span>
                             <span className="line-clamp-1">{s.name}</span>
+                            {s.arxiv && (
+                              <span className="shrink-0 rounded border border-border bg-muted px-1.5 py-px text-[9px] font-semibold uppercase text-muted-foreground"
+                                title="Arxivlangan (no-aktiv) — yana sotila boshlasa avtomatik aktivga qaytadi">
+                                no aktiv
+                              </span>
+                            )}
                           </span>
                         </td>
                         <td className="px-2 py-1">

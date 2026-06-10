@@ -357,6 +357,7 @@ async function uploadV3(
   let newSkuCount = 0;
   let newSkuSample = "";
   let nameDiffCount = 0;
+  let reactivated = 0; // arxivdan avtomatik qaytganlar (yana sotila boshlagan)
 
   try {
     // 3. Mahsulotlarni master bilan solishtirish.
@@ -514,6 +515,26 @@ async function uploadV3(
       `;
     }
 
+    // 7b. Arxivdagi SKU yana sotila boshlagan bo'lsa — avtomatik aktivga qaytadi
+    // (arxiv "no-aktiv" degani; savdo qayta boshlangani aktivlikning o'zi).
+    const soldPids = [
+      ...new Set(
+        result.productRows
+          .filter((r) => (r.soldQty ?? 0) > 0 || r.amount > 0)
+          .map((r) => productCodeToId.get(r.productCode))
+          .filter((x): x is number => x != null)
+      ),
+    ];
+    if (soldPids.length > 0) {
+      reactivated = await prisma.$executeRaw`
+        UPDATE "Product" SET "archivedAt" = NULL
+        WHERE "archivedAt" IS NOT NULL AND id = ANY(${soldPids}::int[])
+      `;
+      if (reactivated > 0) {
+        console.log(`[upload] ${reactivated} ta SKU arxivdan qaytdi (yana sotildi)`);
+      }
+    }
+
     // 8. Planlarni yangi tutamiz — kunlik bulk insert'dan keyin sekin plan oldini oladi.
     await prisma.$executeRawUnsafe('ANALYZE "ProductSales"').catch(() => {});
     await prisma.$executeRawUnsafe('ANALYZE "CategorySales"').catch(() => {});
@@ -550,6 +571,9 @@ async function uploadV3(
   const review: string[] = [];
   if (newSkuCount > 0) {
     review.push(`🆕 Yangi SKU: ${newSkuCount} ta — kategoriyasiz qo'shildi (Moslanmagan ro'yxatida subkategoriya tayinlang). Kodlar: ${newSkuSample}${newSkuCount > 5 ? "…" : ""}`);
+  }
+  if (reactivated > 0) {
+    review.push(`♻️ Arxivdan qaytdi: ${reactivated} ta SKU — yana sotila boshladi (avtomatik aktiv).`);
   }
   if (nameDiffCount > 0) {
     review.push(`✏️ Nom farqi: ${nameDiffCount} ta — master saqlandi. Moslanmagan → "Nom farqi" tabида ko'rib chiqing.`);

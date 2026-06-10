@@ -26,6 +26,7 @@ export type BuilderItem = {
   abc: string | null; // ABC×XYZ matritsa holati — rang uchun
   xyz: string | null;
   lead: number | null; // lead time (kun) — ta'minotchi profilida kiritiladi
+  arxiv: boolean; // no-aktiv (arxivlangan) — ro'yxatda belgisi bilan ko'rinadi
 };
 
 /** Joriy foydalanuvchi qamrovidagi kategoriya id'lari (admin — barchasi = null). */
@@ -41,7 +42,7 @@ export async function suppliersForOrderAction(): Promise<
     if (scope !== null && scope.length === 0) return { ok: true, suppliers: [] };
     const grouped = await prisma.product.groupBy({
       by: ["supplierId"],
-      where: { supplierId: { not: null }, archivedAt: null, ...scopeProductWhere(scope) },
+      where: { supplierId: { not: null }, ...scopeProductWhere(scope) },
       _count: { _all: true },
     });
     const ids = grouped.map((g) => g.supplierId).filter((x): x is number => x != null);
@@ -72,8 +73,8 @@ export async function supplierItemsAction(
     // Joriy holat Product'ga denormalizatsiya qilingan (har yuklashda yangilanadi) —
     // ProductSales tarixini skanlamaymiz, bir zumda o'qiymiz.
     const products = await prisma.product.findMany({
-      where: { supplierId: sid, archivedAt: null, ...scopeProductWhere(scope) },
-      select: { id: true, code: true, name: true, currentStock: true, currentSold: true, abcClass: true, xyzClass: true, leadTimeDays: true, category: { select: { name: true } } },
+      where: { supplierId: sid, ...scopeProductWhere(scope) },
+      select: { id: true, code: true, name: true, currentStock: true, currentSold: true, abcClass: true, xyzClass: true, leadTimeDays: true, archivedAt: true, category: { select: { name: true } } },
       orderBy: { name: "asc" },
       take: 2000,
     });
@@ -81,7 +82,7 @@ export async function supplierItemsAction(
       const stock = Math.round(Number(p.currentStock ?? 0)); // so'nggi davr qoldig'i
       const sold = Math.round(Number(p.currentSold ?? 0)); // so'nggi davr sotuvi (talab)
       const suggested = Math.max(0, sold - stock);
-      return { productId: p.id, code: p.code, name: p.name, sub: p.category?.name ?? null, stock, sold, suggested, abc: p.abcClass, xyz: p.xyzClass, lead: p.leadTimeDays };
+      return { productId: p.id, code: p.code, name: p.name, sub: p.category?.name ?? null, stock, sold, suggested, abc: p.abcClass, xyz: p.xyzClass, lead: p.leadTimeDays, arxiv: p.archivedAt != null };
     });
     return { ok: true, items };
   } catch (err) {

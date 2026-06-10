@@ -189,7 +189,17 @@ export function OrderBuilder() {
                             </span>
                           </span>
                         </TableCell>
-                        <TableCell className="max-w-[260px] truncate" title={it.name}>{it.name}</TableCell>
+                        <TableCell className="max-w-[260px]" title={it.name}>
+                          <span className="flex items-center gap-1.5">
+                            <span className="truncate">{it.name}</span>
+                            {it.arxiv && (
+                              <span className="shrink-0 rounded border border-border bg-muted px-1.5 py-px text-[9px] font-semibold uppercase text-muted-foreground"
+                                title="Arxivlangan (no-aktiv) — yana sotila boshlasa avtomatik aktivga qaytadi">
+                                no aktiv
+                              </span>
+                            )}
+                          </span>
+                        </TableCell>
                         <TableCell className="text-right tabular-nums text-xs text-muted-foreground">{it.stock.toLocaleString("uz-UZ")}</TableCell>
                         <TableCell className="text-right tabular-nums text-xs text-muted-foreground">{it.sold.toLocaleString("uz-UZ")}</TableCell>
                         <TableCell className="text-right tabular-nums text-xs text-muted-foreground">{it.lead != null ? `${it.lead} kun` : "—"}</TableCell>

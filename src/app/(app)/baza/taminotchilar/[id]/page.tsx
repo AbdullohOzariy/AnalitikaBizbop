@@ -30,10 +30,10 @@ export default async function SupplierProfilePage({
       include: { contracts: { orderBy: [{ signedAt: "desc" }, { id: "desc" }] } },
     }),
     prisma.product.findMany({
-      where: { supplierId, archivedAt: null },
+      where: { supplierId },
       select: {
         id: true, code: true, name: true, leadTimeDays: true,
-        abcClass: true, xyzClass: true, currentSold: true,
+        abcClass: true, xyzClass: true, currentSold: true, archivedAt: true,
         category: { select: { id: true, name: true } },
       },
       // Avval ko'p sotiladiganlar — lead time'ni muhimlaridan kiritish tabiiy
@@ -52,6 +52,7 @@ export default async function SupplierProfilePage({
     abc: p.abcClass,
     xyz: p.xyzClass,
     leadTimeDays: p.leadTimeDays,
+    arxiv: p.archivedAt != null,
   }));
 
   const contracts: ContractRow[] = supplier.contracts.map((c) => ({
