@@ -212,6 +212,24 @@ export function buildAnalizTree(result: AbcXyzResult): AnalizGroup[] {
   return out;
 }
 
+// ─── "Lite" daraxt: SKU'larsiz (sahifa payload'i uchun) ────────────────────────
+// To'liq SKU ro'yxati minglab qator — RSC payload'ni shishirib yuborardi.
+// SKU'lar subkat ochilganda loadSubSkusAction orqali keladi.
+
+export type AnalizSubLite = Omit<AnalizSub, "skus"> & { skuCount: number };
+export type AnalizCatLite = Omit<AnalizCat, "subs"> & { subs: AnalizSubLite[] };
+export type AnalizGroupLite = Omit<AnalizGroup, "cats"> & { cats: AnalizCatLite[] };
+
+export function stripSkus(groups: AnalizGroup[]): AnalizGroupLite[] {
+  return groups.map((g) => ({
+    ...g,
+    cats: g.cats.map((c) => ({
+      ...c,
+      subs: c.subs.map(({ skus, ...s }) => ({ ...s, skuCount: skus.length })),
+    })),
+  }));
+}
+
 // ─── ABC×XYZ matritsa ──────────────────────────────────────────────────────────
 
 export type MatrixCell = { count: number; total: number; share: number };

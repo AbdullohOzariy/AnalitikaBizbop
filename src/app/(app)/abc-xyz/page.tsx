@@ -6,7 +6,7 @@ import { canSeeAnalytics } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { getDefaultRange } from "@/lib/analytics";
 import {
-  computeAbcXyz, buildAnalizTree, buildMatrix,
+  computeAbcXyz, buildAnalizTree, buildMatrix, stripSkus,
   ABC_A_LIMIT, ABC_B_LIMIT, XYZ_X_LIMIT, XYZ_Y_LIMIT,
   type AbcClass, type XyzClass,
 } from "@/lib/abc-xyz";
@@ -100,7 +100,8 @@ export default async function AbcXyzPage({
     computeAbcXyz(startStr, endStr, branchId),
     prisma.branch.findMany({ orderBy: { sortOrder: "asc" }, select: { id: true, name: true } }),
   ]);
-  const tree = buildAnalizTree(result);
+  // SKU'lar payload'ga kirmaydi (minglab qator) — subkat ochilganda action yuklaydi.
+  const tree = stripSkus(buildAnalizTree(result));
   const matrix = buildMatrix(result);
 
   // KPI: sinflar bo'yicha SKU soni va savdo ulushi
@@ -240,7 +241,7 @@ export default async function AbcXyzPage({
               </div>
             </div>
           ) : (
-            <AnalizTree groups={tree} mode={tab} />
+            <AnalizTree groups={tree} mode={tab} ctx={{ start: startStr, end: endStr, branchId }} />
           )}
         </CardContent>
       </Card>

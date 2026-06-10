@@ -224,11 +224,13 @@ export default async function DashboardV2Page({
   if (!session) redirect("/login");
 
   const sp = await searchParams;
-  const branches = await prisma.branch.findMany({ orderBy: { sortOrder: "asc" } });
+  // Parallel — waterfall bo'lmasin
+  const [branches, defaultRange] = await Promise.all([
+    prisma.branch.findMany({ orderBy: { sortOrder: "asc" } }),
+    getDefaultRange(),
+  ]);
   const branchId =
     sp.branchId === "all" || !sp.branchId ? undefined : Number(sp.branchId) || undefined;
-
-  const defaultRange = await getDefaultRange();
   const startStr = parseISO(sp.start, defaultRange.start).toISOString().slice(0, 10);
   const endStr = parseISO(sp.end, defaultRange.end).toISOString().slice(0, 10);
 

@@ -413,15 +413,17 @@ export default async function DashboardPage({
   // Dashboard V1 — faqat ADMIN va CEO (Kategoriya menejeri V2 ko'radi).
   if (!isAdminTier(session.user.role) && session.user.role !== "CEO") redirect("/dashboard-v2");
 
-  const sp  = await searchParams;
-  const def = await getDefaultRange();
+  const sp = await searchParams;
+  // Parallel — ketma-ket await DB roundtrip'larini zanjirlab yuborardi (waterfall)
+  const [def, branches] = await Promise.all([
+    getDefaultRange(),
+    prisma.branch.findMany({ orderBy: { sortOrder: "asc" } }),
+  ]);
   const start    = parseDate(sp.start, def.start);
   const end      = parseDate(sp.end,   def.end);
   const branchId = sp.branchId ? Number(sp.branchId) : undefined;
   const startStr = start.toISOString().slice(0, 10);
   const endStr   = end.toISOString().slice(0, 10);
-
-  const branches = await prisma.branch.findMany({ orderBy: { sortOrder: "asc" } });
 
   return (
     <div className="space-y-4 sm:space-y-6">

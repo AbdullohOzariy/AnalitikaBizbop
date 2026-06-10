@@ -1,6 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  experimental: {
+    // Client router keshi: dinamik sahifa 30s ichida qayta ochilsa serverga bormaydi
+    // (orqaga/oldinga va sidebar navigatsiyasi bir zumda). Ma'lumot baribir faqat
+    // fayl yuklanganda o'zgaradi — 30s eskirish xavfsiz.
+    staleTimes: { dynamic: 30 },
+  },
   async redirects() {
     return [
       { source: "/categories", destination: "/iyerarxiya", permanent: true },

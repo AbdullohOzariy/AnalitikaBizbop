@@ -50,18 +50,17 @@ export default async function BranchDetailPage({
   const branchId = Number(id);
   if (!Number.isFinite(branchId)) notFound();
 
-  const branch = await prisma.branch.findUnique({
-    where: { id: branchId },
-    include: { aliases: true },
-  });
+  // Parallel — uchta mustaqil so'rov ketma-ket waterfall bo'lib yurardi
+  const [branch, def, branches] = await Promise.all([
+    prisma.branch.findUnique({ where: { id: branchId }, include: { aliases: true } }),
+    getDefaultRange(),
+    prisma.branch.findMany({ orderBy: { sortOrder: "asc" } }),
+  ]);
   if (!branch) notFound();
 
-  const def = await getDefaultRange();
   const start = parseDate(sp.start, def.start);
   const end = parseDate(sp.end, def.end);
   const range = { start, end };
-
-  const branches = await prisma.branch.findMany({ orderBy: { sortOrder: "asc" } });
   const [kpi, dailySales, dailyReceipts, dailyVisits, top] = await Promise.all([
     computeKPI(range, branchId),
     dailySalesSeries(range, branchId),
