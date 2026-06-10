@@ -74,10 +74,11 @@ model CategoryManager {
 }
 
 model Branch {
-  id        Int    @id @default(autoincrement())
-  name      String @unique
-  sortOrder Int    @default(0)
-  createdAt DateTime @default(now())
+  id            Int      @id @default(autoincrement())
+  name          String   @unique
+  sortOrder     Int      @default(0)
+  sverkaTopicId Int? // sverka guruhidagi topic (message_thread_id) — Sozlamalar → Sverka'da
+  createdAt     DateTime @default(now())
 
   aliases       BranchAlias[]
   sales         CategorySales[]

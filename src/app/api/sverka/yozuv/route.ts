@@ -8,7 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { verifyInitData } from "@/lib/spisaniya/telegram-auth";
 import { sverkaRuxsatBormi } from "@/lib/sverka/ruxsat";
 import { rateLimit } from "@/lib/spisaniya/rate-limit";
-import { getSverkaGroupChatId } from "@/lib/sverka/sozlama";
+import { getSverkaGroupChatId, getSverkaTopicId } from "@/lib/sverka/sozlama";
 import { getBot } from "@/lib/spisaniya/bot";
 
 export const runtime = "nodejs";
@@ -70,6 +70,8 @@ export async function POST(req: Request) {
     const chatId = await getSverkaGroupChatId();
     const bot = getBot();
     if (chatId && bot) {
+      // Sklad filialga mos kelsa — o'sha filial topigiga (Sozlamalar → Sverka)
+      const topicId = await getSverkaTopicId(p.sklad);
       const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
       const caption =
         `📑 <b>Sverka #${rec.id}</b>\n` +
@@ -80,7 +82,11 @@ export async function POST(req: Request) {
         `📄 Dagavor: ${esc(p.dagavor)}\n` +
         `💰 <b>${p.summa.toLocaleString("uz-UZ")} so'm</b>\n` +
         `✍️ ${esc(ism ?? String(user.id))}`;
-      await bot.telegram.sendPhoto(chatId, p.rasmFileId, { caption, parse_mode: "HTML" });
+      await bot.telegram.sendPhoto(chatId, p.rasmFileId, {
+        caption,
+        parse_mode: "HTML",
+        ...(topicId != null ? { message_thread_id: topicId } : {}),
+      });
     }
   } catch (e) {
     console.warn("[sverka] guruhga yuborilmadi:", e instanceof Error ? e.message : e);

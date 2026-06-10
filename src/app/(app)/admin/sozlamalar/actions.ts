@@ -132,3 +132,28 @@ export async function sverkaGuruhSaqlaAction(chatId: string): Promise<Result> {
     return { ok: true };
   } catch (err) { return xato(err); }
 }
+
+
+/** Sverka: filial → guruh topigi (message_thread_id) bog'lash. */
+export async function sverkaTopicSaqlaAction(input: {
+  branchId: number;
+  topicId: string; // bo'sh — olib tashlash
+}): Promise<Result> {
+  try {
+    await requireAdmin();
+    const branchId = z.coerce.number().int().positive().parse(input.branchId);
+    const raw = input.topicId.trim();
+    if (raw && !/^\d{1,12}$/.test(raw)) {
+      return { ok: false, error: "Topic ID musbat raqam bo'lishi kerak." };
+    }
+    const { prisma } = await import("@/lib/prisma");
+    await prisma.branch.update({
+      where: { id: branchId },
+      data: { sverkaTopicId: raw ? Number(raw) : null },
+    });
+    const { clearSverkaTopicCache } = await import("@/lib/sverka/sozlama");
+    clearSverkaTopicCache();
+    revalidatePath(RP);
+    return { ok: true };
+  } catch (err) { return xato(err); }
+}

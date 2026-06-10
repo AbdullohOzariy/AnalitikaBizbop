@@ -17,6 +17,7 @@ import { FilialarEditor } from "./filialar-editor";
 import { RuxsatEditor } from "./ruxsat-editor";
 import { SverkaGuruhEditor } from "./sverka-guruh-editor";
 import { SverkaXodimlar, type XodimRow } from "../../sverka/sverka-client";
+import { SverkaTopiklarEditor, type SverkaTopicRow } from "./sverka-topiklar-editor";
 
 type Tab = "spisaniya" | "sverka";
 
@@ -118,9 +119,10 @@ async function SpisaniyaTab() {
 // ─── Sverka sozlamalari ───────────────────────────────────────────────────────
 
 async function SverkaTab() {
-  const [chatId, xodimlar] = await Promise.all([
+  const [chatId, xodimlar, filialar] = await Promise.all([
     getSverkaGroupChatId(),
     prisma.sverkaXodim.findMany({ orderBy: { createdAt: "desc" } }),
+    prisma.branch.findMany({ orderBy: { sortOrder: "asc" }, select: { id: true, name: true, sverkaTopicId: true } }),
   ]);
 
   return (
@@ -131,6 +133,16 @@ async function SverkaTab() {
         actions={<MessageSquare className="h-4 w-4 text-muted-foreground" />}
       >
         <SverkaGuruhEditor initial={chatId ?? ""} />
+      </SectionCard>
+
+      <SectionCard
+        title="Filial topiklari"
+        description={`${filialar.length} ta filial · sverka to'g'ri topikka borishi uchun`}
+        actions={<Building2 className="h-4 w-4 text-muted-foreground" />}
+      >
+        <SverkaTopiklarEditor
+          filialar={filialar.map((f): SverkaTopicRow => ({ id: f.id, name: f.name, topicId: f.sverkaTopicId }))}
+        />
       </SectionCard>
 
       <SverkaXodimlar
