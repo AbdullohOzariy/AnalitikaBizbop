@@ -29,6 +29,7 @@ export const authConfig = {
         "/api/filialar",
         "/api/rasm-yukla",
         "/api/ruxsat",
+        "/api/sverka", // sverka mini app API'lari — o'zi initData HMAC + SverkaXodim bilan himoyalangan
         "/miniapp",
         "/anketa", // yetkazib beruvchi anketasi — public forma
       ];
