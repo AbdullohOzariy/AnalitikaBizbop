@@ -10,9 +10,13 @@ export const authConfig = {
   session: { strategy: "jwt", maxAge: 12 * 60 * 60 },
   providers: [],
   callbacks: {
-    authorized: ({ auth, request: { nextUrl } }) => {
-      const { pathname } = nextUrl;
+    authorized: ({ auth, request }) => {
+      const { pathname } = request.nextUrl;
       const isLoggedIn = !!auth?.user;
+
+      // supplier.* subdomeni — to'liq public (faqat anketa ko'rinadi, proxy rewrite qiladi)
+      const host = request.headers.get("host") ?? "";
+      if (host.startsWith("supplier.")) return true;
 
       // Public (auth shart emas): NextAuth, Telegram webhook, miniapp (static + API).
       // Bular Telegram tomonidan / sessiyasiz chaqiriladi — login'ga yo'naltirib bo'lmaydi.
@@ -26,6 +30,7 @@ export const authConfig = {
         "/api/rasm-yukla",
         "/api/ruxsat",
         "/miniapp",
+        "/anketa", // ta'minotchi anketasi — public forma
       ];
       const isPublic = PUBLIC_PREFIXES.some(
         (p) => pathname === p || pathname.startsWith(p + "/")
@@ -37,7 +42,7 @@ export const authConfig = {
         if (isLoggedIn) {
           const role = (auth as { user?: { role?: string } })?.user?.role;
           const dest = role === "CAT_MANAGER" || role === "SUPPLYCHAIN" ? "/dashboard-v2" : "/dashboard";
-          return Response.redirect(new URL(dest, nextUrl));
+          return Response.redirect(new URL(dest, request.nextUrl));
         }
         return true;
       }

@@ -33,6 +33,7 @@ import {
   Tags,
   LayoutGrid,
   CalendarCheck,
+  FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -145,6 +146,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/branches",          label: "Filiallar",        icon: Building2, roles: [SA] },
       { href: "/admin/upload",      label: "Fayllar",          icon: Upload,    roles: [SA] },
       { href: "/admin/users",       label: "Foydalanuvchilar", icon: Users,     roles: [SA] },
+      { href: "/admin/anketa",      label: "Anketa",           icon: FileText,  roles: [SA] },
       { href: "/admin/sozlamalar",  label: "Sozlamalar",       icon: Settings,  roles: [SA] },
     ],
   },

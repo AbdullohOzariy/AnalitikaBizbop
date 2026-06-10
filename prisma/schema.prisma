@@ -526,3 +526,28 @@ model ForecastRun {
   @@unique([branchId, groupId, year, month])
   @@index([branchId, year, month])
 }
+
+// ─── Ta'minotchi anketasi (supplier.oilagroup.uz) ──────────────────────────────
+// Forma maydonlari sozlanuvchan — Tizim → Anketa bo'limida tahrirlanadi.
+model AnketaField {
+  id        Int      @id @default(autoincrement())
+  section   String // bo'lim sarlavhasi (KOMPANIYA HAQIDA UMUMIY MA'LUMOT ...)
+  label     String
+  type      String   @default("text") // text | textarea | number | yesno | consent
+  required  Boolean  @default(false)
+  sortOrder Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+// Yuborilgan anketalar — javoblar JSON ({ fieldId: qiymat })
+model AnketaSubmission {
+  id          Int      @id @default(autoincrement())
+  companyName String // tezkor ro'yxat uchun (Kompaniya nomi javobidan)
+  phone       String?
+  answers     Json
+  status      String   @default("NEW") // NEW | REVIEWED
+  createdAt   DateTime @default(now())
+
+  @@index([status, createdAt])
+}
