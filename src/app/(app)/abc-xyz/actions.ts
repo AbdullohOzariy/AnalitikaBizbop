@@ -21,7 +21,15 @@ const ctxSchema = z.object({
   start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   end: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   branchId: z.coerce.number().int().positive().optional(),
+  // Matritsa katagi drill-down'i: berilsa faqat shu sinf SKU'lari qaytadi
+  abc: z.enum(["A", "B", "C"]).optional(),
+  xyz: z.enum(["X", "Y", "Z"]).optional(),
 });
+
+function cellFilter(rows: SkuAnaliz[], p: { abc?: string; xyz?: string }): SkuAnaliz[] {
+  if (!p.abc && !p.xyz) return rows;
+  return rows.filter((r) => (!p.abc || r.abc === p.abc) && (!p.xyz || r.xyz === p.xyz));
+}
 
 const subSchema = ctxSchema.extend({
   // -1 — "Moslanmagan" (kategoriyasiz) tugun
@@ -37,7 +45,7 @@ export async function loadSubSkusAction(
     await requireAnalytics();
     const p = subSchema.parse(input);
     const { rows } = await computeAbcXyz(p.start, p.end, p.branchId);
-    const data = rows.filter(
+    const data = cellFilter(rows, p).filter(
       (r) => (r.subId ?? -1) === p.subId && (r.catId ?? -1) === p.catId
     );
     return { ok: true, data };
@@ -61,7 +69,7 @@ export async function searchSkusAbcAction(
     const p = searchSchema.parse(input);
     const { rows } = await computeAbcXyz(p.start, p.end, p.branchId);
     const q = p.q.toLowerCase();
-    const all = rows.filter(
+    const all = cellFilter(rows, p).filter(
       (r) => r.name.toLowerCase().includes(q) || String(r.code).includes(q)
     );
     return {

@@ -72,6 +72,8 @@ export default async function AbcXyzPage({
 
   const sp = await searchParams;
   const tab: Tab = sp.tab === "xyz" || sp.tab === "matritsa" ? sp.tab : "abc";
+  // Matritsa katagi drill-down'i (masalan "AX") — bosilgan katak tarkibi quyida ochiladi
+  const cell = /^[ABC][XYZ]$/.test(sp.cell ?? "") ? sp.cell : undefined;
 
   // Default davr: ma'lumotli oxirgi oy + undan oldingi 2 oy (XYZ uchun tarix kerak)
   const def = await getDefaultRange();
@@ -103,10 +105,10 @@ export default async function AbcXyzPage({
 
       {/* key: filtr/tab o'zgarsa skeleton qayta ko'rinadi */}
       <Suspense
-        key={[startStr, endStr, branchId ?? "all", tab].join("|")}
+        key={[startStr, endStr, branchId ?? "all", tab, cell ?? ""].join("|")}
         fallback={<AbcDataSkeleton />}
       >
-        <AbcData startStr={startStr} endStr={endStr} branchId={branchId} tab={tab} sp={sp} />
+        <AbcData startStr={startStr} endStr={endStr} branchId={branchId} tab={tab} cell={cell} sp={sp} />
       </Suspense>
     </div>
   );
@@ -126,9 +128,9 @@ function AbcDataSkeleton() {
 
 // Og'ir qism — hisob + KPI + tablar + daraxt/matritsa. Suspense ichida oqib keladi.
 async function AbcData({
-  startStr, endStr, branchId, tab, sp,
+  startStr, endStr, branchId, tab, cell, sp,
 }: {
-  startStr: string; endStr: string; branchId?: number; tab: Tab;
+  startStr: string; endStr: string; branchId?: number; tab: Tab; cell?: string;
   sp: Record<string, string | undefined>;
 }) {
   const result = await computeAbcXyz(startStr, endStr, branchId);
@@ -153,6 +155,16 @@ async function AbcData({
     if (sp.end) p.set("end", sp.end);
     if (sp.branchId) p.set("branchId", sp.branchId);
     p.set("tab", t);
+    return `/abc-xyz?${p.toString()}`;
+  };
+  // Katak havolasi — bosilganda tanlanadi, qayta bosilsa bekor (toggle)
+  const cellHref = (c: string) => {
+    const p = new URLSearchParams();
+    if (sp.start) p.set("start", sp.start);
+    if (sp.end) p.set("end", sp.end);
+    if (sp.branchId) p.set("branchId", sp.branchId);
+    p.set("tab", "matritsa");
+    if (cell !== c) p.set("cell", c);
     return `/abc-xyz?${p.toString()}`;
   };
 
@@ -224,18 +236,25 @@ async function AbcData({
                       {ac} — {ac === "A" ? `top ${ABC_A_LIMIT * 100}%` : ac === "B" ? `keyingi ${(ABC_B_LIMIT - ABC_A_LIMIT) * 100}%` : "qolgan"}
                     </div>
                     {(["X", "Y", "Z"] as const).map((xc) => {
-                      const cell = matrix[ac][xc];
+                      const c = matrix[ac][xc];
+                      const k = `${ac}${xc}`;
                       return (
-                        <div
+                        <Link
                           key={xc}
-                          title={CELL_HINT[ac][xc]}
-                          className={cn("rounded-xl border p-3 text-center", MATRIX_CELL_CLS[`${ac}${xc}`])}
+                          href={cellHref(k)}
+                          scroll={false}
+                          title={`${CELL_HINT[ac][xc]} — tarkibini ko'rish uchun bosing`}
+                          className={cn(
+                            "block rounded-xl border p-3 text-center transition-all hover:shadow-md",
+                            MATRIX_CELL_CLS[k],
+                            cell === k && "ring-2 ring-primary ring-offset-2 ring-offset-background"
+                          )}
                         >
-                          <div className="text-lg font-bold tabular-nums">{cell.count.toLocaleString("uz-UZ")}</div>
+                          <div className="text-lg font-bold tabular-nums">{c.count.toLocaleString("uz-UZ")}</div>
                           <div className="text-[11px] text-muted-foreground">SKU</div>
-                          <div className="mt-1 text-xs font-medium tabular-nums">{formatUZS(cell.total, { compact: true })}</div>
-                          <div className="text-[11px] tabular-nums text-muted-foreground">{pct(cell.share)}</div>
-                        </div>
+                          <div className="mt-1 text-xs font-medium tabular-nums">{formatUZS(c.total, { compact: true })}</div>
+                          <div className="text-[11px] tabular-nums text-muted-foreground">{pct(c.share)}</div>
+                        </Link>
                       );
                     })}
                   </Fragment>
@@ -257,6 +276,45 @@ async function AbcData({
                   <p>Kam daromad, notekis talab — minimal zaxira; CZ — assortimentdan chiqarish nomzodlari.</p>
                 </div>
               </div>
+
+              {!cell && (
+                <p className="text-center text-xs italic text-muted-foreground">
+                  Katakni bosing — tarkibidagi mahsulotlar iyerarxik ko'rinishda ochiladi
+                </p>
+              )}
+
+              {/* Tanlangan katak tarkibi — iyerarxik daraxt (lazy SKU + qidiruv shu katak ichida) */}
+              {cell && (() => {
+                const ac = cell[0] as AbcClass;
+                const xc = cell[1] as XyzClass;
+                const cellRows = result.rows.filter((r) => r.abc === ac && r.xyz === xc);
+                // Ulush foizlari umumiy savdoga nisbatan qoladi (sahifaning qolgan qismi bilan bir xil o'lchov)
+                const cellTree = stripSkus(buildAnalizTree({ rows: cellRows, nPeriods: result.nPeriods, totalAmount: result.totalAmount }));
+                const c = matrix[ac][xc];
+                return (
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={cn("rounded-lg border px-2.5 py-1 text-sm font-bold", MATRIX_CELL_CLS[cell])}>
+                        {cell} tarkibi
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {c.count.toLocaleString("uz-UZ")} SKU · {formatUZS(c.total, { compact: true })} so'm · savdoning {pct(c.share)}
+                      </span>
+                    </div>
+                    {cellRows.length === 0 ? (
+                      <p className="py-6 text-center text-xs italic text-muted-foreground">Bu katakda SKU yo'q</p>
+                    ) : (
+                      <div className="overflow-hidden rounded-xl border border-border">
+                        <AnalizTree
+                          groups={cellTree}
+                          mode="abc"
+                          ctx={{ start: startStr, end: endStr, branchId, abc: ac, xyz: xc }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           ) : (
             <AnalizTree groups={tree} mode={tab} ctx={{ start: startStr, end: endStr, branchId }} />

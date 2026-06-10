@@ -14,7 +14,8 @@ import type {
 import { loadSubSkusAction, searchSkusAbcAction } from "./actions";
 
 type Mode = "abc" | "xyz";
-type Ctx = { start: string; end: string; branchId?: number };
+// abc/xyz berilsa — matritsa katagi drill-down rejimi (lazy yuklash va qidiruv ham shu katak ichida)
+type Ctx = { start: string; end: string; branchId?: number; abc?: "A" | "B" | "C"; xyz?: "X" | "Y" | "Z" };
 
 const ABC_TONE: Record<AbcClass, "green" | "amber" | "muted"> = { A: "green", B: "amber", C: "muted" };
 const XYZ_TONE: Record<XyzClass, "green" | "amber" | "red"> = { X: "green", Y: "amber", Z: "red" };
