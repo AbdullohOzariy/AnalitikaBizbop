@@ -118,7 +118,11 @@ export function CountDynamicsWidget({
           <YAxis tick={{ fontSize: 11, fill: CHART_TICK_FILL }} tickFormatter={(v) => formatNumber(Number(v))} />
           <Tooltip
             contentStyle={tooltipStyle}
-            formatter={(value, name) => [formatNumber(Number(value)), name === "tashrif" ? "Tashriflar" : "Cheklar"]}
+            // Recharts formatter'ga dataKey emas, Line'ning name prop'i keladi
+            // ("Tashriflar"/"Cheklar") — uni o'zini ishlatamiz, qayta map qilmaymiz
+            // (eski `name === "tashrif"` sharti hech qachon to'g'ri kelmasdi —
+            //  ikkala chiziq ham "Cheklar" deb chiqardi).
+            formatter={(value, name) => [formatNumber(Number(value)), String(name)]}
           />
           <Legend wrapperStyle={{ fontSize: 12 }} />
           <Line type="monotone" dataKey="tashrif" name="Tashriflar" stroke="#0ea5e9" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
