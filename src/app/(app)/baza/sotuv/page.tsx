@@ -50,6 +50,8 @@ const getCategoryTree = unstable_cache(
 
 // Saralanadigan ustunlar → SQL ifoda (raw ORDER BY uchun; barchasi fiksirlangan — xavfsiz)
 const MARJA_SQL = `(CASE WHEN ps."costAmount" IS NOT NULL AND ps."amount" > 0 THEN (ps."amount" - ps."costAmount") / ps."amount" * 100 ELSE NULL END)`;
+// Ustama = (sotuv − tannarx) ÷ tannarx — tannarx ustiga necha % qo'yilgan
+const USTAMA_SQL = `(CASE WHEN ps."costAmount" IS NOT NULL AND ps."costAmount" > 0 THEN (ps."amount" - ps."costAmount") / ps."costAmount" * 100 ELSE NULL END)`;
 const SORT_SQL: Record<string, string> = {
   code: 'p."code"',
   name: 'p."name"',
@@ -59,6 +61,7 @@ const SORT_SQL: Record<string, string> = {
   amount: 'ps."amount"',
   costAmount: 'ps."costAmount"',
   marja: MARJA_SQL,
+  ustama: USTAMA_SQL,
 };
 
 type SalesRow = {
@@ -284,6 +287,7 @@ export default async function BazaSotuvPage({
                       <TableHead className="text-right w-[130px]"><SortHead col="amount" label="Savdo" sp={sp} sort={sort} dir={dir} align="right" /></TableHead>
                       <TableHead className="text-right w-[140px]"><SortHead col="costAmount" label="Tannarx" sp={sp} sort={sort} dir={dir} align="right" /></TableHead>
                       <TableHead className="text-right w-[80px]"><SortHead col="marja" label="Marja%" sp={sp} sort={sort} dir={dir} align="right" /></TableHead>
+                      <TableHead className="text-right w-[85px]"><SortHead col="ustama" label="Ustama%" sp={sp} sort={sort} dir={dir} align="right" /></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -292,6 +296,8 @@ export default async function BazaSotuvPage({
                       const cost = r.costAmount != null ? Number(r.costAmount) : null;
                       const sold = r.soldQty != null ? Number(r.soldQty) : 0;
                       const mj = cost !== null && amt > 0 ? ((amt - cost) / amt * 100) : null;
+                      // Ustama % = (sotuv − tannarx) ÷ tannarx (marja sotuvga, ustama tannarxga nisbatan)
+                      const ustama = cost !== null && cost > 0 ? ((amt - cost) / cost * 100) : null;
                       const unitPrice = sold > 0 ? amt / sold : null; // bir dona narxi
                       const unitCost = cost !== null && sold > 0 ? cost / sold : null; // bir dona tannarxi
                       const mjColor =
@@ -324,6 +330,9 @@ export default async function BazaSotuvPage({
                           </TableCell>
                           <TableCell className={`text-right align-top tabular-nums text-xs ${mjColor}`}>
                             {mj !== null ? `${mj.toFixed(1)}%` : "—"}
+                          </TableCell>
+                          <TableCell className="text-right align-top tabular-nums text-xs text-muted-foreground">
+                            {ustama !== null ? `${ustama.toFixed(1)}%` : "—"}
                           </TableCell>
                         </TableRow>
                       );
