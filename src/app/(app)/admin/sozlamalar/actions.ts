@@ -116,3 +116,19 @@ export async function ruxsatOchirAction(telegramId: string): Promise<Result> {
     return { ok: true };
   } catch (err) { return xato(err); }
 }
+
+
+/** Sverka guruh chat ID'sini saqlash (asosiy baza, AppSetting). */
+export async function sverkaGuruhSaqlaAction(chatId: string): Promise<Result> {
+  try {
+    await requireAdmin();
+    const v = chatId.trim();
+    if (v && !/^-?\d{5,20}$/.test(v)) {
+      return { ok: false, error: "Chat ID raqam bo'lishi kerak (odatda -100... ko'rinishida)." };
+    }
+    const { setSverkaGroupChatId } = await import("@/lib/sverka/sozlama");
+    await setSverkaGroupChatId(v);
+    revalidatePath("/admin/sozlamalar");
+    return { ok: true };
+  } catch (err) { return xato(err); }
+}

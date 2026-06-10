@@ -590,3 +590,10 @@ model SverkaXodim {
   ism       String?
   createdAt DateTime @default(now())
 }
+
+// Umumiy kalit-qiymat sozlamalar (asosiy baza) — masalan SVERKA_GROUP_CHAT_ID
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}

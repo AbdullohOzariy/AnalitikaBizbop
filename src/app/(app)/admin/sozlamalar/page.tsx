@@ -1,21 +1,36 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
 import {
   botConfigured,
   filialarToliq,
   guruhChatIdOl,
   ruxsatList,
 } from "@/lib/spisaniya/db";
-import { Settings, WifiOff, Building2, Send, MessageSquare, Users } from "lucide-react";
+import { getSverkaGroupChatId } from "@/lib/sverka/sozlama";
+import { Settings, WifiOff, Building2, MessageSquare, Users } from "lucide-react";
 import { PageHeader, SectionCard, EmptyState } from "@/components/common/page";
+import { cn } from "@/lib/utils";
 import { GuruhEditor } from "./guruh-editor";
 import { FilialarEditor } from "./filialar-editor";
 import { RuxsatEditor } from "./ruxsat-editor";
+import { SverkaGuruhEditor } from "./sverka-guruh-editor";
+import { SverkaXodimlar, type XodimRow } from "../../sverka/sverka-client";
 
-export default async function SozlamalarPage() {
+type Tab = "spisaniya" | "sverka";
+
+export default async function SozlamalarPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
   const session = await auth();
   if (!session) redirect("/login");
   if (session.user.role !== "SYSTEM_ADMIN") redirect("/dashboard");
+
+  const sp = await searchParams;
+  const tab: Tab = sp.tab === "sverka" ? "sverka" : "spisaniya";
 
   return (
     <div className="space-y-5">
@@ -25,28 +40,46 @@ export default async function SozlamalarPage() {
         description="Loyihaning umumiy sozlamalari"
       />
 
-      {/* ─── Telegram / Hisobdan chiqarish ─── */}
-      <div className="flex items-center gap-2 pt-1">
-        <Send className="h-4 w-4 text-primary" />
-        <h2 className="text-sm font-semibold">Telegram bot — Hisobdan chiqarish</h2>
+      {/* Tablar: Spisaniya / Sverka */}
+      <div role="tablist" className="flex gap-2">
+        {([
+          { v: "spisaniya", l: "Spisaniya sozlamalari" },
+          { v: "sverka", l: "Sverka sozlamalari" },
+        ] as { v: Tab; l: string }[]).map((t) => (
+          <Link
+            key={t.v}
+            href={`/admin/sozlamalar?tab=${t.v}`}
+            scroll={false}
+            aria-current={tab === t.v ? "page" : undefined}
+            className={cn(
+              "inline-flex h-9 items-center rounded-xl border px-4 text-sm font-medium transition-colors",
+              tab === t.v
+                ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                : "border-border bg-card text-muted-foreground hover:text-foreground hover:bg-secondary"
+            )}
+          >
+            {t.l}
+          </Link>
+        ))}
       </div>
 
-      {!botConfigured() ? (
-        <EmptyState
-          icon={WifiOff}
-          title="Bot bazasiga ulanmagan"
-          description="BOT_DATABASE_URL muhit o'zgaruvchisi sozlanmagan."
-        />
-      ) : (
-        <SettingsBody />
-      )}
-
-      {/* Kelajakda boshqa sozlama bo'limlari shu yerga qo'shiladi. */}
+      {tab === "spisaniya" ? <SpisaniyaTab /> : <SverkaTab />}
     </div>
   );
 }
 
-async function SettingsBody() {
+// ─── Spisaniya sozlamalari (avvalgi tarkib, o'zgarmagan) ──────────────────────
+
+async function SpisaniyaTab() {
+  if (!botConfigured()) {
+    return (
+      <EmptyState
+        icon={WifiOff}
+        title="Bot bazasiga ulanmagan"
+        description="BOT_DATABASE_URL muhit o'zgaruvchisi sozlanmagan."
+      />
+    );
+  }
   const [filialar, chatId, ruxsatlar] = await Promise.all([
     filialarToliq(),
     guruhChatIdOl(),
@@ -78,6 +111,36 @@ async function SettingsBody() {
       >
         <FilialarEditor filialar={filialar} />
       </SectionCard>
+    </div>
+  );
+}
+
+// ─── Sverka sozlamalari ───────────────────────────────────────────────────────
+
+async function SverkaTab() {
+  const [chatId, xodimlar] = await Promise.all([
+    getSverkaGroupChatId(),
+    prisma.sverkaXodim.findMany({ orderBy: { createdAt: "desc" } }),
+  ]);
+
+  return (
+    <div className="space-y-5">
+      <SectionCard
+        title="Telegram guruh (Sverka)"
+        description="To'ldirilgan sverkalar yuboriladigan guruh"
+        actions={<MessageSquare className="h-4 w-4 text-muted-foreground" />}
+      >
+        <SverkaGuruhEditor initial={chatId ?? ""} />
+      </SectionCard>
+
+      <SverkaXodimlar
+        xodimlar={xodimlar.map((x): XodimRow => ({
+          id: x.id,
+          tgUserId: String(x.tgUserId),
+          ism: x.ism,
+          createdAt: x.createdAt.toISOString().slice(0, 10),
+        }))}
+      />
     </div>
   );
 }

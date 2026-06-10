@@ -8,6 +8,8 @@ import { prisma } from "@/lib/prisma";
 import { verifyInitData } from "@/lib/spisaniya/telegram-auth";
 import { sverkaRuxsatBormi } from "@/lib/sverka/ruxsat";
 import { rateLimit } from "@/lib/spisaniya/rate-limit";
+import { getSverkaGroupChatId } from "@/lib/sverka/sozlama";
+import { getBot } from "@/lib/spisaniya/bot";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -62,5 +64,27 @@ export async function POST(req: Request) {
     },
     select: { id: true },
   });
+
+  // Guruhga yuborish (Sozlamalar → Sverka'da belgilanadi) — xato yozuvni buzmaydi
+  try {
+    const chatId = await getSverkaGroupChatId();
+    const bot = getBot();
+    if (chatId && bot) {
+      const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const caption =
+        `📑 <b>Sverka #${rec.id}</b>\n` +
+        `📅 ${p.sana}\n` +
+        `🏢 ${esc(p.firmaNomi)}\n` +
+        `🏬 Sklad: ${esc(p.sklad)}\n` +
+        `👤 Kontragent: ${esc(p.kontragent)}\n` +
+        `📄 Dagavor: ${esc(p.dagavor)}\n` +
+        `💰 <b>${p.summa.toLocaleString("uz-UZ")} so'm</b>\n` +
+        `✍️ ${esc(ism ?? String(user.id))}`;
+      await bot.telegram.sendPhoto(chatId, p.rasmFileId, { caption, parse_mode: "HTML" });
+    }
+  } catch (e) {
+    console.warn("[sverka] guruhga yuborilmadi:", e instanceof Error ? e.message : e);
+  }
+
   return NextResponse.json({ ok: true, id: rec.id });
 }
