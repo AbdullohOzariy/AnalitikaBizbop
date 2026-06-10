@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -94,6 +94,24 @@ export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number
     [items, Q]
   );
 
+  // Enter — o'sha ustun bo'ylab keyingi qatorga (profil editoridagi kabi tez kiritish)
+  const inputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
+  const regRef = (pid: number, field: string) => (el: HTMLInputElement | null) => {
+    const k = `${pid}:${field}`;
+    if (el) inputRefs.current.set(k, el);
+    else inputRefs.current.delete(k);
+  };
+  const onEnterNext = (pid: number, field: string) => (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const order = shown.map((s) => s.productId);
+    for (let j = order.indexOf(pid) + 1; j < order.length; j++) {
+      const el = inputRefs.current.get(`${order[j]}:${field}`);
+      if (el) { el.focus(); el.select(); break; }
+    }
+  };
+
+
   const itemByPid = useMemo(() => new Map(items.map((i) => [i.productId, i])), [items]);
   const chosen = useMemo(() => {
     const out: { productId: number; quantity: number; price: number; packCount: number | null; packSize: number | null }[] = [];
@@ -182,7 +200,8 @@ export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number
       {items.length > 0 && (
         <p className="text-[11px] text-muted-foreground">
           Min stock = kunlik sotuv × (zakaz oralig'i + lead time) × XYZ buferi (X 1.1 · Y 1.25 · Z 1.5).
-          Miqdor taklifi — min stock'gacha to'ldirish. ⚠ — qoldiq min stock'dan past.
+          ⚠ — qoldiq min stock'dan past. Xira qiymatlar — eslab qolingan taklif (bo'sh qoldirsangiz o'sha ishlatiladi).
+          Enter — ustun bo'ylab keyingi qatorga.
         </p>
       )}
 
@@ -205,9 +224,9 @@ export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number
                     <TableHead className="text-right w-[80px]" title="Kunlik o'rtacha sotuv (oxirgi ma'lumot oynasi, filiallar yig'indisi)">Kunlik</TableHead>
                     <TableHead className="text-right w-[90px]" title="Min stock = kunlik sotuv × (zakaz oralig'i + lead time) × XYZ buferi">Min stock</TableHead>
                     <TableHead className="text-right w-[70px]" title="Lead time — zakazdan kelguncha kunlar">Lead</TableHead>
-                    <TableHead className="w-[150px]" title="Blok/yashik soni × pachkadagi dona — Miqdor avtomatik hisoblanadi">Blok × Pachka</TableHead>
-                    <TableHead className="w-[110px]">Miqdor (dona)</TableHead>
-                    <TableHead className="w-[120px]">Narx</TableHead>
+                    <TableHead className="w-[130px] border-l border-border/60 bg-primary/[0.03]" title="Blok/yashik soni × pachkadagi dona — Miqdor avtomatik hisoblanadi">Blok × Pachka</TableHead>
+                    <TableHead className="w-[90px] bg-primary/[0.03]">Miqdor</TableHead>
+                    <TableHead className="w-[110px] bg-primary/[0.03]">Narx (dona)</TableHead>
                     <TableHead className="text-right w-[120px]">Summa</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -215,9 +234,11 @@ export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number
                   {shown.map((it) => {
                     const l = lines.get(it.productId) ?? { qty: "", price: "", blok: "", pack: "" };
                     const sum = (Number(l.qty) || 0) * (Number(l.price) || it.purchasePrice || 0);
+                    const picked = Number(l.qty) > 0;
                     return (
-                      // Fon — SKU'ning ABC×XYZ matritsa holatiga ko'ra (AX buyurtmada ustuvor!)
-                      <TableRow key={it.productId} className={cn("text-sm", skuRowBg(it.abc, it.xyz))}>
+                      // Fon: tanlangan — yashil (zakazga kiradi); aks holda ABC×XYZ matritsa rangi
+                      <TableRow key={it.productId}
+                        className={cn("text-sm", picked ? "bg-emerald-500/10 hover:bg-emerald-500/15" : skuRowBg(it.abc, it.xyz))}>
                         <TableCell className="font-mono text-xs text-muted-foreground">
                           <span className="flex items-center gap-1.5">
                             {it.code}
@@ -242,11 +263,11 @@ export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number
                         </TableCell>
                         <TableCell className="text-right tabular-nums text-xs text-muted-foreground">{it.stock.toLocaleString("uz-UZ")}</TableCell>
                         <TableCell className="text-right tabular-nums text-xs text-muted-foreground">
-                          {it.dailyAvg > 0 ? it.dailyAvg.toLocaleString("uz-UZ", { maximumFractionDigits: 1 }) : "—"}
+                          {it.dailyAvg > 0 ? it.dailyAvg.toLocaleString("uz-UZ", { maximumFractionDigits: 1 }) : <span className="text-muted-foreground/40">—</span>}
                         </TableCell>
                         <TableCell className="text-right tabular-nums text-xs">
                           {it.minStock == null ? (
-                            <span className="text-muted-foreground" title="Lead time kiritilmagan — ta'minotchi profilida to'ldiring">—</span>
+                            <span className="text-muted-foreground/40" title="Lead time kiritilmagan — ta'minotchi profilida to'ldiring">—</span>
                           ) : it.stock < it.minStock ? (
                             <span className="font-bold text-destructive" title="Qoldiq min stock'dan past — buyurtma shart!">
                               ⚠ {it.minStock.toLocaleString("uz-UZ")}
@@ -255,30 +276,39 @@ export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number
                             <span className="text-muted-foreground">{it.minStock.toLocaleString("uz-UZ")}</span>
                           )}
                         </TableCell>
-                        <TableCell className="text-right tabular-nums text-xs text-muted-foreground">{it.lead != null ? `${it.lead} kun` : "—"}</TableCell>
-                        <TableCell>
+                        <TableCell className="text-right tabular-nums text-xs text-muted-foreground">{it.lead != null ? `${it.lead} kun` : <span className="text-muted-foreground/40">—</span>}</TableCell>
+                        <TableCell className="border-l border-border/60 bg-primary/[0.03] px-2">
                           <span className="flex items-center gap-1">
-                            <Input type="number" inputMode="numeric" value={l.blok}
-                              placeholder={it.packSize && it.suggested > 0 ? String(Math.ceil(it.suggested / it.packSize)) : "blok"}
+                            <Input ref={regRef(it.productId, "blok")} type="number" inputMode="numeric" value={l.blok}
+                              placeholder={it.packSize && it.suggested > 0 ? String(Math.ceil(it.suggested / it.packSize)) : ""}
                               onChange={(e) => setLine(it.productId, { blok: e.target.value })}
-                              className="h-8 w-16 text-right text-xs" title="Blok/yashik soni" />
-                            <span className="text-xs text-muted-foreground">×</span>
-                            <Input type="number" inputMode="numeric" value={l.pack}
-                              placeholder={it.packSize != null ? String(it.packSize) : "dona"}
+                              onKeyDown={onEnterNext(it.productId, "blok")}
+                              className="h-7 w-14 px-1.5 text-right text-xs tabular-nums" title="Blok/yashik soni" aria-label="Blok soni" />
+                            <span className="text-[10px] text-muted-foreground/60">×</span>
+                            <Input ref={regRef(it.productId, "pack")} type="number" inputMode="numeric" value={l.pack}
+                              placeholder={it.packSize != null ? String(it.packSize) : ""}
                               onChange={(e) => setLine(it.productId, { pack: e.target.value })}
-                              className="h-8 w-16 text-right text-xs" title="Pachkadagi dona soni (SKU'da eslab qolinadi)" />
+                              onKeyDown={onEnterNext(it.productId, "pack")}
+                              className="h-7 w-14 px-1.5 text-right text-xs tabular-nums" title="Pachkadagi dona soni (SKU'da eslab qolinadi)" aria-label="Pachka hajmi" />
                           </span>
                         </TableCell>
-                        <TableCell>
-                          <Input type="number" inputMode="decimal" value={l.qty} placeholder={String(it.suggested)}
-                            onChange={(e) => setLine(it.productId, { qty: e.target.value })} className="h-8 w-24 text-xs" />
+                        <TableCell className="bg-primary/[0.03] px-2">
+                          <Input ref={regRef(it.productId, "qty")} type="number" inputMode="decimal" value={l.qty}
+                            placeholder={it.suggested > 0 ? String(it.suggested) : ""}
+                            onChange={(e) => setLine(it.productId, { qty: e.target.value })}
+                            onKeyDown={onEnterNext(it.productId, "qty")}
+                            className="h-7 w-20 px-1.5 text-right text-xs tabular-nums" aria-label="Miqdor (dona)" />
                         </TableCell>
-                        <TableCell>
-                          <Input type="number" inputMode="decimal" value={l.price}
-                            placeholder={it.purchasePrice != null ? String(it.purchasePrice) : "narx"}
-                            onChange={(e) => setLine(it.productId, { price: e.target.value })} className="h-8 w-28 text-xs" />
+                        <TableCell className="bg-primary/[0.03] px-2">
+                          <Input ref={regRef(it.productId, "price")} type="number" inputMode="decimal" value={l.price}
+                            placeholder={it.purchasePrice != null ? String(it.purchasePrice) : ""}
+                            onChange={(e) => setLine(it.productId, { price: e.target.value })}
+                            onKeyDown={onEnterNext(it.productId, "price")}
+                            className="h-7 w-24 px-1.5 text-right text-xs tabular-nums" aria-label="Dona narxi" />
                         </TableCell>
-                        <TableCell className="text-right tabular-nums text-xs font-medium">{sum > 0 ? formatUZS(sum) : "—"}</TableCell>
+                        <TableCell className={cn("text-right tabular-nums text-xs", sum > 0 ? "font-semibold text-emerald-700 dark:text-emerald-400" : "text-muted-foreground/40")}>
+                          {sum > 0 ? formatUZS(sum) : "—"}
+                        </TableCell>
                       </TableRow>
                     );
                   })}
@@ -292,9 +322,9 @@ export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number
             <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Zakaz haqida izoh..." className="h-9" />
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3">
+          <div className="sticky bottom-3 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 shadow-lg">
             <div className="text-sm">
-              <span className="text-muted-foreground">Tanlandi:</span> <span className="font-medium">{chosen.length} SKU</span>
+              <span className="text-muted-foreground">Tanlandi:</span> <span className="font-semibold text-emerald-700 dark:text-emerald-400">{chosen.length} SKU</span>
               <span className="mx-2 text-muted-foreground">·</span>
               <span className="text-muted-foreground">Jami:</span> <span className="font-bold tabular-nums">{formatUZS(total)}</span>
             </div>
