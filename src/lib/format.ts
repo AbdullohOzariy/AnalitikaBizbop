@@ -31,6 +31,19 @@ export function formatDateUZ(d: Date | string): string {
   });
 }
 
+/**
+ * Deterministik "DD.MM.YYYY HH:mm" (Toshkent, UTC+5 — DST yo'q).
+ * toLocaleString o'rniga: server (Node ICU) va brauzer locale'lari farq qilganda
+ * hydration mismatch bermasin; vaqt mintaqasi qat'iy — qayerda render bo'lsa ham bir xil.
+ */
+export function formatDateTimeUZ(d: Date | string): string {
+  const date = typeof d === "string" ? new Date(d) : d;
+  if (isNaN(date.getTime())) return "—";
+  const t = new Date(date.getTime() + 5 * 3_600_000);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(t.getUTCDate())}.${p(t.getUTCMonth() + 1)}.${t.getUTCFullYear()} ${p(t.getUTCHours())}:${p(t.getUTCMinutes())}`;
+}
+
 export function formatDateRangeUZ(start: Date | string, end: Date | string): string {
   return `${formatDateUZ(start)} – ${formatDateUZ(end)}`;
 }

@@ -15,7 +15,9 @@ import {
 import { toast } from "sonner";
 import { uploadVisitsAction } from "./actions";
 
-const CURRENT_YEAR = new Date().getFullYear();
+// Toshkent (UTC+5) yili — getFullYear() lokal TZ'ga bog'liq: server (UTC) va brauzer
+// yil chegarasida farq qilib hydration mismatch berishi mumkin edi.
+const CURRENT_YEAR = new Date(Date.now() + 5 * 3_600_000).getUTCFullYear();
 const YEARS = [CURRENT_YEAR + 1, CURRENT_YEAR, CURRENT_YEAR - 1, CURRENT_YEAR - 2, CURRENT_YEAR - 3];
 
 export function VisitsUploadForm() {

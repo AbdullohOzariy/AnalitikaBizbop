@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -76,6 +76,7 @@ export function PeriodFilter({
   cend?: string;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
 
   const [localStart, setLocalStart] = useState(start);
@@ -90,7 +91,9 @@ export function PeriodFilter({
       if (v == null || v === "") params.delete(k);
       else params.set(k, v);
     }
-    router.replace(`/dashboard?${params.toString()}`, { scroll: false });
+    // Joriy sahifada qolamiz — bu filtr /dashboard'dan tashqari (masalan,
+    // /branches/[id]) sahifalarda ham ishlatiladi.
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
   const handleDateChange = (key: "start" | "end", value: string) => {

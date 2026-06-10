@@ -7,7 +7,7 @@ import { PageHeader, EmptyState, Pill } from "@/components/common/page";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { formatUZS } from "@/lib/format";
+import { formatUZS, formatDateUZ } from "@/lib/format";
 import { ORDER_STATUSES, ORDER_STATUS_LABEL, ORDER_STATUS_TONE } from "./order-status";
 import type { Prisma } from "@/generated/prisma/client";
 
@@ -102,7 +102,7 @@ export default async function SotibOlishPage({
                     <TableCell className="text-right tabular-nums text-xs">{r.count}</TableCell>
                     <TableCell className="text-right tabular-nums text-xs font-medium">{formatUZS(r.total)}</TableCell>
                     <TableCell className="text-xs text-muted-foreground max-w-[140px] truncate">{r.createdBy}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{r.date.toLocaleDateString("uz-UZ")}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{formatDateUZ(r.date)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

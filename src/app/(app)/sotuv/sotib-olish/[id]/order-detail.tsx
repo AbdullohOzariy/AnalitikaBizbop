@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Pill } from "@/components/common/page";
 import { Loader2, Save, Send, PackageCheck, RotateCcw, Trash2, Truck } from "lucide-react";
-import { formatUZS } from "@/lib/format";
+import { formatUZS, formatDateTimeUZ } from "@/lib/format";
 import { ORDER_STATUS_LABEL, ORDER_STATUS_TONE } from "../order-status";
 import { updateOrderItemsAction, setOrderStatusAction, deleteOrderAction } from "../actions";
 
@@ -77,7 +77,8 @@ export function OrderDetail({ order }: { order: OrderData }) {
       if (res.ok) { toast.success("Zakaz o'chirildi."); router.push("/sotuv/sotib-olish"); } else toast.error(res.error);
     });
 
-  const fmtDate = (s: string | null) => (s ? new Date(s).toLocaleString("uz-UZ", { dateStyle: "short", timeStyle: "short" }) : "—");
+  // toLocaleString EMAS — server/brauzer locale/TZ farqi hydration mismatch beradi.
+  const fmtDate = (s: string | null) => (s ? formatDateTimeUZ(s) : "—");
 
   return (
     <div className="space-y-4">

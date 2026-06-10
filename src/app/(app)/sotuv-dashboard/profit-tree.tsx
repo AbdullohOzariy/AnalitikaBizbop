@@ -56,7 +56,17 @@ export function ProfitTree({ tree }: { tree: ProfitTree }) {
             const gOpen = openG.has(g.id);
             return (
               <FragmentGroup key={g.id}>
-                <tr className="cursor-pointer border-b border-border bg-muted/30 hover:bg-muted/50" onClick={() => tg(g.id)}>
+                <tr
+                  className="cursor-pointer border-b border-border bg-muted/30 hover:bg-muted/50"
+                  onClick={() => tg(g.id)}
+                  // Klaviatura bilan ham ochilsin — tr o'zi interaktiv element emas
+                  tabIndex={0}
+                  role="button"
+                  aria-expanded={gOpen}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); tg(g.id); }
+                  }}
+                >
                   <td className="px-3 py-2">
                     <span className="flex items-center gap-1.5">
                       <ChevronRight className={cn("h-4 w-4 shrink-0 text-muted-foreground/60 transition-transform", gOpen && "rotate-90")} />
@@ -71,7 +81,16 @@ export function ProfitTree({ tree }: { tree: ProfitTree }) {
                   const hasSub = c.subcats.length > 0;
                   return (
                     <FragmentGroup key={c.id}>
-                      <tr className={cn("border-b border-border/60", hasSub && "cursor-pointer hover:bg-muted/20")} onClick={() => hasSub && tc(c.id)}>
+                      <tr
+                        className={cn("border-b border-border/60", hasSub && "cursor-pointer hover:bg-muted/20")}
+                        onClick={() => hasSub && tc(c.id)}
+                        tabIndex={hasSub ? 0 : undefined}
+                        role={hasSub ? "button" : undefined}
+                        aria-expanded={hasSub ? cOpen : undefined}
+                        onKeyDown={(e) => {
+                          if (hasSub && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); tc(c.id); }
+                        }}
+                      >
                         <td className="py-1.5 pl-9 pr-3">
                           <span className="flex items-center gap-1.5">
                             {hasSub

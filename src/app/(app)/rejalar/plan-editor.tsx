@@ -61,7 +61,8 @@ const MONTHS = [
   "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr",
 ];
 const WD_SHORT = ["Yak", "Du", "Se", "Ch", "Pa", "Ju", "Sha"];
-const CUR_YEAR = new Date().getFullYear();
+// Toshkent (UTC+5) yili — lokal getFullYear() server/brauzer TZ farqida hydration xavfi.
+const CUR_YEAR = new Date(Date.now() + 5 * 3_600_000).getUTCFullYear();
 const YEARS = [CUR_YEAR - 1, CUR_YEAR, CUR_YEAR + 1];
 
 // ─── Yordamchi ───────────────────────────────────────────────────────────────

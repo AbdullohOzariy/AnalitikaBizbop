@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import {
   ComposedChart,
   Bar,
@@ -28,15 +29,15 @@ function shortDate(iso: string): string {
   return `${m[3]}.${m[2]}`;
 }
 
-// Chiroyli va barcha grafiklarga mos tushuvchi Tooltip stili (Glassmorphism)
-const tooltipStyle = {
-  backgroundColor: "rgba(255, 255, 255, 0.75)",
+// Tooltip stili — CSS tokenlar orqali (dark mode'da ham o'qiladi; widgets.tsx bilan bir xil naqsh)
+const tooltipStyle: CSSProperties = {
+  backgroundColor: "var(--card)",
   backdropFilter: "blur(16px)",
   WebkitBackdropFilter: "blur(16px)",
   borderRadius: "16px",
-  border: "none",
-  boxShadow: "0 10px 40px -10px rgba(0,0,0,0.08)",
-  color: "#111827",
+  border: "1px solid var(--border)",
+  boxShadow: "0 10px 40px -10px rgba(0,0,0,0.15)",
+  color: "var(--foreground)",
   fontSize: "14px",
   fontFamily: "Sora, sans-serif",
 };
