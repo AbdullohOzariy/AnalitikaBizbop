@@ -1,7 +1,7 @@
 /**
- * Sof foyda (Iyerarxiya bo'yicha) — period kesimida.
+ * Foyda (Iyerarxiya bo'yicha) — period kesimida.
  *
- *   sof foyda = (sotuv − tannarx) − chiqim
+ *   foyda = (sotuv − tannarx) − chiqim
  *
  * Sotuv/tannarx: ProductSales (SKU → Product.categoryId = subkat), period proratsiyasi.
  * Chiqim: bizbop yozuvlari (ALOHIDA baza) → SpisaniyaCategoryLink (nom → subkat) orqali.
@@ -29,7 +29,7 @@ export type ProfitGroup = ProfitNode & { cats: ProfitCat[] };
 export type ProfitTree = {
   groups: ProfitGroup[];
   total: { sales: number; cost: number; writeoff: number; gross: number; net: number };
-  unmappedWriteoff: number; // bog'lanmagan chiqim (sof foydaga kirmaydi)
+  unmappedWriteoff: number; // bog'lanmagan chiqim (foydaga kirmaydi)
 };
 
 function finalize<T extends { sales: number; cost: number; writeoff: number }>(n: T) {

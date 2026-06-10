@@ -13,7 +13,7 @@ function netClass(n: number) {
   return n > 0 ? "text-emerald-600 dark:text-emerald-400" : n < 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground";
 }
 
-// Sotuv | Tannarx | Marja | Ustama | Chiqim | Sof foyda
+// Sotuv | Tannarx | Marja | Ustama | Chiqim | Foyda
 function Cells({ sales, cost, gross, writeoff, net }: { sales: number; cost: number; gross: number; writeoff: number; net: number }) {
   // Ustama % = (sotuv − tannarx) ÷ tannarx — "tannarx ustiga necha foiz qo'yilgan".
   // Marja'dan farqi: marja sotuvga nisbatan, ustama tannarxga nisbatan
@@ -48,7 +48,7 @@ export function ProfitTree({ tree }: { tree: ProfitTree }) {
             <th className="px-2 py-2.5 text-right font-semibold">Marja %</th>
             <th className="px-2 py-2.5 text-right font-semibold" title="Ustama = (sotuv − tannarx) ÷ tannarx — tannarx ustiga necha % qo'yilgan">Ustama %</th>
             <th className="px-2 py-2.5 text-right font-semibold">Chiqim</th>
-            <th className="px-3 py-2.5 text-right font-semibold">Sof foyda</th>
+            <th className="px-3 py-2.5 text-right font-semibold">Foyda</th>
           </tr>
         </thead>
         <tbody>
@@ -123,7 +123,7 @@ export function ProfitTree({ tree }: { tree: ProfitTree }) {
       </table>
       {tree.unmappedWriteoff > 0 && (
         <div className="border-t border-border bg-amber-500/[0.06] px-3 py-2 text-xs text-muted-foreground">
-          ⚠ Bog&apos;lanmagan chiqim: <span className="font-semibold text-foreground">−{money(tree.unmappedWriteoff)}</span> — sof foydaga kiritilmadi.{" "}
+          ⚠ Bog&apos;lanmagan chiqim: <span className="font-semibold text-foreground">−{money(tree.unmappedWriteoff)}</span> — foydaga kiritilmadi.{" "}
           <a href="/chiqim/moslash" className="underline underline-offset-2">Kategoriya moslash</a> bo&apos;limidan moslang.
         </div>
       )}

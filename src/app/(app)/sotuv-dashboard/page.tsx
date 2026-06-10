@@ -193,7 +193,7 @@ async function SotuvData({
           hint={projPct != null ? `davr oxiri prognozi ≈ ${projPct.toFixed(0)}%` : `${diff >= 0 ? "+" : ""}${formatUZS(diff, { compact: true })} farq`}
         />
         <StatCard label="Marja" value={marja == null ? "—" : `${marja.toFixed(1)}%`} icon={Percent} tone="violet" hint="sotuv / tannarx" />
-        <StatCard label="Sof foyda" value={formatUZS(profit.total.net, { compact: true })} icon={Coins} tone={profit.total.net >= 0 ? "green" : "red"} hint="sotuv − tannarx − chiqim" />
+        <StatCard label="Foyda" value={formatUZS(profit.total.net, { compact: true })} icon={Coins} tone={profit.total.net >= 0 ? "green" : "red"} hint="sotuv − tannarx − chiqim" />
       </div>
 
       {/* Run-rate signal: orqada qolayotgan bo'lsa — qolgan kunlarda kerakli temp */}
@@ -290,16 +290,16 @@ async function SotuvData({
         </CardContent>
       </Card>
 
-      {/* Sof foyda (Iyerarxiya bo'yicha) */}
+      {/* Foyda (Iyerarxiya bo'yicha) */}
       <div className="space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Coins className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-            <h3 className="text-sm font-semibold">Sof foyda — Iyerarxiya bo&apos;yicha</h3>
+            <h3 className="text-sm font-semibold">Foyda — Iyerarxiya bo&apos;yicha</h3>
             <span className="text-xs text-muted-foreground">(sotuv − tannarx − chiqim{branchId ? "" : " · barcha filiallar"})</span>
           </div>
           <span className="rounded-lg bg-emerald-500/10 px-3 py-1 text-sm font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
-            Jami sof foyda: {formatUZS(profit.total.net, { compact: true })}
+            Jami foyda: {formatUZS(profit.total.net, { compact: true })}
           </span>
         </div>
         <ProfitTree tree={profit} />

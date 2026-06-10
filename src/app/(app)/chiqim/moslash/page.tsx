@@ -69,7 +69,7 @@ export default async function ChiqimMoslashPage() {
       />
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <StatCard label="Kategoriyasiz chiqim" value={fmtNum(katsiz.total)} icon={ListChecks} tone={katsiz.total === 0 ? "green" : "orange"} hint="Sof foydaga kirmaydi" />
+        <StatCard label="Kategoriyasiz chiqim" value={fmtNum(katsiz.total)} icon={ListChecks} tone={katsiz.total === 0 ? "green" : "orange"} hint="Foydaga kirmaydi" />
         <StatCard label="Mavjud subkategoriya" value={String(subs.length)} icon={Tags} tone="blue" />
       </div>
 
