@@ -166,7 +166,7 @@ async function OosData({
         <StatCard label="Tugash xavfi" value={kpi.low.toLocaleString("uz-UZ")} icon={AlertTriangle} tone="orange"
           hint="qoldiq < davr savdosi" />
         <StatCard label="O'lik qoldiq" value={kpi.dead.toLocaleString("uz-UZ")} icon={TrendingDown} tone="default"
-          hint="qoldiq bor, sotuv yo'q" />
+          hint="butun davrda sotuv 0 · ≥2 yuklash" />
       </div>
 
       {/* View tabs */}

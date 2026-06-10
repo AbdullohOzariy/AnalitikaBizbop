@@ -47,27 +47,43 @@ export type OosRow = {
   abc: string | null; xyz: string | null; // matritsa holati — qator rangi uchun
 };
 
-// Eng so'nggi snapshot CTE (DISTINCT ON productId, branchId) — 731k qatorli
-// ProductSales ustidan og'ir so'rov; keshlar tufayli faqat cache-miss'da yuradi.
+// Eng so'nggi snapshot + davr agregati CTE'lari. "latest" — joriy holat (qoldiq),
+// "agg" — davr bo'yicha jami sotuv va nechta yuklashda ko'ringani (o'lik qoldiq uchun).
+// 731k qatorli ProductSales ustidan og'ir so'rov; keshlar tufayli faqat cache-miss'da yuradi.
 function latestCte(f: SnapshotFilters): Prisma.Sql {
   return Prisma.sql`
-    latest AS (
-      SELECT DISTINCT ON (ps."productId", ps."branchId")
-             ps."productId", ps."branchId", ps."stockQty", ps."soldQty", ps."amount", ps."periodEnd",
+    obase AS (
+      SELECT ps."productId", ps."branchId", ps."stockQty", ps."soldQty", ps."amount",
+             ps."periodStart", ps."periodEnd",
              p.code, p.name AS pname, p."categoryId", b.name AS bname,
              p."abcClass" AS abc, p."xyzClass" AS xyz
       FROM "ProductSales" ps
       JOIN "Product" p ON p.id = ps."productId"
       JOIN "Branch"  b ON b.id = ps."branchId"
       WHERE ${innerWhere(f)}
-      ORDER BY ps."productId", ps."branchId", ps."periodEnd" DESC
+    ),
+    latest AS (
+      SELECT DISTINCT ON ("productId", "branchId")
+             "productId", "branchId", "stockQty", "soldQty", "amount", "periodEnd",
+             code, pname, "categoryId", bname, abc, xyz
+      FROM obase
+      ORDER BY "productId", "branchId", "periodEnd" DESC
+    ),
+    oagg AS (
+      SELECT "productId", "branchId",
+             COALESCE(SUM("soldQty"), 0) AS sold_total,
+             COUNT(DISTINCT "periodStart") AS snaps
+      FROM obase
+      GROUP BY "productId", "branchId"
     )`;
 }
 
 const OOS_VIEW_COND: Record<OosView, Prisma.Sql> = {
   oos:  Prisma.sql`l."stockQty" IS NOT NULL AND l."stockQty" <= 0`,
   low:  Prisma.sql`l."stockQty" > 0 AND l."soldQty" IS NOT NULL AND l."soldQty" > 0 AND l."stockQty" < l."soldQty"`,
-  dead: Prisma.sql`l."stockQty" > 0 AND (l."soldQty" IS NULL OR l."soldQty" = 0)`,
+  // O'lik qoldiq: BUTUN davr davomida jami sotuv 0 + hozir qoldiq bor + kamida 2 ta
+  // yuklashda ko'ringan (yangi kelgan partiya darhol "o'lik" tamg'asini olmasin).
+  dead: Prisma.sql`l."stockQty" > 0 AND a.sold_total = 0 AND a.snaps >= 2`,
 };
 
 export const oosKpi = (f: SnapshotFilters) =>
@@ -82,28 +98,34 @@ export const oosKpi = (f: SnapshotFilters) =>
           count(*) FILTER (WHERE ${OOS_VIEW_COND.dead})::int AS dead,
           COALESCE(SUM(l."amount") FILTER (WHERE ${OOS_VIEW_COND.oos}), 0)::float8 AS oos_amount
         FROM latest l
+        JOIN oagg a ON a."productId" = l."productId" AND a."branchId" = l."branchId"
       `);
       return res[0] ?? { jami: 0, oos: 0, low: 0, dead: 0, oos_amount: 0 };
     },
-    ["oosKpi_v1", filterKey(f)],
+    ["oosKpi_v2", filterKey(f)],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
   )();
 
 export const oosRows = (f: SnapshotFilters, view: OosView, page: number, pageSize: number) =>
   unstable_cache(
     async (): Promise<OosRow[]> => {
+      // O'lik qoldiqda savdo 0 — qoldiq miqdori bo'yicha saralaymiz (eng ko'p yotgani tepada)
+      const orderRaw = view === "dead"
+        ? Prisma.raw(`l."stockQty" DESC`)
+        : Prisma.raw(`l."amount" DESC`);
       return prisma.$queryRaw<OosRow[]>(Prisma.sql`
         WITH ${latestCte(f)}
         SELECT l."productId", l."branchId", l.code, l.pname, l.bname, l."stockQty", l."soldQty", l."amount", l."periodEnd",
                l.abc, l.xyz, c.name AS cname
         FROM latest l
+        JOIN oagg a ON a."productId" = l."productId" AND a."branchId" = l."branchId"
         LEFT JOIN "Category" c ON c.id = l."categoryId"
         WHERE ${OOS_VIEW_COND[view]}
-        ORDER BY l."amount" DESC
+        ORDER BY ${orderRaw}
         LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}
       `);
     },
-    ["oosRows_v2", filterKey(f), view, String(page), String(pageSize)],
+    ["oosRows_v3", filterKey(f), view, String(page), String(pageSize)],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
   )();
 
