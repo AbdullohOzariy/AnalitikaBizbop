@@ -498,7 +498,10 @@ function parseProductLevel(
       for (let i = 0; i < n; i++) {
         if (!isGroup[i]) leafSum += parseAmount(data[i].r[sIdx]) ?? 0;
       }
-      const tol = Math.max(1, Math.abs(expected) * 0.001); // 0.1% — 1C yaxlitlashiga bardosh
+      // 0.001% (min 1000 so'm) — 1C yaxlitlashi satr boshiga ≤1 tiyin, demak bu ham keng.
+      // Eski 0.1% milliardlik filialda 10 mln'lik oynani o'tkazib yuborardi — qo'sh hisob
+      // (papka qatori SKU deb sanalishi) aynan shu o'lchamda bo'ladi.
+      const tol = Math.max(1000, Math.abs(expected) * 0.00001);
       if (Math.abs(leafSum - expected) > tol) {
         const farq = leafSum - expected;
         const nomzodlar = data

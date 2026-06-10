@@ -416,6 +416,7 @@ model Expense {
   createdBy User @relation(fields: [createdById], references: [id])
 
   @@index([spentAt])
+  @@index([spentAt, deletedAt]) // finans sahifasi filtri: spentAt oralig'i + deletedAt IS NULL
   @@index([createdById])
 }
 

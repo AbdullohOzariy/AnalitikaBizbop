@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { canSeeAnalytics } from "@/lib/roles";
 import { telegramFileUrl } from "@/lib/spisaniya/bot";
+import { rasmFileIdMavjud } from "@/lib/spisaniya/db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,6 +22,13 @@ export async function GET(
   }
 
   const { fileId } = await params;
+
+  // IDOR himoyasi: file_id bazadagi yozuv/vozvratga biriktirilgan bo'lishi shart —
+  // aks holda istalgan Telegram file_id'ni shu endpoint orqali ko'rish mumkin bo'lardi.
+  if (!(await rasmFileIdMavjud(fileId))) {
+    return new NextResponse("Rasm topilmadi", { status: 404 });
+  }
+
   const url = await telegramFileUrl(fileId);
   if (!url) return new NextResponse("Rasm topilmadi", { status: 404 });
 

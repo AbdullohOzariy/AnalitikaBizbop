@@ -87,10 +87,19 @@ export function parseVisitsWorkbook(buffer: Buffer, year: number): ParsedVisitsR
       if (v == null || v === "") continue;
       const n = typeof v === "number" ? v : Number(String(v).replace(/\s/g, "").replace(",", "."));
       if (!Number.isFinite(n)) continue;
+      // Tashrif soni butun va manfiy emas bo'lishi shart — haqiqiy kesirli/manfiy
+      // qiymat xato ma'lumot belgisi, jim yaxlitlab o'tkazmaymiz. Excel float
+      // artefakti (1499.9999…) esa epsilon ichida butunga keltiriladi.
+      const rounded = Math.round(n);
+      if (n < 0 || Math.abs(n - rounded) > 1e-6) {
+        throw new Error(
+          `Tashriflar faylida noto'g'ri qiymat: "${alias.trim()}" / ${date.toISOString().slice(0, 10)} = ${n} (butun musbat son kutiladi).`
+        );
+      }
       out.push({
         branchAlias: alias.trim(),
         date,
-        count: Math.round(n),
+        count: rounded,
       });
     }
   }

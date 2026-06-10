@@ -26,15 +26,23 @@ export {
   type VozvratHolat,
 };
 
-let _pool: Pool | null = null;
+// Pool globalThis'da — dev hot-reload'da modul qayta yuklanganda eski pool yopilmay
+// yangi ochilib, ulanishlar oqib ketmasin (bizbop bazasi limiti ham cheklangan).
+const globalForBotPool = globalThis as unknown as { botPool: Pool | undefined };
 
 function getPool(): Pool | null {
   const url = process.env.BOT_DATABASE_URL;
   if (!url) return null;
-  if (!_pool) {
-    _pool = new Pool({ connectionString: url, max: 5, idleTimeoutMillis: 10_000 });
+  if (!globalForBotPool.botPool) {
+    globalForBotPool.botPool = new Pool({ connectionString: url, max: 5, idleTimeoutMillis: 10_000 });
   }
-  return _pool;
+  return globalForBotPool.botPool;
+}
+
+/** Read funksiyalari xatoda bo'sh qaytaradi — lekin sabab logga yozilsin (DB uzilishi
+ * "bo'sh sahifa" bo'lib ko'rinmasin, loglardan darhol bilinishi kerak). */
+function logDbXato(err: unknown): void {
+  console.error("[spisaniya/db]", err instanceof Error ? err.message : err);
 }
 
 /** Yozish uchun — pool yo'q bo'lsa xato tashlaydi (read'dagidek jim qaytmaydi). */
@@ -87,7 +95,8 @@ export async function chiqimSummary(
       params
     );
     return rows as { tur: string; count: number; summa: number }[];
-  } catch {
+  } catch (err) {
+    logDbXato(err);
     return [];
   }
 }
@@ -113,7 +122,8 @@ export async function chiqimByBranch(
       params
     );
     return rows as { filial: string; count: number; summa: number }[];
-  } catch {
+  } catch (err) {
+    logDbXato(err);
     return [];
   }
 }
@@ -169,7 +179,8 @@ export async function chiqimRecords(
       params
     );
     return { rows: rows as ChiqimRecord[], total };
-  } catch {
+  } catch (err) {
+    logDbXato(err);
     return { rows: [], total: 0 };
   }
 }
@@ -183,7 +194,8 @@ export async function chiqimFilials(): Promise<string[]> {
       `SELECT DISTINCT filial FROM yozuvlar WHERE filial IS NOT NULL ORDER BY filial`
     );
     return rows.map((r) => r.filial as string);
-  } catch {
+  } catch (err) {
+    logDbXato(err);
     return [];
   }
 }
@@ -195,7 +207,8 @@ export async function botFilialar(): Promise<{ id: number; nomi: string; aktiv: 
   try {
     const { rows } = await p.query(`SELECT id, nomi, aktiv FROM filialar ORDER BY nomi`);
     return rows as { id: number; nomi: string; aktiv: boolean }[];
-  } catch {
+  } catch (err) {
+    logDbXato(err);
     return [];
   }
 }
@@ -206,7 +219,8 @@ export async function botKategoriyalar(): Promise<{ id: number; nomi: string }[]
   try {
     const { rows } = await p.query(`SELECT id, nomi FROM kategoriyalar ORDER BY nomi`);
     return rows as { id: number; nomi: string }[];
-  } catch {
+  } catch (err) {
+    logDbXato(err);
     return [];
   }
 }
@@ -233,6 +247,28 @@ export type YozuvKirim = {
  * Yangi yozuv qo'shadi (tranzaksiya: yozuvlar + vozvrat bo'lsa vozvrat_nazorat).
  * Yangi yozuv id'sini qaytaradi. Guruhga xabar / AI kategoriya — chaqiruvchi fonda qiladi.
  */
+/**
+ * Rasm file_id biror yozuv yoki vozvratga biriktirilganmi — /api/rasm-preview
+ * uchun obyekt-darajali tekshiruv (ixtiyoriy Telegram file_id ko'rilmasin).
+ */
+export async function rasmFileIdMavjud(fileId: string): Promise<boolean> {
+  const p = getPool();
+  if (!p) return false;
+  try {
+    const { rows } = await p.query(
+      `SELECT 1 FROM yozuvlar WHERE rasm_file_id = $1
+       UNION ALL
+       SELECT 1 FROM vozvratlar WHERE rasm_file_id = $1
+       LIMIT 1`,
+      [fileId]
+    );
+    return rows.length > 0;
+  } catch (err) {
+    logDbXato(err);
+    return false;
+  }
+}
+
 export async function insertYozuv(d: YozuvKirim): Promise<number> {
   const p = requirePool();
   await ensureSozlamalarSchema(); // 'ichki_sotuv' constraint tayyor bo'lsin
@@ -282,7 +318,8 @@ export async function aktivFilialNomlari(): Promise<string[]> {
   try {
     const { rows } = await p.query(`SELECT nomi FROM filialar WHERE aktiv = true ORDER BY nomi`);
     return rows.map((r) => r.nomi as string);
-  } catch {
+  } catch (err) {
+    logDbXato(err);
     return [];
   }
 }
@@ -297,7 +334,8 @@ export async function filialTopicId(filial: string): Promise<number | null> {
       [filial]
     );
     return rows[0]?.topic_id ? Number(rows[0].topic_id) : null;
-  } catch {
+  } catch (err) {
+    logDbXato(err);
     return null;
   }
 }
@@ -332,7 +370,8 @@ export async function kategoriyaNomlari(): Promise<string[]> {
   try {
     const { rows } = await p.query(`SELECT nomi FROM kategoriyalar ORDER BY nomi`);
     return rows.map((r) => r.nomi as string);
-  } catch {
+  } catch (err) {
+    logDbXato(err);
     return [];
   }
 }
@@ -376,7 +415,8 @@ export async function chiqimKatsiz(
       [limit]
     );
     return { rows: rows as { id: number; tovar: string; filial: string; summa: number; vaqt: string }[], total: (t.rows[0]?.n as number) ?? 0 };
-  } catch {
+  } catch (err) {
+    logDbXato(err);
     return { rows: [], total: 0 };
   }
 }
@@ -391,7 +431,8 @@ export async function kategoriyasizYozuvlar(limit: number): Promise<{ id: number
       [limit]
     );
     return rows as { id: number; tovar: string }[];
-  } catch {
+  } catch (err) {
+    logDbXato(err);
     return [];
   }
 }
@@ -529,7 +570,8 @@ export async function vozvratById(id: number): Promise<VozvratYozuv | null> {
   try {
     const { rows } = await p.query(`SELECT ${VOZVRAT_COLS} FROM vozvratlar WHERE id=$1`, [id]);
     return (rows[0] as VozvratYozuv) ?? null;
-  } catch {
+  } catch (err) {
+    logDbXato(err);
     return null;
   }
 }
@@ -552,7 +594,8 @@ export async function vozvratKanban(
       params
     );
     return rows as VozvratYozuv[];
-  } catch {
+  } catch (err) {
+    logDbXato(err);
     return [];
   }
 }
@@ -584,7 +627,8 @@ export async function vozvratSummary(
       qaytarilmadiSumma: rows[0].qaytarilmadi as number,
       jamiSoni: rows[0].jami as number,
     };
-  } catch {
+  } catch (err) {
+    logDbXato(err);
     return { qaytarildiSumma: 0, qaytarilmadiSumma: 0, jamiSoni: 0 };
   }
 }
@@ -719,7 +763,8 @@ export async function ruxsatList(): Promise<BotRuxsat[]> {
       `SELECT telegram_id::text, ism, aktiv, qoshgan, vaqt::text FROM bot_ruxsat ORDER BY vaqt DESC`
     );
     return rows as BotRuxsat[];
-  } catch {
+  } catch (err) {
+    logDbXato(err);
     return [];
   }
 }
@@ -735,7 +780,8 @@ export async function ruxsatBormi(telegramId: number | string): Promise<boolean>
       [String(telegramId)]
     );
     return rows.length > 0;
-  } catch {
+  } catch (err) {
+    logDbXato(err);
     return false;
   }
 }
@@ -774,7 +820,8 @@ export async function filialarToliq(): Promise<FilialToliq[]> {
       `SELECT id, nomi, aktiv, topic_id::text FROM filialar ORDER BY nomi`
     );
     return rows as FilialToliq[];
-  } catch {
+  } catch (err) {
+    logDbXato(err);
     return [];
   }
 }
@@ -825,7 +872,8 @@ export async function guruhChatIdOl(): Promise<string> {
     await ensureSozlamalarSchema();
     const { rows } = await p.query(`SELECT qiymat FROM sozlamalar WHERE kalit='GROUP_CHAT_ID'`);
     return rows[0]?.qiymat ?? "";
-  } catch {
+  } catch (err) {
+    logDbXato(err);
     return "";
   }
 }
@@ -856,7 +904,8 @@ export async function kategoriyalarSoni(): Promise<KategoriyaSoni[]> {
        GROUP BY k.id, k.nomi ORDER BY k.nomi`
     );
     return rows as KategoriyaSoni[];
-  } catch {
+  } catch (err) {
+    logDbXato(err);
     return [];
   }
 }
@@ -1007,7 +1056,8 @@ export async function chiqimByKategoriya(
       params
     );
     return rows as { kategoriya: string; count: number; summa: number }[];
-  } catch {
+  } catch (err) {
+    logDbXato(err);
     return [];
   }
 }
@@ -1037,7 +1087,8 @@ export async function chiqimExportRows(
       params
     );
     return rows as ChiqimRecord[];
-  } catch {
+  } catch (err) {
+    logDbXato(err);
     return [];
   }
 }

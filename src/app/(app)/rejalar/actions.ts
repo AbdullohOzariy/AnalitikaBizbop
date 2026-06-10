@@ -2,8 +2,8 @@
 
 import { revalidateTag } from "next/cache";
 import { z } from "zod";
-import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { requireAdmin } from "@/lib/auth-helpers";
 import { ANALYTICS_CACHE_TAG } from "@/lib/analytics";
 import {
   generateForecast,
@@ -12,11 +12,6 @@ import {
   type GroupForecastResult,
   type ForecastDayCell,
 } from "@/lib/forecast";
-
-async function requireAdmin() {
-  const session = await auth();
-  if (session?.user.role !== "SYSTEM_ADMIN") throw new Error("Ruxsat yo'q");
-}
 
 const id = z.coerce.number().int().positive();
 const yearZ = z.coerce.number().int().min(2000).max(2100);
@@ -63,7 +58,7 @@ export type GenerateForecastResult =
     }
   | { ok: false; error: string };
 
-// Barcha filiallar uchun prognoz (filiallar parallel, har biri 3 bo'lim ketma-ket)
+// Barcha filiallar uchun prognoz (filiallar 2 tadan, har biri 3 bo'lim ketma-ket)
 export async function generateForecastAllAction(input: {
   year: number;
   month: number;
@@ -71,9 +66,14 @@ export async function generateForecastAllAction(input: {
   try {
     await requireAdmin();
     const branches = await prisma.branch.findMany({ select: { id: true }, orderBy: { sortOrder: "asc" } });
-    const all = await Promise.all(
-      branches.map((b) => generateForecast(b.id, input.year, input.month))
-    );
+    // To'liq parallel EMAS: har filial bir nechta Claude so'rovi + DB tranzaksiya
+    // ochadi — hammasi birga API rate-limit va Neon pool'ni (max 5) bosib qo'yadi.
+    const LIMIT = 2;
+    const all: Awaited<ReturnType<typeof generateForecast>>[] = [];
+    for (let i = 0; i < branches.length; i += LIMIT) {
+      const chunk = branches.slice(i, i + LIMIT);
+      all.push(...(await Promise.all(chunk.map((b) => generateForecast(b.id, input.year, input.month)))));
+    }
     const days = await getForecastDays(input.year, input.month);
     revalidateTag(ANALYTICS_CACHE_TAG, "max");
     return { ok: true, branchCount: branches.length, groups: all.flat(), days };

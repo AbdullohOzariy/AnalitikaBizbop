@@ -5,7 +5,9 @@ import type { Role } from "@/generated/prisma/enums";
 // To'liq config (Credentials provider bilan birga) src/auth.ts da kengaytirilgan.
 export const authConfig = {
   pages: { signIn: "/login" },
-  session: { strategy: "jwt" },
+  // maxAge: default 30 kun o'rniga 12 soat — token o'g'irlansa amal qilish oynasi qisqa.
+  // (Rol baribir har so'rovda DB'dan qayta o'qiladi — src/auth.ts session callback.)
+  session: { strategy: "jwt", maxAge: 12 * 60 * 60 },
   providers: [],
   callbacks: {
     authorized: ({ auth, request: { nextUrl } }) => {
