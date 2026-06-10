@@ -34,7 +34,7 @@ export function SkuList({ groups }: { groups: HGroup[] }) {
   const [subId, setSubId] = useState<string>(ALL);
   const [page, setPage] = useState(1);
 
-  const [holat, setHolat] = useState<"aktiv" | "arxiv">("aktiv");
+  const [holat, setHolat] = useState<"aktiv" | "arxiv" | "nomzod">("aktiv");
   const [refreshKey, setRefreshKey] = useState(0); // bulk arxivdan keyin ro'yxatni qayta yuklash
   const [inactive, setInactive] = useState<{ stockZero: number; withStock: number } | null>(null);
   const [archPending, startArch] = useTransition();
@@ -159,10 +159,11 @@ export function SkuList({ groups }: { groups: HGroup[] }) {
           options={subOptions} allLabel="Barcha subkat" />
         <div className="space-y-1">
           <Label className="text-xs text-muted-foreground">Holat</Label>
-          <Select value={holat} onValueChange={(v) => { setHolat(v === "arxiv" ? "arxiv" : "aktiv"); setPage(1); }}>
-            <SelectTrigger className="h-9 w-32 text-xs"><SelectValue /></SelectTrigger>
+          <Select value={holat} onValueChange={(v) => { setHolat(v === "arxiv" || v === "nomzod" ? v : "aktiv"); setPage(1); }}>
+            <SelectTrigger className="h-9 w-44 text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="aktiv">Aktiv</SelectItem>
+              <SelectItem value="nomzod">Savdosiz (nomzod)</SelectItem>
               <SelectItem value="arxiv">Arxiv</SelectItem>
             </SelectContent>
           </Select>
@@ -170,7 +171,7 @@ export function SkuList({ groups }: { groups: HGroup[] }) {
       </div>
 
       {/* No-aktiv SKU'lar banneri — ommaviy arxivlash */}
-      {holat === "aktiv" && inactive && inactive.stockZero + inactive.withStock > 0 && (
+      {holat !== "arxiv" && inactive && inactive.stockZero + inactive.withStock > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-zinc-400/40 bg-zinc-400/10 px-3 py-2 text-sm">
           <Archive className="h-4 w-4 shrink-0 text-muted-foreground" />
           <span>
@@ -236,7 +237,7 @@ export function SkuList({ groups }: { groups: HGroup[] }) {
                     <TableCell className="text-xs">{r.sub ?? <span className="text-amber-600 dark:text-amber-400">moslanmagan</span>}</TableCell>
                     <TableCell className="text-right">
                       <span className="inline-flex gap-0.5">
-                        {holat === "aktiv" ? (
+                        {holat !== "arxiv" ? (
                           <>
                             <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEdit(r)} aria-label="Tahrirlash">
                               <Pencil className="h-3.5 w-3.5" />

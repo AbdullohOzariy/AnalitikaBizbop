@@ -30,15 +30,18 @@ export async function searchSkusAction(input: {
   catId?: number;
   subId?: number;
   page?: number;
-  holat?: "aktiv" | "arxiv"; // standart: aktiv (arxivlanganlar ko'rinmaydi)
+  holat?: "aktiv" | "arxiv" | "nomzod"; // nomzod = aktiv, lekin 3 oy savdosiz (arxiv nomzodi)
 }): Promise<{ ok: true; rows: SkuRow[]; total: number; page: number; pageSize: number } | { ok: false; error: string }> {
   try {
     await requireAdmin();
     const q = (input.q ?? "").trim();
     const page = Math.max(1, Math.floor(input.page ?? 1));
-    const where: Prisma.ProductWhereInput = {
-      archivedAt: input.holat === "arxiv" ? { not: null } : null,
-    };
+    const where: Prisma.ProductWhereInput =
+      input.holat === "arxiv"
+        ? { archivedAt: { not: null } }
+        : input.holat === "nomzod"
+          ? { archivedAt: null, abcClass: null } // 3 oy savdosiz, hali aktiv
+          : { archivedAt: null };
     if (q) {
       const num = /^\d+$/.test(q) ? parseInt(q, 10) : undefined;
       where.OR = [
