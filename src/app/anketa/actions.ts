@@ -1,7 +1,7 @@
 "use server";
 
 /**
- * Ta'minotchi anketasi — PUBLIC yuborish (supplier.oilagroup.uz).
+ * Yetkazib beruvchi anketasi — PUBLIC yuborish (supplier.oilagroup.uz).
  * Auth yo'q: IP bo'yicha rate-limit + server tomonda to'liq validatsiya.
  */
 import { headers } from "next/headers";

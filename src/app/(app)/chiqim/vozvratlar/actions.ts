@@ -122,7 +122,7 @@ export async function vozvratYangilaAction(input: {
       sabab: p.sabab === undefined ? undefined : p.sabab || null,
       filial: p.filial,
       yonalish: p.yonalish,
-      // asosiy_filialga o'tkazilsa ta'minotchi tozalanadi
+      // asosiy_filialga o'tkazilsa yetkazib beruvchi tozalanadi
       taminotchi:
         p.yonalish === "asosiy_filial"
           ? null

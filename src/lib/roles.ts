@@ -5,7 +5,7 @@
 // CAT_MANAGER  — o'z kategoriyalari (Dashboard v2, OOS, chiqim, sotib-olish).
 // CEO          — yuqori darajadagi ko'ruvchi.
 // SUPPLYCHAIN  — ta'minot zanjiri: analitika/sotuv/spisaniyani KO'RADI,
-//                ta'minotchilarni esa TO'LIQ boshqaradi (qo'shish, profil, lead time).
+//                yetkazib beruvchilarni esa TO'LIQ boshqaradi (qo'shish, profil, lead time).
 
 type R = string | null | undefined;
 
@@ -22,8 +22,8 @@ export const canSeeAnalytics = (r: R): boolean =>
 /** Ta'minot zanjiri roli. */
 export const isSupplyChain = (r: R): boolean => r === "SUPPLYCHAIN";
 
-/** Ta'minotchilar bo'limini KO'RA oladiganlar. */
+/** Yetkazib beruvchilar bo'limini KO'RA oladiganlar. */
 export const canSeeSuppliers = (r: R): boolean => isAdminTier(r) || isSupplyChain(r);
 
-/** Ta'minotchilarni TAHRIRLAY oladiganlar (qo'shish, profil, shartnoma, lead time). */
+/** Yetkazib beruvchilarni TAHRIRLAY oladiganlar (qo'shish, profil, shartnoma, lead time). */
 export const canEditSuppliers = (r: R): boolean => isSystemAdmin(r) || isSupplyChain(r);

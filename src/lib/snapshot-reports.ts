@@ -192,7 +192,7 @@ function sdCte(f: SnapshotFilters, todayDow: number): Prisma.Sql {
     sd AS (
       SELECT l."productId", l."branchId", l.code, l.pname, l."categoryId", l.bname, l."periodEnd",
              l.abc, l.xyz, l.lead,
-             -- Yetib kelish kunlari = keyingi zakaz kunigacha (ta'minotchi haftalik jadvalidan,
+             -- Yetib kelish kunlari = keyingi zakaz kunigacha (yetkazib beruvchi haftalik jadvalidan,
              -- belgilanmagan bo'lsa 0 — istalgan kuni) + SKU lead time. Lead kiritilmagan — NULL.
              CASE WHEN l.lead IS NOT NULL THEN
                COALESCE((

@@ -79,7 +79,7 @@ export default async function SupplierProfilePage({
       <PageHeader
         icon={Truck}
         title={supplier.name}
-        description="Ta'minotchi profili — SKU'lar, lead time, zakaz kunlari, shartnomalar"
+        description="Yetkazib beruvchi profili — SKU'lar, lead time, zakaz kunlari, shartnomalar"
       >
         <Link
           href="/baza/taminotchilar"
@@ -92,14 +92,14 @@ export default async function SupplierProfilePage({
       {/* KPI */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="SKU soni" value={skus.length.toLocaleString("uz-UZ")} icon={Layers}
-          hint="shu ta'minotchiga biriktirilgan" />
+          hint="shu yetkazib beruvchiga biriktirilgan" />
         <StatCard label="Lead time" value={avgLead != null ? `≈ ${avgLead.toFixed(1)} kun` : "—"} icon={Clock}
           tone={withLead.length === 0 ? "orange" : "default"}
           hint={`kiritilgan: ${withLead.length}/${skus.length}`} />
         <StatCard label="Shartnomalar" value={contracts.length.toLocaleString("uz-UZ")} icon={FileText}
           hint={contracts.length === 0 ? "kiritilmagan" : undefined} />
         <StatCard label="Zakazlar" value={orderCount.toLocaleString("uz-UZ")} icon={ShoppingCart}
-          hint="shu ta'minotchiga berilgan" />
+          hint="shu yetkazib beruvchiga berilgan" />
       </div>
 
       {/* Baho + kontakt */}

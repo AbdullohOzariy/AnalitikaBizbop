@@ -271,7 +271,7 @@ export function VozvratList({
               </div>
               {edit.yonalish === "taminotchi" && (
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Ta&apos;minotchi</Label>
+                  <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Yetkazib beruvchi</Label>
                   <Input value={edit.taminotchi} disabled={isPending} className="h-10 rounded-xl"
                     onChange={(e) => set("taminotchi", e.target.value)} />
                 </div>

@@ -137,7 +137,7 @@ export function ProfilHeader({
 
 // ─── Zakaz kunlari kalendari ──────────────────────────────────────────────────
 // Haftalik takrorlanuvchi naqsh: kalendarda istalgan kunni bossangiz — o'sha HAFTA
-// KUNI butun oyda yonadi/o'chadi (ta'minotchilar haftalik jadval bilan ishlaydi).
+// KUNI butun oyda yonadi/o'chadi (yetkazib beruvchilar haftalik jadval bilan ishlaydi).
 
 export function OrderDaysCalendar({
   supplierId, weekdays, canEdit = true,

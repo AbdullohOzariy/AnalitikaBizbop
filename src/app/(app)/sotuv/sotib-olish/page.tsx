@@ -56,7 +56,7 @@ export default async function SotibOlishPage({
       <PageHeader
         icon={ShoppingCart}
         title="Sotib olish"
-        description="Ta'minotchilarga zakaz (buyurtma) berish va kuzatish"
+        description="Yetkazib beruvchilarga zakaz (buyurtma) berish va kuzatish"
       >
         <Link href="/sotuv/sotib-olish/yangi"
           className="inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-3.5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90">
@@ -81,7 +81,7 @@ export default async function SotibOlishPage({
               <TableHeader>
                 <TableRow className="bg-muted/40 hover:bg-muted/40">
                   <TableHead className="w-[70px]">№</TableHead>
-                  <TableHead>Ta'minotchi</TableHead>
+                  <TableHead>Yetkazib beruvchi</TableHead>
                   <TableHead className="w-[130px]">Holat</TableHead>
                   <TableHead className="text-right w-[90px]">SKU</TableHead>
                   <TableHead className="text-right w-[140px]">Jami summa</TableHead>

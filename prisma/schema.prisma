@@ -16,7 +16,7 @@ enum Role {
   VIEWER // eskirgan — ishlatilmaydi (migratsiyada CAT_MANAGER'ga o'tkazilgan). UI'da yo'q.
   CAT_MANAGER
   CEO
-  SUPPLYCHAIN // ta'minot zanjiri: analitika/sotuv/spisaniya ko'radi + ta'minotchilarni boshqaradi
+  SUPPLYCHAIN // ta'minot zanjiri: analitika/sotuv/spisaniya ko'radi + yetkazib beruvchilarni boshqaradi
 }
 
 // Zakaz (sotib olish buyurtmasi) holati
@@ -269,7 +269,7 @@ model Product {
   code       Int      @unique // 1C mahsulot kodi
   name       String
   categoryId Int? // tegishli kategoriya/subkategoriya (iyerarxiyadagi joyi)
-  supplierId Int? // ta'minotchi (POSTAVSHIK)
+  supplierId Int? // yetkazib beruvchi (POSTAVSHIK)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -279,7 +279,7 @@ model Product {
   currentSold    Decimal?  @db.Decimal(20, 3) // so'nggi davrdagi sotuv (dona)
   abcClass       String?   @db.Char(1) // ABC sinfi (standart 3 oylik oyna) — sotuv yuklashda yangilanadi
   xyzClass       String?   @db.Char(1) // XYZ sinfi (talab barqarorligi) — sotuv yuklashda yangilanadi
-  leadTimeDays   Int? // zakazdan kelguncha kunlar — ta'minotchi profilida kiritiladi
+  leadTimeDays   Int? // zakazdan kelguncha kunlar — yetkazib beruvchi profilida kiritiladi
   archivedAt     DateTime? // no-aktiv (arxiv) — buyurtma/OOS/Stockday'dan chiqadi, tarix saqlanadi
   packSize       Int? // blok/yashik/pachkadagi dona soni — buyurtmada eslab qolinadi
   purchasePrice  Decimal? @db.Decimal(20, 2) // kelishilgan sotib olish narxi (dona) — zakazdan eslab qolinadi
@@ -307,7 +307,7 @@ model ProductNameMismatch {
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 }
 
-// Ta'minotchi (POSTAVSHIK) — sku.xlsx'dagi yetkazib beruvchi. Mahsulotga 1:N.
+// Yetkazib beruvchi (POSTAVSHIK) — sku.xlsx'dagi yetkazib beruvchi. Mahsulotga 1:N.
 model Supplier {
   id            Int     @id @default(autoincrement())
   name          String  @unique // masalan "2-O'RIKZOR BOZOR"
@@ -325,7 +325,7 @@ model Supplier {
   contracts SupplierContract[]
 }
 
-// Ta'minotchi bilan shartnoma — hujjat fayli tashqi havola (Drive va h.k.) sifatida.
+// Yetkazib beruvchi bilan shartnoma — hujjat fayli tashqi havola (Drive va h.k.) sifatida.
 model SupplierContract {
   id         Int       @id @default(autoincrement())
   supplierId Int
@@ -343,7 +343,7 @@ model SupplierContract {
   @@index([supplierId])
 }
 
-// Zakaz — ta'minotchiga sotib olish buyurtmasi (kategoriya menejeri yaratadi).
+// Zakaz — yetkazib beruvchiga sotib olish buyurtmasi (kategoriya menejeri yaratadi).
 model PurchaseOrder {
   id          Int         @id @default(autoincrement())
   supplierId  Int
@@ -531,7 +531,7 @@ model ForecastRun {
   @@index([branchId, year, month])
 }
 
-// ─── Ta'minotchi anketasi (supplier.oilagroup.uz) ──────────────────────────────
+// ─── Yetkazib beruvchi anketasi (supplier.oilagroup.uz) ──────────────────────────────
 // Forma maydonlari sozlanuvchan — Tizim → Anketa bo'limida tahrirlanadi.
 model AnketaField {
   id        Int      @id @default(autoincrement())

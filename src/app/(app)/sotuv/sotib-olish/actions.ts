@@ -33,7 +33,7 @@ export type BuilderItem = {
   suggested: number;
   abc: string | null; // ABC×XYZ matritsa holati — rang uchun
   xyz: string | null;
-  lead: number | null; // lead time (kun) — ta'minotchi profilida kiritiladi
+  lead: number | null; // lead time (kun) — yetkazib beruvchi profilida kiritiladi
   arxiv: boolean; // no-aktiv (arxivlangan) — ro'yxatda belgisi bilan ko'rinadi
   dailyAvg: number; // kunlik o'rtacha sotuv (oxirgi ma'lumot oynasi, filiallar yig'indisi)
   packSize: number | null; // blok/pachkadagi dona soni (Product'da eslab qolinadi)
@@ -61,7 +61,7 @@ const XYZ_BUFFER: Record<string, number> = { X: 1.1, Y: 1.25, Z: 1.5 };
 /** Joriy foydalanuvchi qamrovidagi kategoriya id'lari (admin — barchasi = null). */
 // Qamrov helperlari markazlashgan: src/lib/scope.ts
 
-/** Zakaz uchun ta'minotchilar — foydalanuvchi qamrovidagi SKU'lari bor. */
+/** Zakaz uchun yetkazib beruvchilar — foydalanuvchi qamrovidagi SKU'lari bor. */
 export async function suppliersForOrderAction(): Promise<
   { ok: true; suppliers: SupplierOption[] } | { ok: false; error: string }
 > {
@@ -90,7 +90,7 @@ export async function suppliersForOrderAction(): Promise<
   }
 }
 
-/** Ta'minotchi × qamrov SKU'lari + qoldiq/sotuv asosida taklif miqdori. */
+/** Yetkazib beruvchi × qamrov SKU'lari + qoldiq/sotuv asosida taklif miqdori. */
 export async function supplierItemsAction(
   supplierId: number
 ): Promise<{ ok: true; items: BuilderItem[] } | { ok: false; error: string }> {

@@ -1,5 +1,5 @@
 /**
- * Ta'minotchi anketasi — PUBLIC sahifa (supplier.oilagroup.uz shu yerga rewrite
+ * Yetkazib beruvchi anketasi — PUBLIC sahifa (supplier.oilagroup.uz shu yerga rewrite
  * qilinadi). Maydonlar DB'dan (Tizim → Anketa'da tahrirlanadi).
  */
 import Image from "next/image";
@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 export const metadata = {
   title: "Yetkazib beruvchilar anketasi — BizBop",
-  description: "Bizbop supermarketlari bilan hamkorlik uchun ta'minotchi anketasi",
+  description: "Bizbop supermarketlari bilan hamkorlik uchun yetkazib beruvchi anketasi",
 };
 
 export default async function AnketaPage() {

@@ -22,7 +22,7 @@ export default async function YangiZakazPage({
       <PageHeader
         icon={ShoppingCart}
         title="Yangi zakaz"
-        description="Ta'minotchini tanlang — SKU'lar qoldiq/sotuv asosida taklif bilan chiqadi"
+        description="Yetkazib beruvchini tanlang — SKU'lar qoldiq/sotuv asosida taklif bilan chiqadi"
       />
       <OrderBuilder initialSupplierId={initialSupplierId} />
     </div>

@@ -25,10 +25,10 @@ export function TaminotchilarClient({ suppliers, canEdit = false }: { suppliers:
   const [creating, startCreate] = useTransition();
   const addSupplier = () => {
     const nm = newName.trim();
-    if (!nm) { toast.error("Ta'minotchi nomini kiriting."); return; }
+    if (!nm) { toast.error("Yetkazib beruvchi nomini kiriting."); return; }
     startCreate(async () => {
       const res = await createSupplierAction(nm);
-      if (res.ok) { toast.success("Ta'minotchi qo'shildi."); setNewName(""); router.refresh(); }
+      if (res.ok) { toast.success("Yetkazib beruvchi qo'shildi."); setNewName(""); router.refresh(); }
       else toast.error(res.error);
     });
   };
@@ -75,9 +75,9 @@ export function TaminotchilarClient({ suppliers, canEdit = false }: { suppliers:
     <div className="space-y-4">
       {/* Statistika */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <StatCard label="Ta'minotchilar" value={suppliers.length} icon={Truck} />
+        <StatCard label="Yetkazib beruvchilar" value={suppliers.length} icon={Truck} />
         <StatCard label="SKU (mahsulot)" value={totalSku.toLocaleString("uz-UZ")} icon={Package} tone="blue" />
-        <StatCard label="Ta'minotchisiz SKU" value="—" icon={Tags} hint="alohida hisoblanadi" />
+        <StatCard label="Yetkazib beruvchisiz SKU" value="—" icon={Tags} hint="alohida hisoblanadi" />
       </div>
 
       {/* Qidiruv */}
@@ -86,7 +86,7 @@ export function TaminotchilarClient({ suppliers, canEdit = false }: { suppliers:
         <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Ta'minotchi nomi bo'yicha qidirish..."
+          placeholder="Yetkazib beruvchi nomi bo'yicha qidirish..."
           className="h-9 pl-8 pr-8"
         />
         {query && (
@@ -101,7 +101,7 @@ export function TaminotchilarClient({ suppliers, canEdit = false }: { suppliers:
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card px-3 py-2">
           <Input value={newName} onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") addSupplier(); }}
-            placeholder="Yangi ta'minotchi nomi..." className="h-9 max-w-sm" />
+            placeholder="Yangi yetkazib beruvchi nomi..." className="h-9 max-w-sm" />
           <Button onClick={addSupplier} disabled={creating} className="h-9 gap-1.5">
             {creating ? <Loader2b className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
             Qo'shish
@@ -110,7 +110,7 @@ export function TaminotchilarClient({ suppliers, canEdit = false }: { suppliers:
       )}
 
       {filtered.length === 0 ? (
-        <EmptyState icon={Search} title="Ta'minotchi topilmadi" description="Boshqa nom kiriting." />
+        <EmptyState icon={Search} title="Yetkazib beruvchi topilmadi" description="Boshqa nom kiriting." />
       ) : (
         <div className="space-y-1.5">
           {filtered.map((sup) => {

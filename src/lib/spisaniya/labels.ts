@@ -42,5 +42,5 @@ export const VOZVRAT_HOLAT_LABEL: Record<string, string> = {
 
 export const VOZVRAT_YONALISH_LABEL: Record<string, string> = {
   asosiy_filial: "Asosiy filialga",
-  taminotchi: "Ta'minotchiga",
+  taminotchi: "Yetkazib beruvchiga",
 };

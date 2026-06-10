@@ -4,7 +4,7 @@ import { authConfig } from "@/auth.config";
 
 const { auth } = NextAuth(authConfig);
 
-// supplier.oilagroup.uz — faqat ta'minotchi anketasi: barcha yo'llar /anketa'ga
+// supplier.oilagroup.uz — faqat yetkazib beruvchi anketasi: barcha yo'llar /anketa'ga
 // rewrite qilinadi (asosiy ERP bu domenda ko'rinmaydi). Auth talab qilinmaydi
 // (auth.config'da supplier.* host public deb belgilangan).
 export default auth((req) => {

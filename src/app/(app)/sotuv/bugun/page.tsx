@@ -1,9 +1,9 @@
 /**
  * "Bugun" — kunlik ish navbati. Asosan kategoriya menejerlari uchun:
- * bugun zakaz beriladigan ta'minotchilar (profildagi zakaz kunlari bo'yicha),
+ * bugun zakaz beriladigan yetkazib beruvchilar (profildagi zakaz kunlari bo'yicha),
  * har biri uchun tayyor "Zakaz yaratish" yo'li, bajarilganlik holati,
  * hamda diqqat talab signallar (kechikish xavfi, OOS).
- * Qamrov: CAT_MANAGER faqat o'z kategoriyalaridagi ta'minotchi/signal'larni ko'radi.
+ * Qamrov: CAT_MANAGER faqat o'z kategoriyalaridagi yetkazib beruvchi/signal'larni ko'radi.
  */
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -57,13 +57,13 @@ export default async function BugunPage() {
         <PageHeader icon={CalendarCheck} title="Bugun" description="Kunlik ish navbati" />
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
           Sizga hali kategoriya biriktirilmagan — administrator tayinlagach, bu yerda kunlik
-          ishlaringiz (zakaz beriladigan ta&apos;minotchilar, signallar) ko&apos;rinadi.
+          ishlaringiz (zakaz beriladigan yetkazib beruvchilar, signallar) ko&apos;rinadi.
         </div>
       </div>
     );
   }
 
-  // ── Ta'minotchilar: bugun va ertaga zakaz qabul qiladiganlar (qamrov ichida) ──
+  // ── Yetkazib beruvchilar: bugun va ertaga zakaz qabul qiladiganlar (qamrov ichida) ──
   const supplierWhere = (d: number) => ({
     orderWeekdays: { has: d },
     products: { some: { archivedAt: null, ...scopeProductWhere(scopeParents) } },
@@ -109,7 +109,7 @@ export default async function BugunPage() {
     if (!orderBySupplier.has(o.supplierId)) orderBySupplier.set(o.supplierId, { id: o.id, status: o.status });
   }
 
-  // Qamrovdagi SKU soni har ta'minotchi uchun (kartada ko'rsatish)
+  // Qamrovdagi SKU soni har yetkazib beruvchi uchun (kartada ko'rsatish)
   const skuCounts = todaySuppliers.length
     ? await prisma.product.groupBy({
         by: ["supplierId"],
@@ -136,7 +136,7 @@ export default async function BugunPage() {
       {/* KPI */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Bugungi zakaz kunlari" value={todaySuppliers.length.toLocaleString("uz-UZ")} icon={Truck}
-          hint="zakaz qabul qiladigan ta'minotchilar" />
+          hint="zakaz qabul qiladigan yetkazib beruvchilar" />
         <StatCard label="Zakaz berildi" value={`${done}/${todaySuppliers.length}`} icon={CheckCircle2}
           tone={todaySuppliers.length > 0 && done === todaySuppliers.length ? "green" : "default"}
           hint={done < todaySuppliers.length ? "qolganlari kutilmoqda" : "hammasi bajarildi"} />
@@ -151,16 +151,16 @@ export default async function BugunPage() {
         {/* ── Bugungi zakazlar ro'yxati ── */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Bugun zakaz beriladigan ta&apos;minotchilar</CardTitle>
+            <CardTitle className="text-base">Bugun zakaz beriladigan yetkazib beruvchilar</CardTitle>
             <p className="text-xs text-muted-foreground">
-              Zakaz kunlari ta&apos;minotchi profilida belgilanadi. Tugma — ta&apos;minotchi tanlangan holda tayyor zakaz oynasini ochadi.
+              Zakaz kunlari yetkazib beruvchi profilida belgilanadi. Tugma — yetkazib beruvchi tanlangan holda tayyor zakaz oynasini ochadi.
             </p>
           </CardHeader>
           <CardContent className="space-y-2">
             {todaySuppliers.length === 0 ? (
               <p className="py-6 text-center text-sm italic text-muted-foreground">
-                Bugun zakaz kuni belgilangan ta&apos;minotchi yo&apos;q.
-                Zakaz kunlarini <Link href="/baza/taminotchilar" className="underline underline-offset-2">ta&apos;minotchi profillarida</Link> belgilang.
+                Bugun zakaz kuni belgilangan yetkazib beruvchi yo&apos;q.
+                Zakaz kunlarini <Link href="/baza/taminotchilar" className="underline underline-offset-2">yetkazib beruvchi profillarida</Link> belgilang.
               </p>
             ) : (
               todaySuppliers.map((s) => {

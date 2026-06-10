@@ -61,7 +61,7 @@ export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number
       const res = await suppliersForOrderAction();
       if (res.ok) {
         setSuppliers(res.suppliers);
-        // "Bugun" sahifasidan kelganda ta'minotchi oldindan tanlanadi
+        // "Bugun" sahifasidan kelganda yetkazib beruvchi oldindan tanlanadi
         if (initialSupplierId && res.suppliers.some((s) => s.id === initialSupplierId)) {
           onSupplier(String(initialSupplierId));
         }
@@ -132,7 +132,7 @@ export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number
   }, [lines, itemByPid]);
   const total = useMemo(() => chosen.reduce((s, c) => s + c.quantity * c.price, 0), [chosen]);
 
-  // Tanlangan ta'minotchining zakaz kunlari hinti (profilda belgilanadi).
+  // Tanlangan yetkazib beruvchining zakaz kunlari hinti (profilda belgilanadi).
   // Joriy vaqt faqat mount'da o'qiladi (render purity); hisob arzon — memo shart emas.
   const [hintNow] = useState(() => new Date());
   const orderDayHint = (() => {
@@ -152,7 +152,7 @@ export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number
   })();
 
   const save = () => {
-    if (!supplierId) { toast.error("Ta'minotchi tanlang."); return; }
+    if (!supplierId) { toast.error("Yetkazib beruvchi tanlang."); return; }
     if (chosen.length === 0) { toast.error("Kamida bitta SKU uchun miqdor kiriting."); return; }
     startSave(async () => {
       const res = await createOrderAction({ supplierId: Number(supplierId), items: chosen, note });
@@ -165,10 +165,10 @@ export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-3">
         <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Ta'minotchi</Label>
+          <Label className="text-xs text-muted-foreground">Yetkazib beruvchi</Label>
           <Select value={supplierId} onValueChange={(v) => onSupplier(v ?? "")} disabled={loadingSup || saving}>
             <SelectTrigger className="h-9 w-72 text-sm">
-              <SelectValue placeholder={loadingSup ? "Yuklanmoqda…" : "Ta'minotchi tanlang…"} />
+              <SelectValue placeholder={loadingSup ? "Yuklanmoqda…" : "Yetkazib beruvchi tanlang…"} />
             </SelectTrigger>
             <SelectContent>
               {suppliers.map((s) => (
@@ -208,9 +208,9 @@ export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number
       {loadingItems ? (
         <p className="flex items-center gap-1.5 py-6 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> SKU'lar yuklanmoqda…</p>
       ) : !supplierId ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">Boshlash uchun ta'minotchi tanlang.</p>
+        <p className="py-6 text-center text-sm text-muted-foreground">Boshlash uchun yetkazib beruvchi tanlang.</p>
       ) : items.length === 0 ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">Bu ta'minotchida sizning kategoriyangizда SKU yo'q.</p>
+        <p className="py-6 text-center text-sm text-muted-foreground">Bu yetkazib beruvchida sizning kategoriyangizда SKU yo'q.</p>
       ) : (
         <>
           <div className="overflow-hidden rounded-xl border border-border bg-card">
@@ -267,7 +267,7 @@ export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number
                         </TableCell>
                         <TableCell className="text-right tabular-nums text-xs">
                           {it.minStock == null ? (
-                            <span className="text-muted-foreground/40" title="Lead time kiritilmagan — ta'minotchi profilida to'ldiring">—</span>
+                            <span className="text-muted-foreground/40" title="Lead time kiritilmagan — yetkazib beruvchi profilida to'ldiring">—</span>
                           ) : it.stock < it.minStock ? (
                             <span className="font-bold text-destructive" title="Qoldiq min stock'dan past — buyurtma shart!">
                               ⚠ {it.minStock.toLocaleString("uz-UZ")}

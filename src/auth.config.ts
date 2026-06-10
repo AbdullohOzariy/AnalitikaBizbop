@@ -30,7 +30,7 @@ export const authConfig = {
         "/api/rasm-yukla",
         "/api/ruxsat",
         "/miniapp",
-        "/anketa", // ta'minotchi anketasi — public forma
+        "/anketa", // yetkazib beruvchi anketasi — public forma
       ];
       const isPublic = PUBLIC_PREFIXES.some(
         (p) => pathname === p || pathname.startsWith(p + "/")

@@ -7,7 +7,7 @@ import { Truck } from "lucide-react";
 import { PageHeader } from "@/components/common/page";
 import { TaminotchilarClient, type SupplierRow } from "./taminotchilar-client";
 
-// Ta'minotchilar ro'yxati kam o'zgaradi (seed/import) — 5 daqiqa keshlaymiz.
+// Yetkazib beruvchilar ro'yxati kam o'zgaradi (seed/import) — 5 daqiqa keshlaymiz.
 const getSuppliers = unstable_cache(
   () => prisma.supplier.findMany({
     orderBy: { name: "asc" },
@@ -32,8 +32,8 @@ export default async function TaminotchilarPage() {
     <div className="space-y-4">
       <PageHeader
         icon={Truck}
-        title="Ta'minotchilar"
-        description="Ta'minotchi → subkategoriya → SKU (mahsulot)"
+        title="Yetkazib beruvchilar"
+        description="Yetkazib beruvchi → subkategoriya → SKU (mahsulot)"
       />
       <TaminotchilarClient suppliers={data} canEdit={canEditSuppliers(session.user.role)} />
     </div>

@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canSeeSuppliers, canEditSuppliers } from "@/lib/roles";
 
-// Ta'minotchilar bo'limi guard'lari: ko'rish — admin darajasi + SUPPLYCHAIN;
+// Yetkazib beruvchilar bo'limi guard'lari: ko'rish — admin darajasi + SUPPLYCHAIN;
 // tahrir — SYSTEM_ADMIN + SUPPLYCHAIN (read-only ADMIN tahrir qila olmaydi).
 async function requireSupplierViewer() {
   const session = await auth();
@@ -24,7 +24,7 @@ import { actionError } from "@/lib/action-error";
 export type SupSub = { subId: number; subName: string; catName: string | null; group: string | null; count: number };
 export type SupSku = { code: number; name: string };
 
-/** Ta'minotchi ostidagi subkategoriyalar (SKU soni bilan) — lazy. */
+/** Yetkazib beruvchi ostidagi subkategoriyalar (SKU soni bilan) — lazy. */
 export async function supplierSubcatsAction(
   supplierId: number
 ): Promise<{ ok: true; subs: SupSub[] } | { ok: false; error: string }> {
@@ -58,7 +58,7 @@ export async function supplierSubcatsAction(
   }
 }
 
-/** Ta'minotchi × subkategoriya bo'yicha SKU ro'yxati — lazy. */
+/** Yetkazib beruvchi × subkategoriya bo'yicha SKU ro'yxati — lazy. */
 export async function supplierSkusAction(
   supplierId: number,
   subId: number
@@ -82,7 +82,7 @@ export async function supplierSkusAction(
   }
 }
 
-// ═══════════════════ Ta'minotchi profili ═══════════════════
+// ═══════════════════ Yetkazib beruvchi profili ═══════════════════
 
 const SUPPLIERS_TAG = "suppliers";
 
@@ -109,7 +109,7 @@ export async function updateSupplierProfileAction(
         where: { name: p.name, id: { not: p.supplierId } },
         select: { id: true },
       });
-      if (taken) return { ok: false, error: "Bu nomli ta'minotchi allaqachon bor." };
+      if (taken) return { ok: false, error: "Bu nomli yetkazib beruvchi allaqachon bor." };
     }
     await prisma.supplier.update({
       where: { id: p.supplierId },
@@ -249,7 +249,7 @@ const bulkLeadSchema = z.object({
   onlyEmpty: z.boolean().optional(), // true — faqat kiritilmaganlarga
 });
 
-/** Bulk: ta'minotchining barcha (yoki bitta subkat) SKU'lariga lead time. */
+/** Bulk: yetkazib beruvchining barcha (yoki bitta subkat) SKU'lariga lead time. */
 export async function bulkLeadTimeAction(
   input: z.input<typeof bulkLeadSchema>
 ): Promise<{ ok: true; count: number } | { ok: false; error: string }> {
@@ -272,7 +272,7 @@ export async function bulkLeadTimeAction(
 }
 
 
-/** Yangi ta'minotchi qo'shish (SUPPLYCHAIN/SYSTEM_ADMIN). */
+/** Yangi yetkazib beruvchi qo'shish (SUPPLYCHAIN/SYSTEM_ADMIN). */
 export async function createSupplierAction(
   name: string
 ): Promise<{ ok: true; id: number } | { ok: false; error: string }> {
@@ -280,7 +280,7 @@ export async function createSupplierAction(
     await requireSupplierEditor();
     const nm = z.string().trim().min(1, "Nom kiriting").max(200).parse(name);
     const exists = await prisma.supplier.findUnique({ where: { name: nm }, select: { id: true } });
-    if (exists) return { ok: false, error: "Bu nomli ta'minotchi allaqachon bor." };
+    if (exists) return { ok: false, error: "Bu nomli yetkazib beruvchi allaqachon bor." };
     const sup = await prisma.supplier.create({ data: { name: nm } });
     revalidateTag(SUPPLIERS_TAG, "max");
     revalidatePath("/baza/taminotchilar");

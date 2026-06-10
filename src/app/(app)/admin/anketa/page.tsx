@@ -1,5 +1,5 @@
 /**
- * Tizim → Anketa: ta'minotchi anketasi boshqaruvi.
+ * Tizim → Anketa: yetkazib beruvchi anketasi boshqaruvi.
  * Tablar: kelgan javoblar · forma maydonlarini tahrirlash.
  * Public forma: supplier.oilagroup.uz (yoki /anketa).
  */
@@ -49,7 +49,7 @@ export default async function AnketaAdminPage({
     <div className="space-y-5">
       <PageHeader
         icon={FileText}
-        title="Ta'minotchi anketasi"
+        title="Yetkazib beruvchi anketasi"
         description="supplier.oilagroup.uz dagi forma — javoblar va maydonlar boshqaruvi"
       >
         <a
