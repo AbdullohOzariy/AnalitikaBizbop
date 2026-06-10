@@ -14,7 +14,7 @@ const createSchema = z.object({
   name: z.string().trim().min(1).max(100),
   email: z.string().trim().min(1).max(100), // login — email bo'lishi shart emas
   password: z.string().min(6, "Parol kamida 6 belgi"),
-  role: z.enum(["SYSTEM_ADMIN", "ADMIN", "CAT_MANAGER", "CEO"]),
+  role: z.enum(["SYSTEM_ADMIN", "ADMIN", "CAT_MANAGER", "CEO", "SUPPLYCHAIN"]),
 });
 
 /** Foydalanuvchiga (kategoriya menejeri) javobgar kategoriyalarni biriktiradi. */
@@ -73,7 +73,7 @@ const updateSchema = z.object({
   id: z.number().int().positive(),
   name: z.string().trim().min(1).max(100),
   email: z.string().trim().min(1).max(100),
-  role: z.enum(["SYSTEM_ADMIN", "ADMIN", "CAT_MANAGER", "CEO"]),
+  role: z.enum(["SYSTEM_ADMIN", "ADMIN", "CAT_MANAGER", "CEO", "SUPPLYCHAIN"]),
 });
 
 /** Foydalanuvchi ma'lumotlarini (nom, login, rol) tahrirlash — faqat System Admin. */

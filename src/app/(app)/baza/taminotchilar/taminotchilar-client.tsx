@@ -3,11 +3,15 @@
 import Link from "next/link";
 
 import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Plus, Loader2 as Loader2b } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { StatCard, EmptyState } from "@/components/common/page";
 import { Search, ChevronRight, X, Loader2, Truck, Package, Tags, IdCard } from "lucide-react";
 import {
-  supplierSubcatsAction, supplierSkusAction, type SupSub, type SupSku,
+  supplierSubcatsAction, supplierSkusAction, createSupplierAction, type SupSub, type SupSku,
 } from "./actions";
 
 export type SupplierRow = { id: number; name: string; skuCount: number };
@@ -15,7 +19,19 @@ export type SupplierRow = { id: number; name: string; skuCount: number };
 type SubState = { subs: SupSub[] } | "loading" | "error";
 type SkuState = { products: SupSku[]; total: number } | "loading" | "error";
 
-export function TaminotchilarClient({ suppliers }: { suppliers: SupplierRow[] }) {
+export function TaminotchilarClient({ suppliers, canEdit = false }: { suppliers: SupplierRow[]; canEdit?: boolean }) {
+  const router = useRouter();
+  const [newName, setNewName] = useState("");
+  const [creating, startCreate] = useTransition();
+  const addSupplier = () => {
+    const nm = newName.trim();
+    if (!nm) { toast.error("Ta'minotchi nomini kiriting."); return; }
+    startCreate(async () => {
+      const res = await createSupplierAction(nm);
+      if (res.ok) { toast.success("Ta'minotchi qo'shildi."); setNewName(""); router.refresh(); }
+      else toast.error(res.error);
+    });
+  };
   const [query, setQuery] = useState("");
   const [openSup, setOpenSup] = useState<Set<number>>(new Set());
   const [subData, setSubData] = useState<Map<number, SubState>>(new Map());
@@ -80,6 +96,18 @@ export function TaminotchilarClient({ suppliers }: { suppliers: SupplierRow[] })
           </button>
         )}
       </div>
+
+      {canEdit && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card px-3 py-2">
+          <Input value={newName} onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") addSupplier(); }}
+            placeholder="Yangi ta'minotchi nomi..." className="h-9 max-w-sm" />
+          <Button onClick={addSupplier} disabled={creating} className="h-9 gap-1.5">
+            {creating ? <Loader2b className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+            Qo'shish
+          </Button>
+        </div>
+      )}
 
       {filtered.length === 0 ? (
         <EmptyState icon={Search} title="Ta'minotchi topilmadi" description="Boshqa nom kiriting." />

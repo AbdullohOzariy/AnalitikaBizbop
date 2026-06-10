@@ -14,7 +14,7 @@ export default async function ZakazDetailPage({
 }) {
   const session = await auth();
   const role = session?.user?.role;
-  if (!session?.user || (role !== "SYSTEM_ADMIN" && role !== "ADMIN" && role !== "CAT_MANAGER")) redirect("/dashboard-v2");
+  if (!session?.user || (role !== "SYSTEM_ADMIN" && role !== "ADMIN" && role !== "CAT_MANAGER" && role !== "SUPPLYCHAIN")) redirect("/dashboard-v2");
   const userId = Number(session.user.id);
   const id = Number((await params).id);
   if (!Number.isInteger(id)) notFound();

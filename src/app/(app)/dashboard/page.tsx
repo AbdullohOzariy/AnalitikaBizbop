@@ -411,7 +411,7 @@ export default async function DashboardPage({
   const session = await auth();
   if (!session) redirect("/login");
   // Dashboard V1 — faqat ADMIN va CEO (Kategoriya menejeri V2 ko'radi).
-  if (!isAdminTier(session.user.role) && session.user.role !== "CEO") redirect("/dashboard-v2");
+  if (!isAdminTier(session.user.role) && session.user.role !== "CEO" && session.user.role !== "SUPPLYCHAIN") redirect("/dashboard-v2");
 
   const sp = await searchParams;
   // Parallel — ketma-ket await DB roundtrip'larini zanjirlab yuborardi (waterfall)

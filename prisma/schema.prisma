@@ -16,6 +16,7 @@ enum Role {
   VIEWER // eskirgan — ishlatilmaydi (migratsiyada CAT_MANAGER'ga o'tkazilgan). UI'da yo'q.
   CAT_MANAGER
   CEO
+  SUPPLYCHAIN // ta'minot zanjiri: analitika/sotuv/spisaniya ko'radi + ta'minotchilarni boshqaradi
 }
 
 // Zakaz (sotib olish buyurtmasi) holati

@@ -44,11 +44,12 @@ const WD_SHORT = ["Ya", "Du", "Se", "Ch", "Pa", "Ju", "Sh"];
 // ─── Baho (yulduzlar) + kontakt ───────────────────────────────────────────────
 
 export function ProfilHeader({
-  supplierId, rating, ratingNote, phone, contactName,
+  supplierId, name, rating, ratingNote, phone, contactName, canEdit = true,
 }: {
-  supplierId: number; rating: number | null; ratingNote: string | null;
-  phone: string | null; contactName: string | null;
+  supplierId: number; name: string; rating: number | null; ratingNote: string | null;
+  phone: string | null; contactName: string | null; canEdit?: boolean;
 }) {
+  const [nom, setNom] = useState(name);
   const router = useRouter();
   const [stars, setStars] = useState(rating ?? 0);
   const [note, setNote] = useState(ratingNote ?? "");
@@ -70,7 +71,7 @@ export function ProfilHeader({
   const saveInfo = () => {
     start(async () => {
       const res = await updateSupplierProfileAction({
-        supplierId, phone: tel, contactName: kontakt, ratingNote: note,
+        supplierId, name: nom.trim() || undefined, phone: tel, contactName: kontakt, ratingNote: note,
       });
       if (res.ok) { toast.success("Saqlandi."); setDirty(false); router.refresh(); }
       else toast.error(res.error);
@@ -87,8 +88,8 @@ export function ProfilHeader({
             {[1, 2, 3, 4, 5].map((v) => (
               <button
                 key={v}
-                onClick={() => setRating(v)}
-                disabled={isPending}
+                onClick={() => canEdit && setRating(v)}
+                disabled={isPending || !canEdit}
                 aria-label={`${v} yulduz`}
                 className="rounded p-0.5 transition-transform hover:scale-110"
               >
@@ -104,22 +105,26 @@ export function ProfilHeader({
           </div>
         </div>
 
-        <div className="grid flex-1 gap-3 sm:grid-cols-3">
+        <div className="grid flex-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Nomi</Label>
+            <Input value={nom} onChange={(e) => { setNom(e.target.value); setDirty(true); }} disabled={!canEdit} className="h-9" />
+          </div>
           <div className="space-y-1.5">
             <Label className="flex items-center gap-1 text-xs text-muted-foreground"><User className="h-3 w-3" /> Mas&apos;ul shaxs</Label>
-            <Input value={kontakt} onChange={(e) => { setKontakt(e.target.value); setDirty(true); }} placeholder="Ism" className="h-9" />
+            <Input value={kontakt} onChange={(e) => { setKontakt(e.target.value); setDirty(true); }} placeholder="Ism" disabled={!canEdit} className="h-9" />
           </div>
           <div className="space-y-1.5">
             <Label className="flex items-center gap-1 text-xs text-muted-foreground"><Phone className="h-3 w-3" /> Telefon</Label>
-            <Input value={tel} onChange={(e) => { setTel(e.target.value); setDirty(true); }} placeholder="+998 ..." className="h-9" />
+            <Input value={tel} onChange={(e) => { setTel(e.target.value); setDirty(true); }} placeholder="+998 ..." disabled={!canEdit} className="h-9" />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">Baho izohi</Label>
-            <Input value={note} onChange={(e) => { setNote(e.target.value); setDirty(true); }} placeholder="Masalan: o'z vaqtida yetkazadi" className="h-9" />
+            <Input value={note} onChange={(e) => { setNote(e.target.value); setDirty(true); }} placeholder="Masalan: o'z vaqtida yetkazadi" disabled={!canEdit} className="h-9" />
           </div>
         </div>
 
-        <Button onClick={saveInfo} disabled={isPending || !dirty} className="h-9 gap-1.5">
+        <Button onClick={saveInfo} disabled={isPending || !dirty || !canEdit} className="h-9 gap-1.5">
           {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           Saqlash
         </Button>
@@ -133,9 +138,9 @@ export function ProfilHeader({
 // KUNI butun oyda yonadi/o'chadi (ta'minotchilar haftalik jadval bilan ishlaydi).
 
 export function OrderDaysCalendar({
-  supplierId, weekdays,
+  supplierId, weekdays, canEdit = true,
 }: {
-  supplierId: number; weekdays: number[];
+  supplierId: number; weekdays: number[]; canEdit?: boolean;
 }) {
   const [days, setDays] = useState<Set<number>>(new Set(weekdays));
   const [isPending, start] = useTransition();
@@ -151,6 +156,7 @@ export function OrderDaysCalendar({
   const leadEmpty = (first.getDay() + 6) % 7;
 
   const toggle = (wd: number) => {
+    if (!canEdit) return;
     const next = new Set(days);
     if (next.has(wd)) next.delete(wd); else next.add(wd);
     setDays(next);
@@ -260,7 +266,7 @@ export function OrderDaysCalendar({
 
 type CellSt = "idle" | "saving" | "saved" | "error";
 
-export function LeadTimeEditor({ supplierId, skus }: { supplierId: number; skus: ProfilSku[] }) {
+export function LeadTimeEditor({ supplierId, skus, canEdit = true }: { supplierId: number; skus: ProfilSku[]; canEdit?: boolean }) {
   const router = useRouter();
   const [vals, setVals] = useState<Record<number, string>>(() => {
     const o: Record<number, string> = {};
@@ -369,10 +375,10 @@ export function LeadTimeEditor({ supplierId, skus }: { supplierId: number; skus:
             <Input type="number" min={0} max={365} value={bulkDays} onChange={(e) => setBulkDays(e.target.value)}
               placeholder="masalan 3" className="h-8 w-28 text-xs" />
           </div>
-          <Button variant="outline" size="sm" className="h-8 text-xs" disabled={bulkPending} onClick={() => runBulk(true)}>
+          <Button variant="outline" size="sm" className="h-8 text-xs" disabled={bulkPending || !canEdit} onClick={() => runBulk(true)}>
             {bulkPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null} Bo&apos;shlarga qo&apos;llash
           </Button>
-          <Button variant="outline" size="sm" className="h-8 text-xs" disabled={bulkPending} onClick={() => runBulk(false)}>
+          <Button variant="outline" size="sm" className="h-8 text-xs" disabled={bulkPending || !canEdit} onClick={() => runBulk(false)}>
             Hammasiga qo&apos;llash
           </Button>
         </div>
@@ -433,6 +439,7 @@ export function LeadTimeEditor({ supplierId, skus }: { supplierId: number; skus:
                             onChange={(e) => onChange(s.id, e.target.value)}
                             onKeyDown={(e) => onKeyDown(s.id, e)}
                             onBlur={(e) => { if (st[s.id] !== "saved") save(s.id, e.target.value); }}
+                            disabled={!canEdit}
                             placeholder="—"
                             className="h-7 w-full text-right text-xs tabular-nums"
                           />
@@ -455,7 +462,7 @@ export function LeadTimeEditor({ supplierId, skus }: { supplierId: number; skus:
 
 const emptyForm = { title: "", number: "", signedAt: "", endDate: "", amount: "", url: "", note: "" };
 
-export function ContractsSection({ supplierId, contracts }: { supplierId: number; contracts: ContractRow[] }) {
+export function ContractsSection({ supplierId, contracts, canEdit = true }: { supplierId: number; contracts: ContractRow[]; canEdit?: boolean }) {
   const router = useRouter();
   const [form, setForm] = useState<typeof emptyForm & { id?: number }>(emptyForm);
   const [showForm, setShowForm] = useState(false);
@@ -515,11 +522,11 @@ export function ContractsSection({ supplierId, contracts }: { supplierId: number
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center justify-between text-base">
           <span>Shartnomalar <span className="text-xs font-normal text-muted-foreground">· {contracts.length} ta</span></span>
-          <Button size="sm" variant={showForm ? "outline" : "default"} className="h-8 gap-1 text-xs"
+          {canEdit && <Button size="sm" variant={showForm ? "outline" : "default"} className="h-8 gap-1 text-xs"
             onClick={() => { setShowForm((v) => !v); if (showForm) setForm(emptyForm); }}>
             {showForm ? <X className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
             {showForm ? "Bekor" : "Qo'shish"}
-          </Button>
+          </Button>}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -591,12 +598,16 @@ export function ContractsSection({ supplierId, contracts }: { supplierId: number
                       <ExternalLink className="h-3 w-3" /> Hujjat
                     </a>
                   )}
-                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => edit(c)} aria-label="Tahrirlash">
-                    <Pencil className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => remove(c.id)} disabled={isPending} aria-label="O'chirish">
-                    <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                  </Button>
+                  {canEdit && (
+                    <>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => edit(c)} aria-label="Tahrirlash">
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => remove(c.id)} disabled={isPending} aria-label="O'chirish">
+                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                      </Button>
+                    </>
+                  )}
                 </div>
               );
             })}

@@ -52,7 +52,7 @@ export default async function SotuvDashboardPage({
   const session = await auth();
   if (!session) redirect("/login");
   const role = session.user.role;
-  if (!isAdminTier(role) && role !== "CEO") redirect("/dashboard-v2");
+  if (!isAdminTier(role) && role !== "CEO" && role !== "SUPPLYCHAIN") redirect("/dashboard-v2");
 
   const sp = await searchParams;
   const now = new Date();

@@ -22,7 +22,7 @@ export default async function ReportPage({
 }) {
   const session = await auth();
   if (!session) redirect("/login");
-  if (!isAdminTier(session.user.role)) redirect("/dashboard-v2");
+  if (!isAdminTier(session.user.role) && session.user.role !== "SUPPLYCHAIN") redirect("/dashboard-v2");
 
   const defaultRange = await getDefaultRange();
   const sp = await searchParams;

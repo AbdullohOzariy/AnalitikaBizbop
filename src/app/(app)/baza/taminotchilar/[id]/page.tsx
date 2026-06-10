@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { isAdminTier } from "@/lib/roles";
+import { canSeeSuppliers, canEditSuppliers } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { Truck, ArrowLeft, Layers, Clock, FileText, ShoppingCart } from "lucide-react";
 import { PageHeader, StatCard } from "@/components/common/page";
@@ -18,7 +18,8 @@ export default async function SupplierProfilePage({
   params: Promise<{ id: string }>;
 }) {
   const session = await auth();
-  if (!session?.user || !isAdminTier(session.user.role)) redirect("/dashboard-v2");
+  if (!session?.user || !canSeeSuppliers(session.user.role)) redirect("/dashboard-v2");
+  const canEdit = canEditSuppliers(session.user.role);
 
   const { id } = await params;
   const supplierId = Number(id);
@@ -101,7 +102,9 @@ export default async function SupplierProfilePage({
 
       {/* Baho + kontakt */}
       <ProfilHeader
+        canEdit={canEdit}
         supplierId={supplier.id}
+        name={supplier.name}
         rating={supplier.rating}
         ratingNote={supplier.ratingNote}
         phone={supplier.phone}
@@ -111,12 +114,12 @@ export default async function SupplierProfilePage({
       <div className="grid gap-5 lg:grid-cols-[minmax(340px,420px)_1fr]">
         {/* Chap: zakaz kunlari + shartnomalar */}
         <div className="space-y-5">
-          <OrderDaysCalendar supplierId={supplier.id} weekdays={supplier.orderWeekdays} />
-          <ContractsSection supplierId={supplier.id} contracts={contracts} />
+          <OrderDaysCalendar supplierId={supplier.id} weekdays={supplier.orderWeekdays} canEdit={canEdit} />
+          <ContractsSection supplierId={supplier.id} contracts={contracts} canEdit={canEdit} />
         </div>
 
         {/* O'ng: SKU + lead time */}
-        <LeadTimeEditor supplierId={supplier.id} skus={skus} />
+        <LeadTimeEditor supplierId={supplier.id} skus={skus} canEdit={canEdit} />
       </div>
     </div>
   );

@@ -4,7 +4,21 @@ import { revalidatePath, revalidateTag } from "next/cache";
 
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin } from "@/lib/auth-helpers";
+import { auth } from "@/auth";
+import { canSeeSuppliers, canEditSuppliers } from "@/lib/roles";
+
+// Ta'minotchilar bo'limi guard'lari: ko'rish — admin darajasi + SUPPLYCHAIN;
+// tahrir — SYSTEM_ADMIN + SUPPLYCHAIN (read-only ADMIN tahrir qila olmaydi).
+async function requireSupplierViewer() {
+  const session = await auth();
+  if (!session?.user || !canSeeSuppliers(session.user.role)) throw new Error("Ruxsat yo'q");
+  return session.user;
+}
+async function requireSupplierEditor() {
+  const session = await auth();
+  if (!session?.user || !canEditSuppliers(session.user.role)) throw new Error("Ruxsat yo'q");
+  return session.user;
+}
 import { actionError } from "@/lib/action-error";
 
 export type SupSub = { subId: number; subName: string; catName: string | null; group: string | null; count: number };
@@ -15,7 +29,7 @@ export async function supplierSubcatsAction(
   supplierId: number
 ): Promise<{ ok: true; subs: SupSub[] } | { ok: false; error: string }> {
   try {
-    await requireAdmin();
+    await requireSupplierViewer();
     const id = z.coerce.number().int().positive().parse(supplierId);
     const grouped = await prisma.product.groupBy({
       by: ["categoryId"],
@@ -50,7 +64,7 @@ export async function supplierSkusAction(
   subId: number
 ): Promise<{ ok: true; products: SupSku[]; total: number } | { ok: false; error: string }> {
   try {
-    await requireAdmin();
+    await requireSupplierViewer();
     const sid = z.coerce.number().int().positive().parse(supplierId);
     const cid = z.coerce.number().int().positive().parse(subId);
     const [products, total] = await Promise.all([
@@ -76,6 +90,7 @@ type Result = { ok: true } | { ok: false; error: string };
 
 const profileSchema = z.object({
   supplierId: z.coerce.number().int().positive(),
+  name: z.string().trim().min(1).max(200).optional(),
   phone: z.string().trim().max(50).optional(),
   contactName: z.string().trim().max(120).optional(),
   rating: z.coerce.number().int().min(1).max(5).nullable().optional(),
@@ -87,11 +102,19 @@ export async function updateSupplierProfileAction(
   input: z.input<typeof profileSchema>
 ): Promise<Result> {
   try {
-    await requireAdmin();
+    await requireSupplierEditor();
     const p = profileSchema.parse(input);
+    if (p.name) {
+      const taken = await prisma.supplier.findFirst({
+        where: { name: p.name, id: { not: p.supplierId } },
+        select: { id: true },
+      });
+      if (taken) return { ok: false, error: "Bu nomli ta'minotchi allaqachon bor." };
+    }
     await prisma.supplier.update({
       where: { id: p.supplierId },
       data: {
+        ...(p.name ? { name: p.name } : {}),
         ...(p.phone !== undefined ? { phone: p.phone || null } : {}),
         ...(p.contactName !== undefined ? { contactName: p.contactName || null } : {}),
         ...(p.rating !== undefined ? { rating: p.rating } : {}),
@@ -117,7 +140,7 @@ export async function setOrderWeekdaysAction(
   input: z.input<typeof weekdaysSchema>
 ): Promise<Result> {
   try {
-    await requireAdmin();
+    await requireSupplierEditor();
     const p = weekdaysSchema.parse(input);
     await prisma.supplier.update({
       where: { id: p.supplierId },
@@ -162,7 +185,7 @@ export async function saveContractAction(
   input: z.input<typeof contractSchema>
 ): Promise<{ ok: true; id: number } | { ok: false; error: string }> {
   try {
-    await requireAdmin();
+    await requireSupplierEditor();
     const p = contractSchema.parse(input);
     const data = {
       title: p.title,
@@ -185,7 +208,7 @@ export async function saveContractAction(
 
 export async function deleteContractAction(id: number): Promise<Result> {
   try {
-    await requireAdmin();
+    await requireSupplierEditor();
     const cid = z.coerce.number().int().positive().parse(id);
     const c = await prisma.supplierContract.delete({ where: { id: cid } });
     revalidatePath(`/baza/taminotchilar/${c.supplierId}`);
@@ -207,7 +230,7 @@ export async function setLeadTimeAction(
   input: z.input<typeof leadTimeSchema>
 ): Promise<Result> {
   try {
-    await requireAdmin();
+    await requireSupplierEditor();
     const p = leadTimeSchema.parse(input);
     await prisma.product.update({
       where: { id: p.productId },
@@ -231,7 +254,7 @@ export async function bulkLeadTimeAction(
   input: z.input<typeof bulkLeadSchema>
 ): Promise<{ ok: true; count: number } | { ok: false; error: string }> {
   try {
-    await requireAdmin();
+    await requireSupplierEditor();
     const p = bulkLeadSchema.parse(input);
     const res = await prisma.product.updateMany({
       where: {
@@ -245,5 +268,24 @@ export async function bulkLeadTimeAction(
     return { ok: true, count: res.count };
   } catch (err) {
     return actionError(err, "bulkLeadTime");
+  }
+}
+
+
+/** Yangi ta'minotchi qo'shish (SUPPLYCHAIN/SYSTEM_ADMIN). */
+export async function createSupplierAction(
+  name: string
+): Promise<{ ok: true; id: number } | { ok: false; error: string }> {
+  try {
+    await requireSupplierEditor();
+    const nm = z.string().trim().min(1, "Nom kiriting").max(200).parse(name);
+    const exists = await prisma.supplier.findUnique({ where: { name: nm }, select: { id: true } });
+    if (exists) return { ok: false, error: "Bu nomli ta'minotchi allaqachon bor." };
+    const sup = await prisma.supplier.create({ data: { name: nm } });
+    revalidateTag(SUPPLIERS_TAG, "max");
+    revalidatePath("/baza/taminotchilar");
+    return { ok: true, id: sup.id };
+  } catch (err) {
+    return actionError(err, "createSupplier");
   }
 }

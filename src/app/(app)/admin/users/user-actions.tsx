@@ -30,6 +30,7 @@ const ROLE_OPTS = [
   { v: "SYSTEM_ADMIN", l: "System Admin", d: "To'liq huquq + Tizim" },
   { v: "ADMIN",        l: "Admin (ko'rish)", d: "Tizimdan boshqa hammasi — faqat ko'rish" },
   { v: "CAT_MANAGER",  l: "Kategoriya menejeri", d: "O'z kategoriyalari" },
+  { v: "SUPPLYCHAIN",  l: "Ta'minot zanjiri", d: "Analitika ko'rish + Ta'minotchilar boshqaruvi" },
   { v: "CEO",          l: "CEO", d: "Ko'rish (Dashboard V1+V2)" },
 ] as const;
 const ROLE_LABEL: Record<string, string> = Object.fromEntries(ROLE_OPTS.map((o) => [o.v, o.l]));
@@ -70,7 +71,7 @@ export function UserActions({
   const onSaveEdit = () => {
     if (!eName.trim() || !eEmail.trim()) { toast.error("Nom va login bo'sh bo'lmasin."); return; }
     start(async () => {
-      const res = await updateUserAction({ id, name: eName.trim(), email: eEmail.trim(), role: eRole as "SYSTEM_ADMIN" | "ADMIN" | "CAT_MANAGER" | "CEO" });
+      const res = await updateUserAction({ id, name: eName.trim(), email: eEmail.trim(), role: eRole as "SYSTEM_ADMIN" | "ADMIN" | "CAT_MANAGER" | "CEO" | "SUPPLYCHAIN" });
       if (res.ok) { toast.success("Saqlandi."); setEditOpen(false); }
       else toast.error(res.error);
     });
