@@ -274,3 +274,93 @@ export const stockdayRows = (f: SnapshotFilters, view: StockView, page: number, 
     ["stockdayRows_v3", filterKey(f), view, String(page), String(pageSize), todayStr],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
   )();
+
+// ─── Iyerarxik daraxt agregatlari (Guruh → Kategoriya → Subkat) ────────────────
+// OOS/Stockday daraxt ko'rinishi uchun: tugun darajasida soni + summa; SKU
+// barglari subkat ochilganda alohida (leaf) action orqali lazy yuklanadi.
+
+export type TreeAggRow = {
+  gid: number; gname: string;
+  cid: number; cname: string;
+  sid: number; sname: string;
+  cnt: number;   // SKU×filial qatorlari soni
+  total: number; // OOS: savdo summasi; Stockday: muzlagan kapital (stock_value)
+};
+
+const TREE_GROUPING = Prisma.sql`
+  COALESCE(g.id, -1)              AS gid,
+  COALESCE(g.name, 'Moslanmagan') AS gname,
+  COALESCE(par.id, -1)            AS cid,
+  COALESCE(par.name, 'Moslanmagan') AS cname,
+  COALESCE(sub.id, -1)            AS sid,
+  COALESCE(sub.name, 'Moslanmagan') AS sname`;
+
+export const oosTreeAgg = (f: SnapshotFilters, view: OosView) =>
+  unstable_cache(
+    async (): Promise<TreeAggRow[]> => {
+      return prisma.$queryRaw<TreeAggRow[]>(Prisma.sql`
+        WITH ${latestCte(f)}
+        SELECT ${TREE_GROUPING},
+               count(*)::int AS cnt,
+               COALESCE(SUM(l."amount"), 0)::float8 AS total
+        FROM latest l
+        JOIN oagg a ON a."productId" = l."productId" AND a."branchId" = l."branchId"
+        LEFT JOIN "Category" sub ON sub.id = l."categoryId"
+        LEFT JOIN "Category" par ON par.id = sub."parentId"
+        LEFT JOIN "CategoryGroup" g ON g.id = par."groupId"
+        WHERE ${OOS_VIEW_COND[view]}
+        GROUP BY 1, 2, 3, 4, 5, 6
+      `);
+    },
+    ["oosTree_v1", filterKey(f), view],
+    { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
+  )();
+
+export const stockdayTreeAgg = (f: SnapshotFilters, view: StockView, todayStr: string) =>
+  unstable_cache(
+    async (): Promise<TreeAggRow[]> => {
+      const todayDow = new Date(todayStr + "T00:00:00.000Z").getUTCDay();
+      return prisma.$queryRaw<TreeAggRow[]>(Prisma.sql`
+        WITH ${sdCte(f, todayDow)}
+        SELECT ${TREE_GROUPING},
+               count(*)::int AS cnt,
+               COALESCE(SUM(sd.stock_value), 0)::float8 AS total
+        FROM sd
+        LEFT JOIN "Category" sub ON sub.id = sd."categoryId"
+        LEFT JOIN "Category" par ON par.id = sub."parentId"
+        LEFT JOIN "CategoryGroup" g ON g.id = par."groupId"
+        WHERE ${STOCK_VIEW_COND[view]}
+        GROUP BY 1, 2, 3, 4, 5, 6
+      `);
+    },
+    ["stockdayTree_v1", filterKey(f), view, todayStr],
+    { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
+  )();
+
+// ─── Tekis agregatdan nested daraxt ────────────────────────────────────────────
+
+export type SnapTreeSub = { id: number; name: string; cnt: number; total: number };
+export type SnapTreeCat = { id: number; name: string; cnt: number; total: number; subs: SnapTreeSub[] };
+export type SnapTreeGroup = { id: number; name: string; cnt: number; total: number; cats: SnapTreeCat[] };
+
+export function buildSnapshotTree(rows: TreeAggRow[]): SnapTreeGroup[] {
+  const groups = new Map<number, SnapTreeGroup>();
+  const cats = new Map<string, SnapTreeCat>();
+  for (const r of rows) {
+    let g = groups.get(r.gid);
+    if (!g) { g = { id: r.gid, name: r.gname, cnt: 0, total: 0, cats: [] }; groups.set(r.gid, g); }
+    const ck = `${r.gid}_${r.cid}`;
+    let c = cats.get(ck);
+    if (!c) { c = { id: r.cid, name: r.cname, cnt: 0, total: 0, subs: [] }; cats.set(ck, c); g.cats.push(c); }
+    c.subs.push({ id: r.sid, name: r.sname, cnt: r.cnt, total: r.total });
+    c.cnt += r.cnt; c.total += r.total;
+    g.cnt += r.cnt; g.total += r.total;
+  }
+  const out = [...groups.values()];
+  for (const g of out) {
+    g.cats.sort((a, b) => b.total - a.total || b.cnt - a.cnt);
+    for (const c of g.cats) c.subs.sort((a, b) => b.total - a.total || b.cnt - a.cnt);
+  }
+  out.sort((a, b) => b.total - a.total || b.cnt - a.cnt);
+  return out;
+}

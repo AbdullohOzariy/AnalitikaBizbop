@@ -5,21 +5,17 @@ import { auth } from "@/auth";
 import { canSeeAnalytics } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { getDefaultRange } from "@/lib/analytics";
-import { oosKpi, oosRows, type OosView, type SnapshotFilters } from "@/lib/snapshot-reports";
+import { oosKpi, oosTreeAgg, buildSnapshotTree, type OosView, type SnapshotFilters } from "@/lib/snapshot-reports";
+import { SnapshotTree, type SnapCol } from "@/components/common/snapshot-tree";
+import { oosLeavesAction } from "./actions";
 import { scopeSubIds } from "@/lib/scope";
 import { PackageX, AlertTriangle, Boxes, Layers, TrendingDown } from "lucide-react";
-import { PageHeader, StatCard, EmptyState, Pill } from "@/components/common/page";
+import { PageHeader, StatCard, EmptyState } from "@/components/common/page";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
-import { skuRowBg } from "@/lib/sku-rang";
 import { BazaFilter } from "../baza/baza-filter";
-import { BazaPagination } from "../baza/baza-pagination";
 
-const PAGE_SIZE = 50;
 type View = OosView;
 
 function parseDate(s: string | undefined): Date | undefined {
@@ -31,12 +27,6 @@ function fmtAmount(n: unknown): string {
   const num = Number(n);
   if (isNaN(num) || num === 0) return "—";
   return new Intl.NumberFormat("uz-UZ").format(Math.round(num));
-}
-function fmtQty(n: unknown): string {
-  if (n == null) return "—";
-  const num = Number(n);
-  if (isNaN(num)) return "—";
-  return new Intl.NumberFormat("uz-UZ", { maximumFractionDigits: 2 }).format(num);
 }
 
 const VIEW_META: Record<View, { label: string; icon: typeof PackageX; tone: "red" | "orange" | "default" }> = {
@@ -59,7 +49,6 @@ export default async function OosPage({
 
   const sp = await searchParams;
   const view: View = sp.view === "low" || sp.view === "dead" ? sp.view : "oos";
-  const page = Math.max(1, parseInt(sp.page ?? "1") || 1);
 
   const def = await getDefaultRange();
   const startDate = parseDate(sp.start) ?? def.start;
@@ -111,10 +100,10 @@ export default async function OosPage({
       {/* key: filtr/tab/sahifa o'zgarsa skeleton qayta ko'rinadi (aks holda eski
           ma'lumot indikatorsiz qotib turardi) */}
       <Suspense
-        key={[startStr, endStr, branchId ?? "all", categoryId ?? "all", q, view, page].join("|")}
+        key={[startStr, endStr, branchId ?? "all", categoryId ?? "all", q, view].join("|")}
         fallback={<OosDataSkeleton />}
       >
-        <OosData filters={filters} view={view} page={page} sp={sp} />
+        <OosData filters={filters} view={view} sp={sp} />
       </Suspense>
     </div>
   );
@@ -134,19 +123,25 @@ function OosDataSkeleton() {
 
 // Og'ir qism — KPI + tablar + jadval (keshlangan so'rovlar). Suspense ichida oqib keladi.
 async function OosData({
-  filters, view, page, sp,
+  filters, view, sp,
 }: {
-  filters: SnapshotFilters; view: View; page: number; sp: Record<string, string | undefined>;
+  filters: SnapshotFilters; view: View; sp: Record<string, string | undefined>;
 }) {
-  const offset = (page - 1) * PAGE_SIZE;
-  const [kpi, rows] = await Promise.all([
+  const [kpi, treeAgg] = await Promise.all([
     oosKpi(filters),
-    oosRows(filters, view, page, PAGE_SIZE),
+    oosTreeAgg(filters, view),
   ]);
-
-  const total = view === "oos" ? kpi.oos : view === "low" ? kpi.low : kpi.dead;
-  const totalPages = Math.ceil(total / PAGE_SIZE);
+  const tree = buildSnapshotTree(treeAgg);
   const oosRate = kpi.jami > 0 ? (kpi.oos / kpi.jami) * 100 : 0;
+
+  // Ustunlar — barglar (SKU×filial) uchun; har birida saralash + filtr
+  const cols: SnapCol[] = [
+    { key: "bname", label: "Filial", type: "text", filter: "select", width: "w-[130px]" },
+    { key: "periodEnd", label: "Snapshot", type: "date", width: "w-[100px]" },
+    { key: "stockQty", label: "Qoldiq", type: "num", filter: "range", width: "w-[110px]", pill: view === "oos" },
+    { key: "soldQty", label: "Sotilgan", type: "num", filter: "range", width: "w-[110px]" },
+    { key: "amount", label: "Savdo", type: "money", filter: "range", width: "w-[130px]" },
+  ];
 
   // View tab havolalari (joriy filtrlarni saqlab)
   const tabHref = (v: View) => {
@@ -200,68 +195,24 @@ async function OosData({
         })}
       </div>
 
-      {/* Jadval */}
+      {/* Iyerarxik jadval */}
       <Card className="overflow-hidden">
         <CardContent className="p-0">
-          {rows.length === 0 ? (
+          {tree.length === 0 ? (
             <EmptyState
               icon={Boxes}
               title="Bu kategoriyada tovar yo'q"
               description="Boshqa davr/filtr tanlang. Ma'lumot bo'lmasa — Fayllar bo'limidan SKU (Остаток ustunli) sotuv faylini yuklang."
             />
           ) : (
-            <>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/40 hover:bg-muted/40">
-                      <TableHead className="w-[90px]">Kod</TableHead>
-                      <TableHead>Mahsulot</TableHead>
-                      <TableHead>Kategoriya</TableHead>
-                      <TableHead>Filial</TableHead>
-                      <TableHead className="w-[100px]">Snapshot</TableHead>
-                      <TableHead className="text-right w-[90px]">Qoldiq</TableHead>
-                      <TableHead className="text-right w-[90px]">Sotilgan</TableHead>
-                      <TableHead className="text-right w-[130px]">Savdo</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {rows.map((r) => (
-                      // Fon — SKU'ning ABC×XYZ matritsa holatiga ko'ra
-                      <TableRow key={`${r.productId}-${r.branchId}`} className={cn("text-sm", skuRowBg(r.abc, r.xyz))}>
-                        <TableCell className="font-mono text-xs text-muted-foreground">{r.code}</TableCell>
-                        <TableCell className="max-w-[200px]">
-                          <span className="line-clamp-2 leading-snug">{r.pname}</span>
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{r.cname ?? "—"}</TableCell>
-                        <TableCell className="text-xs">{r.bname}</TableCell>
-                        <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                          {String(r.periodEnd).slice(0, 10)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {view === "oos" ? (
-                            <Pill tone="red">{fmtQty(r.stockQty)}</Pill>
-                          ) : (
-                            <span className={cn("tabular-nums text-xs", view === "low" && "font-medium text-amber-600 dark:text-amber-400")}>
-                              {fmtQty(r.stockQty)}
-                            </span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums text-xs">{fmtQty(r.soldQty)}</TableCell>
-                        <TableCell className="text-right tabular-nums text-xs font-medium">{fmtAmount(r.amount)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-
-              <div className="flex flex-col items-center gap-2 border-t border-border/60 px-4 py-3">
-                <p className="text-xs text-muted-foreground">
-                  {offset + 1}–{Math.min(page * PAGE_SIZE, total)} / jami {total.toLocaleString("uz-UZ")} ta · {totalPages} sahifa
-                </p>
-                <BazaPagination page={page} totalPages={totalPages} basePath="/oos" />
-              </div>
-            </>
+            <SnapshotTree
+              groups={tree}
+              cols={cols}
+              ctx={{ startStr: filters.startStr, endStr: filters.endStr, branchId: filters.branchId, q: filters.q, view }}
+              loadLeaves={oosLeavesAction as never}
+              pillTone={view === "oos" ? "red" : view === "low" ? "amber" : "muted"}
+              totalLabel="savdo"
+            />
           )}
         </CardContent>
       </Card>

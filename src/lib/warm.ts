@@ -28,7 +28,7 @@ import {
 } from "@/lib/analytics-v2";
 import { dailyForecastSeries } from "@/lib/forecast";
 import { computeAbcXyz } from "@/lib/abc-xyz";
-import { oosKpi, oosRows, stockdayKpi, stockdayRows } from "@/lib/snapshot-reports";
+import { oosKpi, oosTreeAgg, stockdayKpi, stockdayTreeAgg } from "@/lib/snapshot-reports";
 
 const isoDay = (d: Date) => d.toISOString().slice(0, 10);
 
@@ -64,11 +64,11 @@ export async function warmAnalyticsCaches(reason: string): Promise<void> {
       dailyForecastSeries(def),
       // ABC/XYZ (default 3 oy)
       computeAbcXyz(abcStart, endStr),
-      // OOS / Stockday — KPI + birinchi sahifa (default tab)
+      // OOS / Stockday — KPI + daraxt agregati (default tab)
       oosKpi(snap),
-      oosRows(snap, "oos", 1, 50),
+      oosTreeAgg(snap, "oos"),
       stockdayKpi(snap, todayStr),
-      stockdayRows(snap, "kritik", 1, 50, todayStr),
+      stockdayTreeAgg(snap, "kritik", todayStr),
     ]);
 
     const failed = results.filter((r) => r.status === "rejected").length;

@@ -5,21 +5,17 @@ import { auth } from "@/auth";
 import { canSeeAnalytics } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { getDefaultRange } from "@/lib/analytics";
-import { stockdayKpi, stockdayRows, type StockView, type SnapshotFilters } from "@/lib/snapshot-reports";
+import { stockdayKpi, stockdayTreeAgg, buildSnapshotTree, type StockView, type SnapshotFilters } from "@/lib/snapshot-reports";
+import { SnapshotTree, type SnapCol } from "@/components/common/snapshot-tree";
+import { stockdayLeavesAction } from "./actions";
 import { scopeSubIds } from "@/lib/scope";
 import { Hourglass, Flame, AlertTriangle, PackageCheck, Boxes, Layers, Download, TimerOff } from "lucide-react";
-import { PageHeader, StatCard, EmptyState, Pill } from "@/components/common/page";
+import { PageHeader, StatCard, EmptyState } from "@/components/common/page";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
-import { skuRowBg } from "@/lib/sku-rang";
 import { BazaFilter } from "../baza/baza-filter";
-import { BazaPagination } from "../baza/baza-pagination";
 
-const PAGE_SIZE = 50;
 type View = StockView;
 
 function parseDate(s: string | undefined): Date | undefined {
@@ -27,24 +23,10 @@ function parseDate(s: string | undefined): Date | undefined {
   const d = new Date(s + "T00:00:00.000Z");
   return isNaN(d.getTime()) ? undefined : d;
 }
-function fmtQty(n: unknown): string {
-  if (n == null) return "—";
-  const num = Number(n);
-  if (isNaN(num)) return "—";
-  return new Intl.NumberFormat("uz-UZ", { maximumFractionDigits: 2 }).format(num);
-}
 function fmtAmount(n: unknown): string {
   const num = Number(n);
   if (isNaN(num) || num === 0) return "—";
   return new Intl.NumberFormat("uz-UZ").format(Math.round(num));
-}
-function fmtDays(n: unknown): string {
-  if (n == null) return "—";
-  const num = Number(n);
-  if (isNaN(num)) return "—";
-  if (num >= 999) return "999+ kun";
-  if (num > 0 && num < 1) return "<1 kun"; // bir kundan kam — zudlik bilan buyurtma
-  return `${new Intl.NumberFormat("uz-UZ", { maximumFractionDigits: 1 }).format(num)} kun`;
 }
 
 const VIEW_META: Record<View, {
@@ -73,7 +55,6 @@ export default async function StockdayPage({
   const sp = await searchParams;
   const view: View =
     sp.view === "kam" || sp.view === "normal" || sp.view === "ortiqcha" ? sp.view : "kritik";
-  const page = Math.max(1, parseInt(sp.page ?? "1") || 1);
 
   const def = await getDefaultRange();
   const startDate = parseDate(sp.start) ?? def.start;
@@ -125,10 +106,10 @@ export default async function StockdayPage({
 
       {/* key: filtr/tab/sahifa o'zgarsa skeleton qayta ko'rinadi */}
       <Suspense
-        key={[startStr, endStr, branchId ?? "all", categoryId ?? "all", q, view, page].join("|")}
+        key={[startStr, endStr, branchId ?? "all", categoryId ?? "all", q, view].join("|")}
         fallback={<StockdayDataSkeleton />}
       >
-        <StockdayData filters={filters} view={view} page={page} sp={sp} todayStr={todayStr} />
+        <StockdayData filters={filters} view={view} sp={sp} todayStr={todayStr} />
       </Suspense>
     </div>
   );
@@ -148,20 +129,28 @@ function StockdayDataSkeleton() {
 
 // Og'ir qism — KPI + tablar + jadval (keshlangan so'rovlar). Suspense ichida oqib keladi.
 async function StockdayData({
-  filters, view, page, sp, todayStr,
+  filters, view, sp, todayStr,
 }: {
-  filters: SnapshotFilters; view: View; page: number; sp: Record<string, string | undefined>;
+  filters: SnapshotFilters; view: View; sp: Record<string, string | undefined>;
   todayStr: string;
 }) {
-  const offset = (page - 1) * PAGE_SIZE;
-  const [kpi, rows] = await Promise.all([
+  const [kpi, treeAgg] = await Promise.all([
     stockdayKpi(filters, todayStr),
-    stockdayRows(filters, view, page, PAGE_SIZE, todayStr),
+    stockdayTreeAgg(filters, view, todayStr),
   ]);
-
-  const total = kpi[view];
-  const totalPages = Math.ceil(total / PAGE_SIZE);
+  const tree = buildSnapshotTree(treeAgg);
   const kritikRate = kpi.faol > 0 ? (kpi.kritik / kpi.faol) * 100 : 0;
+
+  // Ustunlar — barglar (SKU×filial) uchun; har birida saralash + filtr
+  const cols: SnapCol[] = [
+    { key: "bname", label: "Filial", type: "text", filter: "select", width: "w-[130px]" },
+    { key: "periodEnd", label: "Snapshot", type: "date", width: "w-[95px]" },
+    { key: "stockQty", label: "Qoldiq", type: "num", filter: "range", width: "w-[95px]" },
+    { key: "avgDaily", label: "Sotuv/kun", type: "num", filter: "range", width: "w-[100px]" },
+    { key: "stockDays", label: "Zaxira kunlari", type: "days", filter: "range", pill: true, width: "w-[120px]" },
+    { key: "arrivalDays", label: "Keladi", type: "days", filter: "range", risk: true, width: "w-[100px]" },
+    { key: "stockValue", label: "Qoldiq qiymati", type: "money", filter: "range", width: "w-[130px]" },
+  ];
 
   // View tab havolalari (joriy filtrlarni saqlab)
   const tabHref = (v: View) => {
@@ -232,75 +221,24 @@ async function StockdayData({
         </a>
       </div>
 
-      {/* Jadval */}
+      {/* Iyerarxik jadval */}
       <Card className="overflow-hidden">
         <CardContent className="p-0">
-          {rows.length === 0 ? (
+          {tree.length === 0 ? (
             <EmptyState
               icon={Hourglass}
               title="Bu oraliqda tovar yo'q"
               description="Boshqa davr/filtr yoki tab tanlang. Zaxira kunlari faqat qoldig'i va sotuvi bor SKU'lar uchun hisoblanadi."
             />
           ) : (
-            <>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/40 hover:bg-muted/40">
-                      <TableHead className="w-[90px]">Kod</TableHead>
-                      <TableHead>Mahsulot</TableHead>
-                      <TableHead>Kategoriya</TableHead>
-                      <TableHead>Filial</TableHead>
-                      <TableHead className="w-[100px]">Snapshot</TableHead>
-                      <TableHead className="text-right w-[90px]">Qoldiq</TableHead>
-                      <TableHead className="text-right w-[110px]">Sotuv/kun</TableHead>
-                      <TableHead className="text-right w-[120px]">Zaxira kunlari</TableHead>
-                      <TableHead className="text-right w-[110px]" title="Keyingi zakaz kunigacha + lead time (ta'minotchi profilida kiritiladi)">Keladi</TableHead>
-                      <TableHead className="text-right w-[130px]">Qoldiq qiymati</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {rows.map((r) => (
-                      // Fon — SKU'ning ABC×XYZ matritsa holatiga ko'ra
-                      <TableRow key={`${r.productId}-${r.branchId}`} className={cn("text-sm", skuRowBg(r.abc, r.xyz))}>
-                        <TableCell className="font-mono text-xs text-muted-foreground">{r.code}</TableCell>
-                        <TableCell className="max-w-[200px]">
-                          <span className="line-clamp-2 leading-snug">{r.pname}</span>
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{r.cname ?? "—"}</TableCell>
-                        <TableCell className="text-xs">{r.bname}</TableCell>
-                        <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                          {String(r.periodEnd).slice(0, 10)}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums text-xs">{fmtQty(r.stockQty)}</TableCell>
-                        <TableCell className="text-right tabular-nums text-xs text-muted-foreground">{fmtQty(r.avgDaily)}</TableCell>
-                        <TableCell className="text-right">
-                          <Pill tone={VIEW_META[view].pill}>{fmtDays(r.stockDays)}</Pill>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {r.arrivalDays == null ? (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          ) : r.stockDays != null && Number(r.stockDays) < r.arrivalDays ? (
-                            // Xavf: keyingi zakazda ham buyurtma yetib kelguncha zaxira tugaydi
-                            <Pill tone="red" className="gap-1 px-2 py-0 text-[10px] font-bold">⚠ {r.arrivalDays} kun</Pill>
-                          ) : (
-                            <span className="tabular-nums text-xs text-muted-foreground">{r.arrivalDays} kun</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums text-xs">{fmtAmount(r.stockValue)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-
-              <div className="flex flex-col items-center gap-2 border-t border-border/60 px-4 py-3">
-                <p className="text-xs text-muted-foreground">
-                  {offset + 1}–{Math.min(page * PAGE_SIZE, total)} / jami {total.toLocaleString("uz-UZ")} ta · {totalPages} sahifa
-                </p>
-                <BazaPagination page={page} totalPages={totalPages} basePath="/stockday" />
-              </div>
-            </>
+            <SnapshotTree
+              groups={tree}
+              cols={cols}
+              ctx={{ startStr: filters.startStr, endStr: filters.endStr, branchId: filters.branchId, q: filters.q, view, todayStr }}
+              loadLeaves={stockdayLeavesAction as never}
+              pillTone={VIEW_META[view].pill}
+              totalLabel="qoldiq qiymati"
+            />
           )}
         </CardContent>
       </Card>
