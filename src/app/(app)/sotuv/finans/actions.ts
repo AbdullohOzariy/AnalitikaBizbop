@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@/generated/prisma/client";
 import { isAdminTier } from "@/lib/roles";
 import { actionError } from "@/lib/action-error";
 
@@ -29,12 +30,15 @@ export async function createExpenseAction(
   try {
     const user = await requireExpenseEditor();
     const p = createSchema.parse(input);
-    const amount = Math.round(p.quantity * p.unitPrice * 100) / 100;
+    // Pul — float emas, Decimal'da: qty*narx ko'paytmasi IEEE754 xatosiz hisoblansin.
+    const quantity = new Prisma.Decimal(String(p.quantity));
+    const unitPrice = new Prisma.Decimal(String(p.unitPrice));
+    const amount = quantity.mul(unitPrice).toDecimalPlaces(2);
     await prisma.expense.create({
       data: {
         name: p.name,
-        quantity: p.quantity,
-        unitPrice: p.unitPrice,
+        quantity,
+        unitPrice,
         amount,
         spentAt: new Date(p.spentAt + "T00:00:00.000Z"),
         createdById: Number(user.id),

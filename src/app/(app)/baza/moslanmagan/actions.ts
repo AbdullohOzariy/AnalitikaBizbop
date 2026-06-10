@@ -5,6 +5,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { actionError } from "@/lib/action-error";
+import { ANALYTICS_CACHE_TAG } from "@/lib/analytics";
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -20,6 +21,8 @@ export async function assignProductSubcatAction(productId: number, subId: number
     await prisma.product.update({ where: { id: pid }, data: { categoryId: sid } });
     revalidatePath("/baza/moslanmagan");
     revalidateTag("iyerarxiya", "max");
+    // Sof foyda/marja hisoblari Product.categoryId orqali bog'langan — ular ham yangilansin.
+    revalidateTag(ANALYTICS_CACHE_TAG, "max");
     return { ok: true };
   } catch (err) {
     return actionError(err, "assignProductSubcat");

@@ -419,7 +419,8 @@ async function _dailyPlanByGroup(
   const fdByDate = new Map<string, number>();
   const monthForecastTotal = new Map<string, number>();
   for (const r of fdRows) {
-    const iso = isoDay(new Date(r.d));
+    // r.d allaqachon "YYYY-MM-DD" (::text) — new Date() orqali aylantirish TZ siljish xavfi.
+    const iso = r.d.slice(0, 10);
     const mk = `${r.year}-${String(r.month).padStart(2, "0")}`;
     fdByDate.set(iso, Number(r.v));
     monthForecastTotal.set(mk, (monthForecastTotal.get(mk) ?? 0) + Number(r.v));

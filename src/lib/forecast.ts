@@ -158,6 +158,7 @@ async function askClaudeForWeights(params: {
       parsed.weights.length !== n ||
       !parsed.weights.every((w) => typeof w === "number" && isFinite(w) && w >= 0)
     ) {
+      console.warn(`[forecast] AI javobi formati noto'g'ri (${branchName}/${groupName}) — fallback ishlatiladi`);
       return null;
     }
     const sum = (parsed.weights as number[]).reduce((s, w) => s + w, 0);
@@ -166,7 +167,12 @@ async function askClaudeForWeights(params: {
       weights: parsed.weights as number[],
       rationale: typeof parsed.rationale === "string" ? parsed.rationale.slice(0, 500) : "",
     };
-  } catch {
+  } catch (err) {
+    // Jim yutmaymiz: API/parse xatosi fallback'ga olib keladi — sababi logda ko'rinsin.
+    console.warn(
+      `[forecast] AI og'irliklari olinmadi (${branchName}/${groupName}) — fallback:`,
+      err instanceof Error ? err.message : err
+    );
     return null;
   }
 }
@@ -390,7 +396,32 @@ export async function applyForecastDayEdit(
   dateISO: string,
   amount: number | null
 ): Promise<Record<string, ForecastDayCell>> {
-  const planRows = await prisma.$queryRaw<{ amt: number }[]>`
+  // Butun o'qish→hisoblash→yozish oqimi BITTA Serializable tranzaksiyada — ikki
+  // foydalanuvchi parallel tahrirlasa, biri ikkinchisining eski qiymatlari ustidan
+  // taqsimlab yuborishi (lost update) mumkin emas. Konfliktda (P2034) bir marta retry.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await prisma.$transaction(
+        (tx) => applyForecastDayEditTx(tx, branchId, year, month, dateISO, amount),
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 15_000 }
+      );
+    } catch (err) {
+      const conflict =
+        err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2034";
+      if (!conflict || attempt >= 1) throw err;
+    }
+  }
+}
+
+async function applyForecastDayEditTx(
+  tx: Prisma.TransactionClient,
+  branchId: number,
+  year: number,
+  month: number,
+  dateISO: string,
+  amount: number | null
+): Promise<Record<string, ForecastDayCell>> {
+  const planRows = await tx.$queryRaw<{ amt: number }[]>`
     SELECT COALESCE(SUM(sp.amount), 0)::float8 AS amt
     FROM "SalesPlan" sp
     WHERE sp."branchId" = ${branchId} AND sp.year = ${year} AND sp.month = ${month}
@@ -399,7 +430,7 @@ export async function applyForecastDayEdit(
   const target = new Date(dateISO + "T00:00:00.000Z");
 
   // ── Mutatsiyadan OLDIN tekshiruvlar ──
-  const existing = await prisma.forecastDay.findMany({
+  const existing = await tx.forecastDay.findMany({
     where: { branchId, year, month },
     orderBy: { date: "asc" },
   });
@@ -416,20 +447,20 @@ export async function applyForecastDayEdit(
   }
 
   if (amount === null) {
-    await prisma.forecastDay.updateMany({
+    await tx.forecastDay.updateMany({
       where: { branchId, year, month, date: target },
       data: { locked: false },
     });
   } else {
     const val = new Prisma.Decimal(Math.max(0, amount).toFixed(2));
-    await prisma.forecastDay.upsert({
+    await tx.forecastDay.upsert({
       where: { branchId_year_month_date: { branchId, year, month, date: target } },
       create: { branchId, year, month, date: target, amount: val, locked: true },
       update: { amount: val, locked: true },
     });
   }
 
-  const days = await prisma.forecastDay.findMany({
+  const days = await tx.forecastDay.findMany({
     where: { branchId, year, month },
     orderBy: { date: "asc" },
   });
@@ -451,15 +482,14 @@ export async function applyForecastDayEdit(
     const rSum = newVals.reduce((s, v) => s + v, 0);
     newVals[newVals.length - 1] = Math.max(0, Math.round((newVals[newVals.length - 1] + (leftover - rSum)) * 100) / 100);
   }
-  const updates = unlocked.map((d, i) =>
-    prisma.forecastDay.update({
-      where: { id: d.id },
+  for (let i = 0; i < unlocked.length; i++) {
+    await tx.forecastDay.update({
+      where: { id: unlocked[i].id },
       data: { amount: new Prisma.Decimal(newVals[i].toFixed(2)) },
-    })
-  );
-  if (updates.length) await prisma.$transaction(updates);
+    });
+  }
 
-  const fresh = await prisma.forecastDay.findMany({
+  const fresh = await tx.forecastDay.findMany({
     where: { branchId, year, month },
     orderBy: { date: "asc" },
   });

@@ -297,7 +297,8 @@ async function _dailyVisitsSeries(
 export const dailyVisitsSeries = (range: DateRange, branchId?: number) =>
   unstable_cache(
     () => _dailyVisitsSeries(range, branchId),
-    ["dailyVisitsSeries", ...makeKey(range, branchId)],
+    // _v2: eski stale kesh yozuvlari ishlatilmasin (boshqa funksiyalar kabi versiyalangan)
+    ["dailyVisitsSeries_v2", ...makeKey(range, branchId)],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: 60 }
   )();
 
@@ -561,15 +562,17 @@ export type MissingDays = {
 };
 
 async function _findMissingDays(range: DateRange): Promise<MissingDays> {
+  // Sanalar ::text bilan olinadi — DATE ustunini JS Date'ga aylantirishda driver/TZ
+  // farqi kun siljitishi mumkin ("Fakt=0" bug'i shu sinfdan edi). String aniq.
   const [salesRows, visitsRows] = await Promise.all([
-    prisma.$queryRaw<{ "periodStart": Date; "periodEnd": Date }[]>`
-      SELECT DISTINCT "periodStart", "periodEnd"
+    prisma.$queryRaw<{ ps: string; pe: string }[]>`
+      SELECT DISTINCT "periodStart"::text AS ps, "periodEnd"::text AS pe
       FROM "CategorySales"
       WHERE "periodEnd" >= ${range.start} AND "periodStart" <= ${range.end}
         AND amount > 0
     `,
-    prisma.$queryRaw<{ d: Date }[]>`
-      SELECT DISTINCT date AS d
+    prisma.$queryRaw<{ d: string }[]>`
+      SELECT DISTINCT date::text AS d
       FROM "DailyVisits"
       WHERE date BETWEEN ${range.start} AND ${range.end}
         AND "visitCount" > 0
@@ -579,11 +582,11 @@ async function _findMissingDays(range: DateRange): Promise<MissingDays> {
   const haveSales = new Set<string>();
   const dayMs = 86_400_000;
   for (const r of salesRows) {
-    const s = Math.max(r.periodStart.getTime(), range.start.getTime());
-    const e = Math.min(r.periodEnd.getTime(),   range.end.getTime());
+    const s = Math.max(Date.parse(r.ps + "T00:00:00.000Z"), range.start.getTime());
+    const e = Math.min(Date.parse(r.pe + "T00:00:00.000Z"), range.end.getTime());
     for (let t = s; t <= e; t += dayMs) haveSales.add(isoDay(new Date(t)));
   }
-  const haveVisits = new Set(visitsRows.map((r) => isoDay(r.d)));
+  const haveVisits = new Set(visitsRows.map((r) => r.d));
 
   const missingSales: string[] = [];
   const missingVisits: string[] = [];
