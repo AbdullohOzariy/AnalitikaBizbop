@@ -224,7 +224,8 @@ export type DailyPoint = { date: string; value: number };
 // Har kun uchun: ustma-ust davrlardan amount/(period kun soni) yig'indisi.
 async function _dailySalesSeries(
   range: DateRange,
-  branchId?: number
+  branchId?: number,
+  scope?: number[] | null // kategoriya menejeri qamrovi (subkat id'lari)
 ): Promise<DailyPoint[]> {
   const rows = await prisma.$queryRaw<{ date: string; value: number | null }[]>`
     SELECT g.s::date::text AS date,
@@ -236,16 +237,17 @@ async function _dailySalesSeries(
       ON cs."periodStart" <= g.s::date
       AND cs."periodEnd"   >= g.s::date
       ${branchId ? Prisma.sql`AND cs."branchId" = ${branchId}` : Prisma.empty}
+      ${scope ? Prisma.sql`AND cs."categoryId" = ANY(${scope}::int[])` : Prisma.empty}
     GROUP BY g.s
     ORDER BY g.s
   `;
   return rows.map((r) => ({ date: r.date.slice(0, 10), value: Number(r.value ?? 0) }));
 }
 
-export const dailySalesSeries = (range: DateRange, branchId?: number) =>
+export const dailySalesSeries = (range: DateRange, branchId?: number, scope?: number[] | null) =>
   unstable_cache(
-    () => _dailySalesSeries(range, branchId),
-    ["dailySalesSeries_v2", ...makeKey(range, branchId)],
+    () => _dailySalesSeries(range, branchId, scope),
+    ["dailySalesSeries_v2", ...makeKey(range, branchId, scope ? `s${[...scope].sort((a, b) => a - b).join(",")}` : undefined)],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
   )();
 

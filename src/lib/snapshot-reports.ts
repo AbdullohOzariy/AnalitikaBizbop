@@ -18,10 +18,15 @@ export type SnapshotFilters = {
   branchId?: number;
   categoryId?: number;
   q: string;
+  /** Kategoriya menejeri qamrovi — subkat id'lari (admin: undefined/null = cheklovsiz) */
+  scopeSubIds?: number[] | null;
 };
 
 const filterKey = (f: SnapshotFilters) =>
-  [f.startStr, f.endStr, f.branchId ?? "all", f.categoryId ?? "all", f.q].join("|");
+  [
+    f.startStr, f.endStr, f.branchId ?? "all", f.categoryId ?? "all", f.q,
+    f.scopeSubIds ? `s${[...f.scopeSubIds].sort((a, b) => a - b).join(",")}` : "all",
+  ].join("|");
 
 function innerWhere(f: SnapshotFilters): Prisma.Sql {
   const inner: Prisma.Sql[] = [
@@ -31,6 +36,8 @@ function innerWhere(f: SnapshotFilters): Prisma.Sql {
   if (f.branchId) inner.push(Prisma.sql`ps."branchId" = ${f.branchId}`);
   if (f.categoryId) inner.push(Prisma.sql`p."categoryId" = ${f.categoryId}`);
   if (f.q) inner.push(Prisma.sql`(p.name ILIKE ${"%" + f.q + "%"} OR p.code::text = ${f.q})`);
+  // Menejer qamrovi: faqat biriktirilgan kategoriyalarning subkat'lari
+  if (f.scopeSubIds) inner.push(Prisma.sql`p."categoryId" = ANY(${f.scopeSubIds}::int[])`);
   return Prisma.join(inner, " AND ");
 }
 

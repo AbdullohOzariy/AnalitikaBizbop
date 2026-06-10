@@ -4,8 +4,9 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireCatManagerOrAdmin } from "@/lib/auth-helpers";
-import { isAdminTier, isSystemAdmin } from "@/lib/roles";
+import { isSystemAdmin } from "@/lib/roles";
 import { actionError } from "@/lib/action-error";
+import { scopeParentIds, scopeProductWhere } from "@/lib/scope";
 
 export type OrderItemInput = { productId: number; quantity: number; price: number };
 export type SupplierOption = {
@@ -28,16 +29,7 @@ export type BuilderItem = {
 };
 
 /** Joriy foydalanuvchi qamrovidagi kategoriya id'lari (admin — barchasi = null). */
-async function scopeCategoryIds(userId: number, role: string): Promise<number[] | null> {
-  if (isAdminTier(role)) return null;
-  const rows = await prisma.categoryManager.findMany({ where: { userId }, select: { categoryId: true } });
-  return rows.map((r) => r.categoryId);
-}
-
-/** Qamrovdagi mahsulot filtri (subkat'ning ota-kategoriyasi qamrovda). */
-function scopeProductWhere(scope: number[] | null) {
-  return scope === null ? {} : { category: { parentId: { in: scope } } };
-}
+// Qamrov helperlari markazlashgan: src/lib/scope.ts
 
 /** Zakaz uchun ta'minotchilar — foydalanuvchi qamrovidagi SKU'lari bor. */
 export async function suppliersForOrderAction(): Promise<
@@ -45,7 +37,7 @@ export async function suppliersForOrderAction(): Promise<
 > {
   try {
     const user = await requireCatManagerOrAdmin();
-    const scope = await scopeCategoryIds(Number(user.id), user.role);
+    const scope = await scopeParentIds(Number(user.id), user.role);
     if (scope !== null && scope.length === 0) return { ok: true, suppliers: [] };
     const grouped = await prisma.product.groupBy({
       by: ["supplierId"],
@@ -75,7 +67,7 @@ export async function supplierItemsAction(
   try {
     const user = await requireCatManagerOrAdmin();
     const sid = z.coerce.number().int().positive().parse(supplierId);
-    const scope = await scopeCategoryIds(Number(user.id), user.role);
+    const scope = await scopeParentIds(Number(user.id), user.role);
     if (scope !== null && scope.length === 0) return { ok: true, items: [] };
     // Joriy holat Product'ga denormalizatsiya qilingan (har yuklashda yangilanadi) —
     // ProductSales tarixini skanlamaymiz, bir zumda o'qiymiz.
@@ -112,7 +104,7 @@ function ownsOrder(user: ActorUser, createdById: number): boolean {
 
 /** Mahsulotlar foydalanuvchi qamrovida (kategoriya menejeri scope) ekanini tekshiradi. */
 async function scopeError(user: ActorUser, productIds: number[]): Promise<string | null> {
-  const scope = await scopeCategoryIds(Number(user.id), user.role);
+  const scope = await scopeParentIds(Number(user.id), user.role);
   if (scope === null) return null; // admin — barchasi
   const uniq = [...new Set(productIds)];
   if (uniq.length === 0) return null;

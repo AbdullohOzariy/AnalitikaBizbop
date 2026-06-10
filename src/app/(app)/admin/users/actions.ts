@@ -2,6 +2,7 @@
 
 import { revalidatePath, revalidateTag } from "next/cache";
 import { USER_ROLES_TAG } from "@/auth";
+import { CAT_SCOPE_TAG } from "@/lib/scope";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { Role } from "@/generated/prisma/enums";
@@ -35,6 +36,8 @@ export async function setUserCategoriesAction(
         : []),
     ]);
     revalidatePath("/admin/users");
+    // Menejer qamrovi o'zgardi — scope keshlari darhol yangilansin
+    revalidateTag(CAT_SCOPE_TAG, "max");
     return { ok: true };
   } catch (err) {
     return actionError(err, "setUserCategories");

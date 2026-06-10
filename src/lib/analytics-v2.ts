@@ -98,11 +98,12 @@ export type MarjaRow = {
   marja: number | null;
 };
 
-async function _marjaBreakdown(range: DateRange, branchId?: number): Promise<{
+async function _marjaBreakdown(range: DateRange, branchId?: number, scope?: number[] | null): Promise<{
   byCategory: MarjaRow[];
   byBranch:   MarjaRow[];
 }> {
   const branchSql = branchId ? Prisma.sql`AND cs."branchId" = ${branchId}` : Prisma.empty;
+  const scopeSql = scope ? Prisma.sql`AND cs."categoryId" = ANY(${scope}::int[])` : Prisma.empty;
 
   const proRated = Prisma.sql`
     cs.amount::numeric * (
@@ -123,7 +124,7 @@ async function _marjaBreakdown(range: DateRange, branchId?: number): Promise<{
            COALESCE(SUM(${proRatedCost}), 0)::float8 AS cost
     FROM "CategorySales" cs
     JOIN "Category" c ON c.id = cs."categoryId"
-    WHERE cs."periodEnd" >= ${range.start} AND cs."periodStart" <= ${range.end}    ${branchSql}
+    WHERE cs."periodEnd" >= ${range.start} AND cs."periodStart" <= ${range.end}    ${branchSql} ${scopeSql}
     GROUP BY c.id, c.name, c."sortOrder"
     ORDER BY c."sortOrder" ASC
   `;
@@ -134,7 +135,7 @@ async function _marjaBreakdown(range: DateRange, branchId?: number): Promise<{
     FROM "CategorySales" cs
     JOIN "Branch" b ON b.id = cs."branchId"
     JOIN "Category" cat ON cat.id = cs."categoryId"
-    WHERE cs."periodEnd" >= ${range.start} AND cs."periodStart" <= ${range.end}    ${branchSql}
+    WHERE cs."periodEnd" >= ${range.start} AND cs."periodStart" <= ${range.end}    ${branchSql} ${scopeSql}
     GROUP BY b.id, b.name, b."sortOrder"
     ORDER BY b."sortOrder" ASC
   `;
@@ -156,10 +157,10 @@ async function _marjaBreakdown(range: DateRange, branchId?: number): Promise<{
   };
 }
 
-export const marjaBreakdown = (range: DateRange, branchId?: number) =>
+export const marjaBreakdown = (range: DateRange, branchId?: number, scope?: number[] | null) =>
   unstable_cache(
-    () => _marjaBreakdown(range, branchId),
-    ["v3_marja", ...makeKey(range, branchId)],
+    () => _marjaBreakdown(range, branchId, scope),
+    ["v3_marja", ...makeKey(range, branchId, scope ? `s${[...scope].sort((a, b) => a - b).join(",")}` : undefined)],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
   )();
 
@@ -167,8 +168,9 @@ export const marjaBreakdown = (range: DateRange, branchId?: number) =>
 
 export type MarjaGroupNode = MarjaRow & { categories: MarjaRow[] };
 
-async function _marjaHierarchy(range: DateRange, branchId?: number): Promise<MarjaGroupNode[]> {
+async function _marjaHierarchy(range: DateRange, branchId?: number, scope?: number[] | null): Promise<MarjaGroupNode[]> {
   const branchSql = branchId ? Prisma.sql`AND cs."branchId" = ${branchId}` : Prisma.empty;
+  const scopeSql = scope ? Prisma.sql`AND cs."categoryId" = ANY(${scope}::int[])` : Prisma.empty;
   const frac = Prisma.sql`(
     (LEAST(cs."periodEnd", ${range.end}::date) - GREATEST(cs."periodStart", ${range.start}::date) + 1)::float8
     / NULLIF((cs."periodEnd" - cs."periodStart" + 1)::float8, 0)
@@ -185,7 +187,7 @@ async function _marjaHierarchy(range: DateRange, branchId?: number): Promise<Mar
     JOIN "Category" sub ON sub.id = cs."categoryId"
     JOIN "Category" par ON par.id = sub."parentId"
     JOIN "CategoryGroup" g ON g.id = par."groupId"
-    WHERE cs."periodEnd" >= ${range.start} AND cs."periodStart" <= ${range.end}    ${branchSql}
+    WHERE cs."periodEnd" >= ${range.start} AND cs."periodStart" <= ${range.end}    ${branchSql} ${scopeSql}
     GROUP BY g.id, g.name, g."sortOrder", par.id, par.name, par."sortOrder"
     ORDER BY g."sortOrder" ASC, par."sortOrder" ASC
   `;
@@ -210,8 +212,8 @@ async function _marjaHierarchy(range: DateRange, branchId?: number): Promise<Mar
 }
 
 // Keshsiz — savdo ulushi donut (SalesShareWidget) har doim fresh.
-export const marjaHierarchy = (range: DateRange, branchId?: number) =>
-  _marjaHierarchy(range, branchId);
+export const marjaHierarchy = (range: DateRange, branchId?: number, scope?: number[] | null) =>
+  _marjaHierarchy(range, branchId, scope);
 
 // ============ KPI by branch (conversion + avg items per receipt) ============
 
@@ -279,9 +281,11 @@ export type GroupSalesDayRow = {
 
 async function _dailySalesByGroup(
   range: DateRange,
-  branchId?: number
+  branchId?: number,
+  scope?: number[] | null
 ): Promise<{ days: GroupSalesDayRow[]; groups: { id: number; name: string }[] }> {
   const branchSql = branchId ? Prisma.sql`AND cs."branchId" = ${branchId}` : Prisma.empty;
+  const scopeSql = scope ? Prisma.sql`AND cs."categoryId" = ANY(${scope}::int[])` : Prisma.empty;
 
   // Kunlik pro-rated savdo: guruh bo'yicha
   const rows = await prisma.$queryRaw<
@@ -303,6 +307,7 @@ async function _dailySalesByGroup(
       AND cs."periodStart" <= g.s::date
       AND cs."periodEnd"   >= g.s::date
       ${branchSql}
+      ${scopeSql}
     GROUP BY g.s, cg.id, cg.name, cg."sortOrder"
     ORDER BY g.s, cg."sortOrder"
   `;
@@ -332,8 +337,8 @@ async function _dailySalesByGroup(
 }
 
 // Keshsiz — to'g'ridan-to'g'ri DB (unstable_cache stale Fakt'ni qotirib qo'yardi).
-export const dailySalesByGroup = (range: DateRange, branchId?: number) =>
-  _dailySalesByGroup(range, branchId);
+export const dailySalesByGroup = (range: DateRange, branchId?: number, scope?: number[] | null) =>
+  _dailySalesByGroup(range, branchId, scope);
 
 // ============ Guruh bo'yicha kunlik REJA (Reja vs Fakt dinamikasi uchun) ============
 //
@@ -359,9 +364,11 @@ function daysInMonthUTC(year: number, month1: number): number {
 
 async function _dailyPlanByGroup(
   range: DateRange,
-  branchId?: number
+  branchId?: number,
+  scope?: number[] | null
 ): Promise<{ days: GroupPlanDayRow[]; groups: { id: number; name: string }[] }> {
   const planBranchSql = branchId ? Prisma.sql`AND sp."branchId" = ${branchId}` : Prisma.empty;
+  const planScopeSql = scope ? Prisma.sql`AND sp."categoryId" = ANY(${scope}::int[])` : Prisma.empty;
   const fdBranchSql = branchId ? Prisma.sql`AND fd."branchId" = ${branchId}` : Prisma.empty;
 
   // 1) Guruh oylik rejasi: SalesPlan (subkat) → ota → guruh.
@@ -380,6 +387,7 @@ async function _dailyPlanByGroup(
       JOIN "CategoryGroup" g ON g.id = COALESCE(par."groupId", sub."groupId")
       WHERE make_date(sp.year, sp.month, 1) <= ${range.end}::date
         AND (make_date(sp.year, sp.month, 1) + interval '1 month' - interval '1 day')::date >= ${range.start}::date
+        ${planScopeSql}
         ${planBranchSql}
       GROUP BY g.id, g.name, g."sortOrder", sp.year, sp.month
       ORDER BY g."sortOrder" ASC
@@ -474,5 +482,5 @@ async function _dailyPlanByGroup(
 }
 
 // Keshsiz — guruh widgeti har doim fresh ma'lumot (Fakt bilan izchil).
-export const dailyPlanByGroup = (range: DateRange, branchId?: number) =>
-  _dailyPlanByGroup(range, branchId);
+export const dailyPlanByGroup = (range: DateRange, branchId?: number, scope?: number[] | null) =>
+  _dailyPlanByGroup(range, branchId, scope);

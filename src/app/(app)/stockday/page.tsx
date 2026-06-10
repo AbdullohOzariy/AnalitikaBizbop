@@ -6,6 +6,7 @@ import { canSeeAnalytics } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { getDefaultRange } from "@/lib/analytics";
 import { stockdayKpi, stockdayRows, type StockView, type SnapshotFilters } from "@/lib/snapshot-reports";
+import { scopeSubIds } from "@/lib/scope";
 import { Hourglass, Flame, AlertTriangle, PackageCheck, Boxes, Layers, Download, TimerOff } from "lucide-react";
 import { PageHeader, StatCard, EmptyState, Pill } from "@/components/common/page";
 import { Card, CardContent } from "@/components/ui/card";
@@ -80,10 +81,14 @@ export default async function StockdayPage({
   const startStr = startDate.toISOString().slice(0, 10);
   const endStr = endDate.toISOString().slice(0, 10);
   const branchId = sp.branchId ? parseInt(sp.branchId) : undefined;
-  const categoryId = sp.categoryId ? parseInt(sp.categoryId) : undefined;
+  let categoryId = sp.categoryId ? parseInt(sp.categoryId) : undefined;
   const q = sp.q?.trim() ?? "";
 
-  const filters: SnapshotFilters = { startStr, endStr, branchId, categoryId, q };
+  // Kategoriya menejeri qamrovi: faqat biriktirilgan kategoriyalar ko'rinadi
+  const scope = await scopeSubIds(Number(session.user.id), role);
+  if (scope && categoryId != null && !scope.includes(categoryId)) categoryId = undefined;
+
+  const filters: SnapshotFilters = { startStr, endStr, branchId, categoryId, q, scopeSubIds: scope };
   // Kechikish xavfi "bugun"ga bog'liq (keyingi zakaz kunigacha hisob) — kunlik kesh kaliti
   const todayStr = new Date().toISOString().slice(0, 10);
 
@@ -93,7 +98,7 @@ export default async function StockdayPage({
     prisma.category.findMany({
       orderBy: { sortOrder: "asc" },
       select: { id: true, name: true },
-      where: { products: { some: {} } },
+      where: { products: { some: {} }, ...(scope ? { id: { in: scope } } : {}) },
     }),
   ]);
 

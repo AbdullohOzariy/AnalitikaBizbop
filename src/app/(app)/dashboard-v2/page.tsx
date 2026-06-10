@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getDefaultRange, dailySalesSeries } from "@/lib/analytics";
+import { scopeSubIds } from "@/lib/scope";
 import {
   dailyVisitsByBranch,
   dailyReceiptsByBranch,
@@ -83,10 +84,12 @@ async function WidgetsSection({
   startStr,
   endStr,
   branchId,
+  scope,
 }: {
   startStr: string;
   endStr: string;
   branchId: number | undefined;
+  scope: number[] | null;
 }) {
   const range = {
     start: new Date(startStr + "T00:00:00.000Z"),
@@ -108,14 +111,15 @@ async function WidgetsSection({
   ] = await Promise.all([
     dailyVisitsByBranch(range),
     dailyReceiptsByBranch(range),
-    marjaBreakdown(range, branchId),
-    marjaHierarchy(range, branchId),
+    marjaBreakdown(range, branchId, scope),
+    marjaHierarchy(range, branchId, scope),
     kpiByBranch(range),
     kpiByBranch(previousRange),
-    dailySalesByGroup(range, branchId),
-    dailyPlanByGroup(range, branchId),
-    dailySalesSeries(range, branchId),
-    dailyForecastSeries(range, branchId),
+    dailySalesByGroup(range, branchId, scope),
+    dailyPlanByGroup(range, branchId, scope),
+    dailySalesSeries(range, branchId, scope),
+    // Qamrovda ForecastDay (filial darajasi) o'rniga guruh rejalari yig'indisi ishlatiladi
+    scope ? Promise.resolve(null) : dailyForecastSeries(range, branchId),
   ]);
 
   const filterByBranch = (s: typeof visits) =>
@@ -150,8 +154,10 @@ async function WidgetsSection({
   const overallMarja = marjaTotalSales > 0 ? ((marjaTotalSales - marjaTotalCost) / marjaTotalSales) * 100 : null;
 
   // ── Reja bajarilishi (fakt ÷ reja) — hero KPI uchun ──
+  // Qamrovli menejer uchun reja = o'z guruh rejalari yig'indisi (dailyPlanByGroup scoped)
+  const planPoints = dailyPlan ?? groupPlan.days.map((d) => ({ date: d.date, value: d.total }));
   const totalFact = dailyFact.reduce((s, p) => s + p.value, 0);
-  const totalPlan = dailyPlan.reduce((s, p) => s + p.value, 0);
+  const totalPlan = planPoints.reduce((s, p) => s + p.value, 0);
   const execution = totalPlan > 0 ? (totalFact / totalPlan) * 100 : null;
 
   // ── Kunlik son dinamikasi (Tashriflar + Cheklar, jami) ──
@@ -224,10 +230,13 @@ export default async function DashboardV2Page({
   if (!session) redirect("/login");
 
   const sp = await searchParams;
-  // Parallel — waterfall bo'lmasin
-  const [branches, defaultRange] = await Promise.all([
+  // Parallel — waterfall bo'lmasin. scope: kategoriya menejeri faqat o'z
+  // kategoriyalari savdo/marja/reja ma'lumotini ko'radi (tashrif/chek — do'kon
+  // darajasidagi neytral kontekst, qoladi).
+  const [branches, defaultRange, scope] = await Promise.all([
     prisma.branch.findMany({ orderBy: { sortOrder: "asc" } }),
     getDefaultRange(),
+    scopeSubIds(Number(session.user.id), session.user.role),
   ]);
   const branchId =
     sp.branchId === "all" || !sp.branchId ? undefined : Number(sp.branchId) || undefined;
@@ -249,9 +258,16 @@ export default async function DashboardV2Page({
         end={endStr}
       />
 
-      <Suspense fallback={<WidgetsSkeleton />}>
-        <WidgetsSection startStr={startStr} endStr={endStr} branchId={branchId} />
-      </Suspense>
+      {scope && scope.length === 0 ? (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
+          Sizga hali kategoriya biriktirilmagan — administrator Foydalanuvchilar bo'limida
+          kategoriya tayinlagach, shu yerda o'z bo'limingiz ma'lumotlari ko'rinadi.
+        </div>
+      ) : (
+        <Suspense fallback={<WidgetsSkeleton />}>
+          <WidgetsSection startStr={startStr} endStr={endStr} branchId={branchId} scope={scope} />
+        </Suspense>
+      )}
     </div>
   );
 }

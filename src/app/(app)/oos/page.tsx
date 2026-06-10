@@ -6,6 +6,7 @@ import { canSeeAnalytics } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { getDefaultRange } from "@/lib/analytics";
 import { oosKpi, oosRows, type OosView, type SnapshotFilters } from "@/lib/snapshot-reports";
+import { scopeSubIds } from "@/lib/scope";
 import { PackageX, AlertTriangle, Boxes, Layers, TrendingDown } from "lucide-react";
 import { PageHeader, StatCard, EmptyState, Pill } from "@/components/common/page";
 import { Card, CardContent } from "@/components/ui/card";
@@ -66,10 +67,15 @@ export default async function OosPage({
   const startStr = startDate.toISOString().slice(0, 10);
   const endStr = endDate.toISOString().slice(0, 10);
   const branchId = sp.branchId ? parseInt(sp.branchId) : undefined;
-  const categoryId = sp.categoryId ? parseInt(sp.categoryId) : undefined;
+  let categoryId = sp.categoryId ? parseInt(sp.categoryId) : undefined;
   const q = sp.q?.trim() ?? "";
 
-  const filters: SnapshotFilters = { startStr, endStr, branchId, categoryId, q };
+  // Kategoriya menejeri qamrovi: faqat biriktirilgan kategoriyalar ko'rinadi
+  const scope = await scopeSubIds(Number(session.user.id), role);
+  // URL orqali qamrovdan tashqari kategoriya so'ralsa — e'tiborsiz (xavfsizlik)
+  if (scope && categoryId != null && !scope.includes(categoryId)) categoryId = undefined;
+
+  const filters: SnapshotFilters = { startStr, endStr, branchId, categoryId, q, scopeSubIds: scope };
 
   // Yengil so'rovlar (filtr ro'yxatlari) — shell darhol chiqadi; og'ir qism Suspense'da oqib keladi.
   const [branches, categories] = await Promise.all([
@@ -77,7 +83,7 @@ export default async function OosPage({
     prisma.category.findMany({
       orderBy: { sortOrder: "asc" },
       select: { id: true, name: true },
-      where: { products: { some: {} } },
+      where: { products: { some: {} }, ...(scope ? { id: { in: scope } } : {}) },
     }),
   ]);
 
