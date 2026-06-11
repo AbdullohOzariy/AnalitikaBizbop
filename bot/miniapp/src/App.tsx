@@ -33,7 +33,14 @@ export default function App() {
     let bekor = false
     fetch('/api/ruxsat', { method: 'POST', headers: { 'x-telegram-init-data': initData } })
       .then((r) => r.json())
-      .then((d) => { if (!bekor) setGate(d?.allowed ? 'allowed' : 'denied') })
+      .then((d) => {
+        if (bekor) return
+        if (d?.allowed) { setGate('allowed'); return }
+        // Spisaniya ruxsati yo'q, lekin SVERKA roli bor — o'sha appga o'tamiz
+        // (BotFather tugmasi shu sahifaga ko'rsatsa ham to'g'ri ishlasin)
+        if (d?.sverka) { window.location.replace('/miniapp/sverka' + window.location.hash); return }
+        setGate('denied')
+      })
       .catch(() => { if (!bekor) setGate('denied') })
     return () => { bekor = true }
   }, [initData])

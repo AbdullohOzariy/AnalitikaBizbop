@@ -66,6 +66,9 @@ export function SverkaApp() {
   const [firmaOpts, setFirmaOpts] = useState<Firma[]>([]);
   const [sklad, setSklad] = useState("");
   const [kontragent, setKontragent] = useState("");
+  const [kontrQ, setKontrQ] = useState("");
+  const [kontrOpts, setKontrOpts] = useState<Firma[]>([]);
+  const kontrDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [dagavor, setDagavor] = useState("");
   const [summa, setSumma] = useState("");
   const [rasm, setRasm] = useState<File | null>(null);
@@ -80,7 +83,13 @@ export function SverkaApp() {
     (async () => {
       try {
         const r = await api<{ allowed: boolean }>("/api/sverka/ruxsat", { method: "POST" });
-        setPhase(r.allowed ? "form" : "denied");
+        if (r.allowed) { setPhase("form"); return; }
+        // Sverka ruxsati yo'q — spisaniya roli bo'lsa o'sha appga o'tamiz
+        try {
+          const s = await api<{ allowed: boolean }>("/api/ruxsat", { method: "POST" });
+          if (s.allowed) { window.location.replace("/miniapp/index.html" + window.location.hash); return; }
+        } catch { /* jim */ }
+        setPhase("denied");
       } catch { setPhase("denied"); }
     })();
   }, []);
@@ -96,6 +105,18 @@ export function SverkaApp() {
       } catch { /* jim */ }
     }, 250);
   }, [firmaQ, phase]);
+
+  // Kontragent qidiruvi — yetkazib beruvchilar ro'yxatidan (firma kabi)
+  useEffect(() => {
+    if (phase !== "form") return;
+    if (kontrDebounce.current) clearTimeout(kontrDebounce.current);
+    kontrDebounce.current = setTimeout(async () => {
+      try {
+        const r = await api<{ firmalar: Firma[] }>(`/api/sverka/firmalar?q=${encodeURIComponent(kontrQ)}`);
+        setKontrOpts(r.firmalar);
+      } catch { /* jim */ }
+    }, 250);
+  }, [kontrQ, phase]);
 
   // Lug'atlar — firma tanlangach (dagavor takliflari firma bo'yicha)
   useEffect(() => {
@@ -145,7 +166,7 @@ export function SverkaApp() {
   };
 
   const resetForNew = () => {
-    setStep(0); setFirma(null); setFirmaQ(""); setSklad(""); setKontragent("");
+    setStep(0); setFirma(null); setFirmaQ(""); setSklad(""); setKontragent(""); setKontrQ(""); setKontrOpts([]);
     setDagavor(""); setSumma(""); setRasm(null); setErr(""); setPhase("form");
     setSana(todayStr());
   };
@@ -218,7 +239,26 @@ export function SverkaApp() {
           <FieldWithChips value={sklad} onChange={setSklad} placeholder="Sklad nomi…" chips={luglar.sklad} />
         )}
         {step === 3 && (
-          <FieldWithChips value={kontragent} onChange={setKontragent} placeholder="Kontragent…" chips={luglar.kontragent} />
+          <>
+            <input
+              value={kontragent || kontrQ}
+              onChange={(e) => { setKontragent(""); setKontrQ(e.target.value); }}
+              placeholder="Kontragent nomini yozing…"
+              className="inp"
+              autoFocus
+            />
+            {!kontragent && (
+              <div className="opts">
+                {kontrOpts.map((f) => (
+                  <button key={f.id} className="opt" onClick={() => setKontragent(f.name)}>
+                    {f.name}
+                  </button>
+                ))}
+                {kontrOpts.length === 0 && kontrQ && <p className="muted">Topilmadi — boshqacha yozib ko&apos;ring</p>}
+              </div>
+            )}
+            {kontragent && <p className="picked">✓ {kontragent}</p>}
+          </>
         )}
         {step === 4 && (
           <FieldWithChips value={dagavor} onChange={setDagavor} placeholder="Dagavor raqami/nomi…" chips={luglar.dagavor} />
