@@ -103,3 +103,19 @@ export function canEnterFact(role: R, status: OrderStatusT): boolean {
   if (status !== "ACCEPTED" && status !== "RECEIVED") return false;
   return role === "SYSTEM_ADMIN" || role === "ADMIN" || role === "SUPPLYCHAIN" || role === "HEAD_CAT_MANAGER";
 }
+
+
+// ─── Min stock hisobi (server va client bir xil formula) ─────────────────────
+// Min stock = kunlik sotuv × (zakaz oralig'i + lead time) × XYZ buferi
+export const XYZ_BUFFER: Record<string, number> = { X: 1.1, Y: 1.25, Z: 1.5 };
+
+export function hisobMinStock(
+  dailyAvg: number,
+  orderGap: number,
+  lead: number | null,
+  xyz: string | null
+): number | null {
+  if (lead == null || lead < 0) return null;
+  const buffer = XYZ_BUFFER[xyz ?? ""] ?? 1.25;
+  return Math.ceil(dailyAvg * (orderGap + lead) * buffer);
+}

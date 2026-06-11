@@ -5,7 +5,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireCatManagerOrAdmin } from "@/lib/auth-helpers";
 import { auth } from "@/auth";
-import { ORDER_STATUSES, canTransition, canEditItems, canEnterFact, type OrderStatusT } from "./order-status";
+import { ORDER_STATUSES, canTransition, canEditItems, canEnterFact, hisobMinStock, type OrderStatusT } from "./order-status";
 import { isSystemAdmin } from "@/lib/roles";
 import { actionError } from "@/lib/action-error";
 import { scopeParentIds, scopeProductWhere } from "@/lib/scope";
@@ -18,6 +18,7 @@ export type OrderItemInput = {
   price: number; // dona narxi
   packCount?: number | null; // blok/yashik soni (kiritilgan bo'lsa)
   packSize?: number | null; // pachka hajmi (dona)
+  leadTimeDays?: number | null; // zakaz berishda kiritilsa — SKU'da eslab qolinadi
 };
 export type SupplierOption = {
   id: number;
@@ -54,8 +55,7 @@ function orderGapFromDates(dates: Date[], today: Date): number {
   return Math.max(1, max);
 }
 
-// Xavfsizlik buferi — talab notekisligi (XYZ) bo'yicha: notekisga ko'proq zaxira
-const XYZ_BUFFER: Record<string, number> = { X: 1.1, Y: 1.25, Z: 1.5 };
+
 
 /** Joriy foydalanuvchi qamrovidagi kategoriya id'lari (admin — barchasi = null). */
 // Qamrov helperlari markazlashgan: src/lib/scope.ts
@@ -101,12 +101,12 @@ export async function suppliersForOrderAction(): Promise<
 /** Yetkazib beruvchi × qamrov SKU'lari + qoldiq/sotuv asosida taklif miqdori. */
 export async function supplierItemsAction(
   supplierId: number
-): Promise<{ ok: true; items: BuilderItem[] } | { ok: false; error: string }> {
+): Promise<{ ok: true; items: BuilderItem[]; orderGap: number } | { ok: false; error: string }> {
   try {
     const user = await requireCatManagerOrAdmin();
     const sid = z.coerce.number().int().positive().parse(supplierId);
     const scope = await scopeParentIds(Number(user.id), user.role);
-    if (scope !== null && scope.length === 0) return { ok: true, items: [] };
+    if (scope !== null && scope.length === 0) return { ok: true, items: [], orderGap: 1 };
     // Joriy holat Product'ga denormalizatsiya qilingan (har yuklashda yangilanadi) —
     // ProductSales tarixini skanlamaymiz, bir zumda o'qiymiz.
     const [products, futureOrderDays, range] = await Promise.all([
@@ -151,10 +151,7 @@ export async function supplierItemsAction(
       const dailyAvg = dailyByPid.get(p.id) ?? 0;
       // Min stock = kunlik × (zakaz oralig'i + lead) × XYZ buferi —
       // "bugun zakaz bermasangiz, keyingi imkoniyat + yetib kelish davrini qoplaydigan zaxira"
-      const buffer = XYZ_BUFFER[p.xyzClass ?? ""] ?? 1.25;
-      const minStock = p.leadTimeDays != null
-        ? Math.ceil(dailyAvg * (orderGap + p.leadTimeDays) * buffer)
-        : null;
+      const minStock = hisobMinStock(dailyAvg, orderGap, p.leadTimeDays, p.xyzClass);
       // Taklif: min stock'gacha to'ldirish; lead kiritilmagan — eski qo'pol formula
       const suggested = minStock != null
         ? Math.max(0, minStock - stock)
@@ -167,7 +164,7 @@ export async function supplierItemsAction(
         purchasePrice: p.purchasePrice != null ? Number(p.purchasePrice) : null,
       };
     });
-    return { ok: true, items };
+    return { ok: true, items, orderGap };
   } catch (err) {
     return actionError(err, "supplierItems");
   }
@@ -179,16 +176,18 @@ const itemSchema = z.object({
   price: z.coerce.number().nonnegative().max(1_000_000_000_000),
   packCount: z.coerce.number().int().positive().max(100_000).nullable().optional(),
   packSize: z.coerce.number().int().positive().max(100_000).nullable().optional(),
+  leadTimeDays: z.coerce.number().int().min(0).max(365).nullable().optional(),
 });
 
-/** Pachka hajmi va kelishilgan narxni Product'da eslab qolamiz (keyingi zakazda tayyor). */
+/** Pachka, narx va lead time'ni Product'da eslab qolamiz (keyingi zakazda tayyor). */
 async function rememberOrderParams(
-  items: { productId: number; packSize?: number | null; price: number }[]
+  items: { productId: number; packSize?: number | null; price: number; leadTimeDays?: number | null }[]
 ) {
   for (const i of items) {
-    const data: { packSize?: number; purchasePrice?: number } = {};
+    const data: { packSize?: number; purchasePrice?: number; leadTimeDays?: number } = {};
     if (i.packSize != null) data.packSize = i.packSize;
     if (i.price > 0) data.purchasePrice = i.price;
+    if (i.leadTimeDays != null) data.leadTimeDays = i.leadTimeDays;
     if (Object.keys(data).length === 0) continue;
     await prisma.product.update({ where: { id: i.productId }, data }).catch(() => null);
   }

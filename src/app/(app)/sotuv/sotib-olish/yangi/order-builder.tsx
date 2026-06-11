@@ -20,9 +20,11 @@ import {
   suppliersForOrderAction, supplierItemsAction, createOrderAction,
   type SupplierOption, type BuilderItem,
 } from "../actions";
+import { hisobMinStock } from "../order-status";
 
-// qty (dona) — saqlanadigan asosiy qiymat; blok×pack kiritilsa qty avtomatik hisoblanadi
-type Line = { qty: string; price: string; blok: string; pack: string };
+// qty (dona) — saqlanadigan asosiy qiymat; blok×pack kiritilsa qty avtomatik hisoblanadi.
+// lead — zakaz berishda kiritilsa SKU'ga bog'lanadi (eslab qolinadi).
+type Line = { qty: string; price: string; blok: string; pack: string; lead: string };
 
 export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number }) {
   const router = useRouter();
@@ -30,6 +32,7 @@ export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number
   const [supplierId, setSupplierId] = useState("");
   const [items, setItems] = useState<BuilderItem[]>([]);
   const [lines, setLines] = useState<Map<number, Line>>(new Map());
+  const [orderGap, setOrderGap] = useState(1);
   const [note, setNote] = useState("");
   const [q, setQ] = useState("");
   const [loadingSup, startSup] = useTransition();
@@ -44,11 +47,12 @@ export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number
       const res = await supplierItemsAction(Number(v));
       if (res.ok) {
         setItems(res.items);
+        setOrderGap(res.orderGap);
         // taklif miqdorini oldindan to'ldiramiz (narx bo'sh)
         const m = new Map<number, Line>();
         for (const it of res.items) {
           if (it.suggested > 0) {
-            m.set(it.productId, { qty: String(it.suggested), price: it.purchasePrice != null ? String(it.purchasePrice) : "", blok: "", pack: it.packSize != null ? String(it.packSize) : "" });
+            m.set(it.productId, { qty: String(it.suggested), price: it.purchasePrice != null ? String(it.purchasePrice) : "", blok: "", pack: it.packSize != null ? String(it.packSize) : "", lead: "" });
           }
         }
         setLines(m);
@@ -74,7 +78,7 @@ export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number
   const setLine = (pid: number, patch: Partial<Line>) =>
     setLines((prev) => {
       const n = new Map(prev);
-      const cur = n.get(pid) ?? { qty: "", price: "", blok: "", pack: "" };
+      const cur = n.get(pid) ?? { qty: "", price: "", blok: "", pack: "", lead: "" };
       const next = { ...cur, ...patch };
       // Blok × Pachka kiritilsa — dona avtomatik (masalan 5 × 12 = 60)
       if (patch.blok !== undefined || patch.pack !== undefined) {
@@ -114,17 +118,20 @@ export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number
 
   const itemByPid = useMemo(() => new Map(items.map((i) => [i.productId, i])), [items]);
   const chosen = useMemo(() => {
-    const out: { productId: number; quantity: number; price: number; packCount: number | null; packSize: number | null }[] = [];
+    const out: { productId: number; quantity: number; price: number; packCount: number | null; packSize: number | null; leadTimeDays: number | null }[] = [];
     for (const [pid, l] of lines) {
       const qty = Number(l.qty);
       // Narx kiritilmagan bo'lsa — eslab qolingan narx (placeholder'da ko'rinadi)
       const price = Number(l.price) || itemByPid.get(pid)?.purchasePrice || 0;
       const blok = Number(l.blok); const pack = Number(l.pack);
       if (qty > 0) {
+        const lead = Number(l.lead);
         out.push({
           productId: pid, quantity: qty, price,
           packCount: blok > 0 ? blok : null,
           packSize: pack > 0 ? pack : null,
+          // Kiritilgan lead SKU'ga bog'lanadi (eslab qolinadi)
+          leadTimeDays: l.lead.trim() !== "" && Number.isInteger(lead) && lead >= 0 ? lead : null,
         });
       }
     }
@@ -201,7 +208,7 @@ export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number
         <p className="text-[11px] text-muted-foreground">
           Min stock = kunlik sotuv × (zakaz oralig'i + lead time) × XYZ buferi (X 1.1 · Y 1.25 · Z 1.5).
           ⚠ — qoldiq min stock'dan past. Xira qiymatlar — eslab qolingan taklif (bo'sh qoldirsangiz o'sha ishlatiladi).
-          Enter — ustun bo'ylab keyingi qatorga.
+          Lead'ni shu yerda kiritsangiz — SKU'ga saqlanadi va min stock darhol qayta hisoblanadi. Enter — ustun bo'ylab keyingi qatorga.
         </p>
       )}
 
@@ -232,9 +239,12 @@ export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number
                 </TableHeader>
                 <TableBody>
                   {shown.map((it) => {
-                    const l = lines.get(it.productId) ?? { qty: "", price: "", blok: "", pack: "" };
+                    const l = lines.get(it.productId) ?? { qty: "", price: "", blok: "", pack: "", lead: "" };
                     const sum = (Number(l.qty) || 0) * (Number(l.price) || it.purchasePrice || 0);
                     const picked = Number(l.qty) > 0;
+                    // Lead kiritilsa — min stock JONLI qayta hisoblanadi (formula serverniki bilan bir xil)
+                    const effLead = l.lead.trim() !== "" && Number(l.lead) >= 0 ? Number(l.lead) : it.lead;
+                    const liveMin = hisobMinStock(it.dailyAvg, orderGap, effLead, it.xyz);
                     return (
                       // Fon: tanlangan — yashil (zakazga kiradi); aks holda ABC×XYZ matritsa rangi
                       <TableRow key={it.productId}
@@ -266,17 +276,25 @@ export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number
                           {it.dailyAvg > 0 ? it.dailyAvg.toLocaleString("uz-UZ", { maximumFractionDigits: 1 }) : <span className="text-muted-foreground/40">—</span>}
                         </TableCell>
                         <TableCell className="text-right tabular-nums text-xs">
-                          {it.minStock == null ? (
-                            <span className="text-muted-foreground/40" title="Lead time kiritilmagan — yetkazib beruvchi profilida to'ldiring">—</span>
-                          ) : it.stock < it.minStock ? (
+                          {liveMin == null ? (
+                            <span className="text-muted-foreground/40" title="Lead kiritilmagan — yonidagi katakka kiriting (SKU'ga saqlanadi)">—</span>
+                          ) : it.stock < liveMin ? (
                             <span className="font-bold text-destructive" title="Qoldiq min stock'dan past — buyurtma shart!">
-                              ⚠ {it.minStock.toLocaleString("uz-UZ")}
+                              ⚠ {liveMin.toLocaleString("uz-UZ")}
                             </span>
                           ) : (
-                            <span className="text-muted-foreground">{it.minStock.toLocaleString("uz-UZ")}</span>
+                            <span className="text-muted-foreground">{liveMin.toLocaleString("uz-UZ")}</span>
                           )}
                         </TableCell>
-                        <TableCell className="text-right tabular-nums text-xs text-muted-foreground">{it.lead != null ? `${it.lead} kun` : <span className="text-muted-foreground/40">—</span>}</TableCell>
+                        <TableCell className="px-2">
+                          <Input ref={regRef(it.productId, "lead")} type="number" inputMode="numeric" value={l.lead}
+                            placeholder={it.lead != null ? String(it.lead) : ""}
+                            onChange={(e) => setLine(it.productId, { lead: e.target.value })}
+                            onKeyDown={onEnterNext(it.productId, "lead")}
+                            className="h-7 w-14 px-1.5 text-right text-xs tabular-nums"
+                            title="Lead time (kun) — kiritilsa SKU'ga saqlanadi, min stock qayta hisoblanadi"
+                            aria-label="Lead time (kun)" />
+                        </TableCell>
                         <TableCell className="border-l border-border/60 bg-primary/[0.03] px-2">
                           <span className="flex items-center gap-1">
                             <Input ref={regRef(it.productId, "blok")} type="number" inputMode="numeric" value={l.blok}
