@@ -12,7 +12,7 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { Pill } from "@/components/common/page";
-import { Loader2, Save, Send, PackageCheck, RotateCcw, Trash2, Truck } from "lucide-react";
+import { Loader2, Save, Send, PackageCheck, RotateCcw, Trash2, Truck, FileDown } from "lucide-react";
 import { formatUZS, formatDateTimeUZ } from "@/lib/format";
 import {
   ORDER_STATUS_LABEL, ORDER_STATUS_TONE, TRANSITION_LABEL, NEXT_STATUSES,
@@ -109,6 +109,16 @@ export function OrderDetail({ order, role, isOwner }: { order: OrderData; role: 
         <span className="text-xs text-muted-foreground">Yaratdi: {order.createdBy} · {fmtDate(order.createdAt)}</span>
         {order.sentAt && <span className="text-xs text-muted-foreground">Yuborildi: {fmtDate(order.sentAt)}</span>}
         {order.receivedAt && <span className="text-xs text-muted-foreground">Qabul: {fmtDate(order.receivedAt)}</span>}
+
+        <a
+          href={`/api/zakaz/${order.id}/pdf`}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Yetkazib beruvchiga yuborish uchun tayyor nakladnoy (BizBop logo bilan)"
+          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+        >
+          <FileDown className="h-3.5 w-3.5" /> Nakladnoy (PDF)
+        </a>
 
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
           {allowedNexts.map((to) => {

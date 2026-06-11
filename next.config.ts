@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // pdfkit AFM/data fayllarini webpack bundlega olmaslik (runtime require)
+  serverExternalPackages: ["pdfkit"],
   experimental: {
     // Client router keshi: dinamik sahifa 30s ichida qayta ochilsa serverga bormaydi
     // (orqaga/oldinga va sidebar navigatsiyasi bir zumda). Ma'lumot baribir faqat
