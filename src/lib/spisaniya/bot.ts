@@ -44,15 +44,12 @@ function buildBot(): Telegraf | null {
       ? await Promise.all([ruxsatBormi(id), sverkaRuxsatBormi(id).catch(() => false)])
       : [false, false];
     if (allowed || sverkaAllowed) {
+      // Bitta kirish nuqtasi — rolga qarab avtomatik yo'naltiradi
+      // (ikkala rol bo'lsa app ichida tanlov ekrani chiqadi)
       const base = (process.env.WEBHOOK_URL || "").replace(/\/$/, "");
-      const buttons = [
-        ...(allowed ? [[Markup.button.webApp("📝 Yangi yozuv", miniAppUrl())]] : []),
-        ...(sverkaAllowed ? [[Markup.button.webApp("📑 Sverka kiritish", `${base}/miniapp/sverka`)]] : []),
-      ];
       return ctx.reply(
-        `Salom, ${ism}!\n🆔 Sizning ID: ${id}\n\n` +
-          (buttons.length > 1 ? "Bo'limni tanlang:" : "Boshlash uchun tugmani bosing."),
-        Markup.inlineKeyboard(buttons)
+        `Salom, ${ism}!\n🆔 Sizning ID: ${id}\n\nBoshlash uchun tugmani bosing.`,
+        Markup.inlineKeyboard([[Markup.button.webApp("🚀 Boshlash", `${base}/miniapp/kirish`)]])
       );
     }
 
