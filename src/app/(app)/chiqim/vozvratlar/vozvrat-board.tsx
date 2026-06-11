@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Loader2, GripVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatUZS } from "@/lib/format";
 import { VOZVRAT_HOLATLAR as HOLATLAR, VOZVRAT_HOLAT_LABEL as HOLAT_LABEL } from "@/lib/spisaniya/labels";
 import { vozvratHolatAction } from "./actions";
 import { VozvratCard, type VozvratCardData } from "./vozvrat-card";
@@ -86,6 +87,7 @@ export function VozvratBoard({ vozvratlar, canEdit }: { vozvratlar: VozvratCardD
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {HOLATLAR.map((st) => {
           const colItems = items.filter((i) => i.status === st);
+          const colSumma = colItems.reduce((a, i) => a + i.summa, 0);
           const isOver = overCol === st;
           return (
             <div
@@ -99,11 +101,17 @@ export function VozvratBoard({ vozvratlar, canEdit }: { vozvratlar: VozvratCardD
                 isOver && dragId != null && "bg-primary/10 ring-2 ring-primary/40"
               )}
             >
-              <div className="flex items-center justify-between gap-2 border-b border-border/60 px-3 py-2.5">
-                <span className="text-sm font-semibold">{HOLAT_LABEL[st]}</span>
-                <span className="rounded-full bg-background px-2 py-0.5 text-xs font-medium text-muted-foreground">
-                  {colItems.length}
-                </span>
+              <div className="border-b border-border/60 px-3 py-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-semibold">{HOLAT_LABEL[st]}</span>
+                  <span className="rounded-full bg-background px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                    {colItems.length}
+                  </span>
+                </div>
+                {/* Ustun umumiy summasi */}
+                <p className="mt-0.5 text-xs font-bold tabular-nums text-muted-foreground">
+                  {colSumma > 0 ? formatUZS(colSumma) : "—"}
+                </p>
               </div>
               <div className="min-h-[80px] space-y-2.5 p-2.5">
                 {colItems.length === 0 ? (

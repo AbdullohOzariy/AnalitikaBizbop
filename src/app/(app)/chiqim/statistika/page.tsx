@@ -23,6 +23,7 @@ import {
   Layers,
   Tag,
 } from "lucide-react";
+import { ChiqimExportButton } from "../chiqim-export-button";
 import {
   PageHeader,
   StatCard,
@@ -118,6 +119,7 @@ export default async function ChiqimStatistikaPage({
           hideTur
           basePath="/chiqim/statistika"
         />
+        <ChiqimExportButton params={{ start: sp.start ?? fmtDate(def.start), end: sp.end ?? fmtDate(def.end), filial: sp.filial }} />
       </PageHeader>
 
       {/* Jami */}
