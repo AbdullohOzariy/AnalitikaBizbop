@@ -47,7 +47,7 @@ export default async function SverkaPage({
       ? {
           OR: [
             { firmaNomi: { contains: q, mode: "insensitive" } },
-            { kontragent: { contains: q, mode: "insensitive" } },
+            { qabulQildi: { contains: q, mode: "insensitive" } },
             { dagavor: { contains: q, mode: "insensitive" } },
             { sklad: { contains: q, mode: "insensitive" } },
           ],
@@ -69,7 +69,7 @@ export default async function SverkaPage({
     firmaNomi: r.firmaNomi,
     supplierId: r.supplierId,
     sklad: r.sklad,
-    kontragent: r.kontragent,
+    qabulQildi: r.qabulQildi,
     dagavor: r.dagavor,
     summa: Number(r.summa),
     rasmFileId: r.rasmFileId,

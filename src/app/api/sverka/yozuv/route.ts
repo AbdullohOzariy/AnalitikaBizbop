@@ -19,7 +19,7 @@ const schema = z.object({
   supplierId: z.coerce.number().int().positive().nullable().optional(),
   firmaNomi: z.string().trim().min(1).max(200),
   sklad: z.string().trim().min(1).max(200),
-  kontragent: z.string().trim().min(1).max(200),
+  qabulQildi: z.string().trim().min(1).max(200),
   dagavor: z.string().trim().min(1).max(200),
   summa: z.coerce.number().positive().max(1_000_000_000_000),
   rasmFileId: z.string().min(10).max(200),
@@ -55,7 +55,7 @@ export async function POST(req: Request) {
       supplierId: p.supplierId ?? null,
       firmaNomi: p.firmaNomi,
       sklad: p.sklad,
-      kontragent: p.kontragent,
+      qabulQildi: p.qabulQildi,
       dagavor: p.dagavor,
       summa: p.summa,
       rasmFileId: p.rasmFileId,
@@ -78,7 +78,7 @@ export async function POST(req: Request) {
         `📅 ${p.sana}\n` +
         `🏢 ${esc(p.firmaNomi)}\n` +
         `🏬 Sklad: ${esc(p.sklad)}\n` +
-        `👤 Kontragent: ${esc(p.kontragent)}\n` +
+        `👤 Qabul qildi: ${esc(p.qabulQildi)}\n` +
         `📄 Dagavor: ${esc(p.dagavor)}\n` +
         `💰 <b>${p.summa.toLocaleString("uz-UZ")} so'm</b>\n` +
         `✍️ ${esc(ism ?? String(user.id))}`;

@@ -26,13 +26,11 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const supplierId = Number(url.searchParams.get("supplierId")) || 0;
 
-  const [skladlar, kontragentlar, branches, dagavorlar] = await Promise.all([
+  const [skladlar, qabulchilar, branches, dagavorlar] = await Promise.all([
     prisma.$queryRaw<{ v: string }[]>(Prisma.sql`
       SELECT sklad AS v FROM "SverkaRecord" GROUP BY sklad ORDER BY MAX(id) DESC LIMIT 15
     `),
-    prisma.$queryRaw<{ v: string }[]>(Prisma.sql`
-      SELECT kontragent AS v FROM "SverkaRecord" GROUP BY kontragent ORDER BY MAX(id) DESC LIMIT 15
-    `),
+    prisma.sverkaQabulchi.findMany({ orderBy: { ism: "asc" }, select: { ism: true } }),
     prisma.branch.findMany({ orderBy: { sortOrder: "asc" }, select: { name: true } }),
     supplierId
       ? prisma.$queryRaw<{ v: string }[]>(Prisma.sql`
@@ -56,7 +54,7 @@ export async function GET(req: Request) {
 
   return NextResponse.json({
     sklad: sklad.slice(0, 15),
-    kontragent: kontragentlar.map((r) => r.v),
+    qabulchilar: qabulchilar.map((r) => r.ism),
     dagavor: dagavorlar.map((r) => r.v),
   });
 }

@@ -575,7 +575,7 @@ model SverkaRecord {
   supplierId Int? // firma — yetkazib beruvchilar bazasidan (o'chsa NULL, nom qoladi)
   firmaNomi  String // tanlash paytidagi nom (snapshot)
   sklad      String
-  kontragent String
+  qabulQildi String // tovarni qabul qilgan xodim (Sozlamalar → Sverka ro'yxatidan)
   dagavor    String
   summa      Decimal  @db.Decimal(20, 2)
   rasmFileId String // nakladnoy rasmi — Telegram file_id
@@ -617,4 +617,12 @@ model SupplierOrderDay {
 
   @@unique([supplierId, sana])
   @@index([sana])
+}
+
+// Sverka "Qabul qildi" ro'yxati — qabul qiluvchi xodim ismlari
+// (Sozlamalar → Sverka'da yuritiladi, mini app'da tanlanadi).
+model SverkaQabulchi {
+  id        Int      @id @default(autoincrement())
+  ism       String   @unique
+  createdAt DateTime @default(now())
 }

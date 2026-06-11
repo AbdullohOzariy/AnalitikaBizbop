@@ -18,9 +18,9 @@ declare global {
 }
 
 type Firma = { id: number; name: string };
-type Luglar = { sklad: string[]; kontragent: string[]; dagavor: string[] };
+type Luglar = { sklad: string[]; qabulchilar: string[]; dagavor: string[] };
 
-const STEPS = ["Sana", "Firma", "Sklad", "Kontragent", "Dagavor", "Summa va rasm"] as const;
+const STEPS = ["Sana", "Firma", "Sklad", "Qabul qildi", "Dagavor", "Summa va rasm"] as const;
 
 function todayStr(): string {
   return new Date(Date.now() + 5 * 3_600_000).toISOString().slice(0, 10);
@@ -65,14 +65,11 @@ export function SverkaApp() {
   const [firmaQ, setFirmaQ] = useState("");
   const [firmaOpts, setFirmaOpts] = useState<Firma[]>([]);
   const [sklad, setSklad] = useState("");
-  const [kontragent, setKontragent] = useState("");
-  const [kontrQ, setKontrQ] = useState("");
-  const [kontrOpts, setKontrOpts] = useState<Firma[]>([]);
-  const kontrDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [qabulQildi, setQabulQildi] = useState("");
   const [dagavor, setDagavor] = useState("");
   const [summa, setSumma] = useState("");
   const [rasm, setRasm] = useState<File | null>(null);
-  const [luglar, setLuglar] = useState<Luglar>({ sklad: [], kontragent: [], dagavor: [] });
+  const [luglar, setLuglar] = useState<Luglar>({ sklad: [], qabulchilar: [], dagavor: [] });
   const [sending, setSending] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -106,18 +103,6 @@ export function SverkaApp() {
     }, 250);
   }, [firmaQ, phase]);
 
-  // Kontragent qidiruvi — yetkazib beruvchilar ro'yxatidan (firma kabi)
-  useEffect(() => {
-    if (phase !== "form") return;
-    if (kontrDebounce.current) clearTimeout(kontrDebounce.current);
-    kontrDebounce.current = setTimeout(async () => {
-      try {
-        const r = await api<{ firmalar: Firma[] }>(`/api/sverka/firmalar?q=${encodeURIComponent(kontrQ)}`);
-        setKontrOpts(r.firmalar);
-      } catch { /* jim */ }
-    }, 250);
-  }, [kontrQ, phase]);
-
   // Lug'atlar — firma tanlangach (dagavor takliflari firma bo'yicha)
   useEffect(() => {
     if (phase !== "form") return;
@@ -133,7 +118,7 @@ export function SverkaApp() {
     /^\d{4}-\d{2}-\d{2}$/.test(sana),
     firma != null,
     sklad.trim().length > 0,
-    kontragent.trim().length > 0,
+    qabulQildi.trim().length > 0,
     dagavor.trim().length > 0,
     Number(summa) > 0 && rasm != null,
   ][step];
@@ -153,7 +138,7 @@ export function SverkaApp() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           sana, supplierId: firma!.id, firmaNomi: firma!.name,
-          sklad: sklad.trim(), kontragent: kontragent.trim(), dagavor: dagavor.trim(),
+          sklad: sklad.trim(), qabulQildi: qabulQildi.trim(), dagavor: dagavor.trim(),
           summa: Number(summa), rasmFileId: up.file_id,
         }),
       });
@@ -166,7 +151,7 @@ export function SverkaApp() {
   };
 
   const resetForNew = () => {
-    setStep(0); setFirma(null); setFirmaQ(""); setSklad(""); setKontragent(""); setKontrQ(""); setKontrOpts([]);
+    setStep(0); setFirma(null); setFirmaQ(""); setSklad(""); setQabulQildi("");
     setDagavor(""); setSumma(""); setRasm(null); setErr(""); setPhase("form");
     setSana(todayStr());
   };
@@ -236,24 +221,21 @@ export function SverkaApp() {
         )}
         {step === 3 && (
           <>
-            <input
-              value={kontragent || kontrQ}
-              onChange={(e) => { setKontragent(""); setKontrQ(e.target.value); }}
-              placeholder="Kontragent nomini yozing…"
-              className="inp"
-              autoFocus
-            />
-            {!kontragent && (
+            {luglar.qabulchilar.length === 0 ? (
+              <p className="muted">
+                Qabul qiluvchilar ro&apos;yxati bo&apos;sh — Sozlamalar → Sverka&apos;da ism qo&apos;shilsin.
+              </p>
+            ) : (
               <div className="opts">
-                {kontrOpts.map((f) => (
-                  <button key={f.id} className="opt" onClick={() => setKontragent(f.name)}>
-                    {f.name}
+                {luglar.qabulchilar.map((ism) => (
+                  <button key={ism} className={`opt ${qabulQildi === ism ? "sel" : ""}`}
+                    onClick={() => setQabulQildi(ism)}>
+                    {qabulQildi === ism ? "✓ " : ""}{ism}
                   </button>
                 ))}
-                {kontrOpts.length === 0 && kontrQ && <p className="muted">Topilmadi — boshqacha yozib ko&apos;ring</p>}
               </div>
             )}
-            {kontragent && <p className="picked">✓ {kontragent}</p>}
+            {qabulQildi && <p className="picked">✓ {qabulQildi}</p>}
           </>
         )}
         {step === 4 && (
@@ -272,7 +254,7 @@ export function SverkaApp() {
             {/* Tekshiruv xulosasi */}
             <div className="summary">
               <p>{sana} · <b>{firma?.name}</b></p>
-              <p className="muted">{sklad} → {kontragent} · {dagavor}</p>
+              <p className="muted">{sklad} · qabul: {qabulQildi} · {dagavor}</p>
             </div>
           </>
         )}
@@ -362,6 +344,7 @@ function Shell({ children, progress }: { children: React.ReactNode; progress?: n
           border: 1px solid var(--line); background: var(--tg-theme-bg-color, #F2F3F7); color: inherit;
           transition: transform .1s; }
         .opt:active { transform: scale(.98); }
+        .opt.sel { border-color: var(--brand); background: rgba(31,191,92,.10); color: var(--brand6); font-weight: 700; }
         .picked { margin: 12px 2px 0; font-weight: 700; color: var(--brand6); display: inline-flex;
           align-items: center; gap: 6px; background: rgba(31,191,92,.10); border: 1px solid rgba(31,191,92,.25);
           border-radius: 12px; padding: 8px 14px; font-size: 14px; }

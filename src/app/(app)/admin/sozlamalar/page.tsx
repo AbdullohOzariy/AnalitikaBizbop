@@ -18,6 +18,7 @@ import { RuxsatEditor } from "./ruxsat-editor";
 import { SverkaGuruhEditor } from "./sverka-guruh-editor";
 import { SverkaXodimlar, type XodimRow } from "../../sverka/sverka-client";
 import { SverkaTopiklarEditor, type SverkaTopicRow } from "./sverka-topiklar-editor";
+import { SverkaQabulchiEditor, type QabulchiRow } from "./sverka-qabulchi-editor";
 
 type Tab = "spisaniya" | "sverka";
 
@@ -119,10 +120,11 @@ async function SpisaniyaTab() {
 // ─── Sverka sozlamalari ───────────────────────────────────────────────────────
 
 async function SverkaTab() {
-  const [chatId, xodimlar, filialar] = await Promise.all([
+  const [chatId, xodimlar, filialar, qabulchilar] = await Promise.all([
     getSverkaGroupChatId(),
     prisma.sverkaXodim.findMany({ orderBy: { createdAt: "desc" } }),
     prisma.branch.findMany({ orderBy: { sortOrder: "asc" }, select: { id: true, name: true, sverkaTopicId: true } }),
+    prisma.sverkaQabulchi.findMany({ orderBy: { ism: "asc" } }),
   ]);
 
   return (
@@ -143,6 +145,14 @@ async function SverkaTab() {
         <SverkaTopiklarEditor
           filialar={filialar.map((f): SverkaTopicRow => ({ id: f.id, name: f.name, topicId: f.sverkaTopicId }))}
         />
+      </SectionCard>
+
+      <SectionCard
+        title="Qabul qiluvchilar"
+        description={`${qabulchilar.length} ta · mini app'dagi "Qabul qildi" tanlovi`}
+        actions={<Users className="h-4 w-4 text-muted-foreground" />}
+      >
+        <SverkaQabulchiEditor qabulchilar={qabulchilar.map((q): QabulchiRow => ({ id: q.id, ism: q.ism }))} />
       </SectionCard>
 
       <SverkaXodimlar

@@ -19,7 +19,7 @@ export type SverkaRow = {
   firmaNomi: string;
   supplierId: number | null;
   sklad: string;
-  kontragent: string;
+  qabulQildi: string;
   dagavor: string;
   summa: number;
   rasmFileId: string;
@@ -48,7 +48,7 @@ export function SverkaJadval({ rows, canDelete }: { rows: SverkaRow[]; canDelete
           <TableHead className="w-[100px]">Sana</TableHead>
           <TableHead>Firma</TableHead>
           <TableHead className="w-[130px]">Sklad</TableHead>
-          <TableHead className="w-[150px]">Kontragent</TableHead>
+          <TableHead className="w-[150px]">Qabul qildi</TableHead>
           <TableHead className="w-[130px]">Dagavor</TableHead>
           <TableHead className="text-right w-[130px]">Summa</TableHead>
           <TableHead className="w-[90px] text-center">Nakladnoy</TableHead>
@@ -63,7 +63,7 @@ export function SverkaJadval({ rows, canDelete }: { rows: SverkaRow[]; canDelete
             <TableCell className="text-xs whitespace-nowrap">{r.sana}</TableCell>
             <TableCell className="max-w-[220px] truncate font-medium" title={r.firmaNomi}>{r.firmaNomi}</TableCell>
             <TableCell className="max-w-[130px] truncate text-xs text-muted-foreground" title={r.sklad}>{r.sklad}</TableCell>
-            <TableCell className="max-w-[150px] truncate text-xs text-muted-foreground" title={r.kontragent}>{r.kontragent}</TableCell>
+            <TableCell className="max-w-[150px] truncate text-xs text-muted-foreground" title={r.qabulQildi}>{r.qabulQildi}</TableCell>
             <TableCell className="max-w-[130px] truncate text-xs text-muted-foreground" title={r.dagavor}>{r.dagavor}</TableCell>
             <TableCell className="text-right tabular-nums text-xs font-semibold">{formatUZS(r.summa)}</TableCell>
             <TableCell className="text-center">

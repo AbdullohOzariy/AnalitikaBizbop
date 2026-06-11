@@ -157,3 +157,27 @@ export async function sverkaTopicSaqlaAction(input: {
     return { ok: true };
   } catch (err) { return xato(err); }
 }
+
+
+/** Sverka "Qabul qildi" ro'yxati — ism qo'shish. */
+export async function sverkaQabulchiQoshAction(ism: string): Promise<Result> {
+  try {
+    await requireAdmin();
+    const nm = z.string().trim().min(1, "Ism kiriting").max(120).parse(ism);
+    const { prisma } = await import("@/lib/prisma");
+    await prisma.sverkaQabulchi.upsert({ where: { ism: nm }, create: { ism: nm }, update: {} });
+    revalidatePath(RP);
+    return { ok: true };
+  } catch (err) { return xato(err); }
+}
+
+export async function sverkaQabulchiOchirAction(id: number): Promise<Result> {
+  try {
+    await requireAdmin();
+    const qid = z.coerce.number().int().positive().parse(id);
+    const { prisma } = await import("@/lib/prisma");
+    await prisma.sverkaQabulchi.delete({ where: { id: qid } });
+    revalidatePath(RP);
+    return { ok: true };
+  } catch (err) { return xato(err); }
+}
