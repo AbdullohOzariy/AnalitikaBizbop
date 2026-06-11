@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireCatManagerOrAdmin } from "@/lib/auth-helpers";
+import { auth } from "@/auth";
+import { ORDER_STATUSES, canTransition, canEditItems, canEnterFact, type OrderStatusT } from "./order-status";
 import { isSystemAdmin } from "@/lib/roles";
 import { actionError } from "@/lib/action-error";
 import { scopeParentIds, scopeProductWhere } from "@/lib/scope";
@@ -246,14 +248,20 @@ export async function updateOrderItemsAction(
   note?: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
-    const user = await requireCatManagerOrAdmin();
+    const session = await auth();
+    const user = session?.user;
+    if (!user) return { ok: false, error: "Ruxsat yo'q." };
     const oid = z.coerce.number().int().positive().parse(orderId);
     const parsed = z.array(itemSchema).min(1, "Kamida bitta mahsulot kerak").parse(items);
     const order = await prisma.purchaseOrder.findUnique({ where: { id: oid }, select: { status: true, createdById: true } });
     if (!order) return { ok: false, error: "Zakaz topilmadi." };
-    if (!ownsOrder(user, order.createdById)) return { ok: false, error: "Ruxsat yo'q." };
-    if (order.status === "RECEIVED") return { ok: false, error: "Qabul qilingan zakazni tahrirlab bo'lmaydi." };
-    const scopeErr = await scopeError(user, parsed.map((i) => i.productId));
+    const isOwner = order.createdById === Number(user.id);
+    if (!canEditItems(user.role, order.status as OrderStatusT, isOwner)) {
+      return { ok: false, error: "Bu bosqichda qatorlarni tahrirlash sizga ruxsat etilmagan." };
+    }
+    const scopeErr = user.role === "CAT_MANAGER"
+      ? await scopeError({ id: user.id ?? 0, role: user.role ?? "" }, parsed.map((i) => i.productId))
+      : null;
     if (scopeErr) return { ok: false, error: scopeErr };
     await prisma.$transaction([
       prisma.purchaseOrderItem.deleteMany({ where: { orderId: oid } }),
@@ -269,20 +277,26 @@ export async function updateOrderItemsAction(
   }
 }
 
-const STATUS = ["DRAFT", "SENT", "RECEIVED", "RETURNED"] as const;
-
-/** Zakaz holatini o'zgartiradi. */
+/** Zakaz holatini o'zgartiradi — rol-tranzitsiya matritsasi bilan (order-status.ts). */
 export async function setOrderStatusAction(
   orderId: number,
-  status: (typeof STATUS)[number]
+  status: OrderStatusT
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
-    const user = await requireCatManagerOrAdmin();
+    const session = await auth();
+    const user = session?.user;
+    if (!user) return { ok: false, error: "Ruxsat yo'q." };
     const oid = z.coerce.number().int().positive().parse(orderId);
-    const st = z.enum(STATUS).parse(status);
-    const order = await prisma.purchaseOrder.findUnique({ where: { id: oid }, select: { createdById: true } });
+    const st = z.enum(ORDER_STATUSES).parse(status);
+    const order = await prisma.purchaseOrder.findUnique({
+      where: { id: oid },
+      select: { createdById: true, status: true },
+    });
     if (!order) return { ok: false, error: "Zakaz topilmadi." };
-    if (!ownsOrder(user, order.createdById)) return { ok: false, error: "Ruxsat yo'q." };
+    const isOwner = order.createdById === Number(user.id);
+    if (!canTransition(user.role, order.status as OrderStatusT, st, isOwner)) {
+      return { ok: false, error: "Bu o'tish sizning rolingizga ruxsat etilmagan." };
+    }
     await prisma.purchaseOrder.update({
       where: { id: oid },
       data: {
@@ -313,5 +327,49 @@ export async function deleteOrderAction(orderId: number): Promise<{ ok: true } |
     return { ok: true };
   } catch (err) {
     return actionError(err, "deleteOrder");
+  }
+}
+
+
+const factSchema = z.array(
+  z.object({
+    productId: z.coerce.number().int().positive(),
+    factQty: z.coerce.number().min(0).max(1_000_000).nullable(),
+  })
+).min(1);
+
+/**
+ * FAKT yetib kelgan miqdorlarni saqlash (buyurtma vs fakt solishtirish).
+ * SUPPLYCHAIN / HEAD_CAT_MANAGER / Bo'lim boshlig'i / SYSTEM_ADMIN; faqat
+ * ACCEPTED/RECEIVED bosqichlarida.
+ */
+export async function saveOrderFactAction(
+  orderId: number,
+  facts: { productId: number; factQty: number | null }[]
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const session = await auth();
+    const user = session?.user;
+    if (!user) return { ok: false, error: "Ruxsat yo'q." };
+    const oid = z.coerce.number().int().positive().parse(orderId);
+    const parsed = factSchema.parse(facts);
+    const order = await prisma.purchaseOrder.findUnique({ where: { id: oid }, select: { status: true } });
+    if (!order) return { ok: false, error: "Zakaz topilmadi." };
+    if (!canEnterFact(user.role, order.status as OrderStatusT)) {
+      return { ok: false, error: "Fakt kiritish faqat 'Zakaz qabul qilindi'/'Yetib keldi' bosqichida (supplychain/menejerlar boshi)." };
+    }
+    await prisma.$transaction(
+      parsed.map((f) =>
+        prisma.purchaseOrderItem.updateMany({
+          where: { orderId: oid, productId: f.productId },
+          data: { factQty: f.factQty },
+        })
+      )
+    );
+    revalidatePath(`/sotuv/sotib-olish/${oid}`);
+    revalidatePath("/sotuv/sotib-olish");
+    return { ok: true };
+  } catch (err) {
+    return actionError(err, "saveOrderFact");
   }
 }

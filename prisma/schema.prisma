@@ -20,11 +20,16 @@ enum Role {
   HEAD_CAT_MANAGER // kategoriya menejerlari boshi: BARCHA kategoriyalar bo'yicha menejer ishi + yetkazib beruvchilarni ko'rish
 }
 
-// Zakaz (sotib olish buyurtmasi) holati
+// Zakaz (sotib olish buyurtmasi) holati — to'liq workflow:
+// menejer yaratadi → tasdiqqa → supplychain tasdiqlaydi → yuboradi →
+// yetkazib beruvchi qabul qiladi → yetib keladi (fakt solishtiriladi)
 enum OrderStatus {
-  DRAFT // Qoralama
-  SENT // Yuborildi
-  RECEIVED // Qabul qilindi
+  DRAFT // Qoralama (menejer)
+  PENDING // Tasdiqda (supplychain navbatida)
+  APPROVED // Tasdiqlandi (supplychain)
+  SENT // Yetkazib beruvchiga yuborildi
+  ACCEPTED // Zakaz qabul qilindi (yetkazib beruvchi)
+  RECEIVED // Yetib keldi (fakt kiritiladi)
   RETURNED // Qaytarildi
 }
 
@@ -376,6 +381,7 @@ model PurchaseOrderItem {
   price     Decimal @db.Decimal(20, 2) // dona narxi
   packCount Int? // nechta blok/yashik buyurtma qilindi (ko'rinish uchun)
   packSize  Int? // o'sha paytdagi pachka hajmi (dona) — quantity = packCount × packSize
+  factQty   Decimal? @db.Decimal(20, 3) // FAKT yetib kelgan miqdor — solishtirish uchun
 
   order   PurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product Product       @relation(fields: [productId], references: [id], onDelete: Cascade)

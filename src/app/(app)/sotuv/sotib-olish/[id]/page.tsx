@@ -14,7 +14,7 @@ export default async function ZakazDetailPage({
 }) {
   const session = await auth();
   const role = session?.user?.role;
-  if (!session?.user || (role !== "SYSTEM_ADMIN" && role !== "ADMIN" && role !== "CAT_MANAGER" && role !== "SUPPLYCHAIN" && role !== "HEAD_CAT_MANAGER")) redirect("/dashboard-v2");
+  if (!session?.user) redirect("/login"); // barcha rollar kuzatadi (CAT_MANAGER — faqat o'ziniki)
   const userId = Number(session.user.id);
   const id = Number((await params).id);
   if (!Number.isInteger(id)) notFound();
@@ -27,7 +27,7 @@ export default async function ZakazDetailPage({
       supplier: { select: { name: true } },
       createdBy: { select: { name: true } },
       items: {
-        select: { productId: true, quantity: true, price: true, packCount: true, packSize: true, product: { select: { code: true, name: true, category: { select: { name: true } } } } },
+        select: { productId: true, quantity: true, price: true, packCount: true, packSize: true, factQty: true, product: { select: { code: true, name: true, category: { select: { name: true } } } } },
         orderBy: { product: { name: "asc" } },
       },
     },
@@ -53,13 +53,14 @@ export default async function ZakazDetailPage({
       price: Number(i.price),
       packCount: i.packCount,
       packSize: i.packSize,
+      factQty: i.factQty != null ? Number(i.factQty) : null,
     })),
   };
 
   return (
     <div className="space-y-5">
       <PageHeader icon={ShoppingCart} title={`Zakaz #${order.id}`} description={order.supplier.name} />
-      <OrderDetail order={data} />
+      <OrderDetail order={data} role={role ?? ""} isOwner={order.createdById === userId} />
     </div>
   );
 }
