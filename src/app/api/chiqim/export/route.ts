@@ -89,8 +89,11 @@ export async function GET(req: NextRequest) {
   );
 
   // ── 4. Kategoriya bo'yicha varag'i ─────────────────────────────────────────
-  const kategoriyaHeader = ["Kategoriya", "Soni", "Summa"];
-  const kategoriyaRows = byKategoriya.map((r) => [r.kategoriya, r.count, r.summa]);
+  const katTotal = byKategoriya.reduce((a, r) => a + r.summa, 0);
+  const kategoriyaHeader = ["Kategoriya", "Soni", "Summa", "Ulush %"];
+  const kategoriyaRows = [...byKategoriya]
+    .sort((a, b) => b.summa - a.summa)
+    .map((r) => [r.kategoriya, r.count, r.summa, katTotal > 0 ? Number(((r.summa / katTotal) * 100).toFixed(1)) : 0]);
   XLSX.utils.book_append_sheet(
     wb,
     XLSX.utils.aoa_to_sheet([kategoriyaHeader, ...kategoriyaRows]),
