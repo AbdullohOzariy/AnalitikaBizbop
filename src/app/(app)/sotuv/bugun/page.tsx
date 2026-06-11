@@ -64,8 +64,11 @@ export default async function BugunPage() {
   }
 
   // ── Yetkazib beruvchilar: bugun va ertaga zakaz qabul qiladiganlar (qamrov ichida) ──
-  const supplierWhere = (d: number) => ({
-    orderWeekdays: { has: d },
+  // Zakaz kunlari endi ANIQ SANALAR (SupplierOrderDay, kalendardan belgilanadi)
+  const todayD = new Date(todayStr + "T00:00:00.000Z");
+  const tomorrowD = new Date(todayD.getTime() + 86_400_000);
+  const supplierWhere = (d: Date) => ({
+    orderDays: { some: { sana: d } },
     products: { some: { archivedAt: null, ...scopeProductWhere(scopeParents) } },
   });
 
@@ -79,12 +82,12 @@ export default async function BugunPage() {
 
   const [todaySuppliers, tomorrowSuppliers, sdKpi, oKpi] = await Promise.all([
     prisma.supplier.findMany({
-      where: supplierWhere(dow),
+      where: supplierWhere(todayD),
       select: { id: true, name: true, rating: true },
       orderBy: { name: "asc" },
     }),
     prisma.supplier.findMany({
-      where: supplierWhere(tomorrowDow),
+      where: supplierWhere(tomorrowD),
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),

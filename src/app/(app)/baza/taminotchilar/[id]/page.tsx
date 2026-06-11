@@ -28,7 +28,16 @@ export default async function SupplierProfilePage({
   const [supplier, products, orderCount] = await Promise.all([
     prisma.supplier.findUnique({
       where: { id: supplierId },
-      include: { contracts: { orderBy: [{ signedAt: "desc" }, { id: "desc" }] } },
+      include: {
+        contracts: { orderBy: [{ signedAt: "desc" }, { id: "desc" }] },
+        orderDays: {
+          // Server komponent: har so'rovda bir marta (purity qoidasi client uchun)
+          // eslint-disable-next-line react-hooks/purity
+          where: { sana: { gte: new Date(Date.now() - 60 * 86_400_000) } },
+          orderBy: { sana: "asc" },
+          select: { sana: true },
+        },
+      },
     }),
     prisma.product.findMany({
       where: { supplierId },
@@ -116,7 +125,7 @@ export default async function SupplierProfilePage({
       <div className="grid gap-5 lg:grid-cols-[minmax(340px,420px)_1fr]">
         {/* Chap: zakaz kunlari + shartnomalar */}
         <div className="space-y-5">
-          <OrderDaysCalendar supplierId={supplier.id} weekdays={supplier.orderWeekdays} canEdit={canEdit} />
+          <OrderDaysCalendar supplierId={supplier.id} orderDates={supplier.orderDays.map((d) => d.sana.toISOString().slice(0, 10))} canEdit={canEdit} />
           <ContractsSection supplierId={supplier.id} contracts={contracts} canEdit={canEdit} />
         </div>
 

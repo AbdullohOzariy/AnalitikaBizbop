@@ -23,11 +23,6 @@ export function webhookSecret(): string | null {
 type G = typeof globalThis & { __spisaniyaBot?: Telegraf | null };
 const g = globalThis as G;
 
-function miniAppUrl(): string {
-  const base = (process.env.WEBHOOK_URL || "").replace(/\/$/, "");
-  return `${base}/miniapp/index.html`;
-}
-
 function buildBot(): Telegraf | null {
   const token = process.env.BOT_TOKEN;
   if (!token) return null;

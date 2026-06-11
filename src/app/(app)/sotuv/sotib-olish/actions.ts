@@ -21,7 +21,7 @@ export type SupplierOption = {
   id: number;
   name: string;
   skuCount: number;
-  orderWeekdays: number[]; // zakaz qabul kunlari (0=Yak..6=Sha)
+  nextOrderDate: string | null; // keyingi zakaz sanasi (YYYY-MM-DD) — hint uchun
 };
 export type BuilderItem = {
   productId: number;
@@ -41,18 +41,15 @@ export type BuilderItem = {
   minStock: number | null; // kunlik × (zakaz oralig'i + lead) × XYZ buferi; lead yo'q — null
 };
 
-// Zakaz kunlari orasidagi MAKSIMAL interval (eng yomon stsenariy himoyasi).
-// Bo'sh — istalgan kuni zakaz (1); bitta kun — haftada bir (7).
-function maxOrderGapDays(weekdays: number[]): number {
-  const uniq = [...new Set(weekdays)].sort((a, b) => a - b);
-  if (uniq.length === 0) return 1;
-  if (uniq.length === 1) return 7;
-  let max = 0;
-  for (let i = 0; i < uniq.length; i++) {
-    const next = i + 1 === uniq.length ? uniq[0] + 7 : uniq[i + 1];
-    max = Math.max(max, next - uniq[i]);
-  }
-  return max;
+// Zakaz kunlari (aniq sanalar) orasidagi MAKSIMAL interval — eng yomon stsenariy.
+// Belgilanmagan — istalgan kuni (1); bitta sana — ehtiyot uchun kamida 7.
+function orderGapFromDates(dates: Date[], today: Date): number {
+  if (dates.length === 0) return 1;
+  const diff = (a: Date, b: Date) => Math.round((a.getTime() - b.getTime()) / 86_400_000);
+  let max = Math.max(0, diff(dates[0], today));
+  for (let i = 1; i < dates.length; i++) max = Math.max(max, diff(dates[i], dates[i - 1]));
+  if (dates.length === 1) max = Math.max(max, 7);
+  return Math.max(1, max);
 }
 
 // Xavfsizlik buferi — talab notekisligi (XYZ) bo'yicha: notekisga ko'proq zaxira
@@ -75,13 +72,22 @@ export async function suppliersForOrderAction(): Promise<
       _count: { _all: true },
     });
     const ids = grouped.map((g) => g.supplierId).filter((x): x is number => x != null);
-    const sups = await prisma.supplier.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, orderWeekdays: true } });
+    const todayD = new Date(new Date(Date.now() + 5 * 3_600_000).toISOString().slice(0, 10) + "T00:00:00.000Z");
+    const [sups, nextDays] = await Promise.all([
+      prisma.supplier.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } }),
+      prisma.supplierOrderDay.groupBy({
+        by: ["supplierId"],
+        where: { supplierId: { in: ids }, sana: { gte: todayD } },
+        _min: { sana: true },
+      }),
+    ]);
+    const nextBySup = new Map(nextDays.map((r) => [r.supplierId, r._min.sana!.toISOString().slice(0, 10)]));
     const byId = new Map(sups.map((s) => [s.id, s]));
     const suppliers = grouped
       .filter((g) => g.supplierId != null)
       .map((g) => {
         const s = byId.get(g.supplierId!);
-        return { id: g.supplierId!, name: s?.name ?? "—", skuCount: g._count._all, orderWeekdays: s?.orderWeekdays ?? [] };
+        return { id: g.supplierId!, name: s?.name ?? "—", skuCount: g._count._all, nextOrderDate: nextBySup.get(g.supplierId!) ?? null };
       })
       .sort((a, b) => a.name.localeCompare(b.name, "uz"));
     return { ok: true, suppliers };
@@ -101,14 +107,19 @@ export async function supplierItemsAction(
     if (scope !== null && scope.length === 0) return { ok: true, items: [] };
     // Joriy holat Product'ga denormalizatsiya qilingan (har yuklashda yangilanadi) —
     // ProductSales tarixini skanlamaymiz, bir zumda o'qiymiz.
-    const [products, supplier, range] = await Promise.all([
+    const [products, futureOrderDays, range] = await Promise.all([
       prisma.product.findMany({
         where: { supplierId: sid, ...scopeProductWhere(scope) },
         select: { id: true, code: true, name: true, currentStock: true, currentSold: true, abcClass: true, xyzClass: true, leadTimeDays: true, archivedAt: true, packSize: true, purchasePrice: true, category: { select: { name: true } } },
         orderBy: { name: "asc" },
         take: 2000,
       }),
-      prisma.supplier.findUnique({ where: { id: sid }, select: { orderWeekdays: true } }),
+      prisma.supplierOrderDay.findMany({
+        where: { supplierId: sid, sana: { gte: new Date(new Date(Date.now() + 5 * 3_600_000).toISOString().slice(0, 10) + "T00:00:00.000Z") } },
+        orderBy: { sana: "asc" },
+        take: 6,
+        select: { sana: true },
+      }),
       getDefaultRange(),
     ]);
 
@@ -128,7 +139,9 @@ export async function supplierItemsAction(
         `)
       : [];
     const dailyByPid = new Map(dailyRows.map((r) => [r.pid, r.days > 0 ? r.sold / r.days : 0]));
-    const orderGap = maxOrderGapDays(supplier?.orderWeekdays ?? []);
+    // eslint-disable-next-line react-hooks/purity -- server action
+    const todayD = new Date(new Date(Date.now() + 5 * 3_600_000).toISOString().slice(0, 10) + "T00:00:00.000Z");
+    const orderGap = orderGapFromDates(futureOrderDays.map((d) => d.sana), todayD);
 
     const items: BuilderItem[] = products.map((p) => {
       const stock = Math.round(Number(p.currentStock ?? 0)); // so'nggi davr qoldig'i

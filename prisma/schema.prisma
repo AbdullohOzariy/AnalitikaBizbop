@@ -326,6 +326,7 @@ model Supplier {
   orders    PurchaseOrder[]
   contracts SupplierContract[]
   sverkalar SverkaRecord[]
+  orderDays SupplierOrderDay[]
 }
 
 // Yetkazib beruvchi bilan shartnoma — hujjat fayli tashqi havola (Drive va h.k.) sifatida.
@@ -597,4 +598,17 @@ model AppSetting {
   key       String   @id
   value     String
   updatedAt DateTime @updatedAt
+}
+
+// Zakaz qabul kunlari — ANIQ SANALAR (kalendardan bittalab belgilanadi).
+// orderWeekdays (haftalik takror) o'rnini bosdi; eski ustun meros sifatida qoladi.
+model SupplierOrderDay {
+  id         Int      @id @default(autoincrement())
+  supplierId Int
+  sana       DateTime @db.Date
+
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@unique([supplierId, sana])
+  @@index([sana])
 }

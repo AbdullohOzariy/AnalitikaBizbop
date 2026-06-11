@@ -4,7 +4,7 @@ import { Fragment as FragmentRows, useMemo, useRef, useState, useTransition } fr
 import { useRouter } from "next/navigation";
 import {
   Star, Phone, User, Save, Loader2, Check, AlertCircle, Plus, Trash2, Pencil,
-  ExternalLink, X, ChevronRight,
+  ExternalLink, X, ChevronRight, ChevronLeft,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 import { skuRowBg, skuBadgeCls, skuBadgeLabel, skuBadgeTitle } from "@/lib/sku-rang";
 import {
   updateSupplierProfileAction,
-  setOrderWeekdaysAction,
+  toggleOrderDateAction,
   saveContractAction,
   deleteContractAction,
   updateSkuPurchaseAction,
@@ -158,43 +158,51 @@ export function ProfilHeader({
 // KUNI butun oyda yonadi/o'chadi (yetkazib beruvchilar haftalik jadval bilan ishlaydi).
 
 export function OrderDaysCalendar({
-  supplierId, weekdays, canEdit = true,
+  supplierId, orderDates, canEdit = true,
 }: {
-  supplierId: number; weekdays: number[]; canEdit?: boolean;
+  supplierId: number; orderDates: string[]; canEdit?: boolean;
 }) {
-  const [days, setDays] = useState<Set<number>>(new Set(weekdays));
+  const [dates, setDates] = useState<Set<string>>(new Set(orderDates));
   const [isPending, start] = useTransition();
 
   // Joriy vaqt faqat mount'da o'qiladi (render purity — React Compiler talabi)
   const [now] = useState(() => new Date());
-  const year = now.getFullYear();
-  const month = now.getMonth(); // 0-asosli, lokal — kalendar shunchaki vizual
-  const first = new Date(year, month, 1);
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const today = now.getDate();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const ymd = (y: number, m: number, d: number) => `${y}-${pad(m + 1)}-${pad(d)}`;
+  const todayStr = ymd(now.getFullYear(), now.getMonth(), now.getDate());
+
+  // Ko'rinayotgan oy — navigatsiya bilan
+  const [view, setView] = useState(() => ({ y: now.getFullYear(), m: now.getMonth() }));
+  const first = new Date(view.y, view.m, 1);
+  const daysInMonth = new Date(view.y, view.m + 1, 0).getDate();
   // Dushanbadan boshlanadigan to'r: 0=Du ... 6=Ya
   const leadEmpty = (first.getDay() + 6) % 7;
 
-  const toggle = (wd: number) => {
+  const shiftMonth = (delta: number) =>
+    setView((v) => {
+      const d = new Date(v.y, v.m + delta, 1);
+      return { y: d.getFullYear(), m: d.getMonth() };
+    });
+
+  // Bitta SANANI belgilash/bekor qilish — optimistik
+  const toggle = (dstr: string) => {
     if (!canEdit) return;
-    const next = new Set(days);
-    if (next.has(wd)) next.delete(wd); else next.add(wd);
-    setDays(next);
+    const next = new Set(dates);
+    if (next.has(dstr)) next.delete(dstr); else next.add(dstr);
+    setDates(next);
     start(async () => {
-      const res = await setOrderWeekdaysAction({ supplierId, weekdays: [...next] });
-      if (!res.ok) { toast.error(res.error); setDays(new Set(days)); }
+      const res = await toggleOrderDateAction({ supplierId, sana: dstr });
+      if (!res.ok) { toast.error(res.error); setDates(new Set(dates)); }
     });
   };
 
-  // Keyingi zakaz kuni (bugundan boshlab) — arzon hisob, memo shart emas
-  const nextOrderDay = (() => {
-    if (days.size === 0) return null;
-    for (let off = 0; off < 7; off++) {
-      const d = new Date(year, month, today + off);
-      if (days.has(d.getDay())) return { date: d, off };
-    }
-    return null;
-  })();
+  const future = [...dates].filter((d) => d >= todayStr).sort();
+  const nextDate = future[0] ?? null;
+  const fmtUz = (dstr: string) => {
+    const [y, m, d] = dstr.split("-").map(Number);
+    const OYLAR = ["yanvar", "fevral", "mart", "aprel", "may", "iyun", "iyul", "avgust", "sentabr", "oktabr", "noyabr", "dekabr"];
+    return `${d}-${OYLAR[m - 1]}${y !== now.getFullYear() ? ` ${y}` : ""}`;
+  };
 
   const MONTHS = ["Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun", "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr"];
 
@@ -206,75 +214,75 @@ export function OrderDaysCalendar({
           {isPending && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
         </CardTitle>
         <p className="text-xs text-muted-foreground">
-          Kunni bosing — o&apos;sha hafta kuni har hafta zakaz kuni sifatida belgilanadi (qayta bossangiz — bekor).
+          Kalendardan kunlarni BITTALAB belgilang (qayta bossangiz — bekor). Belgilangan sanalar
+          &quot;Bugun&quot;, buyurtma oynasi va Stockday hisoblarida ishlatiladi.
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
-        {/* Hafta kuni tugmalari */}
-        <div className="flex flex-wrap gap-1.5">
+        {/* Oy navigatsiyasi */}
+        <div className="flex items-center justify-between">
+          <button onClick={() => shiftMonth(-1)} aria-label="Oldingi oy"
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-border text-muted-foreground hover:bg-muted/40">
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <p className="text-sm font-semibold">{MONTHS[view.m]} {view.y}</p>
+          <button onClick={() => shiftMonth(1)} aria-label="Keyingi oy"
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-border text-muted-foreground hover:bg-muted/40">
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Oy kalendari — har kun alohida belgilanadi */}
+        <div className="grid grid-cols-7 gap-1 text-center">
           {[1, 2, 3, 4, 5, 6, 0].map((wd) => (
-            <button
-              key={wd}
-              onClick={() => toggle(wd)}
-              className={cn(
-                "h-8 rounded-lg border px-3 text-xs font-semibold transition-colors",
-                days.has(wd)
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border bg-card text-muted-foreground hover:border-primary/40"
-              )}
-            >
-              {WD_SHORT[wd]}
-            </button>
+            <div key={wd} className="py-1 text-[10px] font-semibold uppercase text-muted-foreground">{WD_SHORT[wd]}</div>
           ))}
+          {Array.from({ length: leadEmpty }).map((_, i) => <div key={`e${i}`} />)}
+          {Array.from({ length: daysInMonth }).map((_, i) => {
+            const dnum = i + 1;
+            const dstr = ymd(view.y, view.m, dnum);
+            const active = dates.has(dstr);
+            const isToday = dstr === todayStr;
+            const otgan = dstr < todayStr;
+            return (
+              <button
+                key={dnum}
+                onClick={() => toggle(dstr)}
+                title={active ? "Zakaz kuni — bekor qilish uchun bosing" : "Belgilash uchun bosing"}
+                className={cn(
+                  "flex h-9 items-center justify-center rounded-lg border text-xs tabular-nums transition-colors",
+                  active
+                    ? "border-emerald-500/60 bg-emerald-500/20 font-bold text-emerald-800 dark:text-emerald-300"
+                    : "border-border/50 text-muted-foreground hover:bg-muted/40",
+                  otgan && !active && "opacity-40",
+                  isToday && "ring-2 ring-primary/60"
+                )}
+              >
+                {dnum}
+              </button>
+            );
+          })}
         </div>
 
-        {/* Joriy oy kalendari (vizual) */}
-        <div>
-          <p className="mb-1.5 text-xs font-medium text-muted-foreground">{MONTHS[month]} {year}</p>
-          <div className="grid grid-cols-7 gap-1 text-center">
-            {[1, 2, 3, 4, 5, 6, 0].map((wd) => (
-              <div key={wd} className="py-1 text-[10px] font-semibold uppercase text-muted-foreground">{WD_SHORT[wd]}</div>
-            ))}
-            {Array.from({ length: leadEmpty }).map((_, i) => <div key={`e${i}`} />)}
-            {Array.from({ length: daysInMonth }).map((_, i) => {
-              const dnum = i + 1;
-              const wd = new Date(year, month, dnum).getDay();
-              const active = days.has(wd);
-              const isToday = dnum === today;
-              return (
-                <button
-                  key={dnum}
-                  onClick={() => toggle(wd)}
-                  title={`${WD_UZ[wd]} — ${active ? "zakaz kuni (bekor qilish uchun bosing)" : "belgilash uchun bosing"}`}
-                  className={cn(
-                    "flex h-9 items-center justify-center rounded-lg border text-xs tabular-nums transition-colors",
-                    active
-                      ? "border-emerald-500/60 bg-emerald-500/20 font-bold text-emerald-800 dark:text-emerald-300"
-                      : "border-border/50 text-muted-foreground hover:bg-muted/40",
-                    isToday && "ring-2 ring-primary/60"
-                  )}
-                >
-                  {dnum}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Keyingi zakaz kuni */}
+        {/* Holat: keyingi kun + tugayotgan kunlar ogohlantirishi */}
         <div className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-sm">
-          {days.size === 0 ? (
-            <span className="text-muted-foreground">Zakaz kunlari belgilanmagan.</span>
-          ) : nextOrderDay ? (
+          {future.length === 0 ? (
+            <span className="text-muted-foreground">Kelgusi zakaz kunlari belgilanmagan.</span>
+          ) : (
             <>
               Keyingi zakaz kuni:{" "}
               <span className="font-semibold">
-                {nextOrderDay.off === 0 ? "Bugun" : nextOrderDay.off === 1 ? "Ertaga" : WD_UZ[nextOrderDay.date.getDay()]}
-                {" "}({nextOrderDay.date.getDate()}-{["yanvar","fevral","mart","aprel","may","iyun","iyul","avgust","sentabr","oktabr","noyabr","dekabr"][nextOrderDay.date.getMonth()]})
+                {nextDate === todayStr ? "Bugun" : fmtUz(nextDate!)}
               </span>
+              <span className="ml-2 text-xs text-muted-foreground">· oldinda {future.length} ta kun belgilangan</span>
             </>
-          ) : null}
+          )}
         </div>
+        {future.length > 0 && future.length < 3 && (
+          <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+            ⚠ Kelgusi kunlar kam qoldi — keyingi oylar uchun ham kalendardan belgilab qo&apos;ying.
+          </p>
+        )}
       </CardContent>
     </Card>
   );

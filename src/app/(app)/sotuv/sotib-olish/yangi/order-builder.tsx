@@ -137,18 +137,18 @@ export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number
   const [hintNow] = useState(() => new Date());
   const orderDayHint = (() => {
     const sup = suppliers.find((s) => String(s.id) === supplierId);
-    if (!sup || sup.orderWeekdays.length === 0) return null;
-    const WD = ["Yakshanba", "Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba"];
-    for (let off = 0; off < 7; off++) {
-      const d = new Date(hintNow.getFullYear(), hintNow.getMonth(), hintNow.getDate() + off);
-      if (sup.orderWeekdays.includes(d.getDay())) {
-        return {
-          today: off === 0,
-          label: off === 0 ? "Bugun zakaz kuni" : `Keyingi zakaz kuni: ${off === 1 ? "ertaga" : WD[d.getDay()]} (${d.getDate()}.${String(d.getMonth() + 1).padStart(2, "0")})`,
-        };
-      }
-    }
-    return null;
+    if (!sup?.nextOrderDate) return null;
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const todayStr = `${hintNow.getFullYear()}-${pad(hintNow.getMonth() + 1)}-${pad(hintNow.getDate())}`;
+    const tomorrowD = new Date(hintNow.getFullYear(), hintNow.getMonth(), hintNow.getDate() + 1);
+    const tomorrowStr = `${tomorrowD.getFullYear()}-${pad(tomorrowD.getMonth() + 1)}-${pad(tomorrowD.getDate())}`;
+    const [, m, d] = sup.nextOrderDate.split("-");
+    return {
+      today: sup.nextOrderDate === todayStr,
+      label: sup.nextOrderDate === todayStr
+        ? "Bugun zakaz kuni"
+        : `Keyingi zakaz kuni: ${sup.nextOrderDate === tomorrowStr ? "ertaga" : ""} (${d}.${m})`,
+    };
   })();
 
   const save = () => {

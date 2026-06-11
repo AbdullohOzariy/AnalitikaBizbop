@@ -4,6 +4,7 @@ import { revalidatePath, revalidateTag } from "next/cache";
 
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { ANALYTICS_CACHE_TAG } from "@/lib/analytics";
 import { auth } from "@/auth";
 import { canSeeSuppliers, canEditSuppliers } from "@/lib/roles";
 
@@ -129,28 +130,36 @@ export async function updateSupplierProfileAction(
   }
 }
 
-const weekdaysSchema = z.object({
+const orderDaySchema = z.object({
   supplierId: z.coerce.number().int().positive(),
-  // 0=Yakshanba ... 6=Shanba
-  weekdays: z.array(z.number().int().min(0).max(6)).max(7),
+  sana: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
 
-/** Haftalik zakaz qabul kunlari. */
-export async function setOrderWeekdaysAction(
-  input: z.input<typeof weekdaysSchema>
-): Promise<Result> {
+/** Zakaz qabul kunini (aniq sana) belgilash/bekor qilish — kalendardan bittalab. */
+export async function toggleOrderDateAction(
+  input: z.input<typeof orderDaySchema>
+): Promise<{ ok: true; belgilandi: boolean } | { ok: false; error: string }> {
   try {
     await requireSupplierEditor();
-    const p = weekdaysSchema.parse(input);
-    await prisma.supplier.update({
-      where: { id: p.supplierId },
-      data: { orderWeekdays: [...new Set(p.weekdays)].sort() },
-    });
+    const p = orderDaySchema.parse(input);
+    const sana = new Date(p.sana + "T00:00:00.000Z");
+    const where = { supplierId_sana: { supplierId: p.supplierId, sana } };
+    const existing = await prisma.supplierOrderDay.findUnique({ where, select: { id: true } });
+    let belgilandi: boolean;
+    if (existing) {
+      await prisma.supplierOrderDay.delete({ where });
+      belgilandi = false;
+    } else {
+      await prisma.supplierOrderDay.create({ data: { supplierId: p.supplierId, sana } });
+      belgilandi = true;
+    }
     revalidateTag(SUPPLIERS_TAG, "max");
+    // Stockday "Keladi" hisobi zakaz kunlariga bog'liq — analitika keshini yangilaymiz
+    revalidateTag(ANALYTICS_CACHE_TAG, "max");
     revalidatePath(`/baza/taminotchilar/${p.supplierId}`);
-    return { ok: true };
+    return { ok: true, belgilandi };
   } catch (err) {
-    return actionError(err, "orderWeekdays");
+    return actionError(err, "toggleOrderDate");
   }
 }
 

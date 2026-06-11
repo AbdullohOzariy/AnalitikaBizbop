@@ -162,7 +162,7 @@ export type StockdayRow = {
 };
 
 // Zaxira kunlari CTE — latest (qoldiq) + agg (davrdagi o'rtacha kunlik sotuv).
-function sdCte(f: SnapshotFilters, todayDow: number): Prisma.Sql {
+function sdCte(f: SnapshotFilters, todayStr: string): Prisma.Sql {
   return Prisma.sql`
     base AS (
       SELECT ps."productId", ps."branchId", ps."stockQty", ps."soldQty", ps."costAmount",
@@ -192,13 +192,13 @@ function sdCte(f: SnapshotFilters, todayDow: number): Prisma.Sql {
     sd AS (
       SELECT l."productId", l."branchId", l.code, l.pname, l."categoryId", l.bname, l."periodEnd",
              l.abc, l.xyz, l.lead,
-             -- Yetib kelish kunlari = keyingi zakaz kunigacha (yetkazib beruvchi haftalik jadvalidan,
+             -- Yetib kelish kunlari = keyingi zakaz sanasigacha (kalendar kunlari,
              -- belgilanmagan bo'lsa 0 — istalgan kuni) + SKU lead time. Lead kiritilmagan — NULL.
              CASE WHEN l.lead IS NOT NULL THEN
                COALESCE((
-                 SELECT MIN((((wd - ${todayDow}) % 7) + 7) % 7)
-                 FROM "Supplier" sup, unnest(sup."orderWeekdays") AS wd
-                 WHERE sup.id = l.supid
+                 SELECT MIN(od.sana - ${todayStr}::date)
+                 FROM "SupplierOrderDay" od
+                 WHERE od."supplierId" = l.supid AND od.sana >= ${todayStr}::date
                ), 0) + l.lead
              END AS arrival_days,
              l."stockQty",
@@ -230,9 +230,8 @@ const STOCK_VIEW_COND: Record<StockView, Prisma.Sql> = {
 export const stockdayKpi = (f: SnapshotFilters, todayStr: string) =>
   unstable_cache(
     async (): Promise<StockdayKpi> => {
-      const todayDow = new Date(todayStr + "T00:00:00.000Z").getUTCDay();
-      const res = await prisma.$queryRaw<StockdayKpi[]>(Prisma.sql`
-        WITH ${sdCte(f, todayDow)}
+            const res = await prisma.$queryRaw<StockdayKpi[]>(Prisma.sql`
+        WITH ${sdCte(f, todayStr)}
         SELECT
           count(*) FILTER (WHERE sd.stock_days IS NOT NULL)::int AS faol,
           count(*) FILTER (WHERE ${STOCK_VIEW_COND.kritik})::int AS kritik,
@@ -246,20 +245,19 @@ export const stockdayKpi = (f: SnapshotFilters, todayStr: string) =>
       `);
       return res[0] ?? { faol: 0, kritik: 0, kam: 0, normal: 0, ortiqcha: 0, ortiqcha_value: 0, xavf: 0 };
     },
-    ["stockdayKpi_v2", filterKey(f), todayStr],
+    ["stockdayKpi_v3", filterKey(f), todayStr],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
   )();
 
 export const stockdayRows = (f: SnapshotFilters, view: StockView, page: number, pageSize: number, todayStr: string) =>
   unstable_cache(
     async (): Promise<StockdayRow[]> => {
-      const todayDow = new Date(todayStr + "T00:00:00.000Z").getUTCDay();
-      // Kritik/Kam/Normal — eng tez tugaydigani yuqorida; Ortiqcha — eng ko'pi yuqorida
+            // Kritik/Kam/Normal — eng tez tugaydigani yuqorida; Ortiqcha — eng ko'pi yuqorida
       const orderRaw = view === "ortiqcha"
         ? Prisma.raw(`sd.stock_days DESC`)
         : Prisma.raw(`sd.stock_days ASC`);
       return prisma.$queryRaw<StockdayRow[]>(Prisma.sql`
-        WITH ${sdCte(f, todayDow)}
+        WITH ${sdCte(f, todayStr)}
         SELECT sd."productId", sd."branchId", sd.code, sd.pname, sd.bname, sd."periodEnd",
                sd.abc, sd.xyz, sd.arrival_days::int AS "arrivalDays",
                sd."stockQty", sd.avg_daily AS "avgDaily", sd.stock_days AS "stockDays", sd.stock_value AS "stockValue",
@@ -271,7 +269,7 @@ export const stockdayRows = (f: SnapshotFilters, view: StockView, page: number, 
         LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}
       `);
     },
-    ["stockdayRows_v3", filterKey(f), view, String(page), String(pageSize), todayStr],
+    ["stockdayRows_v4", filterKey(f), view, String(page), String(pageSize), todayStr],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
   )();
 
@@ -319,9 +317,8 @@ export const oosTreeAgg = (f: SnapshotFilters, view: OosView) =>
 export const stockdayTreeAgg = (f: SnapshotFilters, view: StockView, todayStr: string) =>
   unstable_cache(
     async (): Promise<TreeAggRow[]> => {
-      const todayDow = new Date(todayStr + "T00:00:00.000Z").getUTCDay();
-      return prisma.$queryRaw<TreeAggRow[]>(Prisma.sql`
-        WITH ${sdCte(f, todayDow)}
+            return prisma.$queryRaw<TreeAggRow[]>(Prisma.sql`
+        WITH ${sdCte(f, todayStr)}
         SELECT ${TREE_GROUPING},
                count(*)::int AS cnt,
                COALESCE(SUM(sd.stock_value), 0)::float8 AS total
@@ -333,7 +330,7 @@ export const stockdayTreeAgg = (f: SnapshotFilters, view: StockView, todayStr: s
         GROUP BY 1, 2, 3, 4, 5, 6
       `);
     },
-    ["stockdayTree_v1", filterKey(f), view, todayStr],
+    ["stockdayTree_v2", filterKey(f), view, todayStr],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
   )();
 
