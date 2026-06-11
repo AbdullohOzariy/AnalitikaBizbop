@@ -35,9 +35,18 @@ export default function App() {
       .then((r) => r.json())
       .then((d) => {
         if (bekor) return
-        if (d?.allowed) { setGate('allowed'); return }
+        const viaKirish = new URLSearchParams(window.location.search).has('via')
+        if (d?.allowed) {
+          // Ikkala rol ham bor va to'g'ridan-to'g'ri ochilgan (BotFather "Open") —
+          // tanlov ekraniga yuboramiz; kirish sahifasidan kelgan bo'lsa (?via) qolamiz
+          if (d?.sverka && !viaKirish) {
+            window.location.replace('/miniapp/kirish' + window.location.hash)
+            return
+          }
+          setGate('allowed')
+          return
+        }
         // Spisaniya ruxsati yo'q, lekin SVERKA roli bor — o'sha appga o'tamiz
-        // (BotFather tugmasi shu sahifaga ko'rsatsa ham to'g'ri ishlasin)
         if (d?.sverka) { window.location.replace('/miniapp/sverka' + window.location.hash); return }
         setGate('denied')
       })

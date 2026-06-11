@@ -87,7 +87,7 @@ export function SverkaApp() {
         // Sverka ruxsati yo'q — spisaniya roli bo'lsa o'sha appga o'tamiz
         try {
           const s = await api<{ allowed: boolean }>("/api/ruxsat", { method: "POST" });
-          if (s.allowed) { window.location.replace("/miniapp/index.html" + window.location.hash); return; }
+          if (s.allowed) { window.location.replace("/miniapp/index.html?via=kirish" + window.location.hash); return; }
         } catch { /* jim */ }
         setPhase("denied");
       } catch { setPhase("denied"); }

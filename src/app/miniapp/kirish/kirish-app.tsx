@@ -13,7 +13,7 @@ type Holat =
   | { t: "denied"; id: number | null }
   | { t: "choose" };
 
-const SPISANIYA_URL = "/miniapp/index.html";
+const SPISANIYA_URL = "/miniapp/index.html?via=kirish";
 const SVERKA_URL = "/miniapp/sverka";
 
 function go(url: string) {
