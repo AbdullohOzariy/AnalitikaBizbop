@@ -154,19 +154,6 @@ export async function GET(
     y = doc.y + 14;
   }
 
-  // Imzolar
-  if (y > doc.page.height - 110) { doc.addPage(); y = M; }
-  y += 14;
-  doc.font(FONT).fontSize(9).fillColor("#444");
-  doc.text("Topshirdi: ________________________", M, y);
-  doc.text("Qabul qildi: ________________________", rx, y);
-
-  // Pastki brend chiziq
-  doc.fontSize(7.5).fillColor("#999").text(
-    "BizBop Supermarketlari · Analitika tizimi orqali shakllantirildi",
-    M, doc.page.height - 50, { width: W - 2 * M, align: "center" }
-  );
-
   doc.end();
   const buffer = await done;
 
