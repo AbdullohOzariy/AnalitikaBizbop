@@ -17,6 +17,32 @@ export async function register() {
     console.warn("[instrumentation] warm/sinf xatosi:", err instanceof Error ? err.message : err)
   );
 
+  // Kunlik inventarizatsiya hisoboti — har kuni 14:00 (Toshkent): qoldig'i 0/minus,
+  // lekin sotuvi bor muammoli tovarlar Excel'i sozlangan guruhga yuboriladi.
+  // node-cron faqat Node runtime'da; dublikat ro'yxatdan o'tishni globalThis bilan oldini olamiz.
+  {
+    const gg = globalThis as typeof globalThis & { __invReportCron?: boolean };
+    if (!gg.__invReportCron) {
+      gg.__invReportCron = true;
+      try {
+        const { schedule } = await import("node-cron");
+        schedule("0 14 * * *", async () => {
+          try {
+            const { sendInventoryReport } = await import("@/lib/inventory-report/report");
+            const r = await sendInventoryReport();
+            if (!r.ok) console.warn("[inv-report] yuborilmadi:", r.error);
+            else console.log(`[inv-report] yuborildi: ${r.count} ta muammoli SKU`);
+          } catch (e) {
+            console.error("[inv-report] xato:", e instanceof Error ? e.message : e);
+          }
+        }, { timezone: "Asia/Tashkent" });
+        console.log("[instrumentation] Inventarizatsiya cron o'rnatildi: har kuni 14:00 (Asia/Tashkent)");
+      } catch (e) {
+        console.warn("[instrumentation] inv-report cron o'rnatilmadi:", e instanceof Error ? e.message : e);
+      }
+    }
+  }
+
   const token = process.env.BOT_TOKEN;
   const base = (process.env.WEBHOOK_URL || "").replace(/\/$/, "");
   if (!token || !base) {

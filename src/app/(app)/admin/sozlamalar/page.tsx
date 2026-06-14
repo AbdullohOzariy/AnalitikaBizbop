@@ -19,8 +19,10 @@ import { SverkaGuruhEditor } from "./sverka-guruh-editor";
 import { SverkaXodimlar, type XodimRow } from "../../sverka/sverka-client";
 import { SverkaTopiklarEditor, type SverkaTopicRow } from "./sverka-topiklar-editor";
 import { SverkaQabulchiEditor, type QabulchiRow } from "./sverka-qabulchi-editor";
+import { InventoryReportEditor } from "./inventory-report-editor";
+import { getInventoryReportConfig } from "@/lib/inventory-report/sozlama";
 
-type Tab = "spisaniya" | "sverka";
+type Tab = "spisaniya" | "sverka" | "inventarizatsiya";
 
 export default async function SozlamalarPage({
   searchParams,
@@ -32,7 +34,7 @@ export default async function SozlamalarPage({
   if (session.user.role !== "SYSTEM_ADMIN") redirect("/dashboard");
 
   const sp = await searchParams;
-  const tab: Tab = sp.tab === "sverka" ? "sverka" : "spisaniya";
+  const tab: Tab = sp.tab === "sverka" ? "sverka" : sp.tab === "inventarizatsiya" ? "inventarizatsiya" : "spisaniya";
 
   return (
     <div className="space-y-5">
@@ -47,6 +49,7 @@ export default async function SozlamalarPage({
         {([
           { v: "spisaniya", l: "Spisaniya sozlamalari" },
           { v: "sverka", l: "Sverka sozlamalari" },
+          { v: "inventarizatsiya", l: "Inventarizatsiya" },
         ] as { v: Tab; l: string }[]).map((t) => (
           <Link
             key={t.v}
@@ -65,7 +68,28 @@ export default async function SozlamalarPage({
         ))}
       </div>
 
-      {tab === "spisaniya" ? <SpisaniyaTab /> : <SverkaTab />}
+      {tab === "spisaniya" ? <SpisaniyaTab /> : tab === "sverka" ? <SverkaTab /> : <InventarizatsiyaTab />}
+    </div>
+  );
+}
+
+// ─── Inventarizatsiya xabarnoma bot ───────────────────────────────────────────
+
+async function InventarizatsiyaTab() {
+  const cfg = await getInventoryReportConfig();
+  return (
+    <div className="space-y-5">
+      <SectionCard
+        title="Inventarizatsiya xabarnoma bot"
+        description="Har kuni 14:00 (Toshkent) — qoldig'i 0/minus, sotuvi bor muammoli tovarlar Excel'i"
+        actions={<MessageSquare className="h-4 w-4 text-muted-foreground" />}
+      >
+        <InventoryReportEditor
+          tokenSet={!!cfg.token}
+          chatId={cfg.chatId ?? ""}
+          topicId={cfg.topicId != null ? String(cfg.topicId) : ""}
+        />
+      </SectionCard>
     </div>
   );
 }

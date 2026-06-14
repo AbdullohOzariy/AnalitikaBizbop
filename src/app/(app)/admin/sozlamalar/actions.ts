@@ -181,3 +181,48 @@ export async function sverkaQabulchiOchirAction(id: number): Promise<Result> {
     return { ok: true };
   } catch (err) { return xato(err); }
 }
+
+
+// ─── Inventarizatsiya xabarnoma bot (kunlik muammoli tovarlar hisoboti) ─────────
+
+/** Bot token + guruh chat id + topic id'ni saqlash. token bo'sh — o'zgartirilmaydi. */
+export async function inventoryReportSaqlaAction(input: {
+  token: string; chatId: string; topicId: string;
+}): Promise<Result> {
+  try {
+    await requireAdmin();
+    const token = input.token.trim();
+    const chatId = input.chatId.trim();
+    const topicId = input.topicId.trim();
+    if (!chatId) {
+      return { ok: false, error: "Guruh chat ID kiritilishi shart (bo'sh saqlasangiz xabarnoma o'chadi)." };
+    }
+    if (!/^-?\d{5,20}$/.test(chatId)) {
+      return { ok: false, error: "Guruh chat ID raqam bo'lishi kerak (odatda -100... ko'rinishida)." };
+    }
+    if (topicId && !/^\d{1,12}$/.test(topicId)) {
+      return { ok: false, error: "Topic ID musbat raqam bo'lishi kerak." };
+    }
+    if (token && !/^\d{6,}:[A-Za-z0-9_-]{20,}$/.test(token)) {
+      return { ok: false, error: "Bot token noto'g'ri (123456:ABC... ko'rinishida)." };
+    }
+    const { setInventoryReportConfig } = await import("@/lib/inventory-report/sozlama");
+    await setInventoryReportConfig({ token, chatId, topicId });
+    revalidatePath(RP);
+    return { ok: true };
+  } catch (err) { return xato(err); }
+}
+
+/** Hisobotni hoziroq yuborish (sinov tugmasi). Yuborilgan muammoli SKU sonini qaytaradi. */
+export async function inventoryReportYuborAction(): Promise<
+  { ok: true; count: number } | { ok: false; error: string }
+> {
+  try {
+    await requireAdmin();
+    const { sendInventoryReport } = await import("@/lib/inventory-report/report");
+    return await sendInventoryReport();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Xato.";
+    return { ok: false, error: msg.includes("Ruxsat") ? "Ruxsat yo'q." : msg };
+  }
+}

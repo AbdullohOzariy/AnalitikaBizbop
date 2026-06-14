@@ -138,6 +138,27 @@ export const oosRows = (f: SnapshotFilters, view: OosView, page: number, pageSiz
     { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
   )();
 
+// ─── Inventarizatsiya muammoli tovarlari ────────────────────────────────────────
+// Qoldiq ≤ 0 (0 yoki minus) LEKIN so'nggi snapshot'da sotuvi bor — "sotiladi-yu, yo'q"
+// eng muammoli holat. Kunlik Telegram hisoboti uchun (keshsiz, trigger bo'yicha o'qiladi).
+
+export type InventoryProblemRow = {
+  code: number; pname: string; cname: string | null; bname: string;
+  stockQty: string | null; soldQty: string | null;
+};
+
+export const inventoryProblemRows = (f: SnapshotFilters) =>
+  prisma.$queryRaw<InventoryProblemRow[]>(Prisma.sql`
+    WITH ${latestCte(f)}
+    SELECT l.code, l.pname, c.name AS cname, l.bname, l."stockQty", l."soldQty"
+    FROM latest l
+    LEFT JOIN "Category" c ON c.id = l."categoryId"
+    WHERE l."stockQty" IS NOT NULL AND l."stockQty" <= 0
+      AND l."soldQty" IS NOT NULL AND l."soldQty" > 0
+    ORDER BY l."soldQty" DESC
+    LIMIT 10000
+  `);
+
 // ─── Stockday ──────────────────────────────────────────────────────────────────
 
 export type StockView = "kritik" | "kam" | "normal" | "ortiqcha";
