@@ -6,7 +6,6 @@
 import * as XLSX from "xlsx";
 import { Telegram } from "telegraf";
 import { prisma } from "@/lib/prisma";
-import { getDefaultRange } from "@/lib/analytics";
 import { inventoryProblemRows } from "@/lib/snapshot-reports";
 import { getInventoryReportConfig } from "./sozlama";
 
@@ -17,12 +16,18 @@ function num(n: unknown): number {
 
 /** Muammoli tovarlar Excel buferi (so'nggi mavjud kun ma'lumotlari bo'yicha). */
 export async function buildInventoryReport(): Promise<{ buffer: Buffer; count: number; dateStr: string }> {
-  const def = await getDefaultRange();
-  const startStr = def.start.toISOString().slice(0, 10);
-  const endStr = def.end.toISOString().slice(0, 10);
+  // Bir kun oldingi (kecha) holatiga ko'ra — Toshkent (UTC+5, DST yo'q).
+  // 14:00/14-sanada → 13-sana ma'lumoti. endStr = kecha; oyna kechagacha 40 kun
+  // (dam olish/bayram tufayli kun o'tkazib yuborilsa ham eng so'nggi snapshot topiladi).
+  const TASH = 5 * 3_600_000;
+  const yEnd = Date.now() + TASH - 24 * 3_600_000;
+  const endStr = new Date(yEnd).toISOString().slice(0, 10);
+  const startStr = new Date(yEnd - 40 * 24 * 3_600_000).toISOString().slice(0, 10);
   const rows = await inventoryProblemRows({ startStr, endStr, q: "", scopeSubIds: null });
-  // Yorliq uchun haqiqiy ma'lumot kuni (so'nggi yuklangan periodEnd) — oy oxiri emas
-  const lastPs = await prisma.productSales.aggregate({ _max: { periodEnd: true } }).catch(() => null);
+  // Yorliq uchun haqiqiy ishlatilgan ma'lumot kuni (kechagacha bo'lgan eng so'nggi periodEnd)
+  const lastPs = await prisma.productSales
+    .aggregate({ _max: { periodEnd: true }, where: { periodEnd: { lte: new Date(endStr + "T00:00:00.000Z") } } })
+    .catch(() => null);
   const dateStr = lastPs?._max.periodEnd ? lastPs._max.periodEnd.toISOString().slice(0, 10) : endStr;
 
   const header = ["Kod", "Mahsulot", "Kategoriya", "Filial", "Qoldiq", "Sotuv"];

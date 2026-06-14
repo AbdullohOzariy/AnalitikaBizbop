@@ -45,9 +45,10 @@ export function InventoryReportEditor({
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Har kuni soat <b>14:00</b> (Toshkent) da so&apos;nggi mavjud kun (odatda kechagi) ma&apos;lumotlari
-        bo&apos;yicha qoldig&apos;i <b>0 yoki minus</b>, lekin <b>sotuvi bor</b> muammoli tovarlar ro&apos;yxati
-        Excel sifatida shu guruh topigiga yuboriladi. Bot guruhga a&apos;zo va topikka yozish huquqiga ega bo&apos;lishi shart.
+        Har kuni soat <b>14:00</b> (Toshkent) da <b>bir kun oldingi (kecha)</b> holatiga ko&apos;ra
+        qoldig&apos;i <b>0 yoki minus</b>, lekin <b>sotuvi bor</b> muammoli tovarlar ro&apos;yxati Excel
+        sifatida shu guruh topigiga yuboriladi (ma&apos;lumot kuni xabarda ko&apos;rsatiladi). Bot guruhga
+        a&apos;zo va topikka yozish huquqiga ega bo&apos;lishi shart.
       </p>
 
       <div className="grid gap-3 sm:grid-cols-2">
