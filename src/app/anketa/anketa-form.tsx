@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import { submitAnketaAction } from "./actions";
 
 export type AnketaFieldData = { id: number; label: string; type: string; required: boolean };
-export type AnketaSectionData = { title: string; fields: AnketaFieldData[] };
+export type AnketaSectionData = { id: number; title: string; fields: AnketaFieldData[] };
 
 export function AnketaForm({ sections }: { sections: AnketaSectionData[] }) {
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -65,7 +65,7 @@ export function AnketaForm({ sections }: { sections: AnketaSectionData[] }) {
   return (
     <div className="space-y-5">
       {sections.map((s) => (
-        <Card key={s.title}>
+        <Card key={s.id}>
           <CardHeader className="pb-3">
             <CardTitle className="text-base text-emerald-700 dark:text-emerald-400">{s.title}</CardTitle>
           </CardHeader>

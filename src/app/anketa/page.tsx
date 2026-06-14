@@ -15,19 +15,25 @@ export const metadata = {
 };
 
 export default async function AnketaPage() {
-  const fields = await prisma.anketaField.findMany({
-    where: { active: true },
+  const secRows = await prisma.anketaSection.findMany({
     orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
-    select: { id: true, section: true, label: true, type: true, required: true },
+    include: {
+      fields: {
+        where: { active: true },
+        orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+        select: { id: true, label: true, type: true, required: true },
+      },
+    },
   });
 
-  // Bo'limlar bo'yicha guruhlash (sortOrder tartibida)
-  const sections: AnketaSectionData[] = [];
-  for (const f of fields) {
-    let sec = sections.find((s) => s.title === f.section);
-    if (!sec) { sec = { title: f.section, fields: [] }; sections.push(sec); }
-    sec.fields.push({ id: f.id, label: f.label, type: f.type, required: f.required });
-  }
+  // Aktiv maydoni bor bo'limlargina formada ko'rinadi (bo'sh bo'lim chiqmaydi)
+  const sections: AnketaSectionData[] = secRows
+    .filter((s) => s.fields.length > 0)
+    .map((s) => ({
+      id: s.id,
+      title: s.title,
+      fields: s.fields.map((f) => ({ id: f.id, label: f.label, type: f.type, required: f.required })),
+    }));
 
   return (
     <div className="min-h-dvh bg-gradient-to-b from-emerald-50 to-white dark:from-emerald-950/30 dark:to-background">

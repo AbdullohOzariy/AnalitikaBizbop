@@ -12,7 +12,7 @@ import { FileText, Inbox, SlidersHorizontal, ExternalLink } from "lucide-react";
 import { PageHeader, StatCard } from "@/components/common/page";
 import { cn } from "@/lib/utils";
 import { formatDateTimeUZ } from "@/lib/format";
-import { SubmissionsList, FieldsEditor, type FieldRow, type SubmissionRow } from "./anketa-admin";
+import { SubmissionsList, FieldsEditor, type SectionRow, type FieldRow, type SubmissionRow } from "./anketa-admin";
 
 export const dynamic = "force-dynamic";
 
@@ -31,14 +31,19 @@ export default async function AnketaAdminPage({
   const sp = await searchParams;
   const tab: Tab = sp.tab === "maydonlar" && fullAccess ? "maydonlar" : "javoblar";
 
-  const [fields, submissions, newCount] = await Promise.all([
-    prisma.anketaField.findMany({ orderBy: [{ sortOrder: "asc" }, { id: "asc" }] }),
+  const [sectionsData, fields, submissions, newCount] = await Promise.all([
+    prisma.anketaSection.findMany({ orderBy: [{ sortOrder: "asc" }, { id: "asc" }] }),
+    prisma.anketaField.findMany({
+      include: { section: { select: { title: true } } },
+      orderBy: [{ section: { sortOrder: "asc" } }, { sortOrder: "asc" }, { id: "asc" }],
+    }),
     prisma.anketaSubmission.findMany({ orderBy: { createdAt: "desc" }, take: 200 }),
     prisma.anketaSubmission.count({ where: { status: "NEW" } }),
   ]);
 
+  const sectionRows: SectionRow[] = sectionsData.map((s) => ({ id: s.id, title: s.title, sortOrder: s.sortOrder }));
   const fieldRows: FieldRow[] = fields.map((f) => ({
-    id: f.id, section: f.section, label: f.label, type: f.type,
+    id: f.id, sectionId: f.sectionId, sectionTitle: f.section.title, label: f.label, type: f.type,
     required: f.required, sortOrder: f.sortOrder, active: f.active,
   }));
   const subRows: SubmissionRow[] = submissions.map((s) => ({
@@ -93,7 +98,7 @@ export default async function AnketaAdminPage({
 
       {tab === "javoblar"
         ? <SubmissionsList rows={subRows} fields={fieldRows} canDelete={fullAccess} />
-        : <FieldsEditor fields={fieldRows} />}
+        : <FieldsEditor sections={sectionRows} fields={fieldRows} />}
     </div>
   );
 }

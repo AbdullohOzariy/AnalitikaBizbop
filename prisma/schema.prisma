@@ -543,15 +543,27 @@ model ForecastRun {
 
 // ─── Yetkazib beruvchi anketasi (supplier.oilagroup.uz) ──────────────────────────────
 // Forma maydonlari sozlanuvchan — Tizim → Anketa bo'limida tahrirlanadi.
+// Bo'lim (section) alohida entity — bo'sh bo'lim bo'lishi, nomi tahrirlanishi mumkin.
+model AnketaSection {
+  id        Int           @id @default(autoincrement())
+  title     String // bo'lim sarlavhasi (KOMPANIYA HAQIDA UMUMIY MA'LUMOT ...)
+  sortOrder Int           @default(0)
+  createdAt DateTime      @default(now())
+  fields    AnketaField[]
+}
+
 model AnketaField {
-  id        Int      @id @default(autoincrement())
-  section   String // bo'lim sarlavhasi (KOMPANIYA HAQIDA UMUMIY MA'LUMOT ...)
+  id        Int           @id @default(autoincrement())
+  sectionId Int
+  section   AnketaSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   label     String
-  type      String   @default("text") // text | textarea | number | yesno | consent
-  required  Boolean  @default(false)
-  sortOrder Int      @default(0)
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
+  type      String        @default("text") // text | textarea | number | yesno | consent
+  required  Boolean       @default(false)
+  sortOrder Int           @default(0) // bo'lim ichidagi tartib
+  active    Boolean        @default(true)
+  createdAt DateTime      @default(now())
+
+  @@index([sectionId, sortOrder])
 }
 
 // Yuborilgan anketalar — javoblar JSON ({ fieldId: qiymat })
