@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Eye, Trash2, CheckCircle2, Loader2, Plus, Save, GripVertical,
+  Eye, Trash2, CheckCircle2, Loader2, Plus, Save, GripVertical, X, ChevronUp, ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
@@ -19,7 +19,7 @@ import {
 import { Pill } from "@/components/common/page";
 import { cn } from "@/lib/utils";
 import {
-  saveAnketaFieldAction, deleteAnketaFieldAction,
+  saveAnketaFieldAction, deleteAnketaFieldAction, moveAnketaSectionAction,
   setAnketaStatusAction, deleteAnketaSubmissionAction,
 } from "./actions";
 
@@ -174,14 +174,23 @@ export function SubmissionsList({ rows, fields, canDelete = true }: { rows: Subm
 // ─── Maydonlar tahriri ────────────────────────────────────────────────────────
 
 const emptyNew = { section: "", label: "", type: "text", required: false };
+// Dropdown'dagi "Yangi bo'lim" tanlovi uchun maxsus qiymat
+const NEW_SECTION = "__new__";
 
 export function FieldsEditor({ fields }: { fields: FieldRow[] }) {
   const router = useRouter();
   const [edits, setEdits] = useState<Record<number, Partial<FieldRow>>>({});
   const [isPending, start] = useTransition();
   const [nf, setNf] = useState<typeof emptyNew>(emptyNew);
+  // Yangi bo'lim yaratish rejimi (dropdown'dan "➕ Yangi bo'lim" tanlanganda).
+  const [secNew, setSecNew] = useState(false);
 
   const sections = [...new Set(fields.map((f) => f.section))];
+  // Hali bo'lim bo'lmasa — darhol matn kiritish rejimi (tanlash uchun narsa yo'q).
+  const showSectionInput = secNew || sections.length === 0;
+  // Dropdown rejimida: tanlangan bo'lim refresh'dan keyin yo'qolsa (mas. oxirgi maydoni
+  // o'chirilsa), placeholder'ga qaytamiz — eskirgan qiymat bilan "arvoh bo'lim" yaratilmasin.
+  const selectedSection = sections.includes(nf.section) ? nf.section : "";
   const val = <K extends keyof FieldRow>(f: FieldRow, k: K): FieldRow[K] =>
     (edits[f.id]?.[k] ?? f[k]) as FieldRow[K];
   const setVal = (id: number, patch: Partial<FieldRow>) =>
@@ -203,6 +212,14 @@ export function FieldsEditor({ fields }: { fields: FieldRow[] }) {
     });
   };
 
+  const moveSection = (section: string, dir: "up" | "down") => {
+    start(async () => {
+      const res = await moveAnketaSectionAction({ section, dir });
+      if (res.ok) router.refresh();
+      else toast.error(res.error);
+    });
+  };
+
   const remove = (f: FieldRow) => {
     if (!confirm(`"${f.label}" maydonini o'chirasizmi? (Tarixiy javoblar uchun "Aktiv"ni o'chirish tavsiya etiladi)`)) return;
     start(async () => {
@@ -213,15 +230,24 @@ export function FieldsEditor({ fields }: { fields: FieldRow[] }) {
   };
 
   const addNew = () => {
-    if (!nf.section.trim() || !nf.label.trim()) { toast.error("Bo'lim va savol matnini kiriting."); return; }
-    const maxSort = Math.max(0, ...fields.filter((f) => f.section === nf.section.trim()).map((f) => f.sortOrder));
+    // Dropdown rejimida eskirgan tanlov o'rniga tekshirilgan selectedSection ishlatamiz.
+    const section = (showSectionInput ? nf.section : selectedSection).trim();
+    if (!section || !nf.label.trim()) { toast.error("Bo'lim va savol matnini kiriting."); return; }
+    if (section === NEW_SECTION) { toast.error("Bu nom band — boshqa nom tanlang."); return; }
+    const isNewSection = !sections.includes(section);
+    // Yangi maydon barcha mavjud maydonlardan keyin turadi (global maksimal sortOrder + 10).
+    // Bo'lim ichida grouping nom bo'yicha bo'lgani uchun maydon o'z bo'limining oxirida ko'rinadi,
+    // yangi bo'lim esa ro'yxat oxiriga qo'shiladi — sortOrder to'qnashuvisiz.
+    const maxSort = Math.max(0, ...fields.map((f) => f.sortOrder));
     start(async () => {
       const res = await saveAnketaFieldAction({
-        section: nf.section.trim(), label: nf.label.trim(),
+        section, label: nf.label.trim(),
         type: nf.type as "text", required: nf.required, sortOrder: maxSort + 10, active: true,
       });
-      if (res.ok) { toast.success("Maydon qo'shildi."); setNf(emptyNew); router.refresh(); }
-      else toast.error(res.error);
+      if (res.ok) {
+        toast.success(isNewSection ? "Bo'lim va maydon qo'shildi." : "Maydon qo'shildi.");
+        setNf(emptyNew); setSecNew(false); router.refresh();
+      } else toast.error(res.error);
     });
   };
 
@@ -232,11 +258,30 @@ export function FieldsEditor({ fields }: { fields: FieldRow[] }) {
         <CardContent className="flex flex-wrap items-end gap-2 p-4">
           <div className="min-w-44 space-y-1">
             <Label className="text-xs text-muted-foreground">Bo&apos;lim</Label>
-            <Input list="anketa-sections" value={nf.section} onChange={(e) => setNf({ ...nf, section: e.target.value })}
-              placeholder="Bo'lim nomi" className="h-9" />
-            <datalist id="anketa-sections">
-              {sections.map((s) => <option key={s} value={s} />)}
-            </datalist>
+            {showSectionInput ? (
+              <div className="flex items-center gap-1">
+                <Input autoFocus value={nf.section} onChange={(e) => setNf({ ...nf, section: e.target.value })}
+                  placeholder="Yangi bo'lim nomi" className="h-9" />
+                {sections.length > 0 && (
+                  <Button type="button" size="icon" variant="ghost" className="h-9 w-9 shrink-0"
+                    onClick={() => { setSecNew(false); setNf({ ...nf, section: "" }); }}
+                    aria-label="Bekor qilish" title="Mavjud bo'limdan tanlash">
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <select value={selectedSection}
+                onChange={(e) => {
+                  if (e.target.value === NEW_SECTION) { setSecNew(true); setNf({ ...nf, section: "" }); }
+                  else setNf({ ...nf, section: e.target.value });
+                }}
+                className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm">
+                <option value="" disabled>Bo&apos;lim tanlang…</option>
+                {sections.map((s) => <option key={s} value={s}>{s}</option>)}
+                <option value={NEW_SECTION}>➕ Yangi bo&apos;lim…</option>
+              </select>
+            )}
           </div>
           <div className="min-w-64 flex-1 space-y-1">
             <Label className="text-xs text-muted-foreground">Savol matni</Label>
@@ -262,10 +307,20 @@ export function FieldsEditor({ fields }: { fields: FieldRow[] }) {
       </Card>
 
       {/* Mavjud maydonlar — bo'lim bo'yicha */}
-      {sections.map((sec) => (
+      {sections.map((sec, si) => (
         <Card key={sec} className="overflow-hidden">
           <CardContent className="p-0">
-            <div className="border-b border-border/60 bg-muted/30 px-4 py-2 text-sm font-bold">{sec}</div>
+            <div className="flex items-center gap-1 border-b border-border/60 bg-muted/30 px-4 py-1.5">
+              <span className="flex-1 text-sm font-bold">{sec}</span>
+              <Button size="icon" variant="ghost" className="h-7 w-7" disabled={isPending || si === 0}
+                onClick={() => moveSection(sec, "up")} aria-label="Bo'limni yuqoriga" title="Bo'limni yuqoriga ko'chirish">
+                <ChevronUp className="h-4 w-4" />
+              </Button>
+              <Button size="icon" variant="ghost" className="h-7 w-7" disabled={isPending || si === sections.length - 1}
+                onClick={() => moveSection(sec, "down")} aria-label="Bo'limni pastga" title="Bo'limni pastga ko'chirish">
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+            </div>
             <div className="divide-y divide-border/40">
               {fields.filter((f) => f.section === sec).map((f) => {
                 const dirty = !!edits[f.id];

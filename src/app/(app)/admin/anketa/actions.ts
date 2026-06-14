@@ -64,6 +64,69 @@ export async function deleteAnketaFieldAction(id: number): Promise<Result> {
   }
 }
 
+const moveSectionSchema = z.object({
+  section: z.string().trim().min(1),
+  dir: z.enum(["up", "down"]),
+});
+
+/**
+ * Bo'limni yuqoriga/pastga ko'chirish. Alohida "section" jadvali yo'q —
+ * bo'lim tartibi maydonlar sortOrder'idan kelib chiqadi. Shuning uchun
+ * barcha maydonlarni yangi bo'lim tartibida 0,10,20,… qilib qayta raqamlaymiz
+ * (bo'lim ichidagi tartib saqlanadi). Faqat o'zgargan qatorlar yoziladi.
+ */
+export async function moveAnketaSectionAction(
+  input: z.input<typeof moveSectionSchema>
+): Promise<Result> {
+  try {
+    await requireAdmin();
+    const { section, dir } = moveSectionSchema.parse(input);
+    const fields = await prisma.anketaField.findMany({
+      orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+      select: { id: true, section: true, sortOrder: true },
+    });
+
+    // Joriy bo'lim tartibi (birinchi uchragan maydon bo'yicha)
+    const order: string[] = [];
+    for (const f of fields) if (!order.includes(f.section)) order.push(f.section);
+    const idx = order.indexOf(section);
+    if (idx === -1) return { ok: false, error: "Bo'lim topilmadi" };
+    const swap = dir === "up" ? idx - 1 : idx + 1;
+    if (swap < 0 || swap >= order.length) return { ok: true }; // chekkada — harakatsiz
+    [order[idx], order[swap]] = [order[swap], order[idx]];
+
+    // Maydonlarni bo'lim bo'yicha guruhlash (joriy global tartibni saqlab)
+    const bySection = new Map<string, { id: number; sortOrder: number }[]>();
+    for (const f of fields) {
+      const arr = bySection.get(f.section) ?? [];
+      arr.push(f);
+      bySection.set(f.section, arr);
+    }
+
+    // Yangi tartibda 0,10,20,… raqamlash, faqat o'zgarganlarni yangilash
+    let running = 0;
+    const changed: { id: number; sortOrder: number }[] = [];
+    for (const sec of order) {
+      for (const f of bySection.get(sec) ?? []) {
+        if (f.sortOrder !== running) changed.push({ id: f.id, sortOrder: running });
+        running += 10;
+      }
+    }
+    if (changed.length) {
+      await prisma.$transaction(
+        changed.map((u) =>
+          prisma.anketaField.update({ where: { id: u.id }, data: { sortOrder: u.sortOrder } })
+        )
+      );
+    }
+    revalidatePath("/admin/anketa");
+    revalidatePath("/anketa");
+    return { ok: true };
+  } catch (err) {
+    return actionError(err, "moveAnketaSection");
+  }
+}
+
 export async function setAnketaStatusAction(
   id: number,
   status: "NEW" | "REVIEWED"
