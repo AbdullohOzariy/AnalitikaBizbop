@@ -42,6 +42,10 @@ export type BuilderItem = {
   packSize: number | null; // blok/pachkadagi dona soni (Product'da eslab qolinadi)
   purchasePrice: number | null; // oxirgi kelishilgan dona narxi (eslab qolinadi)
   minStock: number | null; // kunlik × (zakaz oralig'i + lead) × XYZ buferi; lead yo'q — null
+  // Iyerarxiya: guruh → kategoriya → subkategoriya (SKU shu yerga tegishli) — daraxt ko'rinishi uchun
+  groupId: number | null; groupName: string | null; groupSort: number;
+  catId: number | null; catName: string | null; catSort: number;
+  subId: number | null; subName: string | null; subSort: number;
 };
 
 // Zakaz kunlari (aniq sanalar) orasidagi MAKSIMAL interval — eng yomon stsenariy.
@@ -112,7 +116,17 @@ export async function supplierItemsAction(
     const [products, futureOrderDays, range] = await Promise.all([
       prisma.product.findMany({
         where: { supplierId: sid, ...scopeProductWhere(scope) },
-        select: { id: true, code: true, name: true, currentStock: true, currentSold: true, abcClass: true, xyzClass: true, leadTimeDays: true, archivedAt: true, packSize: true, purchasePrice: true, category: { select: { name: true } } },
+        select: {
+          id: true, code: true, name: true, currentStock: true, currentSold: true,
+          abcClass: true, xyzClass: true, leadTimeDays: true, archivedAt: true, packSize: true, purchasePrice: true,
+          category: {
+            select: {
+              id: true, name: true, sortOrder: true, parentId: true,
+              group: { select: { id: true, name: true, sortOrder: true } },
+              parent: { select: { id: true, name: true, sortOrder: true, group: { select: { id: true, name: true, sortOrder: true } } } },
+            },
+          },
+        },
         orderBy: { name: "asc" },
         take: 2000,
       }),
@@ -156,12 +170,24 @@ export async function supplierItemsAction(
       const suggested = minStock != null
         ? Math.max(0, minStock - stock)
         : Math.max(0, sold - stock);
+      // Iyerarxiya: leaf = product.category. parentId bo'lsa — leaf subkategoriya, otasi kategoriya;
+      // aks holda leaf to'g'ridan kategoriya (sub yo'q). Guruh leaf yoki ota orqali.
+      const c = p.category;
+      const isSub = !!(c?.parentId && c.parent);
+      const g = c ? (c.group ?? c.parent?.group ?? null) : null;
       return {
-        productId: p.id, code: p.code, name: p.name, sub: p.category?.name ?? null,
+        productId: p.id, code: p.code, name: p.name, sub: c?.name ?? null,
         stock, sold, suggested, abc: p.abcClass, xyz: p.xyzClass, lead: p.leadTimeDays,
         arxiv: p.archivedAt != null, dailyAvg: Math.round(dailyAvg * 10) / 10, minStock,
         packSize: p.packSize,
         purchasePrice: p.purchasePrice != null ? Number(p.purchasePrice) : null,
+        groupId: g?.id ?? null, groupName: g?.name ?? null, groupSort: g?.sortOrder ?? 0,
+        catId: isSub ? c!.parent!.id : (c?.id ?? null),
+        catName: isSub ? c!.parent!.name : (c?.name ?? null),
+        catSort: isSub ? c!.parent!.sortOrder : (c?.sortOrder ?? 0),
+        subId: isSub ? c!.id : null,
+        subName: isSub ? c!.name : null,
+        subSort: isSub ? c!.sortOrder : 0,
       };
     });
     return { ok: true, items, orderGap };
