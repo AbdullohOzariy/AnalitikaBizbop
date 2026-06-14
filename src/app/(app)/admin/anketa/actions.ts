@@ -4,6 +4,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@/generated/prisma/client";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { auth } from "@/auth";
 import { canReviewAnketa } from "@/lib/roles";
@@ -113,11 +114,16 @@ export async function moveAnketaSectionAction(
       }
     }
     if (changed.length) {
-      await prisma.$transaction(
-        changed.map((u) =>
-          prisma.anketaField.update({ where: { id: u.id }, data: { sortOrder: u.sortOrder } })
-        )
-      );
+      // Bitta atomik SQL bilan ommaviy yangilash — N ta alohida UPDATE'li
+      // $transaction o'rniga (Neon'da ko'p statement'li tranzaksiya ishonchsiz edi).
+      // Naqsh: admin/upload/actions.ts. ${...}::int MAJBURIY — FROM (VALUES ...) da
+      // tipsiz parametr text bo'lib qoladi va "integer = text" xatosi beradi.
+      const vals = changed.map((u) => Prisma.sql`(${u.id}::int, ${u.sortOrder}::int)`);
+      await prisma.$executeRaw`
+        UPDATE "AnketaField" AS a SET "sortOrder" = v.so
+        FROM (VALUES ${Prisma.join(vals)}) AS v(id, so)
+        WHERE a.id = v.id
+      `;
     }
     revalidatePath("/admin/anketa");
     revalidatePath("/anketa");
