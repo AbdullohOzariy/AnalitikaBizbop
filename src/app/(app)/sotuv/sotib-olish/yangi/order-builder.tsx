@@ -15,7 +15,7 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Search, X, Loader2, Save, ChevronRight, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
+import { Search, X, Loader2, Save, ChevronRight, ChevronsDownUp, ChevronsUpDown, Wand2, Eraser } from "lucide-react";
 import { formatUZS } from "@/lib/format";
 import {
   suppliersForOrderAction, supplierItemsAction, createOrderAction,
@@ -257,6 +257,34 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
     });
   };
 
+  // Avto to'ldirish — min stock (kunlik sotuv × (zakaz oralig'i + lead) × XYZ buferi) va
+  // pachka/korobka asosida miqdorlarni hisoblaydi. AI EMAS — sof formula (0 token, bir zumda).
+  // Faqat BO'SH qatorlarni to'ldiradi (qo'lda kiritilganlarni saqlaydi); kerak bo'lmagan
+  // (suggested ≤ 0) SKU'larga tegmaydi — ularni menejer keyin o'zi qo'shadi/chiqaradi.
+  const autoFill = () => {
+    const m = new Map(lines);
+    let filled = 0;
+    for (const it of items) {
+      const cur = m.get(it.productId);
+      if (cur && Number(cur.qty) > 0) continue; // qo'lda kiritilgan — tegmaymiz
+      const base = it.suggested;
+      if (base <= 0) continue; // zaxira yetarli — zakaz shart emas
+      if (it.packSize && it.packSize > 0) {
+        // Pachka/korobkaga yaxlitlash: kerakli miqdordan kam bo'lmagan eng yaqin pachka soni
+        const boxes = Math.ceil(base / it.packSize);
+        m.set(it.productId, { qty: String(boxes * it.packSize), price: cur?.price ?? "", blok: String(boxes), pack: String(it.packSize), lead: cur?.lead ?? "" });
+      } else {
+        m.set(it.productId, { qty: String(Math.ceil(base)), price: cur?.price ?? "", blok: "", pack: "", lead: cur?.lead ?? "" });
+      }
+      filled++;
+    }
+    setLines(m);
+    if (filled > 0) toast.success(`${filled} ta SKU avto to'ldirildi (min stock + pachka).`);
+    else toast.info("Avto to'ldirish uchun mos SKU yo'q — zaxira yetarli yoki lead kiritilmagan.");
+  };
+
+  const clearAll = () => setLines(new Map());
+
   // Bitta SKU qatori (daraxtning bir necha joyida ishlatiladi — direct/sub ostida)
   const renderSku = (it: BuilderItem) => {
     const l = lines.get(it.productId) ?? { qty: "", price: "", blok: "", pack: "", lead: "" };
@@ -331,11 +359,20 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
           </span>
         </TableCell>
         <TableCell className="bg-primary/[0.03] px-2">
-          <Input ref={regRef(it.productId, "qty")} type="number" inputMode="decimal" value={l.qty}
-            placeholder={it.suggested > 0 ? String(it.suggested) : ""}
-            onChange={(e) => setLine(it.productId, { qty: e.target.value })}
-            onKeyDown={onEnterNext(it.productId, "qty")}
-            className="h-7 w-20 px-1.5 text-right text-xs tabular-nums" aria-label="Miqdor (dona)" />
+          <span className="flex items-center gap-1">
+            <Input ref={regRef(it.productId, "qty")} type="number" inputMode="decimal" value={l.qty}
+              placeholder={it.suggested > 0 ? String(it.suggested) : ""}
+              onChange={(e) => setLine(it.productId, { qty: e.target.value })}
+              onKeyDown={onEnterNext(it.productId, "qty")}
+              className="h-7 w-20 px-1.5 text-right text-xs tabular-nums" aria-label="Miqdor (dona)" />
+            {picked && (
+              <button type="button" onClick={() => setLine(it.productId, { qty: "" })}
+                title="Zakazdan chiqarish (0)" aria-label="Zakazdan chiqarish"
+                className="shrink-0 text-muted-foreground/40 transition-colors hover:text-destructive">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </span>
         </TableCell>
         <TableCell className="bg-primary/[0.03] px-2">
           <Input ref={regRef(it.productId, "price")} type="number" inputMode="decimal" value={l.price}
@@ -387,6 +424,14 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
         )}
         {items.length > 0 && (
           <>
+            <Button type="button" size="sm" onClick={autoFill} disabled={saving} className="h-9 gap-1.5"
+              title="Min stock, pachka/korobka va sotuv tahliliga ko'ra bo'sh miqdorlarni avtomatik to'ldiradi (AI emas — formula)">
+              <Wand2 className="h-4 w-4" /> Avto to'ldirish
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={clearAll} disabled={saving} className="h-9 gap-1.5"
+              title="Barcha kiritilgan miqdorlarni tozalaydi">
+              <Eraser className="h-4 w-4" /> Tozalash
+            </Button>
             <div className="relative min-w-56 flex-1">
               <Label className="text-xs text-muted-foreground">Qidirish</Label>
               <div className="relative">
