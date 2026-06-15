@@ -15,7 +15,7 @@ import { Pill } from "@/components/common/page";
 import { cn } from "@/lib/utils";
 import { formatUZS } from "@/lib/format";
 import {
-  ORDER_STATUSES, ORDER_STATUS_LABEL, ORDER_STATUS_TONE, TRANSITION_LABEL,
+  ORDER_STATUSES, ORDER_STATUS_LABEL, TRANSITION_LABEL,
   NEXT_STATUSES, canTransition, type OrderStatusT,
 } from "./order-status";
 import { setOrderStatusAction } from "./actions";
@@ -24,6 +24,7 @@ export type KanbanCard = {
   id: number;
   status: OrderStatusT;
   supplier: string;
+  agent: string | null; // agent (brend) nomi — bo'lsa kartada ko'rinadi
   total: number;
   count: number;
   createdBy: string;
@@ -88,6 +89,9 @@ export function KanbanBoard({ cards, role }: { cards: KanbanCard[]; role: string
                           </span>
                           <span className="shrink-0 font-mono text-[10px] text-muted-foreground">#{c.id}</span>
                         </div>
+                        {c.agent && (
+                          <p className="mt-0.5 truncate text-[11px] font-medium text-primary" title={c.agent}>{c.agent}</p>
+                        )}
                         <p className="mt-1 text-xs tabular-nums">
                           <span className="font-bold">{formatUZS(c.total, { compact: true })}</span>
                           <span className="text-muted-foreground"> · {c.count} SKU</span>

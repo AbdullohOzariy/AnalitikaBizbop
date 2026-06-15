@@ -20,11 +20,19 @@ export type OrderItemInput = {
   packSize?: number | null; // pachka hajmi (dona)
   leadTimeDays?: number | null; // zakaz berishda kiritilsa — SKU'da eslab qolinadi
 };
-export type SupplierOption = {
+export type AgentOption = {
   id: number;
   name: string;
   skuCount: number;
-  nextOrderDate: string | null; // keyingi zakaz sanasi (YYYY-MM-DD) — hint uchun
+  nextOrderDate: string | null;
+};
+export type SupplierOption = {
+  id: number;
+  name: string;
+  skuCount: number; // jami SKU (agentli + agentsiz)
+  agentlessSkuCount: number; // agentga biriktirilmagan SKU soni ("Agentsiz" zakaz uchun)
+  nextOrderDate: string | null; // supplier keyingi zakaz sanasi (YYYY-MM-DD) — hint
+  agents: AgentOption[];
 };
 export type BuilderItem = {
   productId: number;
@@ -72,29 +80,58 @@ export async function suppliersForOrderAction(): Promise<
     const user = await requireOrderCreator();
     const scope = await scopeParentIds(Number(user.id), user.role);
     if (scope !== null && scope.length === 0) return { ok: true, suppliers: [] };
+    // Supplier × agent bo'yicha SKU sonini bir so'rovda olamiz (agentsiz = agentId null)
     const grouped = await prisma.product.groupBy({
-      by: ["supplierId"],
+      by: ["supplierId", "agentId"],
       where: { supplierId: { not: null }, ...scopeProductWhere(scope) },
       _count: { _all: true },
     });
-    const ids = grouped.map((g) => g.supplierId).filter((x): x is number => x != null);
+    const ids = [...new Set(grouped.map((g) => g.supplierId).filter((x): x is number => x != null))];
+    if (ids.length === 0) return { ok: true, suppliers: [] };
+    const agentIds = [...new Set(grouped.map((g) => g.agentId).filter((x): x is number => x != null))];
     const todayD = new Date(new Date(Date.now() + 5 * 3_600_000).toISOString().slice(0, 10) + "T00:00:00.000Z");
-    const [sups, nextDays] = await Promise.all([
+    const [sups, agentsRaw, supNextDays, agentNextDays] = await Promise.all([
       prisma.supplier.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } }),
+      agentIds.length
+        ? prisma.agent.findMany({ where: { id: { in: agentIds } }, select: { id: true, name: true, supplierId: true } })
+        : Promise.resolve([] as { id: number; name: string; supplierId: number }[]),
       prisma.supplierOrderDay.groupBy({
         by: ["supplierId"],
         where: { supplierId: { in: ids }, sana: { gte: todayD } },
         _min: { sana: true },
       }),
+      agentIds.length
+        ? prisma.agentOrderDay.groupBy({ by: ["agentId"], where: { agentId: { in: agentIds }, sana: { gte: todayD } }, _min: { sana: true } })
+        : Promise.resolve([] as { agentId: number; _min: { sana: Date | null } }[]),
     ]);
-    const nextBySup = new Map(nextDays.map((r) => [r.supplierId, r._min.sana!.toISOString().slice(0, 10)]));
-    const byId = new Map(sups.map((s) => [s.id, s]));
-    const suppliers = grouped
-      .filter((g) => g.supplierId != null)
-      .map((g) => {
-        const s = byId.get(g.supplierId!);
-        return { id: g.supplierId!, name: s?.name ?? "—", skuCount: g._count._all, nextOrderDate: nextBySup.get(g.supplierId!) ?? null };
-      })
+    const supNextBy = new Map(supNextDays.map((r) => [r.supplierId, r._min.sana!.toISOString().slice(0, 10)]));
+    const agentNextBy = new Map(agentNextDays.map((r) => [r.agentId, r._min.sana!.toISOString().slice(0, 10)]));
+    const supName = new Map(sups.map((s) => [s.id, s.name]));
+
+    const agentCount = new Map<number, number>(); // agentId → SKU soni
+    const supTotal = new Map<number, number>();
+    const supAgentless = new Map<number, number>();
+    for (const g of grouped) {
+      const sid = g.supplierId!;
+      supTotal.set(sid, (supTotal.get(sid) ?? 0) + g._count._all);
+      if (g.agentId == null) supAgentless.set(sid, (supAgentless.get(sid) ?? 0) + g._count._all);
+      else agentCount.set(g.agentId, (agentCount.get(g.agentId) ?? 0) + g._count._all);
+    }
+    const agentsBySup = new Map<number, AgentOption[]>();
+    for (const a of agentsRaw) {
+      const arr = agentsBySup.get(a.supplierId) ?? [];
+      arr.push({ id: a.id, name: a.name, skuCount: agentCount.get(a.id) ?? 0, nextOrderDate: agentNextBy.get(a.id) ?? null });
+      agentsBySup.set(a.supplierId, arr);
+    }
+    const suppliers: SupplierOption[] = ids
+      .map((sid) => ({
+        id: sid,
+        name: supName.get(sid) ?? "—",
+        skuCount: supTotal.get(sid) ?? 0,
+        agentlessSkuCount: supAgentless.get(sid) ?? 0,
+        nextOrderDate: supNextBy.get(sid) ?? null,
+        agents: (agentsBySup.get(sid) ?? []).sort((a, b) => a.name.localeCompare(b.name, "uz")),
+      }))
       .sort((a, b) => a.name.localeCompare(b.name, "uz"));
     return { ok: true, suppliers };
   } catch (err) {
@@ -104,18 +141,26 @@ export async function suppliersForOrderAction(): Promise<
 
 /** Yetkazib beruvchi × qamrov SKU'lari + qoldiq/sotuv asosida taklif miqdori. */
 export async function supplierItemsAction(
-  supplierId: number
+  supplierId: number,
+  agentId?: number | null
 ): Promise<{ ok: true; items: BuilderItem[]; orderGap: number } | { ok: false; error: string }> {
   try {
     const user = await requireOrderCreator();
     const sid = z.coerce.number().int().positive().parse(supplierId);
+    // agentId berilsa — faqat shu agent SKU'lari; berilmasa — agentsiz (biriktirilmagan) SKU'lar
+    const aid = agentId != null ? z.coerce.number().int().positive().parse(agentId) : null;
     const scope = await scopeParentIds(Number(user.id), user.role);
     if (scope !== null && scope.length === 0) return { ok: true, items: [], orderGap: 1 };
     // Joriy holat Product'ga denormalizatsiya qilingan (har yuklashda yangilanadi) —
     // ProductSales tarixini skanlamaymiz, bir zumda o'qiymiz.
+    // Zakaz oralig'i (orderGap) manbai: agent bo'lsa AgentOrderDay, aks holda SupplierOrderDay.
+    const futureCutoff = new Date(new Date(Date.now() + 5 * 3_600_000).toISOString().slice(0, 10) + "T00:00:00.000Z");
+    const futureDaysPromise = aid != null
+      ? prisma.agentOrderDay.findMany({ where: { agentId: aid, sana: { gte: futureCutoff } }, orderBy: { sana: "asc" }, take: 6, select: { sana: true } })
+      : prisma.supplierOrderDay.findMany({ where: { supplierId: sid, sana: { gte: futureCutoff } }, orderBy: { sana: "asc" }, take: 6, select: { sana: true } });
     const [products, futureOrderDays, range] = await Promise.all([
       prisma.product.findMany({
-        where: { supplierId: sid, ...scopeProductWhere(scope) },
+        where: { supplierId: sid, ...(aid != null ? { agentId: aid } : { agentId: null }), ...scopeProductWhere(scope) },
         select: {
           id: true, code: true, name: true, currentStock: true, currentSold: true,
           abcClass: true, xyzClass: true, leadTimeDays: true, archivedAt: true, packSize: true, purchasePrice: true,
@@ -130,12 +175,7 @@ export async function supplierItemsAction(
         orderBy: { name: "asc" },
         take: 2000,
       }),
-      prisma.supplierOrderDay.findMany({
-        where: { supplierId: sid, sana: { gte: new Date(new Date(Date.now() + 5 * 3_600_000).toISOString().slice(0, 10) + "T00:00:00.000Z") } },
-        orderBy: { sana: "asc" },
-        take: 6,
-        select: { sana: true },
-      }),
+      futureDaysPromise,
       getDefaultRange(),
     ]);
 
@@ -239,18 +279,28 @@ async function scopeError(user: ActorUser, productIds: number[]): Promise<string
 /** Yangi zakaz (qoralama) yaratadi. Yaratilgan id'ni qaytaradi. */
 export async function createOrderAction(input: {
   supplierId: number;
+  agentId?: number | null;
   items: OrderItemInput[];
   note?: string;
 }): Promise<{ ok: true; id: number } | { ok: false; error: string }> {
   try {
     const user = await requireOrderCreator();
     const supplierId = z.coerce.number().int().positive().parse(input.supplierId);
+    const agentId = input.agentId != null ? z.coerce.number().int().positive().parse(input.agentId) : null;
     const items = z.array(itemSchema).min(1, "Kamida bitta mahsulot kerak").parse(input.items);
     const scopeErr = await scopeError(user, items.map((i) => i.productId));
     if (scopeErr) return { ok: false, error: scopeErr };
+    // Agent supplierga tegishlimi + barcha SKU shu agentniki (zakaz har agentga alohida)
+    if (agentId != null) {
+      const agent = await prisma.agent.findUnique({ where: { id: agentId }, select: { supplierId: true } });
+      if (!agent || agent.supplierId !== supplierId) return { ok: false, error: "Agent bu yetkazib beruvchiga tegishli emas." };
+      const mismatch = await prisma.product.count({ where: { id: { in: items.map((i) => i.productId) }, NOT: { agentId } } });
+      if (mismatch > 0) return { ok: false, error: "Ba'zi SKU'lar tanlangan agentga tegishli emas." };
+    }
     const order = await prisma.purchaseOrder.create({
       data: {
         supplierId,
+        agentId,
         createdById: Number(user.id),
         note: input.note?.trim() || null,
         status: "DRAFT",

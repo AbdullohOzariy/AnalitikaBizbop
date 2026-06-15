@@ -17,6 +17,7 @@ export default async function YangiZakazPage({
   if (!session?.user || !canManageOrders(role)) redirect("/dashboard-v2");
   const sp = await searchParams;
   const initialSupplierId = sp.supplier ? Number(sp.supplier) || undefined : undefined;
+  const initialAgentId = sp.agent ? Number(sp.agent) || undefined : undefined;
 
   return (
     <div className="space-y-5">
@@ -25,7 +26,7 @@ export default async function YangiZakazPage({
         title="Yangi zakaz"
         description="Yetkazib beruvchini tanlang — SKU'lar qoldiq/sotuv asosida taklif bilan chiqadi"
       />
-      <OrderBuilder initialSupplierId={initialSupplierId} />
+      <OrderBuilder initialSupplierId={initialSupplierId} initialAgentId={initialAgentId} />
     </div>
   );
 }

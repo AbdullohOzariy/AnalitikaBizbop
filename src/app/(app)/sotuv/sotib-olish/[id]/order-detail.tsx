@@ -25,6 +25,7 @@ export type OrderData = {
   status: string;
   note: string;
   supplier: string;
+  agent: { name: string; phone: string | null; contactName: string | null } | null;
   createdBy: string;
   createdAt: string;
   sentAt: string | null;
@@ -126,6 +127,14 @@ export function OrderDetail({ order, role, isOwner }: { order: OrderData; role: 
       {/* Sarlavha + holat + amallar */}
       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card px-4 py-3">
         <span className="inline-flex items-center gap-1.5 text-sm font-medium"><Truck className="h-4 w-4 text-muted-foreground" /> {order.supplier}</span>
+        {order.agent && (
+          <span className="inline-flex items-center gap-1 text-sm font-medium text-primary">
+            · {order.agent.name}
+            {(order.agent.contactName || order.agent.phone) && (
+              <span className="text-xs font-normal text-muted-foreground">({[order.agent.contactName, order.agent.phone].filter(Boolean).join(" · ")})</span>
+            )}
+          </span>
+        )}
         <Pill tone={ORDER_STATUS_TONE[order.status] ?? "muted"}>{ORDER_STATUS_LABEL[order.status] ?? order.status}</Pill>
         <span className="text-xs text-muted-foreground">Yaratdi: {order.createdBy} · {fmtDate(order.createdAt)}</span>
         {order.sentAt && <span className="text-xs text-muted-foreground">Yuborildi: {fmtDate(order.sentAt)}</span>}

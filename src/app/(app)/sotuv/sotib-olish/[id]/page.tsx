@@ -25,6 +25,7 @@ export default async function ZakazDetailPage({
       id: true, status: true, note: true, createdAt: true, sentAt: true, receivedAt: true,
       createdById: true,
       supplier: { select: { name: true } },
+      agent: { select: { name: true, phone: true, contactName: true } },
       createdBy: { select: { name: true } },
       items: {
         select: { productId: true, quantity: true, price: true, packCount: true, packSize: true, factQty: true, product: { select: { code: true, name: true, leadTimeDays: true, category: { select: { name: true } } } } },
@@ -40,6 +41,7 @@ export default async function ZakazDetailPage({
     status: order.status,
     note: order.note ?? "",
     supplier: order.supplier.name,
+    agent: order.agent ? { name: order.agent.name, phone: order.agent.phone, contactName: order.agent.contactName } : null,
     createdBy: order.createdBy.name,
     createdAt: order.createdAt.toISOString(),
     sentAt: order.sentAt?.toISOString() ?? null,
@@ -60,7 +62,7 @@ export default async function ZakazDetailPage({
 
   return (
     <div className="space-y-5">
-      <PageHeader icon={ShoppingCart} title={`Zakaz #${order.id}`} description={order.supplier.name} />
+      <PageHeader icon={ShoppingCart} title={`Zakaz #${order.id}`} description={order.agent ? `${order.supplier.name} · ${order.agent.name}` : order.supplier.name} />
       <OrderDetail order={data} role={role ?? ""} isOwner={order.createdById === userId} />
     </div>
   );

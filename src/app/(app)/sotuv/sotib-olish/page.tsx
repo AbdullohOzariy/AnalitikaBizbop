@@ -32,6 +32,7 @@ export default async function SotibOlishPage() {
     select: {
       id: true, status: true, createdAt: true, createdById: true,
       supplier: { select: { name: true } },
+      agent: { select: { name: true } },
       createdBy: { select: { name: true } },
       items: { select: { quantity: true, price: true } },
     },
@@ -43,6 +44,7 @@ export default async function SotibOlishPage() {
     id: o.id,
     status: o.status as OrderStatusT,
     supplier: o.supplier.name,
+    agent: o.agent?.name ?? null,
     total: o.items.reduce((s, i) => s + Number(i.quantity) * Number(i.price), 0),
     count: o.items.length,
     createdBy: o.createdBy.name,

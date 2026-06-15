@@ -39,6 +39,7 @@ export async function GET(
     select: {
       id: true, status: true, note: true, createdAt: true, sentAt: true, createdById: true,
       supplier: { select: { name: true, phone: true, contactName: true } },
+      agent: { select: { name: true, phone: true, contactName: true } },
       createdBy: { select: { name: true } },
       items: {
         select: {
@@ -97,9 +98,17 @@ export async function GET(
 
   const rx = W / 2 + 10;
   doc.font(FONT_BOLD).fontSize(9).fillColor("#888").text("YETKAZIB BERUVCHI", rx, y);
-  doc.font(FONT_BOLD).fontSize(11).fillColor("#111").text(order.supplier.name, rx, y + 13, { width: W - M - rx });
-  const supInfo = [order.supplier.contactName, order.supplier.phone].filter(Boolean).join(" · ");
-  if (supInfo) doc.font(FONT).fontSize(9).fillColor("#444").text(supInfo, rx, y + 28, { width: W - M - rx });
+  if (order.agent) {
+    // Agent (brend) zakazi — agent nomi/kontakti birinchi, postavshik kichik subtitr
+    doc.font(FONT_BOLD).fontSize(11).fillColor("#111").text(order.agent.name, rx, y + 13, { width: W - M - rx });
+    const agInfo = [order.agent.contactName, order.agent.phone].filter(Boolean).join(" · ");
+    if (agInfo) doc.font(FONT).fontSize(9).fillColor("#444").text(agInfo, rx, y + 28, { width: W - M - rx });
+    doc.font(FONT).fontSize(8).fillColor("#888").text(`Postavshik: ${order.supplier.name}`, rx, y + (agInfo ? 41 : 28), { width: W - M - rx });
+  } else {
+    doc.font(FONT_BOLD).fontSize(11).fillColor("#111").text(order.supplier.name, rx, y + 13, { width: W - M - rx });
+    const supInfo = [order.supplier.contactName, order.supplier.phone].filter(Boolean).join(" · ");
+    if (supInfo) doc.font(FONT).fontSize(9).fillColor("#444").text(supInfo, rx, y + 28, { width: W - M - rx });
+  }
 
   y = 150;
 
@@ -157,7 +166,7 @@ export async function GET(
   doc.end();
   const buffer = await done;
 
-  const safeName = order.supplier.name.replace(/[^\w\d-]+/g, "_").slice(0, 40);
+  const safeName = `${order.supplier.name}${order.agent ? "-" + order.agent.name : ""}`.replace(/[^\w\d-]+/g, "_").slice(0, 50);
   return new NextResponse(new Uint8Array(buffer), {
     headers: {
       "Content-Type": "application/pdf",

@@ -32,10 +32,12 @@ type SubNode = { id: number; name: string; sort: number; items: BuilderItem[] };
 type CatNode = { id: number; name: string; sort: number; subs: SubNode[]; direct: BuilderItem[] };
 type GroupNode = { id: number; name: string; sort: number; cats: CatNode[]; skuCount: number };
 
-export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number }) {
+export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSupplierId?: number; initialAgentId?: number }) {
   const router = useRouter();
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
   const [supplierId, setSupplierId] = useState("");
+  // Agent tanlovi: "" — tanlanmagan, "none" — agentsiz (umumiy), "<id>" — agent
+  const [agentSel, setAgentSel] = useState("");
   const [items, setItems] = useState<BuilderItem[]>([]);
   const [lines, setLines] = useState<Map<number, Line>>(new Map());
   const [orderGap, setOrderGap] = useState(1);
@@ -49,13 +51,14 @@ export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number
   const [closedC, setClosedC] = useState<Set<string>>(new Set()); // `${groupId}:${catId}` — sintetik -1 kategoriya guruhlar aro to'qnashmasin
   const [closedS, setClosedS] = useState<Set<number>>(new Set());
 
-  const onSupplier = (v: string) => {
-    setSupplierId(v);
+  const resetLists = () => {
     setItems([]); setLines(new Map()); setQ("");
     setClosedG(new Set()); setClosedC(new Set()); setClosedS(new Set());
-    if (!v) return;
+  };
+
+  const loadItems = (sid: number, aid: number | null) => {
     startItems(async () => {
-      const res = await supplierItemsAction(Number(v));
+      const res = await supplierItemsAction(sid, aid);
       if (res.ok) {
         setItems(res.items);
         setOrderGap(res.orderGap);
@@ -71,14 +74,38 @@ export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number
     });
   };
 
+  const onSupplier = (v: string) => {
+    setSupplierId(v);
+    setAgentSel("");
+    resetLists();
+    if (!v) return;
+    // Agentsiz supplier — SKU'larni darhol yuklaymiz; agentli bo'lsa agent tanlashni kutamiz
+    const sup = suppliers.find((s) => String(s.id) === v);
+    if (sup && sup.agents.length === 0) loadItems(Number(v), null);
+  };
+
+  const onAgent = (v: string) => {
+    setAgentSel(v);
+    resetLists();
+    if (!v || !supplierId) return;
+    loadItems(Number(supplierId), v === "none" ? null : Number(v));
+  };
+
   useEffect(() => {
     startSup(async () => {
       const res = await suppliersForOrderAction();
       if (res.ok) {
         setSuppliers(res.suppliers);
-        // "Bugun" sahifasidan kelganda yetkazib beruvchi oldindan tanlanadi
-        if (initialSupplierId && res.suppliers.some((s) => s.id === initialSupplierId)) {
-          onSupplier(String(initialSupplierId));
+        // "Bugun" sahifasidan kelganda yetkazib beruvchi (+agent) oldindan tanlanadi
+        const sup = initialSupplierId ? res.suppliers.find((s) => s.id === initialSupplierId) : undefined;
+        if (sup) {
+          setSupplierId(String(sup.id));
+          if (initialAgentId && sup.agents.some((a) => a.id === initialAgentId)) {
+            setAgentSel(String(initialAgentId));
+            loadItems(sup.id, initialAgentId);
+          } else if (sup.agents.length === 0) {
+            loadItems(sup.id, null);
+          }
         }
       } else toast.error(res.error);
     });
@@ -201,27 +228,34 @@ export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number
   // Tanlangan yetkazib beruvchining zakaz kunlari hinti (profilda belgilanadi).
   // Joriy vaqt faqat mount'da o'qiladi (render purity); hisob arzon — memo shart emas.
   const [hintNow] = useState(() => new Date());
+  const selectedSupplier = useMemo(() => suppliers.find((s) => String(s.id) === supplierId), [suppliers, supplierId]);
   const orderDayHint = (() => {
-    const sup = suppliers.find((s) => String(s.id) === supplierId);
-    if (!sup?.nextOrderDate) return null;
+    const sup = selectedSupplier;
+    if (!sup) return null;
+    // Agent tanlangan bo'lsa — agentning kunlari, aks holda supplier kunlari
+    const ag = agentSel && agentSel !== "none" ? sup.agents.find((a) => String(a.id) === agentSel) : null;
+    const nextOrderDate = ag ? ag.nextOrderDate : sup.nextOrderDate;
+    if (!nextOrderDate) return null;
     const pad = (n: number) => String(n).padStart(2, "0");
     const todayStr = `${hintNow.getFullYear()}-${pad(hintNow.getMonth() + 1)}-${pad(hintNow.getDate())}`;
     const tomorrowD = new Date(hintNow.getFullYear(), hintNow.getMonth(), hintNow.getDate() + 1);
     const tomorrowStr = `${tomorrowD.getFullYear()}-${pad(tomorrowD.getMonth() + 1)}-${pad(tomorrowD.getDate())}`;
-    const [, m, d] = sup.nextOrderDate.split("-");
+    const [, m, d] = nextOrderDate.split("-");
     return {
-      today: sup.nextOrderDate === todayStr,
-      label: sup.nextOrderDate === todayStr
+      today: nextOrderDate === todayStr,
+      label: nextOrderDate === todayStr
         ? "Bugun zakaz kuni"
-        : `Keyingi zakaz kuni: ${sup.nextOrderDate === tomorrowStr ? "ertaga" : ""} (${d}.${m})`,
+        : `Keyingi zakaz kuni: ${nextOrderDate === tomorrowStr ? "ertaga" : ""} (${d}.${m})`,
     };
   })();
 
   const save = () => {
     if (!supplierId) { toast.error("Yetkazib beruvchi tanlang."); return; }
+    if (selectedSupplier && selectedSupplier.agents.length > 0 && agentSel === "") { toast.error("Agent (brend) tanlang."); return; }
     if (chosen.length === 0) { toast.error("Kamida bitta SKU uchun miqdor kiriting."); return; }
+    const agentId = agentSel && agentSel !== "none" ? Number(agentSel) : null;
     startSave(async () => {
-      const res = await createOrderAction({ supplierId: Number(supplierId), items: chosen, note });
+      const res = await createOrderAction({ supplierId: Number(supplierId), agentId, items: chosen, note });
       if (res.ok) { toast.success("Zakaz yaratildi (qoralama)."); router.push(`/sotuv/sotib-olish/${res.id}`); }
       else toast.error(res.error);
     });
@@ -337,6 +371,24 @@ export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number
             </SelectContent>
           </Select>
         </div>
+        {selectedSupplier && selectedSupplier.agents.length > 0 && (
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Agent (brend)</Label>
+            <Select value={agentSel} onValueChange={(v) => onAgent(typeof v === "string" ? v : "")} disabled={loadingItems || saving}>
+              <SelectTrigger className="h-9 w-60 text-sm">
+                <SelectValue placeholder="Agent tanlang…" />
+              </SelectTrigger>
+              <SelectContent>
+                {selectedSupplier.agents.map((a) => (
+                  <SelectItem key={a.id} value={String(a.id)}>{a.name} · {a.skuCount} SKU</SelectItem>
+                ))}
+                {selectedSupplier.agentlessSkuCount > 0 && (
+                  <SelectItem value="none">Agentsiz (umumiy) · {selectedSupplier.agentlessSkuCount} SKU</SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
         {items.length > 0 && (
           <>
             <div className="relative min-w-56 flex-1">
@@ -376,8 +428,10 @@ export function OrderBuilder({ initialSupplierId }: { initialSupplierId?: number
         <p className="flex items-center gap-1.5 py-6 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> SKU'lar yuklanmoqda…</p>
       ) : !supplierId ? (
         <p className="py-6 text-center text-sm text-muted-foreground">Boshlash uchun yetkazib beruvchi tanlang.</p>
+      ) : selectedSupplier && selectedSupplier.agents.length > 0 && agentSel === "" ? (
+        <p className="py-6 text-center text-sm text-muted-foreground">Agent (brend) tanlang — SKU&apos;lar shundan keyin chiqadi.</p>
       ) : items.length === 0 ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">Bu yetkazib beruvchida sizning kategoriyangizда SKU yo'q.</p>
+        <p className="py-6 text-center text-sm text-muted-foreground">Bu yerda sizning kategoriyangizda SKU yo&apos;q.</p>
       ) : (
         <>
           <div className="overflow-hidden rounded-xl border border-border bg-card">
