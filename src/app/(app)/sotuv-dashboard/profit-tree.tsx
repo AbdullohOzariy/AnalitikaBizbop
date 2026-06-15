@@ -13,17 +13,26 @@ function netClass(n: number) {
   return n > 0 ? "text-emerald-600 dark:text-emerald-400" : n < 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground";
 }
 
-// Sotuv | Tannarx | Marja | Ustama | Chiqim | Foyda
-function Cells({ sales, cost, gross, writeoff, net }: { sales: number; cost: number; gross: number; writeoff: number; net: number }) {
+// Sotuv | Tannarx | Marja | Reja | Farq | Ustama | Chiqim | Foyda
+function Cells({ sales, cost, gross, writeoff, net, planMargin }: { sales: number; cost: number; gross: number; writeoff: number; net: number; planMargin?: number | null }) {
   // Ustama % = (sotuv − tannarx) ÷ tannarx — "tannarx ustiga necha foiz qo'yilgan".
   // Marja'dan farqi: marja sotuvga nisbatan, ustama tannarxga nisbatan
   // (masalan, tannarx 100, sotuv 130 → marja 23.1%, ustama 30%).
   const ustama = cost > 0 ? (gross / cost) * 100 : null;
+  const marja = sales > 0 ? (gross / sales) * 100 : null;
+  // Farq = haqiqiy marja − reja marja (foiz punkt); reja faqat subkatlarda bo'ladi
+  const farq = marja != null && planMargin != null ? marja - planMargin : null;
   return (
     <>
       <td className="px-2 py-1.5 text-right tabular-nums">{money(sales)}</td>
       <td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground">{money(cost)}</td>
-      <td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground">{sales > 0 ? `${((gross / sales) * 100).toFixed(1)}%` : "—"}</td>
+      <td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground">{marja != null ? `${marja.toFixed(1)}%` : "—"}</td>
+      <td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground">{planMargin != null ? `${planMargin.toFixed(1)}%` : "—"}</td>
+      <td className={cn("px-2 py-1.5 text-right font-semibold tabular-nums",
+        farq == null ? "text-muted-foreground/40" : farq >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}
+        title={farq != null ? (farq >= 0 ? "Reja bajarilmoqda" : "Rejadan past") : undefined}>
+        {farq == null ? "—" : `${farq >= 0 ? "+" : ""}${farq.toFixed(1)}`}
+      </td>
       <td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground">{ustama != null ? `${ustama.toFixed(1)}%` : "—"}</td>
       <td className="px-2 py-1.5 text-right tabular-nums text-red-600/80 dark:text-red-400/80">{writeoff > 0 ? `−${money(writeoff)}` : "—"}</td>
       <td className={cn("px-3 py-1.5 text-right font-semibold tabular-nums", netClass(net))}>{money(net)}</td>
@@ -39,13 +48,15 @@ export function ProfitTree({ tree }: { tree: ProfitTree }) {
 
   return (
     <div className="overflow-x-auto rounded-xl border border-border">
-      <table className="w-full min-w-[760px] text-sm">
+      <table className="w-full min-w-[900px] text-sm">
         <thead>
           <tr className="border-b border-border bg-muted text-xs uppercase tracking-wider text-muted-foreground">
             <th className="px-3 py-2.5 text-left font-semibold">Bo&apos;lim / Kategoriya / Subkat</th>
             <th className="px-2 py-2.5 text-right font-semibold">Sotuv</th>
             <th className="px-2 py-2.5 text-right font-semibold">Tannarx</th>
             <th className="px-2 py-2.5 text-right font-semibold">Marja %</th>
+            <th className="px-2 py-2.5 text-right font-semibold" title="Subkat reja marjasi (Rejalar bo'limidan)">Reja %</th>
+            <th className="px-2 py-2.5 text-right font-semibold" title="Farq = haqiqiy marja − reja (foiz punkt); + reja bajarilmoqda, − rejadan past">Farq</th>
             <th className="px-2 py-2.5 text-right font-semibold" title="Ustama = (sotuv − tannarx) ÷ tannarx — tannarx ustiga necha % qo'yilgan">Ustama %</th>
             <th className="px-2 py-2.5 text-right font-semibold">Chiqim</th>
             <th className="px-3 py-2.5 text-right font-semibold">Foyda</th>
@@ -110,7 +121,7 @@ export function ProfitTree({ tree }: { tree: ProfitTree }) {
                       {cOpen && c.subcats.map((s) => (
                         <tr key={s.id} className="border-b border-border/30 hover:bg-muted/10">
                           <td className="py-1.5 pl-16 pr-3 text-foreground/90">{s.name}</td>
-                          <Cells sales={s.sales} cost={s.cost} gross={s.gross} writeoff={s.writeoff} net={s.net} />
+                          <Cells sales={s.sales} cost={s.cost} gross={s.gross} writeoff={s.writeoff} net={s.net} planMargin={s.planMargin} />
                         </tr>
                       ))}
                     </FragmentGroup>

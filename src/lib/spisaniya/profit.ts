@@ -23,6 +23,7 @@ export type ProfitNode = {
   writeoff: number;
   gross: number; // sotuv − tannarx
   net: number; // gross − chiqim
+  planMargin?: number | null; // reja marja % (faqat subkatlarda; filial tanlansa o'shaniki, aks holda filiallar o'rtachasi)
 };
 export type ProfitCat = ProfitNode & { subcats: ProfitNode[] };
 export type ProfitGroup = ProfitNode & { cats: ProfitCat[] };
@@ -95,6 +96,16 @@ async function _computeProfitTree(
   const salesByCid = new Map<number, { sales: number; cost: number }>();
   for (const r of salesRows) salesByCid.set(Number(r.cid), { sales: Number(r.sales), cost: Number(r.cost) });
 
+  // Subkat reja marjasi: filial tanlansa o'shaniki, aks holda filiallar reja %'ining o'rtachasi
+  const planByCid = new Map<number, number>();
+  if (branchId) {
+    const rows = await prisma.marginPlan.findMany({ where: { branchId }, select: { categoryId: true, marginPct: true } });
+    for (const r of rows) planByCid.set(r.categoryId, Number(r.marginPct));
+  } else {
+    const rows = await prisma.marginPlan.groupBy({ by: ["categoryId"], _avg: { marginPct: true } });
+    for (const r of rows) if (r._avg.marginPct != null) planByCid.set(r.categoryId, Number(r._avg.marginPct));
+  }
+
   let tS = 0, tC = 0, tW = 0;
   const outGroups: ProfitGroup[] = groups.map((g) => {
     let gS = 0, gC = 0, gW = 0;
@@ -104,7 +115,7 @@ async function _computeProfitTree(
         const sv = salesByCid.get(s.id) ?? { sales: 0, cost: 0 };
         const wo = woByCid.get(s.id) ?? 0;
         cS += sv.sales; cC += sv.cost; cW += wo;
-        return finalize({ id: s.id, name: s.name, sales: sv.sales, cost: sv.cost, writeoff: wo });
+        return { ...finalize({ id: s.id, name: s.name, sales: sv.sales, cost: sv.cost, writeoff: wo }), planMargin: planByCid.get(s.id) ?? null };
       });
       // Kategoriyaning o'ziga (top-level cid) to'g'ridan-to'g'ri bog'langan chiqim/sotuv
       const catDirectWo = woByCid.get(c.id) ?? 0;
@@ -138,7 +149,7 @@ export function computeProfitTree(range: ChiqimRange, branchId?: number): Promis
         : undefined;
       return _computeProfitTree(range, branchId, branchName);
     },
-    ["computeProfitTree_v2", isoDay(range.start), isoDay(range.end), branchId ? String(branchId) : "all"],
+    ["computeProfitTree_v3", isoDay(range.start), isoDay(range.end), branchId ? String(branchId) : "all"],
     // revalidate: false EMAS — chiqim komponenti bizbop (bot) bazasidan keladi va
     // u yerdagi yozuvlar revalidateTag chaqirmaydi; 5 daqiqalik yangilanish yetarli.
     { tags: [ANALYTICS_CACHE_TAG], revalidate: 300 }
