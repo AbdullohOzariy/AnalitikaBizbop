@@ -33,9 +33,6 @@ export default async function UploadPage() {
     include: {
       branch: { select: { name: true } },
       uploadedBy: { select: { name: true, email: true } },
-      _count: {
-        select: { sales: true, metrics: true, visits: true },
-      },
     },
   });
 
@@ -92,10 +89,6 @@ export default async function UploadPage() {
                   </TableHeader>
                   <TableBody>
                     {files.map((f) => {
-                      const rowCount =
-                        f._count.sales +
-                        f._count.metrics +
-                        f._count.visits;
                       return (
                         <TableRow key={f.id}>
                           <TableCell className="font-medium">
@@ -111,7 +104,7 @@ export default async function UploadPage() {
                               ? formatDateRangeUZ(f.periodStart, f.periodEnd)
                               : "—"}
                           </TableCell>
-                          <TableCell className="text-right tabular-nums">{rowCount}</TableCell>
+                          <TableCell className="text-right tabular-nums">{f.rowCount.toLocaleString("uz-UZ")}</TableCell>
                           <TableCell>
                             <div className="text-sm font-medium text-foreground">
                               {f.uploadedBy.name?.trim() || f.uploadedBy.email}

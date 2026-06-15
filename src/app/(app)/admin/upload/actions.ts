@@ -324,6 +324,8 @@ async function uploadV3(
   const uniqueAliases = [
     ...new Set(result.productRows.map((r) => r.branchAlias)),
   ];
+  // Fayldagi qator soni = noyob SKU soni (Excel'da har SKU bitta qator; filiallar ustun)
+  const uniqueProdCount = new Set(result.productRows.map((r) => r.productCode)).size;
   const aliasToBranchId = new Map<string, number>();
   for (const alias of uniqueAliases) {
     const resolved = await resolveBranchWithAI(alias, AliasSource.SALES);
@@ -347,7 +349,7 @@ async function uploadV3(
       periodStart: result.periodStart,
       periodEnd: result.periodEnd,
       templateVersion: "v3",
-      rowCount: result.productRows.length,
+      rowCount: uniqueProdCount,
       status: UploadStatus.FAILED,
       uploadedById: Number(user.id),
     },
@@ -564,8 +566,6 @@ async function uploadV3(
       await updateProductMatrixClasses();
       await warmAnalyticsCaches("upload");
     });
-
-  const uniqueProdCount = new Set(result.productRows.map((r) => r.productCode)).size;
 
   // Master bilan farqlar — hisobot (master O'ZGARTIRILMADI)
   const review: string[] = [];
