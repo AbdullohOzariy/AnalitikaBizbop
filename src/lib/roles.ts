@@ -27,9 +27,9 @@ export const canSeeAnalytics = (r: R): boolean =>
 /** Kategoriya menejerlari boshi. */
 export const isHeadCatManager = (r: R): boolean => r === "HEAD_CAT_MANAGER";
 
-/** Menejer ishi (zakaz yaratish/yuritish): menejer, boshi yoki SYSTEM_ADMIN. */
+/** Zakaz yaratish/yuritish: menejer, boshi, supplychain yoki SYSTEM_ADMIN. */
 export const canManageOrders = (r: R): boolean =>
-  r === "SYSTEM_ADMIN" || r === "CAT_MANAGER" || r === "HEAD_CAT_MANAGER";
+  r === "SYSTEM_ADMIN" || r === "CAT_MANAGER" || r === "HEAD_CAT_MANAGER" || r === "SUPPLYCHAIN";
 
 /** Anketalarni ko'rib tasdiqlash — Bo'lim boshlig'i (ADMIN), Supplychain, SYSTEM_ADMIN. */
 export const canReviewAnketa = (r: R): boolean =>

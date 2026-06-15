@@ -76,9 +76,11 @@ export function canTransition(role: R, from: OrderStatusT, to: OrderStatusT, isO
       (from === "ACCEPTED" && to === "RECEIVED")
     );
   }
-  // Supplychain: tasdiqlash → yuborish → qabul → yetib keldi / qaytarish
+  // Supplychain: o'z zakazini tasdiqqa yuboradi (o'zi yaratgan bo'lsa) +
+  // tasdiqlash → yuborish → qabul → yetib keldi / qaytarish
   if (role === "SUPPLYCHAIN") {
     return (
+      (from === "DRAFT" && to === "PENDING" && isOwner) ||
       (from === "PENDING" && (to === "APPROVED" || to === "DRAFT")) ||
       (from === "APPROVED" && (to === "SENT" || to === "PENDING")) ||
       (from === "SENT" && (to === "ACCEPTED" || to === "RETURNED")) ||
@@ -94,7 +96,7 @@ export function canEditItems(role: R, status: OrderStatusT, isOwner: boolean): b
   if (role === "SYSTEM_ADMIN" || role === "ADMIN") return status !== "RECEIVED";
   if (role === "CAT_MANAGER") return isOwner && status === "DRAFT";
   if (role === "HEAD_CAT_MANAGER") return status === "DRAFT";
-  if (role === "SUPPLYCHAIN") return status === "PENDING" || status === "APPROVED";
+  if (role === "SUPPLYCHAIN") return (status === "DRAFT" && isOwner) || status === "PENDING" || status === "APPROVED";
   return false;
 }
 

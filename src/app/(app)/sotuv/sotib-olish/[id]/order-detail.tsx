@@ -29,15 +29,21 @@ export type OrderData = {
   createdAt: string;
   sentAt: string | null;
   receivedAt: string | null;
-  items: { productId: number; code: number; name: string; sub: string | null; quantity: number; price: number; packCount: number | null; packSize: number | null; factQty: number | null }[];
+  items: { productId: number; code: number; name: string; sub: string | null; quantity: number; price: number; packCount: number | null; packSize: number | null; lead: number | null; factQty: number | null }[];
 };
 
-type Line = { qty: string; price: string };
+// lead — SKU lead time (kun, Product'ga saqlanadi); pack — pachkadagi dona soni (packSize)
+type Line = { qty: string; price: string; lead: string; pack: string };
 
 export function OrderDetail({ order, role, isOwner }: { order: OrderData; role: string; isOwner: boolean }) {
   const router = useRouter();
   const [lines, setLines] = useState<Map<number, Line>>(
-    () => new Map(order.items.map((i) => [i.productId, { qty: String(i.quantity), price: String(i.price) }]))
+    () => new Map(order.items.map((i) => [i.productId, {
+      qty: String(i.quantity),
+      price: String(i.price),
+      lead: i.lead != null ? String(i.lead) : "",
+      pack: i.packSize != null ? String(i.packSize) : "",
+    }]))
   );
   const [facts, setFacts] = useState<Map<number, string>>(
     () => new Map(order.items.map((i) => [i.productId, i.factQty != null ? String(i.factQty) : ""]))
@@ -65,7 +71,7 @@ export function OrderDetail({ order, role, isOwner }: { order: OrderData; role: 
     });
 
   const setLine = (pid: number, patch: Partial<Line>) =>
-    setLines((prev) => { const n = new Map(prev); const cur = n.get(pid) ?? { qty: "", price: "" }; n.set(pid, { ...cur, ...patch }); return n; });
+    setLines((prev) => { const n = new Map(prev); const cur = n.get(pid) ?? { qty: "", price: "", lead: "", pack: "" }; n.set(pid, { ...cur, ...patch }); return n; });
 
   const items = order.items;
   const total = useMemo(() => {
@@ -76,7 +82,22 @@ export function OrderDetail({ order, role, isOwner }: { order: OrderData; role: 
 
   const saveItems = () => {
     const payload = items
-      .map((i) => { const l = lines.get(i.productId)!; const qty = Number(l.qty) || 0; return { productId: i.productId, quantity: qty, price: Number(l.price) || 0, packCount: qty === i.quantity ? i.packCount : null, packSize: i.packSize }; })
+      .map((i) => {
+        const l = lines.get(i.productId)!;
+        const qty = Number(l.qty) || 0;
+        const pack = Number(l.pack) > 0 ? Number(l.pack) : null;
+        const leadN = Number(l.lead);
+        const lead = l.lead.trim() !== "" && Number.isInteger(leadN) && leadN >= 0 ? leadN : null;
+        return {
+          productId: i.productId,
+          quantity: qty,
+          price: Number(l.price) || 0,
+          // Blok soni (packCount) faqat miqdor va pachka o'zgarmaganda mos qoladi
+          packCount: qty === i.quantity && pack === i.packSize ? i.packCount : null,
+          packSize: pack,
+          leadTimeDays: lead, // SKU'ga eslab qolinadi (rememberOrderParams)
+        };
+      })
       .filter((x) => x.quantity > 0);
     if (payload.length === 0) { toast.error("Kamida bitta SKU miqdori kerak."); return; }
     startSave(async () => {
@@ -155,6 +176,8 @@ export function OrderDetail({ order, role, isOwner }: { order: OrderData; role: 
                 <TableHead className="w-[80px]">Kod</TableHead>
                 <TableHead>SKU</TableHead>
                 <TableHead className="w-[140px]">Subkategoriya</TableHead>
+                <TableHead className="w-[70px]" title="Lead time (kun) — zakazdan kelguncha; SKU'ga saqlanadi">Lead</TableHead>
+                <TableHead className="w-[80px]" title="Pachkadagi dona soni — SKU'ga saqlanadi">Pachka</TableHead>
                 <TableHead className="w-[110px]">Miqdor</TableHead>
                 <TableHead className="w-[120px]">Narx</TableHead>
                 <TableHead className="text-right w-[120px]">Summa</TableHead>
@@ -164,13 +187,25 @@ export function OrderDetail({ order, role, isOwner }: { order: OrderData; role: 
             </TableHeader>
             <TableBody>
               {items.map((i) => {
-                const l = lines.get(i.productId) ?? { qty: "", price: "" };
+                const l = lines.get(i.productId) ?? { qty: "", price: "", lead: "", pack: "" };
                 const sum = (Number(l.qty) || 0) * (Number(l.price) || 0);
                 return (
                   <TableRow key={i.productId} className="text-sm">
                     <TableCell className="font-mono text-xs text-muted-foreground">{i.code}</TableCell>
                     <TableCell className="max-w-[240px] truncate" title={i.name}>{i.name}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{i.sub ?? "—"}</TableCell>
+                    <TableCell>
+                      <Input type="number" inputMode="numeric" value={l.lead} disabled={!editable || busy}
+                        placeholder={i.lead != null ? String(i.lead) : ""}
+                        onChange={(e) => setLine(i.productId, { lead: e.target.value })}
+                        className="h-8 w-16 text-xs tabular-nums" title="Lead time (kun) — SKU'ga saqlanadi" aria-label="Lead time (kun)" />
+                    </TableCell>
+                    <TableCell>
+                      <Input type="number" inputMode="numeric" value={l.pack} disabled={!editable || busy}
+                        placeholder={i.packSize != null ? String(i.packSize) : ""}
+                        onChange={(e) => setLine(i.productId, { pack: e.target.value })}
+                        className="h-8 w-16 text-xs tabular-nums" title="Pachkadagi dona soni — SKU'ga saqlanadi" aria-label="Pachkadagi dona soni" />
+                    </TableCell>
                     <TableCell>
                       <Input type="number" inputMode="decimal" value={l.qty} disabled={!editable || busy}
                         onChange={(e) => setLine(i.productId, { qty: e.target.value })} className="h-8 w-24 text-xs" />

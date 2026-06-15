@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireCatManagerOrAdmin } from "@/lib/auth-helpers";
+import { requireOrderCreator } from "@/lib/auth-helpers";
 import { auth } from "@/auth";
 import { ORDER_STATUSES, canTransition, canEditItems, canEnterFact, hisobMinStock, type OrderStatusT } from "./order-status";
 import { isSystemAdmin } from "@/lib/roles";
@@ -69,7 +69,7 @@ export async function suppliersForOrderAction(): Promise<
   { ok: true; suppliers: SupplierOption[] } | { ok: false; error: string }
 > {
   try {
-    const user = await requireCatManagerOrAdmin();
+    const user = await requireOrderCreator();
     const scope = await scopeParentIds(Number(user.id), user.role);
     if (scope !== null && scope.length === 0) return { ok: true, suppliers: [] };
     const grouped = await prisma.product.groupBy({
@@ -107,7 +107,7 @@ export async function supplierItemsAction(
   supplierId: number
 ): Promise<{ ok: true; items: BuilderItem[]; orderGap: number } | { ok: false; error: string }> {
   try {
-    const user = await requireCatManagerOrAdmin();
+    const user = await requireOrderCreator();
     const sid = z.coerce.number().int().positive().parse(supplierId);
     const scope = await scopeParentIds(Number(user.id), user.role);
     if (scope !== null && scope.length === 0) return { ok: true, items: [], orderGap: 1 };
@@ -243,7 +243,7 @@ export async function createOrderAction(input: {
   note?: string;
 }): Promise<{ ok: true; id: number } | { ok: false; error: string }> {
   try {
-    const user = await requireCatManagerOrAdmin();
+    const user = await requireOrderCreator();
     const supplierId = z.coerce.number().int().positive().parse(input.supplierId);
     const items = z.array(itemSchema).min(1, "Kamida bitta mahsulot kerak").parse(input.items);
     const scopeErr = await scopeError(user, items.map((i) => i.productId));
@@ -341,7 +341,7 @@ export async function setOrderStatusAction(
 /** Zakazni o'chiradi (faqat qoralama). */
 export async function deleteOrderAction(orderId: number): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
-    const user = await requireCatManagerOrAdmin();
+    const user = await requireOrderCreator();
     const oid = z.coerce.number().int().positive().parse(orderId);
     const order = await prisma.purchaseOrder.findUnique({ where: { id: oid }, select: { status: true, createdById: true } });
     if (!order) return { ok: false, error: "Zakaz topilmadi." };
