@@ -62,14 +62,9 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
       if (res.ok) {
         setItems(res.items);
         setOrderGap(res.orderGap);
-        // taklif miqdorini oldindan to'ldiramiz (narx bo'sh)
-        const m = new Map<number, Line>();
-        for (const it of res.items) {
-          if (it.suggested > 0) {
-            m.set(it.productId, { qty: String(it.suggested), price: it.purchasePrice != null ? String(it.purchasePrice) : "", blok: "", pack: it.packSize != null ? String(it.packSize) : "", lead: "" });
-          }
-        }
-        setLines(m);
+        // SKU'lar oldindan TANLANMAYDI — faqat menejer miqdor kiritgani zakazga kiradi.
+        // Taklif miqdori, eslab qolingan narx/pachka esa placeholder (xira) sifatida ko'rinadi.
+        setLines(new Map());
       } else toast.error(res.error);
     });
   };
@@ -215,7 +210,8 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
         out.push({
           productId: pid, quantity: qty, price,
           packCount: blok > 0 ? blok : null,
-          packSize: pack > 0 ? pack : null,
+          // Pachka kiritilmagan bo'lsa — eslab qolingan packSize (placeholder'da ko'rinadi)
+          packSize: pack > 0 ? pack : (itemByPid.get(pid)?.packSize ?? null),
           // Kiritilgan lead SKU'ga bog'lanadi (eslab qolinadi)
           leadTimeDays: l.lead.trim() !== "" && Number.isInteger(lead) && lead >= 0 ? lead : null,
         });
@@ -419,8 +415,9 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
       {items.length > 0 && (
         <p className="text-[11px] text-muted-foreground">
           Min stock = kunlik sotuv × (zakaz oralig'i + lead time) × XYZ buferi (X 1.1 · Y 1.25 · Z 1.5).
-          ⚠ — qoldiq min stock'dan past. Xira qiymatlar — eslab qolingan taklif (bo'sh qoldirsangiz o'sha ishlatiladi).
-          Lead'ni shu yerda kiritsangiz — SKU'ga saqlanadi va min stock darhol qayta hisoblanadi. Enter — ustun bo'ylab keyingi qatorga.
+          ⚠ — qoldiq min stock'dan past. Faqat MIQDOR kiritilgan SKU zakazga (va nakladnoyga) kiradi —
+          bo'sh/0 qoldirilganlar kirmaydi. Xira sonlar — taklif miqdori va eslab qolingan narx/pachka
+          (narxni bo'sh qoldirsangiz o'sha ishlatiladi). Lead'ni kiritsangiz — SKU'ga saqlanadi. Enter — keyingi qatorga.
         </p>
       )}
 

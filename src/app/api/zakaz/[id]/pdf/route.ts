@@ -55,15 +55,17 @@ export async function GET(
     return new NextResponse("Ruxsat yo'q", { status: 403 });
   }
 
-  const rows = order.items.map((i, idx) => ({
-    n: idx + 1,
-    code: String(i.product.code),
-    name: i.product.name,
-    pack: i.packCount != null && i.packSize != null ? `${i.packCount} × ${i.packSize}` : "",
-    qty: Number(i.quantity),
-    price: Number(i.price),
-    sum: Number(i.quantity) * Number(i.price),
-  }));
+  const rows = order.items
+    .filter((i) => Number(i.quantity) > 0) // 0 (zakaz berilmagan) SKU nakladnoyga kirmaydi
+    .map((i, idx) => ({
+      n: idx + 1,
+      code: String(i.product.code),
+      name: i.product.name,
+      pack: i.packCount != null && i.packSize != null ? `${i.packCount} × ${i.packSize}` : "",
+      qty: Number(i.quantity),
+      price: Number(i.price),
+      sum: Number(i.quantity) * Number(i.price),
+    }));
   const total = rows.reduce((s, r) => s + r.sum, 0);
   const sana = (order.sentAt ?? order.createdAt).toISOString().slice(0, 10);
 
