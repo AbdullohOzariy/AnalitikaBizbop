@@ -43,6 +43,34 @@ export async function register() {
     }
   }
 
+  // Kunlik MARJA hisoboti — har kuni 15:00 (Toshkent): oxirgi davr filial×subkat
+  // marjasi minus (tannarx > sotuv) kataklari Excel'i. Faqat sozlamada YOQILGAN bo'lsa.
+  {
+    const gg = globalThis as typeof globalThis & { __marginReportCron?: boolean };
+    if (!gg.__marginReportCron) {
+      gg.__marginReportCron = true;
+      try {
+        const { schedule } = await import("node-cron");
+        schedule("0 15 * * *", async () => {
+          try {
+            const { getMarginReportConfig } = await import("@/lib/margin-report/sozlama");
+            const cfg = await getMarginReportConfig();
+            if (!cfg.autoEnabled) return; // avto yuborish o'chirilgan
+            const { sendMarginReport } = await import("@/lib/margin-report/report");
+            const r = await sendMarginReport();
+            if (!r.ok) console.warn("[margin-report] yuborilmadi:", r.error);
+            else console.log(`[margin-report] yuborildi: ${r.count} ta filial×subkat`);
+          } catch (e) {
+            console.error("[margin-report] xato:", e instanceof Error ? e.message : e);
+          }
+        }, { timezone: "Asia/Tashkent" });
+        console.log("[instrumentation] Marja cron o'rnatildi: har kuni 15:00 (Asia/Tashkent)");
+      } catch (e) {
+        console.warn("[instrumentation] margin-report cron o'rnatilmadi:", e instanceof Error ? e.message : e);
+      }
+    }
+  }
+
   const token = process.env.BOT_TOKEN;
   const base = (process.env.WEBHOOK_URL || "").replace(/\/$/, "");
   if (!token || !base) {

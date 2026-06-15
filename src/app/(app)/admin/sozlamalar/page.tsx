@@ -21,8 +21,10 @@ import { SverkaTopiklarEditor, type SverkaTopicRow } from "./sverka-topiklar-edi
 import { SverkaQabulchiEditor, type QabulchiRow } from "./sverka-qabulchi-editor";
 import { InventoryReportEditor } from "./inventory-report-editor";
 import { getInventoryReportConfig } from "@/lib/inventory-report/sozlama";
+import { MarginReportEditor } from "./margin-report-editor";
+import { getMarginReportConfig } from "@/lib/margin-report/sozlama";
 
-type Tab = "spisaniya" | "sverka" | "inventarizatsiya";
+type Tab = "spisaniya" | "sverka" | "inventarizatsiya" | "marja";
 
 export default async function SozlamalarPage({
   searchParams,
@@ -34,7 +36,7 @@ export default async function SozlamalarPage({
   if (session.user.role !== "SYSTEM_ADMIN") redirect("/dashboard");
 
   const sp = await searchParams;
-  const tab: Tab = sp.tab === "sverka" ? "sverka" : sp.tab === "inventarizatsiya" ? "inventarizatsiya" : "spisaniya";
+  const tab: Tab = sp.tab === "sverka" ? "sverka" : sp.tab === "inventarizatsiya" ? "inventarizatsiya" : sp.tab === "marja" ? "marja" : "spisaniya";
 
   return (
     <div className="space-y-5">
@@ -50,6 +52,7 @@ export default async function SozlamalarPage({
           { v: "spisaniya", l: "Spisaniya sozlamalari" },
           { v: "sverka", l: "Sverka sozlamalari" },
           { v: "inventarizatsiya", l: "Inventarizatsiya" },
+          { v: "marja", l: "Marja minus" },
         ] as { v: Tab; l: string }[]).map((t) => (
           <Link
             key={t.v}
@@ -68,7 +71,29 @@ export default async function SozlamalarPage({
         ))}
       </div>
 
-      {tab === "spisaniya" ? <SpisaniyaTab /> : tab === "sverka" ? <SverkaTab /> : <InventarizatsiyaTab />}
+      {tab === "spisaniya" ? <SpisaniyaTab /> : tab === "sverka" ? <SverkaTab /> : tab === "inventarizatsiya" ? <InventarizatsiyaTab /> : <MarjaTab />}
+    </div>
+  );
+}
+
+// ─── Marja minus xabarnoma bot ────────────────────────────────────────────────
+
+async function MarjaTab() {
+  const cfg = await getMarginReportConfig();
+  return (
+    <div className="space-y-5">
+      <SectionCard
+        title="Marja minus xabarnoma bot"
+        description="Oxirgi davr — filial×subkat marjasi minus (tannarx > sotuv) Excel'i"
+        actions={<MessageSquare className="h-4 w-4 text-muted-foreground" />}
+      >
+        <MarginReportEditor
+          tokenSet={!!cfg.token}
+          chatId={cfg.chatId ?? ""}
+          topicId={cfg.topicId != null ? String(cfg.topicId) : ""}
+          autoEnabled={cfg.autoEnabled}
+        />
+      </SectionCard>
     </div>
   );
 }
