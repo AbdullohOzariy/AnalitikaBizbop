@@ -33,7 +33,7 @@ async function inScope(user: ScopeUser, productIds: number[]): Promise<boolean> 
   return cnt === uniq.length;
 }
 
-export type SupplierLite = { id: number; name: string; skuCount: number };
+export type SupplierLite = { id: number; name: string; total: number; assigned: number };
 
 export type PmeSku = {
   productId: number; code: number; name: string; segment: Segment | null;
@@ -84,17 +84,24 @@ export async function pmeSuppliersAction(): Promise<
     const user = await requirePmeViewer();
     const scope = await scopeParentIds(Number(user.id), user.role);
     if (scope !== null && scope.length === 0) return { ok: true, suppliers: [] };
-    const grouped = await prisma.product.groupBy({
-      by: ["supplierId"],
-      where: { supplierId: { not: null }, ...scopeProductWhere(scope) },
-      _count: { _all: true },
-    });
-    const ids = grouped.map((g) => g.supplierId).filter((x): x is number => x != null);
+    const baseWhere = { supplierId: { not: null }, ...scopeProductWhere(scope) };
+    // Jami SKU va segment biriktirilgan SKU sonini supplier bo'yicha bir vaqtda olamiz
+    const [totalG, assignedG] = await Promise.all([
+      prisma.product.groupBy({ by: ["supplierId"], where: baseWhere, _count: { _all: true } }),
+      prisma.product.groupBy({ by: ["supplierId"], where: { ...baseWhere, segment: { not: null } }, _count: { _all: true } }),
+    ]);
+    const ids = totalG.map((g) => g.supplierId).filter((x): x is number => x != null);
     const sups = await prisma.supplier.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } });
-    const byId = new Map(sups.map((s) => [s.id, s.name]));
-    const suppliers = grouped
+    const nameBy = new Map(sups.map((s) => [s.id, s.name]));
+    const assignedBy = new Map(assignedG.filter((g) => g.supplierId != null).map((g) => [g.supplierId!, g._count._all]));
+    const suppliers = totalG
       .filter((g) => g.supplierId != null)
-      .map((g) => ({ id: g.supplierId!, name: byId.get(g.supplierId!) ?? "—", skuCount: g._count._all }))
+      .map((g) => ({
+        id: g.supplierId!,
+        name: nameBy.get(g.supplierId!) ?? "—",
+        total: g._count._all,
+        assigned: assignedBy.get(g.supplierId!) ?? 0,
+      }))
       .sort((a, b) => a.name.localeCompare(b.name, "uz"));
     return { ok: true, suppliers };
   } catch (err) {

@@ -3,11 +3,7 @@
 import { Fragment, useEffect, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import { Search, X, ChevronRight, Loader2 } from "lucide-react";
+import { Search, X, ChevronRight, Loader2, ArrowLeft, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { GROUP_COLORS, norm } from "../iyerarxiya/colors";
 import type { Segment } from "@/generated/prisma/enums";
@@ -183,10 +179,12 @@ function SegmentBadge({ value }: { value: Segment | null }) {
 // ─── Tab 1: Biriktirish (ta'minotchi kesimida iyerarxik) ──────────────────────
 export function BiriktirishTab({ canEdit }: { canEdit: boolean }) {
   const [suppliers, setSuppliers] = useState<SupplierLite[]>([]);
-  const [supplierId, setSupplierId] = useState("");
+  const [selected, setSelected] = useState<SupplierLite | null>(null);
   const [items, setItems] = useState<PmeSku[]>([]);
   const [seg, setSeg] = useState<Map<number, Segment | null>>(new Map());
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState("");          // detal: SKU qidiruvi
+  const [listQ, setListQ] = useState("");   // ro'yxat: ta'minotchi nomi filtri
+  const [statusFilter, setStatusFilter] = useState<"all" | "left" | "done">("all");
   const [loadingSup, startSup] = useTransition();
   const [loadingItems, startItems] = useTransition();
   const [, startSave] = useTransition();
@@ -198,23 +196,26 @@ export function BiriktirishTab({ canEdit }: { canEdit: boolean }) {
     });
   }, []);
 
-  const supplierLabels = useMemo(() => {
-    const o: Record<string, React.ReactNode> = {};
-    for (const s of suppliers) o[String(s.id)] = s.name;
-    return o;
-  }, [suppliers]);
-
-  const onSupplier = (v: string) => {
-    setSupplierId(v);
-    setItems([]); setSeg(new Map()); setQ("");
-    if (!v) return;
+  const openSupplier = (s: SupplierLite) => {
+    setSelected(s); setItems([]); setSeg(new Map()); setQ("");
     startItems(async () => {
-      const res = await pmeSupplierSkusAction(Number(v));
-      if (res.ok) {
-        setItems(res.items);
-        setSeg(new Map(res.items.map((it) => [it.productId, it.segment])));
-      } else toast.error(res.error);
+      const res = await pmeSupplierSkusAction(s.id);
+      if (res.ok) { setItems(res.items); setSeg(new Map(res.items.map((it) => [it.productId, it.segment]))); }
+      else toast.error(res.error);
     });
+  };
+
+  const assignedCount = useMemo(() => {
+    let n = 0; for (const it of items) if (seg.get(it.productId)) n++; return n;
+  }, [items, seg]);
+
+  // Ortga: tanlangan ta'minotchining sanoqlarini local holatdan yangilab, ro'yxatga qaytamiz
+  const back = () => {
+    if (selected && items.length > 0) {
+      const total = items.length, assigned = assignedCount;
+      setSuppliers((prev) => prev.map((s) => (s.id === selected.id ? { ...s, total, assigned } : s)));
+    }
+    setSelected(null); setItems([]); setSeg(new Map()); setQ("");
   };
 
   const pick = (pid: number, s: Segment | null) => {
@@ -226,9 +227,9 @@ export function BiriktirishTab({ canEdit }: { canEdit: boolean }) {
   };
 
   const bulk = (leafCatId: number, s: Segment | null) => {
-    if (!supplierId) return;
+    if (!selected) return;
     startSave(async () => {
-      const res = await bulkSetSegmentAction({ supplierId: Number(supplierId), categoryId: leafCatId, segment: s });
+      const res = await bulkSetSegmentAction({ supplierId: selected.id, categoryId: leafCatId, segment: s });
       if (res.ok) {
         setSeg((prev) => {
           const n = new Map(prev);
@@ -240,49 +241,31 @@ export function BiriktirishTab({ canEdit }: { canEdit: boolean }) {
     });
   };
 
-  const Q = q.trim().toUpperCase();
-  const searching = Q.length > 0;
-  const shown = useMemo(
-    () => (Q ? items.filter((i) => i.name.toUpperCase().includes(Q) || String(i.code).includes(Q)) : items),
-    [items, Q]
-  );
+  // ══ DETAL: tanlangan ta'minotchi SKU'lari ══
+  if (selected) {
+    const Q = q.trim().toUpperCase();
+    const searching = Q.length > 0;
+    const shown = Q ? items.filter((i) => i.name.toUpperCase().includes(Q) || String(i.code).includes(Q)) : items;
+    const counts = { PREMIUM: 0, MEDIUM: 0, EASY: 0, none: 0 };
+    for (const it of items) { const v = seg.get(it.productId); if (v) counts[v]++; else counts.none++; }
 
-  // Segment sanoqlari
-  const counts = useMemo(() => {
-    const c = { PREMIUM: 0, MEDIUM: 0, EASY: 0, none: 0 };
-    for (const it of items) { const v = seg.get(it.productId); if (v) c[v]++; else c.none++; }
-    return c;
-  }, [items, seg]);
-
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Yetkazib beruvchi</Label>
-          <Select value={supplierId} onValueChange={(v) => onSupplier(typeof v === "string" ? v : "")} disabled={loadingSup} items={supplierLabels}>
-            <SelectTrigger className="h-9 w-72 text-sm">
-              <SelectValue placeholder={loadingSup ? "Yuklanmoqda…" : "Yetkazib beruvchi tanlang…"} />
-            </SelectTrigger>
-            <SelectContent>
-              {suppliers.map((s) => (
-                <SelectItem key={s.id} value={String(s.id)}>{s.name} · {s.skuCount} SKU</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        {items.length > 0 && (
-          <div className="relative min-w-56 flex-1">
-            <Label className="text-xs text-muted-foreground">Qidirish</Label>
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="SKU nomi yoki kodi..." className="h-9 pl-8 pr-8" />
-              {q && <button onClick={() => setQ("")} aria-label="Tozalash" className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button>}
-            </div>
+    return (
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <button onClick={back} className="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-sm font-medium transition-colors hover:bg-secondary">
+            <ArrowLeft className="h-4 w-4" /> Ortga
+          </button>
+          <span className="text-base font-bold">{selected.name}</span>
+          <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-semibold tabular-nums">
+            {assignedCount}/{items.length} ajratildi
+          </span>
+          <div className="relative ml-auto min-w-56">
+            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="SKU nomi yoki kodi..." className="h-9 pl-8 pr-8" />
+            {q && <button onClick={() => setQ("")} aria-label="Tozalash" className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button>}
           </div>
-        )}
-      </div>
+        </div>
 
-      {items.length > 0 && (
         <div className="flex flex-wrap items-center gap-3 text-xs">
           {SEGMENTS.map((s) => (
             <span key={s.v} className="inline-flex items-center gap-1.5">
@@ -292,36 +275,98 @@ export function BiriktirishTab({ canEdit }: { canEdit: boolean }) {
           <span className="text-muted-foreground">Segmentsiz: <b className="tabular-nums">{counts.none}</b></span>
           {canEdit && <span className="text-muted-foreground">· P/M/E tugmasini bosing (aktivni qayta bossangiz — bo'shaydi). Subkat sarlavhasida — butun subkatga.</span>}
         </div>
-      )}
 
-      {loadingItems ? (
-        <p className="flex items-center gap-1.5 py-6 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> SKU'lar yuklanmoqda…</p>
-      ) : !supplierId ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">Boshlash uchun yetkazib beruvchi tanlang.</p>
-      ) : items.length === 0 ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">Bu yerda sizning qamrovingizda SKU yo&apos;q.</p>
+        {loadingItems ? (
+          <p className="flex items-center gap-1.5 py-6 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> SKU'lar yuklanmoqda…</p>
+        ) : items.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">Bu yerda sizning qamrovingizda SKU yo&apos;q.</p>
+        ) : (
+          <SkuTree
+            items={shown}
+            searching={searching}
+            renderRight={(it) =>
+              canEdit
+                ? <SegmentButtons value={seg.get(it.productId) ?? null} onPick={(s) => pick(it.productId, s)} />
+                : <SegmentBadge value={seg.get(it.productId) ?? null} />
+            }
+            renderBulk={canEdit ? (leafCatId) => (
+              <span className="flex shrink-0 items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+                {SEGMENTS.map((s) => (
+                  <button key={s.v} type="button" onClick={() => bulk(leafCatId, s.v)} title={`Hammasini: ${s.label}`}
+                    className={cn("h-5 w-5 rounded text-[10px] font-bold text-muted-foreground/50 transition-colors", s.bulkHover)}>
+                    {s.short}
+                  </button>
+                ))}
+                <button type="button" onClick={() => bulk(leafCatId, null)} title="Hammasini bo'shatish"
+                  className="text-muted-foreground/40 transition-colors hover:text-destructive"><X className="h-3.5 w-3.5" /></button>
+              </span>
+            ) : undefined}
+          />
+        )}
+      </div>
+    );
+  }
+
+  // ══ RO'YXAT: ta'minotchilar (progress + filtr) ══
+  const LQ = listQ.trim().toUpperCase();
+  const isDone = (s: SupplierLite) => s.total > 0 && s.assigned >= s.total;
+  const filtered = suppliers.filter((s) => {
+    if (LQ && !s.name.toUpperCase().includes(LQ)) return false;
+    if (statusFilter === "done") return isDone(s);
+    if (statusFilter === "left") return !isDone(s);
+    return true;
+  });
+  const doneCount = suppliers.filter(isDone).length;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative min-w-56 flex-1">
+          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input value={listQ} onChange={(e) => setListQ(e.target.value)} placeholder="Yetkazib beruvchi nomi..." className="h-9 pl-8 pr-8" />
+          {listQ && <button onClick={() => setListQ("")} aria-label="Tozalash" className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button>}
+        </div>
+        <div className="flex gap-1">
+          {([{ v: "all", l: "Hammasi" }, { v: "left", l: "Tugatilmagan" }, { v: "done", l: "Tugatilgan" }] as { v: typeof statusFilter; l: string }[]).map((t) => (
+            <button key={t.v} onClick={() => setStatusFilter(t.v)}
+              className={cn("h-9 rounded-lg border px-3 text-sm font-medium transition-colors",
+                statusFilter === t.v ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground hover:text-foreground hover:bg-secondary")}>
+              {t.l}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <p className="text-xs text-muted-foreground">
+        Jami {suppliers.length} ta yetkazib beruvchi · tugatilgan <b className="text-foreground">{doneCount}</b> · qoldi <b className="text-foreground">{suppliers.length - doneCount}</b>
+      </p>
+
+      {loadingSup ? (
+        <p className="flex items-center gap-1.5 py-6 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Yuklanmoqda…</p>
+      ) : filtered.length === 0 ? (
+        <p className="py-6 text-center text-sm text-muted-foreground">Yetkazib beruvchi topilmadi.</p>
       ) : (
-        <SkuTree
-          items={shown}
-          searching={searching}
-          renderRight={(it) =>
-            canEdit
-              ? <SegmentButtons value={seg.get(it.productId) ?? null} onPick={(s) => pick(it.productId, s)} />
-              : <SegmentBadge value={seg.get(it.productId) ?? null} />
-          }
-          renderBulk={canEdit ? (leafCatId) => (
-            <span className="flex shrink-0 items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
-              {SEGMENTS.map((s) => (
-                <button key={s.v} type="button" onClick={() => bulk(leafCatId, s.v)} title={`Hammasini: ${s.label}`}
-                  className={cn("h-5 w-5 rounded text-[10px] font-bold text-muted-foreground/50 transition-colors", s.bulkHover)}>
-                  {s.short}
-                </button>
-              ))}
-              <button type="button" onClick={() => bulk(leafCatId, null)} title="Hammasini bo'shatish"
-                className="text-muted-foreground/40 transition-colors hover:text-destructive"><X className="h-3.5 w-3.5" /></button>
-            </span>
-          ) : undefined}
-        />
+        <div className="overflow-hidden rounded-xl border border-border bg-card">
+          {filtered.map((s) => {
+            const done = isDone(s);
+            const pct = s.total > 0 ? Math.round((s.assigned / s.total) * 100) : 0;
+            return (
+              <button key={s.id} onClick={() => openSupplier(s)}
+                className="flex w-full items-center gap-3 border-b border-border/40 px-4 py-2.5 text-left transition-colors last:border-b-0 hover:bg-muted/30">
+                <span className="min-w-0 flex-1 truncate text-sm font-medium">{s.name}</span>
+                <span className="hidden h-1.5 w-28 shrink-0 overflow-hidden rounded-full bg-muted sm:block">
+                  <span className={cn("block h-full rounded-full", done ? "bg-emerald-500" : "bg-primary")} style={{ width: `${pct}%` }} />
+                </span>
+                <span className={cn("shrink-0 tabular-nums text-sm font-semibold", done ? "text-emerald-600 dark:text-emerald-400" : "text-foreground")}>
+                  {s.assigned}/{s.total}
+                </span>
+                {done
+                  ? <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
+                  : <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/50" />}
+              </button>
+            );
+          })}
+        </div>
       )}
     </div>
   );
