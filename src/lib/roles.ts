@@ -43,3 +43,11 @@ export const canSeeSuppliers = (r: R): boolean => isAdminTier(r) || isSupplyChai
 
 /** Yetkazib beruvchilarni TAHRIRLAY oladiganlar (qo'shish, profil, shartnoma, lead time). */
 export const canEditSuppliers = (r: R): boolean => isSystemAdmin(r) || isSupplyChain(r);
+
+/** PME analyze (P/M/E segment) bo'limini KO'RA oladiganlar — read-only ADMIN ham. */
+export const canSeePme = (r: R): boolean =>
+  isAdminTier(r) || isSupplyChain(r) || r === "CAT_MANAGER" || isHeadCatManager(r);
+
+/** PME segmentni biriktira (tahrirlay) oladiganlar — read-only ADMIN bundan mustasno. */
+export const canEditPme = (r: R): boolean =>
+  isSystemAdmin(r) || isSupplyChain(r) || r === "CAT_MANAGER" || isHeadCatManager(r);

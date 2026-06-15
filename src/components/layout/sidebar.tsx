@@ -35,6 +35,7 @@ import {
   CalendarCheck,
   FileText,
   FileCheck2,
+  Gem,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -110,6 +111,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/oos",             label: "OOS",             icon: PackageX,        roles: [SA, A, "CAT_MANAGER", "CEO", "SUPPLYCHAIN", "HEAD_CAT_MANAGER"] },
       { href: "/stockday",        label: "Stockday",        icon: Hourglass,       roles: [SA, A, "CAT_MANAGER", "CEO", "SUPPLYCHAIN", "HEAD_CAT_MANAGER"] },
       { href: "/abc-xyz",         label: "ABC/XYZ",         icon: LayoutGrid,      roles: [SA, A, "CAT_MANAGER", "CEO", "SUPPLYCHAIN", "HEAD_CAT_MANAGER"] },
+      { href: "/pme",             label: "PME analyze",     icon: Gem,             roles: [SA, A, "CAT_MANAGER", "SUPPLYCHAIN", "HEAD_CAT_MANAGER"] },
       { href: "/report",          label: "Hisobot",         icon: Table2,          roles: [SA, A, "SUPPLYCHAIN"] },
       { href: "/rejalar",         label: "Rejalar",         icon: ClipboardList,   roles: [SA, A, "CAT_MANAGER", "CEO", "HEAD_CAT_MANAGER"] },
     ],

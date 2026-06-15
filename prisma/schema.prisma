@@ -39,6 +39,13 @@ enum FileType {
   VISITS
 }
 
+// PME analyze — SKU'ning ikkinchi o'lchamdagi segmenti (qo'lda biriktiriladi)
+enum Segment {
+  PREMIUM
+  MEDIUM
+  EASY
+}
+
 enum AliasSource {
   SALES
   VISITS
@@ -278,6 +285,7 @@ model Product {
   categoryId Int? // tegishli kategoriya/subkategoriya (iyerarxiyadagi joyi)
   supplierId Int? // yetkazib beruvchi (POSTAVSHIK)
   agentId    Int? // yetkazib beruvchi ichidagi agent (brend) — SKU shu agentga biriktiriladi
+  segment    Segment? // PME analyze segmenti (Premium/Medium/Easy) — qo'lda biriktiriladi
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -303,6 +311,7 @@ model Product {
   @@index([categoryId])
   @@index([supplierId])
   @@index([agentId])
+  @@index([segment])
 }
 
 // Kunlik sotuv faylidagi nom master nomidan farq qilsa — review uchun saqlanadi.
