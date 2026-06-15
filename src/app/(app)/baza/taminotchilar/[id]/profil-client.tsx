@@ -4,25 +4,35 @@ import { Fragment as FragmentRows, useMemo, useRef, useState, useTransition } fr
 import { useRouter } from "next/navigation";
 import {
   Star, Phone, User, Save, Loader2, Check, AlertCircle, Plus, Trash2, Pencil,
-  ExternalLink, X, ChevronRight, ChevronLeft,
+  ExternalLink, X, ChevronRight, ChevronLeft, Users, CalendarDays,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { Pill } from "@/components/common/page";
 import { cn } from "@/lib/utils";
 import { skuRowBg, skuBadgeCls, skuBadgeLabel, skuBadgeTitle } from "@/lib/sku-rang";
 import {
   updateSupplierProfileAction,
   toggleOrderDateAction,
+  toggleAgentOrderDateAction,
   saveContractAction,
   deleteContractAction,
   updateSkuPurchaseAction,
   bulkLeadTimeAction,
   deleteSupplierAction,
+  createAgentAction,
+  updateAgentAction,
+  deleteAgentAction,
+  assignSkuAgentAction,
+  bulkAssignSkuAgentAction,
   type ContractRow,
+  type AgentRow,
 } from "../actions";
 
 // ─── Tiplar ───────────────────────────────────────────────────────────────────
@@ -38,10 +48,10 @@ export type ProfilSku = {
   leadTimeDays: number | null;
   packSize: number | null; // pachkadagi dona
   purchasePrice: number | null; // kelishilgan dona narxi
+  agentId: number | null; // biriktirilgan agent (brend)
   arxiv: boolean; // no-aktiv (arxivlangan)
 };
 
-const WD_UZ = ["Yakshanba", "Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba"];
 const WD_SHORT = ["Ya", "Du", "Se", "Ch", "Pa", "Ju", "Sh"];
 
 // ─── Baho (yulduzlar) + kontakt ───────────────────────────────────────────────
@@ -158,12 +168,17 @@ export function ProfilHeader({
 // KUNI butun oyda yonadi/o'chadi (yetkazib beruvchilar haftalik jadval bilan ishlaydi).
 
 export function OrderDaysCalendar({
-  supplierId, orderDates, canEdit = true,
+  supplierId, agentId, orderDates, canEdit = true, title = "Zakaz qabul kunlari", compact = false,
 }: {
-  supplierId: number; orderDates: string[]; canEdit?: boolean;
+  // supplierId YOKI agentId beriladi — agentId bo'lsa agent kalendari (AgentOrderDay)
+  supplierId?: number; agentId?: number; orderDates: string[]; canEdit?: boolean; title?: string; compact?: boolean;
 }) {
   const [dates, setDates] = useState<Set<string>>(new Set(orderDates));
   const [isPending, start] = useTransition();
+  const toggleAction = (dstr: string) =>
+    agentId != null
+      ? toggleAgentOrderDateAction({ agentId, sana: dstr })
+      : toggleOrderDateAction({ supplierId: supplierId!, sana: dstr });
 
   // Joriy vaqt faqat mount'da o'qiladi (render purity — React Compiler talabi)
   const [now] = useState(() => new Date());
@@ -191,7 +206,7 @@ export function OrderDaysCalendar({
     if (next.has(dstr)) next.delete(dstr); else next.add(dstr);
     setDates(next);
     start(async () => {
-      const res = await toggleOrderDateAction({ supplierId, sana: dstr });
+      const res = await toggleAction(dstr);
       if (!res.ok) { toast.error(res.error); setDates(new Set(dates)); }
     });
   };
@@ -210,13 +225,15 @@ export function OrderDaysCalendar({
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-base">
-          <span>Zakaz qabul kunlari</span>
+          <span>{title}</span>
           {isPending && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
         </CardTitle>
-        <p className="text-xs text-muted-foreground">
-          Kalendardan kunlarni BITTALAB belgilang (qayta bossangiz — bekor). Belgilangan sanalar
-          &quot;Bugun&quot;, buyurtma oynasi va Stockday hisoblarida ishlatiladi.
-        </p>
+        {!compact && (
+          <p className="text-xs text-muted-foreground">
+            Kalendardan kunlarni BITTALAB belgilang (qayta bossangiz — bekor). Belgilangan sanalar
+            &quot;Bugun&quot;, buyurtma oynasi va Stockday hisoblarida ishlatiladi.
+          </p>
+        )}
       </CardHeader>
       <CardContent className="space-y-3">
         {/* Oy navigatsiyasi */}
@@ -288,6 +305,148 @@ export function OrderDaysCalendar({
   );
 }
 
+// ─── Agentlar (brend) ─────────────────────────────────────────────────────────
+// Yetkazib beruvchi ichidagi agentlar: qo'shish/tahrir/o'chirish + har agent uchun
+// alohida zakaz kunlari. SKU'lar pastdagi jadvalda agentga biriktiriladi.
+
+const emptyAgentForm = { name: "", contactName: "", phone: "" };
+
+export function AgentsSection({ supplierId, agents, canEdit = true }: { supplierId: number; agents: AgentRow[]; canEdit?: boolean }) {
+  const router = useRouter();
+  const [form, setForm] = useState<typeof emptyAgentForm & { id?: number }>(emptyAgentForm);
+  const [showForm, setShowForm] = useState(false);
+  const [openCal, setOpenCal] = useState<number | null>(null);
+  const [isPending, start] = useTransition();
+
+  const set = (k: keyof typeof emptyAgentForm, v: string) => setForm((p) => ({ ...p, [k]: v }));
+
+  const submit = () => {
+    if (!form.name.trim()) { toast.error("Agent nomini kiriting."); return; }
+    start(async () => {
+      const res = form.id
+        ? await updateAgentAction({ agentId: form.id, name: form.name, contactName: form.contactName, phone: form.phone })
+        : await createAgentAction({ supplierId, name: form.name, contactName: form.contactName, phone: form.phone });
+      if (res.ok) {
+        toast.success(form.id ? "Agent yangilandi." : "Agent qo'shildi.");
+        setForm(emptyAgentForm); setShowForm(false); router.refresh();
+      } else toast.error(res.error);
+    });
+  };
+
+  const edit = (a: AgentRow) => {
+    setForm({ id: a.id, name: a.name, contactName: a.contactName ?? "", phone: a.phone ?? "" });
+    setShowForm(true);
+  };
+
+  const remove = (a: AgentRow) => {
+    if (!confirm(`"${a.name}" agentini o'chirasizmi?\n\nSKU'lari yo'qolmaydi (agentsiz qoladi), zakaz kunlari o'chadi. Zakaz tarixi bo'lsa bloklanadi.`)) return;
+    start(async () => {
+      const res = await deleteAgentAction(a.id);
+      if (res.ok) { toast.success("O'chirildi."); router.refresh(); }
+      else toast.error(res.error);
+    });
+  };
+
+  // Keyingi zakaz kuni hint uchun. Joriy sana faqat mount'da (render purity).
+  const [todayStr] = useState(() => {
+    const t = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`;
+  });
+  const nextDate = (a: AgentRow) => a.orderDates.filter((d) => d >= todayStr).sort()[0] ?? null;
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center justify-between text-base">
+          <span className="flex items-center gap-1.5">
+            <Users className="h-4 w-4 text-muted-foreground" /> Agentlar (brend)
+            <span className="text-xs font-normal text-muted-foreground">· {agents.length} ta</span>
+          </span>
+          {canEdit && (
+            <Button size="sm" variant={showForm ? "outline" : "default"} className="h-8 gap-1 text-xs"
+              onClick={() => { setShowForm((v) => !v); if (showForm) setForm(emptyAgentForm); }}>
+              {showForm ? <X className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+              {showForm ? "Bekor" : "Qo'shish"}
+            </Button>
+          )}
+        </CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Agent — yetkazib beruvchi ichidagi brend. SKU'larni o'ngdagi jadvalda agentga biriktiring;
+          zakaz har agentga ALOHIDA beriladi.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {showForm && (
+          <div className="grid gap-3 rounded-xl border border-border bg-muted/20 p-3 sm:grid-cols-3">
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Nomi (brend) *</Label>
+              <Input value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="Masalan: Coca-Cola" className="h-9" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Mas&apos;ul shaxs</Label>
+              <Input value={form.contactName} onChange={(e) => set("contactName", e.target.value)} placeholder="Ism" className="h-9" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Telefon</Label>
+              <Input value={form.phone} onChange={(e) => set("phone", e.target.value)} placeholder="+998 ..." className="h-9" />
+            </div>
+            <div className="sm:col-span-3">
+              <Button onClick={submit} disabled={isPending} className="h-9 gap-1.5">
+                {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                {form.id ? "Yangilash" : "Saqlash"}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {agents.length === 0 ? (
+          <p className="py-4 text-center text-xs italic text-muted-foreground">
+            Hozircha agent yo'q — SKU'lar to&apos;g&apos;ridan yetkazib beruvchiga tegishli.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {agents.map((a) => {
+              const nd = nextDate(a);
+              return (
+                <div key={a.id} className="rounded-xl border border-border">
+                  <div className="flex flex-wrap items-center gap-2 px-3 py-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                        {a.name}
+                        <span className="text-xs font-normal text-muted-foreground">{a.skuCount} SKU</span>
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {[a.contactName, a.phone].filter(Boolean).join(" · ") || "kontakt yo'q"}
+                        {nd && <> · keyingi zakaz: {nd === todayStr ? "bugun" : nd}</>}
+                      </p>
+                    </div>
+                    <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs"
+                      onClick={() => setOpenCal((v) => (v === a.id ? null : a.id))}>
+                      <CalendarDays className="h-3.5 w-3.5" /> Zakaz kunlari
+                    </Button>
+                    {canEdit && (
+                      <>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => edit(a)} aria-label="Tahrirlash"><Pencil className="h-3.5 w-3.5" /></Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => remove(a)} disabled={isPending} aria-label="O'chirish"><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
+                      </>
+                    )}
+                  </div>
+                  {openCal === a.id && (
+                    <div className="border-t border-border/60 p-3">
+                      <OrderDaysCalendar agentId={a.id} orderDates={a.orderDates} canEdit={canEdit} title={`Zakaz kunlari — ${a.name}`} compact />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── SKU sotib olish sozlamalari (lead · pachka · narx) — ketma-ket kiritish ──
 // Enter → saqlanadi va fokus KEYINGI qatorning O'SHA ustuniga o'tadi. O'zgartirish
 // 700ms dan keyin avtomatik saqlanadi. Subkat bo'yicha guruhlangan, ABC×XYZ ranglar.
@@ -301,7 +460,9 @@ const FIELD_CFG: Record<SkuField, { label: string; max: number; int: boolean }> 
   price: { label: "Narx (dona)", max: 1_000_000_000_000, int: false },
 };
 
-export function LeadTimeEditor({ supplierId, skus, canEdit = true }: { supplierId: number; skus: ProfilSku[]; canEdit?: boolean }) {
+const AGENT_NONE = "__none__"; // Radix Select bo'sh qiymatni qo'llamaydi — "agentsiz" sentineli
+
+export function LeadTimeEditor({ supplierId, skus, agents, canEdit = true }: { supplierId: number; skus: ProfilSku[]; agents: { id: number; name: string }[]; canEdit?: boolean }) {
   const router = useRouter();
   const [vals, setVals] = useState<Record<number, Record<SkuField, string>>>(() => {
     const o: Record<number, Record<SkuField, string>> = {};
@@ -318,6 +479,36 @@ export function LeadTimeEditor({ supplierId, skus, canEdit = true }: { supplierI
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const inputs = useRef<Map<string, HTMLInputElement>>(new Map());
   const [, startT] = useTransition();
+
+  // Agent biriktirish (har SKU + subkat bulk)
+  const hasAgents = agents.length > 0;
+  const [agentVals, setAgentVals] = useState<Record<number, string>>(() => {
+    const o: Record<number, string> = {};
+    for (const s of skus) o[s.id] = s.agentId != null ? String(s.agentId) : "";
+    return o;
+  });
+  const setAgent = (pid: number, val: string) => {
+    const agentId = val === AGENT_NONE ? null : Number(val);
+    setAgentVals((p) => ({ ...p, [pid]: agentId == null ? "" : String(agentId) }));
+    startT(async () => {
+      const res = await assignSkuAgentAction({ productId: pid, agentId });
+      if (!res.ok) toast.error(res.error);
+    });
+  };
+  const bulkAssignSub = (subId: number, val: string) => {
+    const agentId = val === AGENT_NONE ? null : Number(val);
+    startT(async () => {
+      const res = await bulkAssignSkuAgentAction({ supplierId, agentId, subId });
+      if (res.ok) {
+        toast.success(`${res.count} ta SKU ${agentId == null ? "agentsiz qilindi" : "biriktirildi"}.`);
+        setAgentVals((prev) => {
+          const next = { ...prev };
+          for (const s of skus) if (s.subId === subId) next[s.id] = agentId == null ? "" : String(agentId);
+          return next;
+        });
+      } else toast.error(res.error);
+    });
+  };
 
   // Bulk (faqat lead uchun)
   const [bulkDays, setBulkDays] = useState("");
@@ -447,6 +638,7 @@ export function LeadTimeEditor({ supplierId, skus, canEdit = true }: { supplierI
             <thead className="sticky top-0 z-10 bg-card">
               <tr className="border-b border-border text-xs text-muted-foreground">
                 <th className="px-4 py-2 font-semibold">SKU</th>
+                {hasAgents && <th className="w-[150px] px-1 py-2 font-semibold">Agent (brend)</th>}
                 <th className="w-[90px] px-1 py-2 text-right font-semibold">Lead (kun)</th>
                 <th className="w-[95px] px-1 py-2 text-right font-semibold" title="Blok/yashikdagi dona soni">Pachka</th>
                 <th className="w-[120px] px-1 py-2 text-right font-semibold" title="Kelishilgan dona narxi">Narx</th>
@@ -464,11 +656,23 @@ export function LeadTimeEditor({ supplierId, skus, canEdit = true }: { supplierI
                       tabIndex={0} role="button" aria-expanded={open}
                       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpenSubs((p) => { const n = new Set(p); if (n.has(subId)) n.delete(subId); else n.add(subId); return n; }); } }}
                     >
-                      <td className="px-4 py-2" colSpan={5}>
+                      <td className="px-4 py-2" colSpan={hasAgents ? 6 : 5}>
                         <span className="flex items-center gap-1.5">
                           <ChevronRight className={cn("h-3.5 w-3.5 text-muted-foreground/60 transition-transform", open && "rotate-90")} />
                           {g.name}
                           <span className="font-normal text-muted-foreground">· {g.items.length} SKU</span>
+                          {hasAgents && canEdit && (
+                            <span className="ml-auto flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                              <span className="text-[10px] font-normal text-muted-foreground">→ agentga:</span>
+                              <Select onValueChange={(v) => { if (typeof v === "string") bulkAssignSub(subId, v); }}>
+                                <SelectTrigger className="h-6 w-[140px] text-[11px]"><SelectValue placeholder="biriktirish…" /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value={AGENT_NONE}>— agentsiz</SelectItem>
+                                  {agents.map((a) => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                            </span>
+                          )}
                         </span>
                       </td>
                     </tr>
@@ -492,6 +696,18 @@ export function LeadTimeEditor({ supplierId, skus, canEdit = true }: { supplierI
                             )}
                           </span>
                         </td>
+                        {hasAgents && (
+                          <td className="px-1 py-1">
+                            <Select value={agentVals[s.id] === "" ? AGENT_NONE : agentVals[s.id]}
+                              onValueChange={(v) => setAgent(s.id, typeof v === "string" ? v : AGENT_NONE)} disabled={!canEdit}>
+                              <SelectTrigger className="h-7 w-full text-[11px]"><SelectValue placeholder="—" /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value={AGENT_NONE}>— agentsiz</SelectItem>
+                                {agents.map((a) => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          </td>
+                        )}
                         {(["lead", "pack", "price"] as SkuField[]).map((field) => (
                           <td key={field} className="px-1 py-1">
                             <Input

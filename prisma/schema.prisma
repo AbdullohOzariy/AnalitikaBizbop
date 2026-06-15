@@ -85,15 +85,15 @@ model Branch {
   sverkaTopicId Int? // sverka guruhidagi topic (message_thread_id) — Sozlamalar → Sverka'da
   createdAt     DateTime @default(now())
 
-  aliases       BranchAlias[]
-  sales         CategorySales[]
-  productSales  ProductSales[]
-  metrics       DailyMetrics[]
+  aliases        BranchAlias[]
+  sales          CategorySales[]
+  productSales   ProductSales[]
+  metrics        DailyMetrics[]
   receiptMetrics DailyReceiptMetric[]
-  visits        DailyVisits[]
-  uploads       UploadedFile[]
-  salesPlans    SalesPlan[]
-  marginPlans   MarginPlan[]
+  visits         DailyVisits[]
+  uploads        UploadedFile[]
+  salesPlans     SalesPlan[]
+  marginPlans    MarginPlan[]
   forecastCurves ForecastCurve[]
   forecastRuns   ForecastRun[]
   forecastDays   ForecastDay[]
@@ -182,16 +182,16 @@ model CategorySales {
 
 // sr.xlsx fayllaridan — kunlik chek metrikalari (filial majburiy).
 model DailyMetrics {
-  id                   Int      @id @default(autoincrement())
-  uploadedFileId       Int
-  branchId             Int
-  date                 DateTime @db.Date
-  receiptCount         Int
-  receiptTotal         Decimal  @db.Decimal(20, 2)
-  avgItemsPerReceipt   Decimal  @db.Decimal(10, 4)
-  avgReceipt           Decimal  @db.Decimal(20, 2)
-  bigPurchaseLevel     Decimal  @db.Decimal(20, 2)
-  smallPurchaseLevel   Decimal  @db.Decimal(20, 2)
+  id                 Int      @id @default(autoincrement())
+  uploadedFileId     Int
+  branchId           Int
+  date               DateTime @db.Date
+  receiptCount       Int
+  receiptTotal       Decimal  @db.Decimal(20, 2)
+  avgItemsPerReceipt Decimal  @db.Decimal(10, 4)
+  avgReceipt         Decimal  @db.Decimal(20, 2)
+  bigPurchaseLevel   Decimal  @db.Decimal(20, 2)
+  smallPurchaseLevel Decimal  @db.Decimal(20, 2)
 
   uploadedFile UploadedFile @relation(fields: [uploadedFileId], references: [id], onDelete: Cascade)
   branch       Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
@@ -221,21 +221,21 @@ model DailyVisits {
 
 // Yuklangan har bir fayl audit + dublikat oldini olish uchun saqlanadi.
 model UploadedFile {
-  id           Int          @id @default(autoincrement())
-  label        String       // admin tomonidan qo'yilgan nom (chalg'imaslik uchun)
-  originalName String
-  fileHash     String       @unique // sha256 — bir xil fayl 2 marta yuklanmaydi
-  fileType     FileType
-  branchId     Int?         // METRICS uchun majburiy, SALES bir filialli bo'lsa shunchaki
-  periodStart  DateTime?    @db.Date
-  periodEnd    DateTime?    @db.Date
-  yearOverride Int?         // VISITS faylda yil bo'lmaganda admin tanlaydi
-  templateVersion String?   // sotuv shabloni versiyasi (header signaturasidan: v1/v2/v3)
-  rowCount     Int          @default(0)
-  status       UploadStatus @default(SUCCESS)
-  errorMessage String?
-  uploadedById Int
-  createdAt    DateTime     @default(now())
+  id              Int          @id @default(autoincrement())
+  label           String // admin tomonidan qo'yilgan nom (chalg'imaslik uchun)
+  originalName    String
+  fileHash        String       @unique // sha256 — bir xil fayl 2 marta yuklanmaydi
+  fileType        FileType
+  branchId        Int? // METRICS uchun majburiy, SALES bir filialli bo'lsa shunchaki
+  periodStart     DateTime?    @db.Date
+  periodEnd       DateTime?    @db.Date
+  yearOverride    Int? // VISITS faylda yil bo'lmaganda admin tanlaydi
+  templateVersion String? // sotuv shabloni versiyasi (header signaturasidan: v1/v2/v3)
+  rowCount        Int          @default(0)
+  status          UploadStatus @default(SUCCESS)
+  errorMessage    String?
+  uploadedById    Int
+  createdAt       DateTime     @default(now())
 
   uploadedBy User    @relation(fields: [uploadedById], references: [id])
   branch     Branch? @relation(fields: [branchId], references: [id])
@@ -277,6 +277,7 @@ model Product {
   name       String
   categoryId Int? // tegishli kategoriya/subkategoriya (iyerarxiyadagi joyi)
   supplierId Int? // yetkazib beruvchi (POSTAVSHIK)
+  agentId    Int? // yetkazib beruvchi ichidagi agent (brend) — SKU shu agentga biriktiriladi
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -289,17 +290,19 @@ model Product {
   leadTimeDays   Int? // zakazdan kelguncha kunlar — yetkazib beruvchi profilida kiritiladi
   archivedAt     DateTime? // no-aktiv (arxiv) — buyurtma/OOS/Stockday'dan chiqadi, tarix saqlanadi
   packSize       Int? // blok/yashik/pachkadagi dona soni — buyurtmada eslab qolinadi
-  purchasePrice  Decimal? @db.Decimal(20, 2) // kelishilgan sotib olish narxi (dona) — zakazdan eslab qolinadi
+  purchasePrice  Decimal?  @db.Decimal(20, 2) // kelishilgan sotib olish narxi (dona) — zakazdan eslab qolinadi
   lastSalePeriod DateTime? @db.Date // so'nggi yuklangan davr (eskini bosib o'tmaslik uchun)
 
   category     Category?            @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   supplier     Supplier?            @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  agent        Agent?               @relation(fields: [agentId], references: [id], onDelete: SetNull)
   sales        ProductSales[]
   nameMismatch ProductNameMismatch?
   orderItems   PurchaseOrderItem[]
 
   @@index([categoryId])
   @@index([supplierId])
+  @@index([agentId])
 }
 
 // Kunlik sotuv faylidagi nom master nomidan farq qilsa — review uchun saqlanadi.
@@ -332,6 +335,28 @@ model Supplier {
   contracts SupplierContract[]
   sverkalar SverkaRecord[]
   orderDays SupplierOrderDay[]
+  agents    Agent[]
+}
+
+// Agent (BREND) — yetkazib beruvchi ichidagi alohida brend/vakil. Postavshikning
+// SKU'lari agentlarga taqsimlanadi; har agent o'z kontakti va zakaz kunlari bilan,
+// zakaz har agentga ALOHIDA beriladi (PurchaseOrder.agentId, alohida nakladnoy).
+model Agent {
+  id          Int      @id @default(autoincrement())
+  supplierId  Int
+  name        String // brend nomi (yetkazib beruvchi ichida unikal)
+  phone       String?
+  contactName String? // mas'ul shaxs
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  supplier  Supplier        @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  products  Product[]
+  orderDays AgentOrderDay[]
+  orders    PurchaseOrder[]
+
+  @@unique([supplierId, name])
+  @@index([supplierId])
 }
 
 // Yetkazib beruvchi bilan shartnoma — hujjat fayli tashqi havola (Drive va h.k.) sifatida.
@@ -356,6 +381,7 @@ model SupplierContract {
 model PurchaseOrder {
   id          Int         @id @default(autoincrement())
   supplierId  Int
+  agentId     Int? // agent (brend) — zakaz har agentga alohida; agentsiz zakazda null
   createdById Int // yaratgan foydalanuvchi (menejer/admin)
   status      OrderStatus @default(DRAFT)
   note        String?
@@ -365,20 +391,22 @@ model PurchaseOrder {
   receivedAt  DateTime?
 
   supplier  Supplier            @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  agent     Agent?              @relation(fields: [agentId], references: [id], onDelete: SetNull)
   createdBy User                @relation(fields: [createdById], references: [id], onDelete: Cascade)
   items     PurchaseOrderItem[]
 
   @@index([supplierId])
+  @@index([agentId])
   @@index([createdById])
   @@index([status])
 }
 
 model PurchaseOrderItem {
-  id        Int     @id @default(autoincrement())
+  id        Int      @id @default(autoincrement())
   orderId   Int
   productId Int
-  quantity  Decimal @db.Decimal(20, 3)
-  price     Decimal @db.Decimal(20, 2) // dona narxi
+  quantity  Decimal  @db.Decimal(20, 3)
+  price     Decimal  @db.Decimal(20, 2) // dona narxi
   packCount Int? // nechta blok/yashik buyurtma qilindi (ko'rinish uchun)
   packSize  Int? // o'sha paytdagi pachka hajmi (dona) — quantity = packCount × packSize
   factQty   Decimal? @db.Decimal(20, 3) // FAKT yetib kelgan miqdor — solishtirish uchun
@@ -421,7 +449,7 @@ model SalesPlan {
   branchId   Int
   categoryId Int
   year       Int
-  month      Int      // 1–12
+  month      Int // 1–12
   amount     Decimal  @default(0) @db.Decimal(18, 2)
   updatedAt  DateTime @updatedAt
 
@@ -450,10 +478,10 @@ model SpisaniyaCategoryLink {
 // Sotuv bo'limi moliyasi — harajatlar (filialsiz, umumiy ro'yxat).
 // Summa = miqdor × narx (serverda hisoblanadi).
 model Expense {
-  id          Int      @id @default(autoincrement())
+  id          Int       @id @default(autoincrement())
   name        String // harajat nomi
-  quantity    Decimal  @db.Decimal(20, 3) // miqdor
-  unitPrice   Decimal  @db.Decimal(20, 2) // narx (bir birlik)
+  quantity    Decimal   @db.Decimal(20, 3) // miqdor
+  unitPrice   Decimal   @db.Decimal(20, 2) // narx (bir birlik)
   amount      Decimal   @db.Decimal(20, 2) // summa = quantity × unitPrice
   spentAt     DateTime  @db.Date // harajat qilingan sana
   createdById Int
@@ -560,7 +588,7 @@ model AnketaField {
   type      String        @default("text") // text | textarea | number | yesno | consent
   required  Boolean       @default(false)
   sortOrder Int           @default(0) // bo'lim ichidagi tartib
-  active    Boolean        @default(true)
+  active    Boolean       @default(true)
   createdAt DateTime      @default(now())
 
   @@index([sectionId, sortOrder])
@@ -628,6 +656,18 @@ model SupplierOrderDay {
   supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
 
   @@unique([supplierId, sana])
+  @@index([sana])
+}
+
+// Agent (brend) zakaz qabul kunlari — SupplierOrderDay'ga parallel, lekin agent darajasida.
+model AgentOrderDay {
+  id      Int      @id @default(autoincrement())
+  agentId Int
+  sana    DateTime @db.Date
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, sana])
   @@index([sana])
 }
 

@@ -327,6 +327,205 @@ export async function updateSkuPurchaseAction(
 }
 
 
+// ── Agentlar (brend) ──
+// Yetkazib beruvchi ichidagi agentlar. SKU'lar agentlarga taqsimlanadi; har agent
+// o'z zakaz kunlari (AgentOrderDay) bilan. Zakaz har agentga alohida beriladi.
+
+export type AgentRow = {
+  id: number;
+  name: string;
+  phone: string | null;
+  contactName: string | null;
+  sortOrder: number;
+  skuCount: number;
+  orderDates: string[]; // YYYY-MM-DD — kalendar uchun
+};
+
+const agentCreateSchema = z.object({
+  supplierId: z.coerce.number().int().positive(),
+  name: z.string().trim().min(1, "Nom kiriting").max(200),
+  phone: z.string().trim().max(50).optional(),
+  contactName: z.string().trim().max(120).optional(),
+});
+
+/** Yangi agent qo'shish. Nom yetkazib beruvchi ichida unikal. */
+export async function createAgentAction(
+  input: z.input<typeof agentCreateSchema>
+): Promise<{ ok: true; id: number } | { ok: false; error: string }> {
+  try {
+    await requireSupplierEditor();
+    const p = agentCreateSchema.parse(input);
+    const exists = await prisma.agent.findFirst({
+      where: { supplierId: p.supplierId, name: p.name },
+      select: { id: true },
+    });
+    if (exists) return { ok: false, error: "Bu nomli agent allaqachon bor." };
+    const agent = await prisma.agent.create({
+      data: { supplierId: p.supplierId, name: p.name, phone: p.phone || null, contactName: p.contactName || null },
+      select: { id: true },
+    });
+    revalidateTag(SUPPLIERS_TAG, "max");
+    revalidatePath(`/baza/taminotchilar/${p.supplierId}`);
+    return { ok: true, id: agent.id };
+  } catch (err) {
+    return actionError(err, "createAgent");
+  }
+}
+
+const agentUpdateSchema = z.object({
+  agentId: z.coerce.number().int().positive(),
+  name: z.string().trim().min(1).max(200).optional(),
+  phone: z.string().trim().max(50).optional(),
+  contactName: z.string().trim().max(120).optional(),
+  sortOrder: z.coerce.number().int().optional(),
+});
+
+/** Agent profilini yangilash (qisman). undefined — tegilmaydi, bo'sh satr — tozalanadi. */
+export async function updateAgentAction(input: z.input<typeof agentUpdateSchema>): Promise<Result> {
+  try {
+    await requireSupplierEditor();
+    const p = agentUpdateSchema.parse(input);
+    const agent = await prisma.agent.findUnique({ where: { id: p.agentId }, select: { supplierId: true } });
+    if (!agent) return { ok: false, error: "Agent topilmadi." };
+    if (p.name) {
+      const taken = await prisma.agent.findFirst({
+        where: { supplierId: agent.supplierId, name: p.name, id: { not: p.agentId } },
+        select: { id: true },
+      });
+      if (taken) return { ok: false, error: "Bu nomli agent allaqachon bor." };
+    }
+    await prisma.agent.update({
+      where: { id: p.agentId },
+      data: {
+        ...(p.name ? { name: p.name } : {}),
+        ...(p.phone !== undefined ? { phone: p.phone || null } : {}),
+        ...(p.contactName !== undefined ? { contactName: p.contactName || null } : {}),
+        ...(p.sortOrder !== undefined ? { sortOrder: p.sortOrder } : {}),
+      },
+    });
+    revalidateTag(SUPPLIERS_TAG, "max");
+    revalidatePath(`/baza/taminotchilar/${agent.supplierId}`);
+    return { ok: true };
+  } catch (err) {
+    return actionError(err, "updateAgent");
+  }
+}
+
+/** Agentni o'chirish. Zakazi bo'lsa BLOKLANADI; SKU'lar yo'qolmaydi (agentId NULL). */
+export async function deleteAgentAction(agentId: number): Promise<Result> {
+  try {
+    await requireSupplierEditor();
+    const aid = z.coerce.number().int().positive().parse(agentId);
+    const agent = await prisma.agent.findUnique({ where: { id: aid }, select: { supplierId: true } });
+    if (!agent) return { ok: false, error: "Agent topilmadi." };
+    const orderCount = await prisma.purchaseOrder.count({ where: { agentId: aid } });
+    if (orderCount > 0) {
+      return { ok: false, error: `O'chirib bo'lmaydi: ${orderCount} ta zakaz tarixi bor.` };
+    }
+    // SKU'lar agentsiz qoladi (SetNull) → supplier kunlariga qaytadi; AgentOrderDay cascade o'chadi
+    await prisma.agent.delete({ where: { id: aid } });
+    revalidateTag(SUPPLIERS_TAG, "max");
+    revalidateTag(ANALYTICS_CACHE_TAG, "max");
+    revalidatePath(`/baza/taminotchilar/${agent.supplierId}`);
+    return { ok: true };
+  } catch (err) {
+    return actionError(err, "deleteAgent");
+  }
+}
+
+const agentOrderDaySchema = z.object({
+  agentId: z.coerce.number().int().positive(),
+  sana: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+
+/** Agent zakaz qabul kunini belgilash/bekor qilish — toggleOrderDateAction'ning agent versiyasi. */
+export async function toggleAgentOrderDateAction(
+  input: z.input<typeof agentOrderDaySchema>
+): Promise<{ ok: true; belgilandi: boolean } | { ok: false; error: string }> {
+  try {
+    await requireSupplierEditor();
+    const p = agentOrderDaySchema.parse(input);
+    const agent = await prisma.agent.findUnique({ where: { id: p.agentId }, select: { supplierId: true } });
+    if (!agent) return { ok: false, error: "Agent topilmadi." };
+    const sana = new Date(p.sana + "T00:00:00.000Z");
+    const where = { agentId_sana: { agentId: p.agentId, sana } };
+    const existing = await prisma.agentOrderDay.findUnique({ where, select: { id: true } });
+    let belgilandi: boolean;
+    if (existing) {
+      await prisma.agentOrderDay.delete({ where });
+      belgilandi = false;
+    } else {
+      await prisma.agentOrderDay.create({ data: { agentId: p.agentId, sana } });
+      belgilandi = true;
+    }
+    revalidateTag(SUPPLIERS_TAG, "max");
+    // Stockday "Keladi" agent kunlariga bog'liq — analitika keshini yangilaymiz
+    revalidateTag(ANALYTICS_CACHE_TAG, "max");
+    revalidatePath(`/baza/taminotchilar/${agent.supplierId}`);
+    return { ok: true, belgilandi };
+  } catch (err) {
+    return actionError(err, "toggleAgentOrderDate");
+  }
+}
+
+const assignAgentSchema = z.object({
+  productId: z.coerce.number().int().positive(),
+  agentId: z.coerce.number().int().positive().nullable(),
+});
+
+/** Bitta SKU'ni agentga biriktirish (yoki agentId=null — bo'shatish). */
+export async function assignSkuAgentAction(input: z.input<typeof assignAgentSchema>): Promise<Result> {
+  try {
+    await requireSupplierEditor();
+    const p = assignAgentSchema.parse(input);
+    const product = await prisma.product.findUnique({ where: { id: p.productId }, select: { supplierId: true } });
+    if (!product) return { ok: false, error: "SKU topilmadi." };
+    if (p.agentId != null) {
+      const agent = await prisma.agent.findUnique({ where: { id: p.agentId }, select: { supplierId: true } });
+      if (!agent || agent.supplierId !== product.supplierId) {
+        return { ok: false, error: "Agent bu yetkazib beruvchiga tegishli emas." };
+      }
+    }
+    await prisma.product.update({ where: { id: p.productId }, data: { agentId: p.agentId } });
+    revalidateTag(ANALYTICS_CACHE_TAG, "max");
+    if (product.supplierId) revalidatePath(`/baza/taminotchilar/${product.supplierId}`);
+    return { ok: true };
+  } catch (err) {
+    return actionError(err, "assignSkuAgent");
+  }
+}
+
+const bulkAssignSchema = z.object({
+  supplierId: z.coerce.number().int().positive(),
+  agentId: z.coerce.number().int().positive().nullable(),
+  subId: z.coerce.number().int().positive().optional(), // berilsa — faqat shu subkat
+});
+
+/** Bulk: yetkazib beruvchining barcha (yoki bitta subkat) SKU'larini agentga biriktirish. */
+export async function bulkAssignSkuAgentAction(
+  input: z.input<typeof bulkAssignSchema>
+): Promise<{ ok: true; count: number } | { ok: false; error: string }> {
+  try {
+    await requireSupplierEditor();
+    const p = bulkAssignSchema.parse(input);
+    if (p.agentId != null) {
+      const agent = await prisma.agent.findUnique({ where: { id: p.agentId }, select: { supplierId: true } });
+      if (!agent || agent.supplierId !== p.supplierId) {
+        return { ok: false, error: "Agent bu yetkazib beruvchiga tegishli emas." };
+      }
+    }
+    const res = await prisma.product.updateMany({
+      where: { supplierId: p.supplierId, ...(p.subId ? { categoryId: p.subId } : {}) },
+      data: { agentId: p.agentId },
+    });
+    revalidateTag(ANALYTICS_CACHE_TAG, "max");
+    revalidatePath(`/baza/taminotchilar/${p.supplierId}`);
+    return { ok: true, count: res.count };
+  } catch (err) {
+    return actionError(err, "bulkAssignSkuAgent");
+  }
+}
+
 /**
  * Yetkazib beruvchini o'chirish (SUPPLYCHAIN/SYSTEM_ADMIN).
  * Zakazlari bor bo'lsa BLOKLANADI (PurchaseOrder cascade — tarix yo'qoladi);

@@ -3,10 +3,10 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { canSeeSuppliers, canEditSuppliers } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
-import { Truck, ArrowLeft, Layers, Clock, FileText, ShoppingCart } from "lucide-react";
+import { Truck, ArrowLeft, Layers, Clock, FileText, ShoppingCart, Users } from "lucide-react";
 import { PageHeader, StatCard } from "@/components/common/page";
-import type { ContractRow } from "../actions";
-import { ProfilHeader, OrderDaysCalendar, LeadTimeEditor, ContractsSection, type ProfilSku } from "./profil-client";
+import type { ContractRow, AgentRow } from "../actions";
+import { ProfilHeader, OrderDaysCalendar, LeadTimeEditor, ContractsSection, AgentsSection, type ProfilSku } from "./profil-client";
 
 export const dynamic = "force-dynamic";
 
@@ -37,13 +37,24 @@ export default async function SupplierProfilePage({
           orderBy: { sana: "asc" },
           select: { sana: true },
         },
+        agents: {
+          orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+          include: {
+            orderDays: {
+              // eslint-disable-next-line react-hooks/purity
+              where: { sana: { gte: new Date(Date.now() - 60 * 86_400_000) } },
+              orderBy: { sana: "asc" },
+              select: { sana: true },
+            },
+          },
+        },
       },
     }),
     prisma.product.findMany({
       where: { supplierId },
       select: {
         id: true, code: true, name: true, leadTimeDays: true, packSize: true, purchasePrice: true,
-        abcClass: true, xyzClass: true, currentSold: true, archivedAt: true,
+        abcClass: true, xyzClass: true, currentSold: true, archivedAt: true, agentId: true,
         category: { select: { id: true, name: true } },
       },
       // Avval ko'p sotiladiganlar — lead time'ni muhimlaridan kiritish tabiiy
@@ -64,8 +75,23 @@ export default async function SupplierProfilePage({
     leadTimeDays: p.leadTimeDays,
     packSize: p.packSize,
     purchasePrice: p.purchasePrice != null ? Number(p.purchasePrice) : null,
+    agentId: p.agentId,
     arxiv: p.archivedAt != null,
   }));
+
+  // Agent bo'yicha SKU soni — allaqachon yuklangan products'dan (qo'shimcha so'rovsiz)
+  const agentSkuCount = new Map<number, number>();
+  for (const p of products) if (p.agentId != null) agentSkuCount.set(p.agentId, (agentSkuCount.get(p.agentId) ?? 0) + 1);
+  const agents: AgentRow[] = supplier.agents.map((a) => ({
+    id: a.id,
+    name: a.name,
+    phone: a.phone,
+    contactName: a.contactName,
+    sortOrder: a.sortOrder,
+    skuCount: agentSkuCount.get(a.id) ?? 0,
+    orderDates: a.orderDays.map((d) => d.sana.toISOString().slice(0, 10)),
+  }));
+  const agentOptions = agents.map((a) => ({ id: a.id, name: a.name }));
 
   const contracts: ContractRow[] = supplier.contracts.map((c) => ({
     id: c.id,
@@ -99,9 +125,11 @@ export default async function SupplierProfilePage({
       </PageHeader>
 
       {/* KPI */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard label="SKU soni" value={skus.length.toLocaleString("uz-UZ")} icon={Layers}
           hint="shu yetkazib beruvchiga biriktirilgan" />
+        <StatCard label="Agentlar (brend)" value={agents.length.toLocaleString("uz-UZ")} icon={Users}
+          hint={agents.length === 0 ? "kiritilmagan" : undefined} />
         <StatCard label="Lead time" value={avgLead != null ? `≈ ${avgLead.toFixed(1)} kun` : "—"} icon={Clock}
           tone={withLead.length === 0 ? "orange" : "default"}
           hint={`kiritilgan: ${withLead.length}/${skus.length}`} />
@@ -123,14 +151,20 @@ export default async function SupplierProfilePage({
       />
 
       <div className="grid gap-5 lg:grid-cols-[minmax(340px,420px)_1fr]">
-        {/* Chap: zakaz kunlari + shartnomalar */}
+        {/* Chap: agentlar + zakaz kunlari + shartnomalar */}
         <div className="space-y-5">
-          <OrderDaysCalendar supplierId={supplier.id} orderDates={supplier.orderDays.map((d) => d.sana.toISOString().slice(0, 10))} canEdit={canEdit} />
+          <AgentsSection supplierId={supplier.id} agents={agents} canEdit={canEdit} />
+          <OrderDaysCalendar
+            supplierId={supplier.id}
+            orderDates={supplier.orderDays.map((d) => d.sana.toISOString().slice(0, 10))}
+            canEdit={canEdit}
+            title={agents.length > 0 ? "Zakaz kunlari — agentsiz SKU" : "Zakaz qabul kunlari"}
+          />
           <ContractsSection supplierId={supplier.id} contracts={contracts} canEdit={canEdit} />
         </div>
 
-        {/* O'ng: SKU + lead time */}
-        <LeadTimeEditor supplierId={supplier.id} skus={skus} canEdit={canEdit} />
+        {/* O'ng: SKU + agent + lead time */}
+        <LeadTimeEditor supplierId={supplier.id} skus={skus} agents={agentOptions} canEdit={canEdit} />
       </div>
     </div>
   );
