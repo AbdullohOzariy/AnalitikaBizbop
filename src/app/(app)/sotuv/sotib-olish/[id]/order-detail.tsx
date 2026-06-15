@@ -210,7 +210,7 @@ export function OrderDetail({ order, role, isOwner }: { order: OrderData; role: 
                         className="h-8 w-16 text-xs tabular-nums" title="Lead time (kun) — SKU'ga saqlanadi" aria-label="Lead time (kun)" />
                     </TableCell>
                     <TableCell>
-                      <Input type="number" inputMode="numeric" value={l.pack} disabled={!editable || busy}
+                      <Input type="number" inputMode="decimal" value={l.pack} disabled={!editable || busy}
                         placeholder={i.packSize != null ? String(i.packSize) : ""}
                         onChange={(e) => setLine(i.productId, { pack: e.target.value })}
                         className="h-8 w-16 text-xs tabular-nums" title="Pachkadagi dona soni — SKU'ga saqlanadi" aria-label="Pachkadagi dona soni" />

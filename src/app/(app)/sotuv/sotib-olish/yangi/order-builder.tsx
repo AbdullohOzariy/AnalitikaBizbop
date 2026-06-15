@@ -356,13 +356,13 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
         </TableCell>
         <TableCell className="border-l border-border/60 bg-primary/[0.03] px-2">
           <span className="flex items-center gap-1">
-            <Input ref={regRef(it.productId, "blok")} type="number" inputMode="numeric" value={l.blok}
+            <Input ref={regRef(it.productId, "blok")} type="number" inputMode="decimal" value={l.blok}
               placeholder={it.packSize && it.suggested > 0 ? String(Math.ceil(it.suggested / it.packSize)) : ""}
               onChange={(e) => setLine(it.productId, { blok: e.target.value })}
               onKeyDown={onEnterNext(it.productId, "blok")}
               className="h-7 w-14 px-1.5 text-right text-xs tabular-nums" title="Blok/yashik soni" aria-label="Blok soni" />
             <span className="text-[10px] text-muted-foreground/60">×</span>
-            <Input ref={regRef(it.productId, "pack")} type="number" inputMode="numeric" value={l.pack}
+            <Input ref={regRef(it.productId, "pack")} type="number" inputMode="decimal" value={l.pack}
               placeholder={it.packSize != null ? String(it.packSize) : ""}
               onChange={(e) => setLine(it.productId, { pack: e.target.value })}
               onKeyDown={onEnterNext(it.productId, "pack")}

@@ -61,7 +61,7 @@ export async function GET(
       n: idx + 1,
       code: String(i.product.code),
       name: i.product.name,
-      pack: i.packCount != null && i.packSize != null ? `${i.packCount} × ${i.packSize}` : "",
+      pack: i.packCount != null && i.packSize != null ? `${Number(i.packCount)} × ${Number(i.packSize)}` : "",
       qty: Number(i.quantity),
       price: Number(i.price),
       sum: Number(i.quantity) * Number(i.price),

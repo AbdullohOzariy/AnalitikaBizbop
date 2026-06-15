@@ -73,7 +73,7 @@ export default async function SupplierProfilePage({
     abc: p.abcClass,
     xyz: p.xyzClass,
     leadTimeDays: p.leadTimeDays,
-    packSize: p.packSize,
+    packSize: p.packSize != null ? Number(p.packSize) : null,
     purchasePrice: p.purchasePrice != null ? Number(p.purchasePrice) : null,
     agentId: p.agentId,
     arxiv: p.archivedAt != null,

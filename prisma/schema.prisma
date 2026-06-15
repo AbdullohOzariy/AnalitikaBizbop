@@ -297,7 +297,7 @@ model Product {
   xyzClass       String?   @db.Char(1) // XYZ sinfi (talab barqarorligi) — sotuv yuklashda yangilanadi
   leadTimeDays   Int? // zakazdan kelguncha kunlar — yetkazib beruvchi profilida kiritiladi
   archivedAt     DateTime? // no-aktiv (arxiv) — buyurtma/OOS/Stockday'dan chiqadi, tarix saqlanadi
-  packSize       Int? // blok/yashik/pachkadagi dona soni — buyurtmada eslab qolinadi
+  packSize       Decimal? @db.Decimal(20, 3) // pachkadagi dona soni/hajmi (og'irlik/hajm uchun kasr ham) — buyurtmada eslab qolinadi
   purchasePrice  Decimal?  @db.Decimal(20, 2) // kelishilgan sotib olish narxi (dona) — zakazdan eslab qolinadi
   lastSalePeriod DateTime? @db.Date // so'nggi yuklangan davr (eskini bosib o'tmaslik uchun)
 
@@ -416,8 +416,8 @@ model PurchaseOrderItem {
   productId Int
   quantity  Decimal  @db.Decimal(20, 3)
   price     Decimal  @db.Decimal(20, 2) // dona narxi
-  packCount Int? // nechta blok/yashik buyurtma qilindi (ko'rinish uchun)
-  packSize  Int? // o'sha paytdagi pachka hajmi (dona) — quantity = packCount × packSize
+  packCount Decimal? @db.Decimal(20, 3) // nechta blok/yashik buyurtma qilindi (kasr ham bo'lishi mumkin)
+  packSize  Decimal? @db.Decimal(20, 3) // o'sha paytdagi pachka soni/hajmi — quantity = packCount × packSize
   factQty   Decimal? @db.Decimal(20, 3) // FAKT yetib kelgan miqdor — solishtirish uchun
 
   order   PurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)

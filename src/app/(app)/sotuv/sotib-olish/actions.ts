@@ -219,7 +219,7 @@ export async function supplierItemsAction(
         productId: p.id, code: p.code, name: p.name, sub: c?.name ?? null,
         stock, sold, suggested, abc: p.abcClass, xyz: p.xyzClass, lead: p.leadTimeDays,
         arxiv: p.archivedAt != null, dailyAvg: Math.round(dailyAvg * 10) / 10, minStock,
-        packSize: p.packSize,
+        packSize: p.packSize != null ? Number(p.packSize) : null,
         purchasePrice: p.purchasePrice != null ? Number(p.purchasePrice) : null,
         groupId: g?.id ?? null, groupName: g?.name ?? null, groupSort: g?.sortOrder ?? 0,
         catId: isSub ? c!.parent!.id : (c?.id ?? null),
@@ -240,8 +240,8 @@ const itemSchema = z.object({
   productId: z.coerce.number().int().positive(),
   quantity: z.coerce.number().positive().max(1_000_000),
   price: z.coerce.number().nonnegative().max(1_000_000_000_000),
-  packCount: z.coerce.number().int().positive().max(100_000).nullable().optional(),
-  packSize: z.coerce.number().int().positive().max(100_000).nullable().optional(),
+  packCount: z.coerce.number().positive().max(100_000).nullable().optional(),
+  packSize: z.coerce.number().positive().max(100_000).nullable().optional(),
   leadTimeDays: z.coerce.number().int().min(0).max(365).nullable().optional(),
 });
 

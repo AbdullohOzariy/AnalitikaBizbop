@@ -303,7 +303,7 @@ export async function createSupplierAction(
 const skuParamSchema = z.object({
   productId: z.coerce.number().int().positive(),
   leadTimeDays: z.coerce.number().int().min(0).max(365).nullable().optional(),
-  packSize: z.coerce.number().int().positive().max(100_000).nullable().optional(),
+  packSize: z.coerce.number().positive().max(100_000).nullable().optional(),
   purchasePrice: z.coerce.number().nonnegative().max(1_000_000_000_000).nullable().optional(),
 });
 

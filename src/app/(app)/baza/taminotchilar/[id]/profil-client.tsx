@@ -456,7 +456,7 @@ type SkuField = "lead" | "pack" | "price";
 
 const FIELD_CFG: Record<SkuField, { label: string; max: number; int: boolean }> = {
   lead: { label: "Lead (kun)", max: 365, int: true },
-  pack: { label: "Pachka (dona)", max: 100_000, int: true },
+  pack: { label: "Pachka", max: 100_000, int: false },
   price: { label: "Narx (dona)", max: 1_000_000_000_000, int: false },
 };
 
