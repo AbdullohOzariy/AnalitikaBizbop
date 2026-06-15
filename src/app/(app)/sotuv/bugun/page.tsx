@@ -63,13 +63,20 @@ export default async function BugunPage() {
     );
   }
 
-  // ── Yetkazib beruvchilar: bugun va ertaga zakaz qabul qiladiganlar (qamrov ichida) ──
-  // Zakaz kunlari endi ANIQ SANALAR (SupplierOrderDay, kalendardan belgilanadi)
+  // ── Zakaz nishonlari: bugun/ertaga zakaz qabul qiladigan AGENTLAR + agentsiz
+  // yetkazib beruvchilar (qamrov ichida). Zakaz kunlari ANIQ SANALAR:
+  // agentda AgentOrderDay, agentsiz SKU'larda SupplierOrderDay.
   const todayD = new Date(todayStr + "T00:00:00.000Z");
   const tomorrowD = new Date(todayD.getTime() + 86_400_000);
+  const scopeProd = scopeProductWhere(scopeParents);
+  const agentWhere = (d: Date) => ({
+    orderDays: { some: { sana: d } },
+    products: { some: { archivedAt: null, ...scopeProd } },
+  });
+  // Agentsiz: faqat agentga biriktirilmagan (agentId:null) SKU'lari bor supplier
   const supplierWhere = (d: Date) => ({
     orderDays: { some: { sana: d } },
-    products: { some: { archivedAt: null, ...scopeProductWhere(scopeParents) } },
+    products: { some: { archivedAt: null, agentId: null, ...scopeProd } },
   });
 
   const def = await getDefaultRange();
@@ -80,7 +87,17 @@ export default async function BugunPage() {
     scopeSubIds: scope,
   };
 
-  const [todaySuppliers, tomorrowSuppliers, sdKpi, oKpi] = await Promise.all([
+  const [todayAgents, tomorrowAgents, todaySuppliers, tomorrowSuppliers, sdKpi, oKpi] = await Promise.all([
+    prisma.agent.findMany({
+      where: agentWhere(todayD),
+      select: { id: true, name: true, supplierId: true, supplier: { select: { name: true, rating: true } } },
+      orderBy: [{ supplier: { name: "asc" } }, { name: "asc" }],
+    }),
+    prisma.agent.findMany({
+      where: agentWhere(tomorrowD),
+      select: { id: true, name: true, supplierId: true, supplier: { select: { name: true } } },
+      orderBy: [{ supplier: { name: "asc" } }, { name: "asc" }],
+    }),
     prisma.supplier.findMany({
       where: supplierWhere(todayD),
       select: { id: true, name: true, rating: true },
@@ -95,38 +112,73 @@ export default async function BugunPage() {
     oosKpi(filters),
   ]);
 
-  // Bugun allaqachon berilgan zakazlar (menejer — faqat o'ziniki)
-  const todayOrders = todaySuppliers.length
+  // Bugungi nishonlar (agent + agentsiz supplier) — bitta ro'yxatga jamlaymiz
+  type OrderTarget = { key: string; supplierId: number; agentId: number | null; label: string; rating: number | null; href: string };
+  const todayTargets: OrderTarget[] = [
+    ...todayAgents.map((a) => ({
+      key: `${a.supplierId}:${a.id}`,
+      supplierId: a.supplierId,
+      agentId: a.id,
+      label: `${a.supplier.name} · ${a.name}`,
+      rating: a.supplier.rating,
+      href: `/sotuv/sotib-olish/yangi?supplier=${a.supplierId}&agent=${a.id}`,
+    })),
+    ...todaySuppliers.map((s) => ({
+      key: `${s.id}:none`,
+      supplierId: s.id,
+      agentId: null,
+      label: s.name,
+      rating: s.rating,
+      href: `/sotuv/sotib-olish/yangi?supplier=${s.id}`,
+    })),
+  ].sort((a, b) => a.label.localeCompare(b.label, "uz"));
+
+  // Bugun allaqachon berilgan zakazlar (supplier×agent bo'yicha; menejer — faqat o'ziniki)
+  const targetSupIds = [...new Set(todayTargets.map((t) => t.supplierId))];
+  const todayOrders = targetSupIds.length
     ? await prisma.purchaseOrder.findMany({
         where: {
-          supplierId: { in: todaySuppliers.map((s) => s.id) },
+          supplierId: { in: targetSupIds },
           createdAt: { gte: todayStartUtc },
           ...(role === "CAT_MANAGER" ? { createdById: userId } : {}),
         },
-        select: { id: true, supplierId: true, status: true },
+        select: { id: true, supplierId: true, agentId: true, status: true },
         orderBy: { id: "desc" },
       })
     : [];
-  const orderBySupplier = new Map<number, { id: number; status: string }>();
+  const orderByTarget = new Map<string, { id: number; status: string }>();
   for (const o of todayOrders) {
-    if (!orderBySupplier.has(o.supplierId)) orderBySupplier.set(o.supplierId, { id: o.id, status: o.status });
+    const k = `${o.supplierId}:${o.agentId ?? "none"}`;
+    if (!orderByTarget.has(k)) orderByTarget.set(k, { id: o.id, status: o.status });
   }
 
-  // Qamrovdagi SKU soni har yetkazib beruvchi uchun (kartada ko'rsatish)
-  const skuCounts = todaySuppliers.length
-    ? await prisma.product.groupBy({
-        by: ["supplierId"],
-        where: {
-          supplierId: { in: todaySuppliers.map((s) => s.id) },
-          archivedAt: null,
-          ...scopeProductWhere(scopeParents),
-        },
-        _count: { _all: true },
-      })
-    : [];
-  const skuCountMap = new Map(skuCounts.map((g) => [g.supplierId, g._count._all]));
+  // Qamrovdagi SKU soni har nishon uchun (agent yoki agentsiz supplier)
+  const todayAgentIds = todayAgents.map((a) => a.id);
+  const todaySupIds = todaySuppliers.map((s) => s.id);
+  const [agentSkuCounts, supSkuCounts] = await Promise.all([
+    todayAgentIds.length
+      ? prisma.product.groupBy({ by: ["agentId"], where: { agentId: { in: todayAgentIds }, archivedAt: null, ...scopeProd }, _count: { _all: true } })
+      : Promise.resolve([] as { agentId: number | null; _count: { _all: number } }[]),
+    todaySupIds.length
+      ? prisma.product.groupBy({ by: ["supplierId"], where: { supplierId: { in: todaySupIds }, agentId: null, archivedAt: null, ...scopeProd }, _count: { _all: true } })
+      : Promise.resolve([] as { supplierId: number | null; _count: { _all: number } }[]),
+  ]);
+  const agentSupMap = new Map(todayAgents.map((a) => [a.id, a.supplierId]));
+  const skuByKey = new Map<string, number>();
+  for (const g of agentSkuCounts) {
+    if (g.agentId == null) continue;
+    const sid = agentSupMap.get(g.agentId);
+    if (sid != null) skuByKey.set(`${sid}:${g.agentId}`, g._count._all);
+  }
+  for (const g of supSkuCounts) if (g.supplierId != null) skuByKey.set(`${g.supplierId}:none`, g._count._all);
 
-  const done = todaySuppliers.filter((s) => orderBySupplier.has(s.id)).length;
+  // Ertangi nishonlar (agent + agentsiz supplier)
+  const tomorrowTargets = [
+    ...tomorrowAgents.map((a) => ({ id: `a${a.id}`, supplierId: a.supplierId, label: `${a.supplier.name} · ${a.name}` })),
+    ...tomorrowSuppliers.map((s) => ({ id: `s${s.id}`, supplierId: s.id, label: s.name })),
+  ].sort((a, b) => a.label.localeCompare(b.label, "uz"));
+
+  const done = todayTargets.filter((t) => orderByTarget.has(t.key)).length;
 
   return (
     <div className="space-y-5">
@@ -138,11 +190,11 @@ export default async function BugunPage() {
 
       {/* KPI */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Bugungi zakaz kunlari" value={todaySuppliers.length.toLocaleString("uz-UZ")} icon={Truck}
-          hint="zakaz qabul qiladigan yetkazib beruvchilar" />
-        <StatCard label="Zakaz berildi" value={`${done}/${todaySuppliers.length}`} icon={CheckCircle2}
-          tone={todaySuppliers.length > 0 && done === todaySuppliers.length ? "green" : "default"}
-          hint={done < todaySuppliers.length ? "qolganlari kutilmoqda" : "hammasi bajarildi"} />
+        <StatCard label="Bugungi zakaz kunlari" value={todayTargets.length.toLocaleString("uz-UZ")} icon={Truck}
+          hint="zakaz qabul qiladigan agent/yetkazib beruvchilar" />
+        <StatCard label="Zakaz berildi" value={`${done}/${todayTargets.length}`} icon={CheckCircle2}
+          tone={todayTargets.length > 0 && done === todayTargets.length ? "green" : "default"}
+          hint={done < todayTargets.length ? "qolganlari kutilmoqda" : "hammasi bajarildi"} />
         <StatCard label="Kechikish xavfi" value={sdKpi.xavf.toLocaleString("uz-UZ")} icon={TimerOff}
           tone={sdKpi.xavf > 0 ? "red" : "default"}
           hint="keyingi zakazda ham yetib kelguncha tugaydi" />
@@ -154,23 +206,24 @@ export default async function BugunPage() {
         {/* ── Bugungi zakazlar ro'yxati ── */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Bugun zakaz beriladigan yetkazib beruvchilar</CardTitle>
+            <CardTitle className="text-base">Bugun zakaz beriladigan agent / yetkazib beruvchilar</CardTitle>
             <p className="text-xs text-muted-foreground">
-              Zakaz kunlari yetkazib beruvchi profilida belgilanadi. Tugma — yetkazib beruvchi tanlangan holda tayyor zakaz oynasini ochadi.
+              Zakaz kunlari agent (yoki agentsiz SKU uchun yetkazib beruvchi) profilida belgilanadi.
+              Tugma — nishon tanlangan holda tayyor zakaz oynasini ochadi.
             </p>
           </CardHeader>
           <CardContent className="space-y-2">
-            {todaySuppliers.length === 0 ? (
+            {todayTargets.length === 0 ? (
               <p className="py-6 text-center text-sm italic text-muted-foreground">
-                Bugun zakaz kuni belgilangan yetkazib beruvchi yo&apos;q.
+                Bugun zakaz kuni belgilangan agent/yetkazib beruvchi yo&apos;q.
                 Zakaz kunlarini <Link href="/baza/taminotchilar" className="underline underline-offset-2">yetkazib beruvchi profillarida</Link> belgilang.
               </p>
             ) : (
-              todaySuppliers.map((s) => {
-                const order = orderBySupplier.get(s.id);
+              todayTargets.map((t) => {
+                const order = orderByTarget.get(t.key);
                 return (
                   <div
-                    key={s.id}
+                    key={t.key}
                     className={cn(
                       "flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2.5",
                       order ? "border-emerald-500/40 bg-emerald-500/10" : "border-border"
@@ -181,11 +234,11 @@ export default async function BugunPage() {
                       : <Clock className="h-4 w-4 shrink-0 text-amber-500" />}
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">
-                        {s.name}
-                        {s.rating != null && <span className="ml-1.5 text-xs text-amber-500">{"★".repeat(s.rating)}</span>}
+                        {t.label}
+                        {t.rating != null && <span className="ml-1.5 text-xs text-amber-500">{"★".repeat(t.rating)}</span>}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {(skuCountMap.get(s.id) ?? 0).toLocaleString("uz-UZ")} SKU
+                        {(skuByKey.get(t.key) ?? 0).toLocaleString("uz-UZ")} SKU
                         {order && <> · zakaz <Link href={`/sotuv/sotib-olish/${order.id}`} className="underline underline-offset-2">#{order.id}</Link> berildi</>}
                       </p>
                     </div>
@@ -193,7 +246,7 @@ export default async function BugunPage() {
                       <Pill tone="green" className="text-[10px]">bajarildi</Pill>
                     ) : canCreateOrder ? (
                       <Link
-                        href={`/sotuv/sotib-olish/yangi?supplier=${s.id}`}
+                        href={t.href}
                         className="inline-flex h-8 items-center gap-1 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
                       >
                         <Plus className="h-3.5 w-3.5" /> Zakaz yaratish
@@ -256,14 +309,14 @@ export default async function BugunPage() {
               <p className="text-xs text-muted-foreground">Tayyorgarlik uchun: ertangi zakaz kunlari</p>
             </CardHeader>
             <CardContent>
-              {tomorrowSuppliers.length === 0 ? (
+              {tomorrowTargets.length === 0 ? (
                 <p className="py-2 text-center text-xs italic text-muted-foreground">Ertaga zakaz kuni yo&apos;q.</p>
               ) : (
                 <ul className="space-y-1.5">
-                  {tomorrowSuppliers.map((s) => (
-                    <li key={s.id} className="flex items-center gap-2 text-sm">
+                  {tomorrowTargets.map((t) => (
+                    <li key={t.id} className="flex items-center gap-2 text-sm">
                       <Truck className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                      <Link href={`/baza/taminotchilar/${s.id}`} className="truncate hover:underline">{s.name}</Link>
+                      <Link href={`/baza/taminotchilar/${t.supplierId}`} className="truncate hover:underline">{t.label}</Link>
                     </li>
                   ))}
                 </ul>

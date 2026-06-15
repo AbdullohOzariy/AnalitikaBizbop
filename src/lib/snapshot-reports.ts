@@ -190,7 +190,7 @@ function sdCte(f: SnapshotFilters, todayStr: string): Prisma.Sql {
              ps."periodStart", ps."periodEnd",
              p.code, p.name AS pname, p."categoryId", b.name AS bname,
              p."abcClass" AS abc, p."xyzClass" AS xyz,
-             p."leadTimeDays" AS lead, p."supplierId" AS supid
+             p."leadTimeDays" AS lead, p."supplierId" AS supid, p."agentId" AS agid
       FROM "ProductSales" ps
       JOIN "Product" p ON p.id = ps."productId"
       JOIN "Branch"  b ON b.id = ps."branchId"
@@ -198,7 +198,7 @@ function sdCte(f: SnapshotFilters, todayStr: string): Prisma.Sql {
     ),
     latest AS (
       SELECT DISTINCT ON ("productId", "branchId")
-             "productId", "branchId", "stockQty", "periodEnd", code, pname, "categoryId", bname, abc, xyz, lead, supid
+             "productId", "branchId", "stockQty", "periodEnd", code, pname, "categoryId", bname, abc, xyz, lead, supid, agid
       FROM base
       ORDER BY "productId", "branchId", "periodEnd" DESC
     ),
@@ -216,11 +216,17 @@ function sdCte(f: SnapshotFilters, todayStr: string): Prisma.Sql {
              -- Yetib kelish kunlari = keyingi zakaz sanasigacha (kalendar kunlari,
              -- belgilanmagan bo'lsa 0 — istalgan kuni) + SKU lead time. Lead kiritilmagan — NULL.
              CASE WHEN l.lead IS NOT NULL THEN
-               COALESCE((
-                 SELECT MIN(od.sana - ${todayStr}::date)
-                 FROM "SupplierOrderDay" od
-                 WHERE od."supplierId" = l.supid AND od.sana >= ${todayStr}::date
-               ), 0) + l.lead
+               COALESCE(
+                 CASE WHEN l.agid IS NOT NULL THEN (
+                   SELECT MIN(aod.sana - ${todayStr}::date)
+                   FROM "AgentOrderDay" aod
+                   WHERE aod."agentId" = l.agid AND aod.sana >= ${todayStr}::date
+                 ) ELSE (
+                   SELECT MIN(od.sana - ${todayStr}::date)
+                   FROM "SupplierOrderDay" od
+                   WHERE od."supplierId" = l.supid AND od.sana >= ${todayStr}::date
+                 ) END
+               , 0) + l.lead
              END AS arrival_days,
              l."stockQty",
              (a.sold_total / NULLIF(a.tracked_days, 0)) AS avg_daily,
@@ -266,7 +272,7 @@ export const stockdayKpi = (f: SnapshotFilters, todayStr: string) =>
       `);
       return res[0] ?? { faol: 0, kritik: 0, kam: 0, normal: 0, ortiqcha: 0, ortiqcha_value: 0, xavf: 0 };
     },
-    ["stockdayKpi_v3", filterKey(f), todayStr],
+    ["stockdayKpi_v4", filterKey(f), todayStr],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
   )();
 
@@ -290,7 +296,7 @@ export const stockdayRows = (f: SnapshotFilters, view: StockView, page: number, 
         LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}
       `);
     },
-    ["stockdayRows_v4", filterKey(f), view, String(page), String(pageSize), todayStr],
+    ["stockdayRows_v5", filterKey(f), view, String(page), String(pageSize), todayStr],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
   )();
 
@@ -351,7 +357,7 @@ export const stockdayTreeAgg = (f: SnapshotFilters, view: StockView, todayStr: s
         GROUP BY 1, 2, 3, 4, 5, 6
       `);
     },
-    ["stockdayTree_v2", filterKey(f), view, todayStr],
+    ["stockdayTree_v3", filterKey(f), view, todayStr],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
   )();
 
