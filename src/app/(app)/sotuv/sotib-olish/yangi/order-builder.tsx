@@ -225,6 +225,17 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
   // Joriy vaqt faqat mount'da o'qiladi (render purity); hisob arzon — memo shart emas.
   const [hintNow] = useState(() => new Date());
   const selectedSupplier = useMemo(() => suppliers.find((s) => String(s.id) === supplierId), [suppliers, supplierId]);
+  // base-ui Select: trigger'da qiymat (id) emas, NOM ko'rinishi uchun items (qiymat→label) kerak
+  const supplierLabels = useMemo(() => {
+    const o: Record<string, React.ReactNode> = {};
+    for (const s of suppliers) o[String(s.id)] = s.name;
+    return o;
+  }, [suppliers]);
+  const agentLabels = useMemo(() => {
+    const o: Record<string, React.ReactNode> = { none: "Agentsiz (umumiy)" };
+    for (const a of selectedSupplier?.agents ?? []) o[String(a.id)] = a.name;
+    return o;
+  }, [selectedSupplier]);
   const orderDayHint = (() => {
     const sup = selectedSupplier;
     if (!sup) return null;
@@ -393,7 +404,7 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
       <div className="flex flex-wrap items-end gap-3">
         <div className="space-y-1">
           <Label className="text-xs text-muted-foreground">Yetkazib beruvchi</Label>
-          <Select value={supplierId} onValueChange={(v) => onSupplier(v ?? "")} disabled={loadingSup || saving}>
+          <Select value={supplierId} onValueChange={(v) => onSupplier(v ?? "")} disabled={loadingSup || saving} items={supplierLabels}>
             <SelectTrigger className="h-9 w-72 text-sm">
               <SelectValue placeholder={loadingSup ? "Yuklanmoqda…" : "Yetkazib beruvchi tanlang…"} />
             </SelectTrigger>
@@ -407,7 +418,7 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
         {selectedSupplier && selectedSupplier.agents.length > 0 && (
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">Agent (brend)</Label>
-            <Select value={agentSel} onValueChange={(v) => onAgent(typeof v === "string" ? v : "")} disabled={loadingItems || saving}>
+            <Select value={agentSel} onValueChange={(v) => onAgent(typeof v === "string" ? v : "")} disabled={loadingItems || saving} items={agentLabels}>
               <SelectTrigger className="h-9 w-60 text-sm">
                 <SelectValue placeholder="Agent tanlang…" />
               </SelectTrigger>

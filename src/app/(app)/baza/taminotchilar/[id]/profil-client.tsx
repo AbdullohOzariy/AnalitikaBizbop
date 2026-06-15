@@ -482,6 +482,12 @@ export function LeadTimeEditor({ supplierId, skus, agents, canEdit = true }: { s
 
   // Agent biriktirish (har SKU + subkat bulk)
   const hasAgents = agents.length > 0;
+  // base-ui Select: trigger'da id emas, NOM ko'rinishi uchun items (qiymat→label) kerak
+  const agentLabels = useMemo(() => {
+    const o: Record<string, React.ReactNode> = { [AGENT_NONE]: "— agentsiz" };
+    for (const a of agents) o[String(a.id)] = a.name;
+    return o;
+  }, [agents]);
   const [agentVals, setAgentVals] = useState<Record<number, string>>(() => {
     const o: Record<number, string> = {};
     for (const s of skus) o[s.id] = s.agentId != null ? String(s.agentId) : "";
@@ -664,7 +670,7 @@ export function LeadTimeEditor({ supplierId, skus, agents, canEdit = true }: { s
                           {hasAgents && canEdit && (
                             <span className="ml-auto flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                               <span className="text-[10px] font-normal text-muted-foreground">→ agentga:</span>
-                              <Select onValueChange={(v) => { if (typeof v === "string") bulkAssignSub(subId, v); }}>
+                              <Select onValueChange={(v) => { if (typeof v === "string") bulkAssignSub(subId, v); }} items={agentLabels}>
                                 <SelectTrigger className="h-6 w-[140px] text-[11px]"><SelectValue placeholder="biriktirish…" /></SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value={AGENT_NONE}>— agentsiz</SelectItem>
@@ -699,7 +705,7 @@ export function LeadTimeEditor({ supplierId, skus, agents, canEdit = true }: { s
                         {hasAgents && (
                           <td className="px-1 py-1">
                             <Select value={agentVals[s.id] === "" ? AGENT_NONE : agentVals[s.id]}
-                              onValueChange={(v) => setAgent(s.id, typeof v === "string" ? v : AGENT_NONE)} disabled={!canEdit}>
+                              onValueChange={(v) => setAgent(s.id, typeof v === "string" ? v : AGENT_NONE)} disabled={!canEdit} items={agentLabels}>
                               <SelectTrigger className="h-7 w-full text-[11px]"><SelectValue placeholder="—" /></SelectTrigger>
                               <SelectContent>
                                 <SelectItem value={AGENT_NONE}>— agentsiz</SelectItem>
