@@ -41,9 +41,14 @@ export function AnketaForm({ sections }: { sections: AnketaSectionData[] }) {
     }
     setServerError("");
     start(async () => {
-      const res = await submitAnketaAction({ answers });
-      if (res.ok) setSent(true);
-      else setServerError(res.error);
+      try {
+        const res = await submitAnketaAction({ answers });
+        if (res.ok) setSent(true);
+        else setServerError(res.error);
+      } catch {
+        // Tarmoq xatosi yoki Server Action bloklangani — jim qolmasin
+        setServerError("Yuborib bo'lmadi. Internet aloqasini tekshirib, qayta urinib ko'ring.");
+      }
     });
   };
 

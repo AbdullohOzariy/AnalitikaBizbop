@@ -8,6 +8,12 @@ const nextConfig: NextConfig = {
     // (orqaga/oldinga va sidebar navigatsiyasi bir zumda). Ma'lumot baribir faqat
     // fayl yuklanganda o'zgaradi — 30s eskirish xavfsiz.
     staleTimes: { dynamic: 30 },
+    // Server Action'lar CSRF himoyasi Origin'ni host bilan solishtiradi — sozlanmasa
+    // faqat same-origin. Public anketa boshqa domendan (supplier.oilagroup.uz, proxy/
+    // rewrite) yuboriladi, shu sababli "Yuborish" bloklanardi. O'sha originlarni ruxsat beramiz.
+    serverActions: {
+      allowedOrigins: ["supplier.oilagroup.uz", "*.oilagroup.uz"],
+    },
   },
   async redirects() {
     return [
