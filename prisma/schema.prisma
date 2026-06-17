@@ -307,6 +307,7 @@ model Product {
   sales        ProductSales[]
   nameMismatch ProductNameMismatch?
   orderItems   PurchaseOrderItem[]
+  warehouseStock WarehouseStock?
 
   @@index([categoryId])
   @@index([supplierId])
@@ -666,6 +667,17 @@ model SupplierOrderDay {
 
   @@unique([supplierId, sana])
   @@index([sana])
+}
+
+// Markaziy ombor qoldig'i — kunlik import (kod → qoldiq) bilan yangilanadi (1C sotuv
+// faylida yo'q). Bitta markaziy ombor; snapshot (oxirgi import). Taqsimot shu asosda.
+model WarehouseStock {
+  id        Int      @id @default(autoincrement())
+  productId Int      @unique
+  qty       Decimal  @default(0) @db.Decimal(20, 3)
+  updatedAt DateTime @updatedAt
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 }
 
 // Agent (brend) zakaz qabul kunlari — SupplierOrderDay'ga parallel, lekin agent darajasida.
