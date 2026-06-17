@@ -38,8 +38,9 @@ export const canReviewAnketa = (r: R): boolean =>
 /** Ta'minot zanjiri roli. */
 export const isSupplyChain = (r: R): boolean => r === "SUPPLYCHAIN";
 
-/** Yetkazib beruvchilar bo'limini KO'RA oladiganlar. */
-export const canSeeSuppliers = (r: R): boolean => isAdminTier(r) || isSupplyChain(r) || isHeadCatManager(r);
+/** Yetkazib beruvchilar bo'limini KO'RA oladiganlar (CAT_MANAGER — read-only, tahrir yo'q). */
+export const canSeeSuppliers = (r: R): boolean =>
+  isAdminTier(r) || isSupplyChain(r) || isHeadCatManager(r) || r === "CAT_MANAGER";
 
 /** Yetkazib beruvchilarni TAHRIRLAY oladiganlar (qo'shish, profil, shartnoma, lead time). */
 export const canEditSuppliers = (r: R): boolean => isSystemAdmin(r) || isSupplyChain(r);
