@@ -6,17 +6,25 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/auth";
-import { canSeeSuppliers, canEditSuppliers } from "@/lib/roles";
-import { Gauge, Truck, CheckCircle2, PackageCheck, Clock } from "lucide-react";
-import { PageHeader, StatCard, EmptyState } from "@/components/common/page";
+import { canSeeSuppliers, canEditSuppliers, canManageWarehouse } from "@/lib/roles";
+import { prisma } from "@/lib/prisma";
+import { Gauge, Truck, CheckCircle2, PackageCheck, Clock, Plus, Send } from "lucide-react";
+import { PageHeader, StatCard, EmptyState, Pill } from "@/components/common/page";
 import { cn } from "@/lib/utils";
+import { formatDateUZ } from "@/lib/format";
 import { supplierLogistics } from "@/lib/logistics";
 import { LogistikaFilter } from "./filter";
 import { OmborTab } from "./ombor-tab";
 
 export const dynamic = "force-dynamic";
 
-type Tab = "scorecard" | "ombor";
+type Tab = "scorecard" | "ombor" | "taqsimot";
+
+const DIST_STATUS: Record<string, { label: string; tone: "muted" | "green" | "red" | "blue" }> = {
+  DRAFT: { label: "Qoralama", tone: "muted" },
+  CONFIRMED: { label: "Tasdiqlandi", tone: "green" },
+  CANCELLED: { label: "Bekor", tone: "red" },
+};
 
 function ymd(d: Date): string { return d.toISOString().slice(0, 10); }
 function pctCls(v: number | null): string {
@@ -38,8 +46,9 @@ export default async function LogistikaPage({
   if (!canSeeSuppliers(session.user.role)) redirect("/dashboard-v2");
   const canEdit = canEditSuppliers(session.user.role);
 
+  const canWh = canManageWarehouse(session.user.role);
   const sp = await searchParams;
-  const tab: Tab = sp.tab === "ombor" ? "ombor" : "scorecard";
+  const tab: Tab = sp.tab === "ombor" ? "ombor" : sp.tab === "taqsimot" && canWh ? "taqsimot" : "scorecard";
   const isDate = (s: string | undefined): s is string => !!s && /^\d{4}-\d{2}-\d{2}$/.test(s);
   const today = new Date(); today.setUTCHours(0, 0, 0, 0);
   const startStr = isDate(sp.start) ? sp.start : ymd(new Date(today.getTime() - 89 * 86_400_000));
@@ -48,6 +57,7 @@ export default async function LogistikaPage({
   const TABS: { v: Tab; l: string }[] = [
     { v: "scorecard", l: "Ta'minotchi" },
     { v: "ombor", l: "Ombor" },
+    ...(canWh ? [{ v: "taqsimot" as Tab, l: "Taqsimot" }] : []),
   ];
 
   return (
@@ -69,7 +79,70 @@ export default async function LogistikaPage({
         ))}
       </div>
 
-      {tab === "ombor" ? <OmborTab canEdit={canEdit} /> : <Scorecard startStr={startStr} endStr={endStr} />}
+      {tab === "ombor" ? <OmborTab canEdit={canEdit} />
+        : tab === "taqsimot" ? <TaqsimotList />
+        : <Scorecard startStr={startStr} endStr={endStr} />}
+    </div>
+  );
+}
+
+async function TaqsimotList() {
+  const dists = await prisma.distribution.findMany({
+    orderBy: { id: "desc" },
+    take: 100,
+    select: {
+      id: true, status: true, targetDays: true, createdAt: true,
+      branch: { select: { name: true } },
+      _count: { select: { items: true } },
+    },
+  });
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">Ombor → filial taqsimot hujjatlari. Tasdiqlanganda ombor qoldig&apos;idan ayiriladi.</p>
+        <Link href="/logistika/taqsimot/yangi"
+          className="inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-3.5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90">
+          <Plus className="h-4 w-4" /> Yangi taqsimot
+        </Link>
+      </div>
+      {dists.length === 0 ? (
+        <EmptyState icon={Send} title="Taqsimot yo'q" description="Yangi taqsimot tuzing — filial va qoplash kunlarini tanlang, tizim tavsiya beradi." />
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-border">
+          <table className="w-full min-w-[640px] text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted text-xs uppercase tracking-wider text-muted-foreground">
+                <th className="px-3 py-2.5 text-left font-semibold">#</th>
+                <th className="px-3 py-2.5 text-left font-semibold">Filial</th>
+                <th className="px-2 py-2.5 text-left font-semibold">Holat</th>
+                <th className="px-2 py-2.5 text-right font-semibold">SKU</th>
+                <th className="px-2 py-2.5 text-right font-semibold">Qoplash</th>
+                <th className="px-3 py-2.5 text-left font-semibold">Sana</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dists.map((d) => {
+                const st = DIST_STATUS[d.status] ?? { label: d.status, tone: "muted" as const };
+                return (
+                  <tr key={d.id} className="border-b border-border/40 hover:bg-muted/20">
+                    <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
+                      <Link href={`/logistika/taqsimot/${d.id}`} className="hover:underline">#{d.id}</Link>
+                    </td>
+                    <td className="px-3 py-2 font-medium">
+                      <Link href={`/logistika/taqsimot/${d.id}`} className="hover:underline">{d.branch.name}</Link>
+                    </td>
+                    <td className="px-2 py-2"><Pill tone={st.tone}>{st.label}</Pill></td>
+                    <td className="px-2 py-2 text-right tabular-nums">{d._count.items}</td>
+                    <td className="px-2 py-2 text-right tabular-nums text-muted-foreground">{d.targetDays} kun</td>
+                    <td className="px-3 py-2 text-xs text-muted-foreground">{formatDateUZ(d.createdAt)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

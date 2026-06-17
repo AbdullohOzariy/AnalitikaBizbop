@@ -52,3 +52,6 @@ export const canSeePme = (r: R): boolean =>
 /** PME segmentni biriktira (tahrirlay) oladiganlar — read-only ADMIN bundan mustasno. */
 export const canEditPme = (r: R): boolean =>
   isSystemAdmin(r) || isSupplyChain(r) || r === "CAT_MANAGER" || isHeadCatManager(r);
+
+/** Ombor + taqsimot (logistika operatsiyalari) — qoldiq import, ombor→filial taqsimot. */
+export const canManageWarehouse = (r: R): boolean => isSystemAdmin(r) || isSupplyChain(r);

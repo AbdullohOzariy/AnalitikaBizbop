@@ -6,9 +6,10 @@ import * as XLSX from "xlsx";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { auth } from "@/auth";
-import { canSeeSuppliers, canEditSuppliers } from "@/lib/roles";
+import { canSeeSuppliers, canEditSuppliers, canManageWarehouse } from "@/lib/roles";
 import { actionError } from "@/lib/action-error";
 import { warehouseStockList, parseWarehouseRows, type WarehouseRow } from "@/lib/warehouse";
+import { branchDistributionSuggest, type DistSuggest } from "@/lib/distribution";
 
 async function requireView() {
   const s = await auth();
@@ -102,5 +103,120 @@ export async function importWarehouseStockAction(
     return { ok: true, matched: matchedRows.length, unmatched: unmatched.length, unmatchedSample: unmatched.slice(0, 10), rows: parsed.length };
   } catch (err) {
     return actionError(err, "importWarehouseStock");
+  }
+}
+
+// ─── Taqsimot (ombor → filial) ──────────────────────────────────────────────
+
+async function requireWarehouse() {
+  const s = await auth();
+  if (!s?.user || !canManageWarehouse(s.user.role)) throw new Error("Ruxsat yo'q");
+  return s.user;
+}
+
+/** Filial uchun taqsimot tavsiyasi (ombor + filial qoldiq/sotuv asosida). */
+export async function distributionSuggestAction(
+  branchId: number, targetDays: number
+): Promise<{ ok: true; items: DistSuggest[] } | { ok: false; error: string }> {
+  try {
+    await requireWarehouse();
+    const bid = z.coerce.number().int().positive().parse(branchId);
+    const td = z.coerce.number().int().min(1).max(60).parse(targetDays);
+    return { ok: true, items: await branchDistributionSuggest(bid, td) };
+  } catch (err) {
+    return actionError(err, "distributionSuggest");
+  }
+}
+
+const distItemSchema = z.object({
+  productId: z.coerce.number().int().positive(),
+  qty: z.coerce.number().positive().max(1_000_000),
+});
+
+/** Yangi taqsimot (qoralama) yaratadi. */
+export async function createDistributionAction(input: {
+  branchId: number; targetDays: number; note?: string; items: { productId: number; qty: number }[];
+}): Promise<{ ok: true; id: number } | { ok: false; error: string }> {
+  try {
+    const user = await requireWarehouse();
+    const branchId = z.coerce.number().int().positive().parse(input.branchId);
+    const targetDays = z.coerce.number().int().min(1).max(60).parse(input.targetDays);
+    const items = z.array(distItemSchema).min(1, "Kamida bitta SKU kerak").parse(input.items);
+    const d = await prisma.distribution.create({
+      data: {
+        branchId, targetDays, note: input.note?.trim() || null, createdById: Number(user.id), status: "DRAFT",
+        items: { create: items.map((i) => ({ productId: i.productId, qty: i.qty })) },
+      },
+      select: { id: true },
+    });
+    revalidatePath("/logistika");
+    return { ok: true, id: d.id };
+  } catch (err) {
+    return actionError(err, "createDistribution");
+  }
+}
+
+/** Taqsimot qatorlarini yangilash (faqat qoralama). */
+export async function updateDistributionItemsAction(
+  id: number, items: { productId: number; qty: number }[], note?: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    await requireWarehouse();
+    const did = z.coerce.number().int().positive().parse(id);
+    const parsed = z.array(distItemSchema).min(1, "Kamida bitta SKU kerak").parse(items);
+    const d = await prisma.distribution.findUnique({ where: { id: did }, select: { status: true } });
+    if (!d) return { ok: false, error: "Taqsimot topilmadi." };
+    if (d.status !== "DRAFT") return { ok: false, error: "Faqat qoralama tahrirlanadi." };
+    await prisma.$transaction([
+      prisma.distributionItem.deleteMany({ where: { distributionId: did } }),
+      prisma.distributionItem.createMany({ data: parsed.map((i) => ({ distributionId: did, productId: i.productId, qty: i.qty })) }),
+      prisma.distribution.update({ where: { id: did }, data: { note: note?.trim() || null } }),
+    ]);
+    revalidatePath(`/logistika/taqsimot/${did}`);
+    revalidatePath("/logistika");
+    return { ok: true };
+  } catch (err) {
+    return actionError(err, "updateDistributionItems");
+  }
+}
+
+/** Tasdiqlash (qoralama → tasdiqlandi): ombor qoldig'idan ayiriladi (0 dan past tushmaydi). */
+export async function confirmDistributionAction(id: number): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    await requireWarehouse();
+    const did = z.coerce.number().int().positive().parse(id);
+    const d = await prisma.distribution.findUnique({
+      where: { id: did },
+      select: { status: true, items: { select: { productId: true, qty: true } } },
+    });
+    if (!d) return { ok: false, error: "Taqsimot topilmadi." };
+    if (d.status !== "DRAFT") return { ok: false, error: "Faqat qoralamani tasdiqlash mumkin." };
+    if (d.items.length === 0) return { ok: false, error: "Bo'sh taqsimot." };
+    const ops: Prisma.PrismaPromise<unknown>[] = d.items.map((it) =>
+      prisma.$executeRaw`UPDATE "WarehouseStock" SET "qty" = GREATEST("qty" - ${new Prisma.Decimal(it.qty)}::numeric, 0), "updatedAt" = now() WHERE "productId" = ${it.productId}`
+    );
+    ops.push(prisma.distribution.update({ where: { id: did }, data: { status: "CONFIRMED", confirmedAt: new Date() } }));
+    await prisma.$transaction(ops);
+    revalidatePath(`/logistika/taqsimot/${did}`);
+    revalidatePath("/logistika");
+    return { ok: true };
+  } catch (err) {
+    return actionError(err, "confirmDistribution");
+  }
+}
+
+/** Qoralama taqsimotni o'chirish. */
+export async function deleteDistributionAction(id: number): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    await requireWarehouse();
+    const did = z.coerce.number().int().positive().parse(id);
+    const d = await prisma.distribution.findUnique({ where: { id: did }, select: { status: true } });
+    if (!d) return { ok: false, error: "Taqsimot topilmadi." };
+    if (d.status !== "DRAFT") return { ok: false, error: "Faqat qoralama o'chiriladi." };
+    await prisma.distribution.delete({ where: { id: did } });
+    revalidatePath("/logistika");
+    return { ok: true };
+  } catch (err) {
+    return actionError(err, "deleteDistribution");
   }
 }

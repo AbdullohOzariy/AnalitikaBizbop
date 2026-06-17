@@ -46,6 +46,13 @@ enum Segment {
   EASY
 }
 
+// Ombor → filial taqsimot hujjati holati
+enum DistributionStatus {
+  DRAFT // Qoralama (tahrirlanadi)
+  CONFIRMED // Tasdiqlandi (ombor qoldig'idan ayirildi, qulflangan)
+  CANCELLED // Bekor qilindi
+}
+
 enum AliasSource {
   SALES
   VISITS
@@ -71,6 +78,7 @@ model User {
   managedCategories CategoryManager[] // kategoriya menejeri javobgar kategoriyalari
   purchaseOrders    PurchaseOrder[]
   expenses          Expense[]
+  distributions     Distribution[]
 }
 
 // Kategoriya menejeri ↔ kategoriya (ko'p-ko'p): bir xodim bir nechta kategoriyaga javobgar.
@@ -104,6 +112,7 @@ model Branch {
   forecastCurves ForecastCurve[]
   forecastRuns   ForecastRun[]
   forecastDays   ForecastDay[]
+  distributions  Distribution[]
 }
 
 model BranchAlias {
@@ -308,6 +317,7 @@ model Product {
   nameMismatch ProductNameMismatch?
   orderItems   PurchaseOrderItem[]
   warehouseStock WarehouseStock?
+  distributionItems DistributionItem[]
 
   @@index([categoryId])
   @@index([supplierId])
@@ -678,6 +688,38 @@ model WarehouseStock {
   updatedAt DateTime @updatedAt
 
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+// Ombor → filial taqsimot hujjati (tizim yaratadi). Tasdiqlanganda ombor qoldig'idan ayiriladi.
+model Distribution {
+  id          Int                @id @default(autoincrement())
+  branchId    Int // qabul qiluvchi filial
+  status      DistributionStatus @default(DRAFT)
+  targetDays  Int                @default(7) // qoplash kunlari (tavsiya uchun)
+  note        String?
+  createdById Int
+  createdAt   DateTime           @default(now())
+  confirmedAt DateTime?
+
+  branch    Branch             @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  createdBy User               @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  items     DistributionItem[]
+
+  @@index([branchId])
+  @@index([status])
+}
+
+model DistributionItem {
+  id             Int     @id @default(autoincrement())
+  distributionId Int
+  productId      Int
+  qty            Decimal @db.Decimal(20, 3) // taqsimlanadigan miqdor
+
+  distribution Distribution @relation(fields: [distributionId], references: [id], onDelete: Cascade)
+  product      Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([distributionId, productId])
+  @@index([productId])
 }
 
 // Agent (brend) zakaz qabul kunlari — SupplierOrderDay'ga parallel, lekin agent darajasida.
