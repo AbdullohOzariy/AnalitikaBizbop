@@ -331,20 +331,25 @@ function SkuEditDialog({ row, subs, onClose, onSaved }: {
 }) {
   const [isPending, start] = useTransition();
   const [name, setName] = useState(row.name);
+  const [code, setCode] = useState(String(row.code));
   const [subId, setSubId] = useState<string>(row.subId != null ? String(row.subId) : "");
   const [subLabel, setSubLabel] = useState<string>(row.sub ?? "");
 
   const save = () => {
     const nm = name.trim();
     if (!nm) { toast.error("Nom kerak."); return; }
+    const codeNum = code.trim() === "" ? null : Number(code);
+    if (codeNum !== null && (!Number.isInteger(codeNum) || codeNum <= 0)) { toast.error("Kod musbat butun son bo'lishi kerak."); return; }
     const changedName = nm !== row.name;
     const changedSub = subId !== "" && Number(subId) !== row.subId;
-    if (!changedName && !changedSub) { onClose(); return; }
+    const changedCode = codeNum !== null && codeNum !== row.code;
+    if (!changedName && !changedSub && !changedCode) { onClose(); return; }
     start(async () => {
       const res = await updateProductAction({
         productId: row.id,
         name: changedName ? nm : undefined,
         subId: changedSub ? Number(subId) : undefined,
+        code: changedCode ? codeNum : undefined,
       });
       if (res.ok) { toast.success("Saqlandi."); onSaved(); } else toast.error(res.error);
     });
@@ -356,7 +361,7 @@ function SkuEditDialog({ row, subs, onClose, onSaved }: {
         <DialogHeader>
           <DialogTitle>SKU tahrirlash</DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground">
-            Kod {row.code} · nom va subkategoriyani o&apos;zgartiring.
+            Kod, nom va subkategoriyani o&apos;zgartiring. {row.code < 0 && "(Kod vaqtinchalik — haqiqiy 1C kodni kiriting.)"}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3 py-1">
@@ -364,6 +369,11 @@ function SkuEditDialog({ row, subs, onClose, onSaved }: {
             <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Nom</Label>
             <Input value={name} disabled={isPending} className="h-10 rounded-xl" autoFocus
               onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && save()} />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Kod (1C)</Label>
+            <Input value={code} disabled={isPending} type="number" inputMode="numeric" className="h-10 rounded-xl"
+              onChange={(e) => setCode(e.target.value)} onKeyDown={(e) => e.key === "Enter" && save()} />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Subkategoriya</Label>

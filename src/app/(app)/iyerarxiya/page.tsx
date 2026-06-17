@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/common/page";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { IyerarxiyaClient, type HGroup } from "./iyerarxiya-client";
 import { SkuList } from "./sku-list";
+import { SkuAdd } from "./sku-add";
 
 const getHierarchy = unstable_cache(
   () =>
@@ -67,6 +68,7 @@ export default async function IyerarxiyaPage() {
         <TabsList>
           <TabsTrigger value="tree">Daraxt</TabsTrigger>
           <TabsTrigger value="list">Ro&apos;yxat (SKU)</TabsTrigger>
+          {isAdmin && <TabsTrigger value="add">SKU qo&apos;shish</TabsTrigger>}
         </TabsList>
         <TabsContent value="tree" className="pt-3">
           <IyerarxiyaClient groups={data} isAdmin={isAdmin} />
@@ -74,6 +76,11 @@ export default async function IyerarxiyaPage() {
         <TabsContent value="list" className="pt-3">
           <SkuList groups={data} />
         </TabsContent>
+        {isAdmin && (
+          <TabsContent value="add" className="pt-3">
+            <SkuAdd groups={data} />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

@@ -97,6 +97,7 @@ export async function updateProductAction(input: {
   productId: number;
   name?: string;
   subId?: number;
+  code?: number; // 1C kodni keyin biriktirish/o'zgartirish (vaqtinchalik koddan haqiqiyga)
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     await requireAdmin();
@@ -111,6 +112,12 @@ export async function updateProductAction(input: {
       if (!sub || sub.parentId == null) return { ok: false, error: "Faqat subkategoriya tanlanishi mumkin." };
       data.category = { connect: { id: sid } };
     }
+    if (input.code !== undefined) {
+      const code = z.coerce.number().int().positive().max(2_000_000_000).parse(input.code);
+      const taken = await prisma.product.findFirst({ where: { code, id: { not: pid } }, select: { id: true } });
+      if (taken) return { ok: false, error: `Bu kod (${code}) allaqachon boshqa SKU'da bor.` };
+      data.code = code;
+    }
     if (Object.keys(data).length === 0) return { ok: false, error: "O'zgarish yo'q." };
     await prisma.product.update({ where: { id: pid }, data });
     revalidatePath("/iyerarxiya");
@@ -120,6 +127,48 @@ export async function updateProductAction(input: {
     return { ok: true };
   } catch (err) {
     return actionError(err, "updateProduct");
+  }
+}
+
+const createSkuSchema = z.object({
+  name: z.string().trim().min(1, "Nom kerak").max(255),
+  code: z.coerce.number().int().positive().max(2_000_000_000).optional(), // ixtiyoriy — keyin biriktirilsa ham bo'ladi
+  categoryId: z.coerce.number().int().positive(),
+});
+
+/**
+ * Yangi SKU qo'lda qo'shish. Kod ixtiyoriy — berilmasa VAQTINCHALIK manfiy unikal kod
+ * beriladi (1C kodlari musbat; keyin tahrirlab haqiqiy kodga almashtiriladi). Qoldiq/sotuv
+ * null (UI'da 0) — keyingi sotuv yuklashlarida kod bo'yicha avtomatik to'ladi.
+ */
+export async function createSkuAction(
+  input: z.input<typeof createSkuSchema>
+): Promise<{ ok: true; id: number; code: number } | { ok: false; error: string }> {
+  try {
+    await requireAdmin();
+    const p = createSkuSchema.parse(input);
+    const sub = await prisma.category.findUnique({ where: { id: p.categoryId }, select: { parentId: true } });
+    if (!sub || sub.parentId == null) return { ok: false, error: "Faqat subkategoriya tanlanishi mumkin." };
+
+    let code = p.code;
+    if (code != null) {
+      const taken = await prisma.product.findUnique({ where: { code }, select: { id: true } });
+      if (taken) return { ok: false, error: `Bu kod (${code}) allaqachon mavjud.` };
+    } else {
+      // Vaqtinchalik unikal kod — eng kichik koddan 1 kam (manfiy)
+      const agg = await prisma.product.aggregate({ _min: { code: true } });
+      code = Math.min(0, agg._min.code ?? 0) - 1;
+    }
+
+    const created = await prisma.product.create({
+      data: { code, name: p.name, categoryId: p.categoryId }, // qoldiq/sotuv null — keyin to'ladi
+      select: { id: true, code: true },
+    });
+    revalidatePath("/iyerarxiya");
+    revalidateTag("iyerarxiya", "max");
+    return { ok: true, id: created.id, code: created.code };
+  } catch (err) {
+    return actionError(err, "createSku");
   }
 }
 
