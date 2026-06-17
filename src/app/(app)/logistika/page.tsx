@@ -8,17 +8,18 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { canSeeSuppliers, canEditSuppliers, canManageWarehouse } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
-import { Gauge, Truck, CheckCircle2, PackageCheck, Clock, Plus, Send, ArrowLeftRight, ArrowRight } from "lucide-react";
+import { Gauge, Truck, CheckCircle2, PackageCheck, Clock, Plus, Send, ArrowLeftRight, ArrowRight, CalendarClock, AlertTriangle } from "lucide-react";
 import { PageHeader, StatCard, EmptyState, Pill } from "@/components/common/page";
 import { cn } from "@/lib/utils";
 import { formatDateUZ } from "@/lib/format";
 import { supplierLogistics } from "@/lib/logistics";
+import { expectedDeliveries } from "@/lib/delivery";
 import { LogistikaFilter } from "./filter";
 import { OmborTab } from "./ombor-tab";
 
 export const dynamic = "force-dynamic";
 
-type Tab = "scorecard" | "ombor" | "taqsimot" | "kochirish";
+type Tab = "scorecard" | "kalendar" | "ombor" | "taqsimot" | "kochirish";
 
 const DIST_STATUS: Record<string, { label: string; tone: "muted" | "green" | "red" | "blue" }> = {
   DRAFT: { label: "Qoralama", tone: "muted" },
@@ -48,7 +49,8 @@ export default async function LogistikaPage({
 
   const canWh = canManageWarehouse(session.user.role);
   const sp = await searchParams;
-  const tab: Tab = sp.tab === "ombor" ? "ombor"
+  const tab: Tab = sp.tab === "kalendar" ? "kalendar"
+    : sp.tab === "ombor" ? "ombor"
     : sp.tab === "taqsimot" && canWh ? "taqsimot"
     : sp.tab === "kochirish" && canWh ? "kochirish"
     : "scorecard";
@@ -59,6 +61,7 @@ export default async function LogistikaPage({
 
   const TABS: { v: Tab; l: string }[] = [
     { v: "scorecard", l: "Ta'minotchi" },
+    { v: "kalendar", l: "Kalendar" },
     { v: "ombor", l: "Ombor" },
     ...(canWh ? [{ v: "taqsimot" as Tab, l: "Taqsimot" }, { v: "kochirish" as Tab, l: "Ko'chirish" }] : []),
   ];
@@ -85,7 +88,81 @@ export default async function LogistikaPage({
       {tab === "ombor" ? <OmborTab canEdit={canEdit} />
         : tab === "taqsimot" ? <TaqsimotList />
         : tab === "kochirish" ? <KochirishList />
+        : tab === "kalendar" ? <DeliveryCalendar />
         : <Scorecard startStr={startStr} endStr={endStr} />}
+    </div>
+  );
+}
+
+const dmy = (s: string) => s.split("-").reverse().join(".");
+
+async function DeliveryCalendar() {
+  const rows = await expectedDeliveries();
+  const lateCount = rows.filter((r) => r.daysLate > 0).length;
+  const soonCount = rows.filter((r) => r.daysUntil != null && r.daysUntil >= 0 && r.daysUntil <= 1).length;
+  const totalQty = rows.reduce((s, r) => s + r.totalQty, 0);
+
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="Kutilmoqda" value={rows.length.toLocaleString("uz-UZ")} icon={Truck} hint="yuborilgan, hali kelmagan zakaz" />
+        <StatCard label="Kechikkan" value={lateCount.toLocaleString("uz-UZ")} icon={AlertTriangle}
+          tone={lateCount > 0 ? "red" : "green"} hint="kutilgan sanadan o'tib ketgan" />
+        <StatCard label="Bugun/ertaga" value={soonCount.toLocaleString("uz-UZ")} icon={CalendarClock} hint="yaqin kunda kutilmoqda" />
+        <StatCard label="Jami miqdor" value={Math.round(totalQty).toLocaleString("uz-UZ")} icon={PackageCheck} hint="kutilayotgan dona" />
+      </div>
+
+      {rows.length === 0 ? (
+        <EmptyState icon={CalendarClock} title="Kutilayotgan yetkazish yo'q" description="Yuborilgan (SENT/ACCEPTED), lekin hali yetib kelmagan zakazlar bu yerda ko'rinadi." />
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-border">
+          <table className="w-full min-w-[760px] text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted text-xs uppercase tracking-wider text-muted-foreground">
+                <th className="px-3 py-2.5 text-left font-semibold">#</th>
+                <th className="px-3 py-2.5 text-left font-semibold">Ta&apos;minotchi / agent</th>
+                <th className="px-2 py-2.5 text-left font-semibold">Yuborildi</th>
+                <th className="px-2 py-2.5 text-center font-semibold" title="Reja lead (kun)">Lead</th>
+                <th className="px-2 py-2.5 text-left font-semibold">Kutilgan</th>
+                <th className="px-2 py-2.5 text-left font-semibold">Holat</th>
+                <th className="px-2 py-2.5 text-right font-semibold">SKU</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => {
+                const status = r.expectedDate == null
+                  ? { label: "ETA noma'lum", tone: "muted" as const }
+                  : r.daysLate > 0
+                    ? { label: `${r.daysLate} kun kechikdi`, tone: "red" as const }
+                    : r.daysUntil === 0
+                      ? { label: "Bugun", tone: "blue" as const }
+                      : { label: `${r.daysUntil} kundan keyin`, tone: "green" as const };
+                return (
+                  <tr key={r.orderId} className={cn("border-b border-border/40 hover:bg-muted/20", r.daysLate > 0 && "bg-red-500/[0.04]")}>
+                    <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
+                      <Link href={`/sotuv/sotib-olish/${r.orderId}`} className="hover:underline">#{r.orderId}</Link>
+                    </td>
+                    <td className="px-3 py-2 font-medium">
+                      {r.supplier}{r.agent && <span className="ml-1 text-xs font-normal text-muted-foreground">· {r.agent}</span>}
+                    </td>
+                    <td className="px-2 py-2 text-xs text-muted-foreground">{dmy(r.sentDate)}</td>
+                    <td className="px-2 py-2 text-center tabular-nums text-xs text-muted-foreground">{r.plannedLead != null ? Math.ceil(r.plannedLead) : "—"}</td>
+                    <td className="px-2 py-2 text-xs">{r.expectedDate ? dmy(r.expectedDate) : "—"}</td>
+                    <td className="px-2 py-2"><Pill tone={status.tone}>{status.label}</Pill></td>
+                    <td className="px-2 py-2 text-right tabular-nums text-muted-foreground">{r.itemCount}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <p className="text-[11px] text-muted-foreground">
+        Kutilgan sana = yuborilgan sana + zakaz SKU&apos;larining o&apos;rtacha <b>reja lead</b>&apos;i. Reja lead
+        bo&apos;lmagan zakazlar &quot;ETA noma&apos;lum&quot; bo&apos;ladi. Faqat <b>yuborilgan</b> (SENT/ACCEPTED), hali
+        <b> qabul qilinmagan</b> zakazlar ko&apos;rsatiladi.
+      </p>
     </div>
   );
 }

@@ -270,3 +270,47 @@ export async function marginReportYuborAction(): Promise<
     return { ok: false, error: msg.includes("Ruxsat") ? "Ruxsat yo'q." : msg };
   }
 }
+
+// ─── Yetkazib berish kechikishi signali ────────────────────────────────────────
+
+/** Bot token + guruh chat id + topic id + avto-yoqish'ni saqlash. token bo'sh — o'zgartirilmaydi. */
+export async function deliveryAlertSaqlaAction(input: {
+  token: string; chatId: string; topicId: string; autoEnabled: boolean;
+}): Promise<Result> {
+  try {
+    await requireAdmin();
+    const token = input.token.trim();
+    const chatId = input.chatId.trim();
+    const topicId = input.topicId.trim();
+    if (!chatId) {
+      return { ok: false, error: "Guruh chat ID kiritilishi shart (bo'sh saqlasangiz xabarnoma o'chadi)." };
+    }
+    if (!/^-?\d{5,20}$/.test(chatId)) {
+      return { ok: false, error: "Guruh chat ID raqam bo'lishi kerak (odatda -100... ko'rinishida)." };
+    }
+    if (topicId && !/^\d{1,12}$/.test(topicId)) {
+      return { ok: false, error: "Topic ID musbat raqam bo'lishi kerak." };
+    }
+    if (token && !/^\d{6,}:[A-Za-z0-9_-]{20,}$/.test(token)) {
+      return { ok: false, error: "Bot token noto'g'ri (123456:ABC... ko'rinishida)." };
+    }
+    const { setDeliveryAlertConfig } = await import("@/lib/delivery-alert/sozlama");
+    await setDeliveryAlertConfig({ token, chatId, topicId, autoEnabled: !!input.autoEnabled });
+    revalidatePath(RP);
+    return { ok: true };
+  } catch (err) { return xato(err); }
+}
+
+/** Kechikish signalini hoziroq yuborish (sinov tugmasi). Kechikkan zakazlar sonini qaytaradi. */
+export async function deliveryAlertYuborAction(): Promise<
+  { ok: true; count: number } | { ok: false; error: string }
+> {
+  try {
+    await requireAdmin();
+    const { sendDeliveryAlert } = await import("@/lib/delivery-alert/report");
+    return await sendDeliveryAlert();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Xato.";
+    return { ok: false, error: msg.includes("Ruxsat") ? "Ruxsat yo'q." : msg };
+  }
+}

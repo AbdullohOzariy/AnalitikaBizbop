@@ -71,6 +71,36 @@ export async function register() {
     }
   }
 
+  // Kunlik YETKAZIB BERISH kechikishi signali — har kuni 10:00 (Toshkent): kutilgan
+  // sanadan o'tib ketgan (hali kelmagan) zakazlar ro'yxati guruhga. Faqat sozlamada
+  // YOQILGAN bo'lsa va kechikkan zakaz bo'lsa (bo'sh bo'lsa — jim).
+  {
+    const gg = globalThis as typeof globalThis & { __deliveryAlertCron?: boolean };
+    if (!gg.__deliveryAlertCron) {
+      gg.__deliveryAlertCron = true;
+      try {
+        const { schedule } = await import("node-cron");
+        schedule("0 10 * * *", async () => {
+          try {
+            const { getDeliveryAlertConfig } = await import("@/lib/delivery-alert/sozlama");
+            const cfg = await getDeliveryAlertConfig();
+            if (!cfg.autoEnabled) return; // avto yuborish o'chirilgan
+            const { sendDeliveryAlert } = await import("@/lib/delivery-alert/report");
+            const r = await sendDeliveryAlert({ skipIfEmpty: true });
+            if (!r.ok) console.warn("[delivery-alert] yuborilmadi:", r.error);
+            else if (r.skipped) console.log("[delivery-alert] kechikkan zakaz yo'q — o'tkazib yuborildi");
+            else console.log(`[delivery-alert] yuborildi: ${r.count} ta kechikkan zakaz`);
+          } catch (e) {
+            console.error("[delivery-alert] xato:", e instanceof Error ? e.message : e);
+          }
+        }, { timezone: "Asia/Tashkent" });
+        console.log("[instrumentation] Yetkazish kechikishi cron o'rnatildi: har kuni 10:00 (Asia/Tashkent)");
+      } catch (e) {
+        console.warn("[instrumentation] delivery-alert cron o'rnatilmadi:", e instanceof Error ? e.message : e);
+      }
+    }
+  }
+
   const token = process.env.BOT_TOKEN;
   const base = (process.env.WEBHOOK_URL || "").replace(/\/$/, "");
   if (!token || !base) {

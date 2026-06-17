@@ -23,8 +23,10 @@ import { InventoryReportEditor } from "./inventory-report-editor";
 import { getInventoryReportConfig } from "@/lib/inventory-report/sozlama";
 import { MarginReportEditor } from "./margin-report-editor";
 import { getMarginReportConfig } from "@/lib/margin-report/sozlama";
+import { DeliveryAlertEditor } from "./delivery-alert-editor";
+import { getDeliveryAlertConfig } from "@/lib/delivery-alert/sozlama";
 
-type Tab = "spisaniya" | "sverka" | "inventarizatsiya" | "marja";
+type Tab = "spisaniya" | "sverka" | "inventarizatsiya" | "marja" | "yetkazish";
 
 export default async function SozlamalarPage({
   searchParams,
@@ -36,7 +38,7 @@ export default async function SozlamalarPage({
   if (session.user.role !== "SYSTEM_ADMIN") redirect("/dashboard");
 
   const sp = await searchParams;
-  const tab: Tab = sp.tab === "sverka" ? "sverka" : sp.tab === "inventarizatsiya" ? "inventarizatsiya" : sp.tab === "marja" ? "marja" : "spisaniya";
+  const tab: Tab = sp.tab === "sverka" ? "sverka" : sp.tab === "inventarizatsiya" ? "inventarizatsiya" : sp.tab === "marja" ? "marja" : sp.tab === "yetkazish" ? "yetkazish" : "spisaniya";
 
   return (
     <div className="space-y-5">
@@ -53,6 +55,7 @@ export default async function SozlamalarPage({
           { v: "sverka", l: "Sverka sozlamalari" },
           { v: "inventarizatsiya", l: "Inventarizatsiya" },
           { v: "marja", l: "Marja minus" },
+          { v: "yetkazish", l: "Yetkazish kechikishi" },
         ] as { v: Tab; l: string }[]).map((t) => (
           <Link
             key={t.v}
@@ -71,7 +74,29 @@ export default async function SozlamalarPage({
         ))}
       </div>
 
-      {tab === "spisaniya" ? <SpisaniyaTab /> : tab === "sverka" ? <SverkaTab /> : tab === "inventarizatsiya" ? <InventarizatsiyaTab /> : <MarjaTab />}
+      {tab === "spisaniya" ? <SpisaniyaTab /> : tab === "sverka" ? <SverkaTab /> : tab === "inventarizatsiya" ? <InventarizatsiyaTab /> : tab === "marja" ? <MarjaTab /> : <YetkazishTab />}
+    </div>
+  );
+}
+
+// ─── Yetkazib berish kechikishi signali ───────────────────────────────────────
+
+async function YetkazishTab() {
+  const cfg = await getDeliveryAlertConfig();
+  return (
+    <div className="space-y-5">
+      <SectionCard
+        title="Yetkazib berish kechikishi signali"
+        description="Har kuni 10:00 (Toshkent) — kutilgan sanadan o'tib ketgan, hali kelmagan zakazlar ro'yxati"
+        actions={<MessageSquare className="h-4 w-4 text-muted-foreground" />}
+      >
+        <DeliveryAlertEditor
+          tokenSet={!!cfg.token}
+          chatId={cfg.chatId ?? ""}
+          topicId={cfg.topicId != null ? String(cfg.topicId) : ""}
+          autoEnabled={cfg.autoEnabled}
+        />
+      </SectionCard>
     </div>
   );
 }
