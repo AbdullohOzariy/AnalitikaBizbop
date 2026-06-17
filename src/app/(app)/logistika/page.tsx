@@ -8,7 +8,7 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { canSeeSuppliers, canEditSuppliers, canManageWarehouse } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
-import { Gauge, Truck, CheckCircle2, PackageCheck, Clock, Plus, Send } from "lucide-react";
+import { Gauge, Truck, CheckCircle2, PackageCheck, Clock, Plus, Send, ArrowLeftRight, ArrowRight } from "lucide-react";
 import { PageHeader, StatCard, EmptyState, Pill } from "@/components/common/page";
 import { cn } from "@/lib/utils";
 import { formatDateUZ } from "@/lib/format";
@@ -18,7 +18,7 @@ import { OmborTab } from "./ombor-tab";
 
 export const dynamic = "force-dynamic";
 
-type Tab = "scorecard" | "ombor" | "taqsimot";
+type Tab = "scorecard" | "ombor" | "taqsimot" | "kochirish";
 
 const DIST_STATUS: Record<string, { label: string; tone: "muted" | "green" | "red" | "blue" }> = {
   DRAFT: { label: "Qoralama", tone: "muted" },
@@ -48,7 +48,10 @@ export default async function LogistikaPage({
 
   const canWh = canManageWarehouse(session.user.role);
   const sp = await searchParams;
-  const tab: Tab = sp.tab === "ombor" ? "ombor" : sp.tab === "taqsimot" && canWh ? "taqsimot" : "scorecard";
+  const tab: Tab = sp.tab === "ombor" ? "ombor"
+    : sp.tab === "taqsimot" && canWh ? "taqsimot"
+    : sp.tab === "kochirish" && canWh ? "kochirish"
+    : "scorecard";
   const isDate = (s: string | undefined): s is string => !!s && /^\d{4}-\d{2}-\d{2}$/.test(s);
   const today = new Date(); today.setUTCHours(0, 0, 0, 0);
   const startStr = isDate(sp.start) ? sp.start : ymd(new Date(today.getTime() - 89 * 86_400_000));
@@ -57,7 +60,7 @@ export default async function LogistikaPage({
   const TABS: { v: Tab; l: string }[] = [
     { v: "scorecard", l: "Ta'minotchi" },
     { v: "ombor", l: "Ombor" },
-    ...(canWh ? [{ v: "taqsimot" as Tab, l: "Taqsimot" }] : []),
+    ...(canWh ? [{ v: "taqsimot" as Tab, l: "Taqsimot" }, { v: "kochirish" as Tab, l: "Ko'chirish" }] : []),
   ];
 
   return (
@@ -81,7 +84,72 @@ export default async function LogistikaPage({
 
       {tab === "ombor" ? <OmborTab canEdit={canEdit} />
         : tab === "taqsimot" ? <TaqsimotList />
+        : tab === "kochirish" ? <KochirishList />
         : <Scorecard startStr={startStr} endStr={endStr} />}
+    </div>
+  );
+}
+
+async function KochirishList() {
+  const transfers = await prisma.branchTransfer.findMany({
+    orderBy: { id: "desc" },
+    take: 100,
+    select: {
+      id: true, status: true, targetDays: true, createdAt: true,
+      fromBranch: { select: { name: true } },
+      toBranch: { select: { name: true } },
+      _count: { select: { items: true } },
+    },
+  });
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">Filiallararo ko&apos;chirish — manbadagi ortiqcha qoldiqni kam/OOS filialga ko&apos;chirish (ombordan o&apos;tmasdan).</p>
+        <Link href="/logistika/kochirish/yangi"
+          className="inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-3.5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90">
+          <Plus className="h-4 w-4" /> Yangi ko&apos;chirish
+        </Link>
+      </div>
+      {transfers.length === 0 ? (
+        <EmptyState icon={ArrowLeftRight} title="Ko'chirish yo'q" description="Yangi ko'chirish tuzing — manba va qabul qiluvchi filialni tanlang, tizim tavsiya beradi." />
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-border">
+          <table className="w-full min-w-[640px] text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted text-xs uppercase tracking-wider text-muted-foreground">
+                <th className="px-3 py-2.5 text-left font-semibold">#</th>
+                <th className="px-3 py-2.5 text-left font-semibold">Yo&apos;nalish</th>
+                <th className="px-2 py-2.5 text-left font-semibold">Holat</th>
+                <th className="px-2 py-2.5 text-right font-semibold">SKU</th>
+                <th className="px-2 py-2.5 text-right font-semibold">Qoplash</th>
+                <th className="px-3 py-2.5 text-left font-semibold">Sana</th>
+              </tr>
+            </thead>
+            <tbody>
+              {transfers.map((t) => {
+                const st = DIST_STATUS[t.status] ?? { label: t.status, tone: "muted" as const };
+                return (
+                  <tr key={t.id} className="border-b border-border/40 hover:bg-muted/20">
+                    <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
+                      <Link href={`/logistika/kochirish/${t.id}`} className="hover:underline">#{t.id}</Link>
+                    </td>
+                    <td className="px-3 py-2 font-medium">
+                      <Link href={`/logistika/kochirish/${t.id}`} className="inline-flex items-center gap-1.5 hover:underline">
+                        {t.fromBranch.name} <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" /> {t.toBranch.name}
+                      </Link>
+                    </td>
+                    <td className="px-2 py-2"><Pill tone={st.tone}>{st.label}</Pill></td>
+                    <td className="px-2 py-2 text-right tabular-nums">{t._count.items}</td>
+                    <td className="px-2 py-2 text-right tabular-nums text-muted-foreground">{t.targetDays} kun</td>
+                    <td className="px-3 py-2 text-xs text-muted-foreground">{formatDateUZ(t.createdAt)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

@@ -53,6 +53,13 @@ enum DistributionStatus {
   CANCELLED // Bekor qilindi
 }
 
+// Filiallararo ko'chirish hujjati holati
+enum TransferStatus {
+  DRAFT // Qoralama (tahrirlanadi)
+  CONFIRMED // Tasdiqlandi (qulflangan — hujjat sifatida)
+  CANCELLED // Bekor qilindi
+}
+
 enum AliasSource {
   SALES
   VISITS
@@ -79,6 +86,7 @@ model User {
   purchaseOrders    PurchaseOrder[]
   expenses          Expense[]
   distributions     Distribution[]
+  branchTransfers   BranchTransfer[]
 }
 
 // Kategoriya menejeri ↔ kategoriya (ko'p-ko'p): bir xodim bir nechta kategoriyaga javobgar.
@@ -113,6 +121,8 @@ model Branch {
   forecastRuns   ForecastRun[]
   forecastDays   ForecastDay[]
   distributions  Distribution[]
+  transfersFrom  BranchTransfer[] @relation("TransferFrom")
+  transfersTo    BranchTransfer[] @relation("TransferTo")
 }
 
 model BranchAlias {
@@ -318,6 +328,7 @@ model Product {
   orderItems   PurchaseOrderItem[]
   warehouseStock WarehouseStock?
   distributionItems DistributionItem[]
+  transferItems     BranchTransferItem[]
 
   @@index([categoryId])
   @@index([supplierId])
@@ -719,6 +730,44 @@ model DistributionItem {
   product      Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@unique([distributionId, productId])
+  @@index([productId])
+}
+
+// Filiallararo ko'chirish hujjati — manba filialdagi ortiqcha/o'lik qoldiqni qabul
+// qiluvchi filialga ko'chirish (shoshilinch OOS uchun, markaziy ombordan o'tmasdan).
+// Filial qoldig'i kunlik importdan keladi (o'zgaruvchan jadval yo'q) — tasdiqlash
+// faqat hujjatni qulflaydi, qoldiq ayirilmaydi (import qayta yangilaydi).
+model BranchTransfer {
+  id           Int            @id @default(autoincrement())
+  fromBranchId Int // manba (ortiqcha/o'lik qoldiqli)
+  toBranchId   Int // qabul qiluvchi (kam/OOS)
+  status       TransferStatus @default(DRAFT)
+  targetDays   Int            @default(7) // qoplash kunlari (tavsiya uchun)
+  note         String?
+  createdById  Int
+  createdAt    DateTime       @default(now())
+  confirmedAt  DateTime?
+
+  fromBranch Branch               @relation("TransferFrom", fields: [fromBranchId], references: [id], onDelete: Cascade)
+  toBranch   Branch               @relation("TransferTo", fields: [toBranchId], references: [id], onDelete: Cascade)
+  createdBy  User                 @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  items      BranchTransferItem[]
+
+  @@index([fromBranchId])
+  @@index([toBranchId])
+  @@index([status])
+}
+
+model BranchTransferItem {
+  id         Int     @id @default(autoincrement())
+  transferId Int
+  productId  Int
+  qty        Decimal @db.Decimal(20, 3) // ko'chiriladigan miqdor
+
+  transfer BranchTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  product  Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([transferId, productId])
   @@index([productId])
 }
 

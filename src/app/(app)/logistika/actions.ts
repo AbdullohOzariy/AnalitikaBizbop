@@ -10,6 +10,7 @@ import { canSeeSuppliers, canEditSuppliers, canManageWarehouse } from "@/lib/rol
 import { actionError } from "@/lib/action-error";
 import { warehouseStockList, parseWarehouseRows, type WarehouseRow } from "@/lib/warehouse";
 import { branchDistributionSuggest, type DistSuggest } from "@/lib/distribution";
+import { branchTransferSuggest, type TransferSuggest } from "@/lib/transfer";
 
 async function requireView() {
   const s = await auth();
@@ -218,5 +219,111 @@ export async function deleteDistributionAction(id: number): Promise<{ ok: true }
     return { ok: true };
   } catch (err) {
     return actionError(err, "deleteDistribution");
+  }
+}
+
+// ─── Filiallararo ko'chirish (manba → qabul qiluvchi) ────────────────────────
+
+/** Manba → qabul qiluvchi filial uchun ko'chirish tavsiyasi (ortiqcha vs ehtiyoj). */
+export async function transferSuggestAction(
+  fromBranchId: number, toBranchId: number, targetDays: number
+): Promise<{ ok: true; items: TransferSuggest[] } | { ok: false; error: string }> {
+  try {
+    await requireWarehouse();
+    const from = z.coerce.number().int().positive().parse(fromBranchId);
+    const to = z.coerce.number().int().positive().parse(toBranchId);
+    if (from === to) return { ok: false, error: "Manba va qabul qiluvchi filial bir xil bo'lmasin." };
+    const td = z.coerce.number().int().min(1).max(60).parse(targetDays);
+    return { ok: true, items: await branchTransferSuggest(from, to, td) };
+  } catch (err) {
+    return actionError(err, "transferSuggest");
+  }
+}
+
+const transferItemSchema = z.object({
+  productId: z.coerce.number().int().positive(),
+  qty: z.coerce.number().positive().max(1_000_000),
+});
+
+/** Yangi ko'chirish hujjati (qoralama). */
+export async function createTransferAction(input: {
+  fromBranchId: number; toBranchId: number; targetDays: number; note?: string; items: { productId: number; qty: number }[];
+}): Promise<{ ok: true; id: number } | { ok: false; error: string }> {
+  try {
+    const user = await requireWarehouse();
+    const fromBranchId = z.coerce.number().int().positive().parse(input.fromBranchId);
+    const toBranchId = z.coerce.number().int().positive().parse(input.toBranchId);
+    if (fromBranchId === toBranchId) return { ok: false, error: "Manba va qabul qiluvchi filial bir xil bo'lmasin." };
+    const targetDays = z.coerce.number().int().min(1).max(60).parse(input.targetDays);
+    const items = z.array(transferItemSchema).min(1, "Kamida bitta SKU kerak").parse(input.items);
+    const t = await prisma.branchTransfer.create({
+      data: {
+        fromBranchId, toBranchId, targetDays, note: input.note?.trim() || null, createdById: Number(user.id), status: "DRAFT",
+        items: { create: items.map((i) => ({ productId: i.productId, qty: i.qty })) },
+      },
+      select: { id: true },
+    });
+    revalidatePath("/logistika");
+    return { ok: true, id: t.id };
+  } catch (err) {
+    return actionError(err, "createTransfer");
+  }
+}
+
+/** Ko'chirish qatorlarini yangilash (faqat qoralama). */
+export async function updateTransferItemsAction(
+  id: number, items: { productId: number; qty: number }[], note?: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    await requireWarehouse();
+    const tid = z.coerce.number().int().positive().parse(id);
+    const parsed = z.array(transferItemSchema).min(1, "Kamida bitta SKU kerak").parse(items);
+    const t = await prisma.branchTransfer.findUnique({ where: { id: tid }, select: { status: true } });
+    if (!t) return { ok: false, error: "Ko'chirish topilmadi." };
+    if (t.status !== "DRAFT") return { ok: false, error: "Faqat qoralama tahrirlanadi." };
+    await prisma.$transaction([
+      prisma.branchTransferItem.deleteMany({ where: { transferId: tid } }),
+      prisma.branchTransferItem.createMany({ data: parsed.map((i) => ({ transferId: tid, productId: i.productId, qty: i.qty })) }),
+      prisma.branchTransfer.update({ where: { id: tid }, data: { note: note?.trim() || null } }),
+    ]);
+    revalidatePath(`/logistika/kochirish/${tid}`);
+    revalidatePath("/logistika");
+    return { ok: true };
+  } catch (err) {
+    return actionError(err, "updateTransferItems");
+  }
+}
+
+/** Tasdiqlash (qoralama → tasdiqlandi): hujjat qulflanadi (qoldiq ayirilmaydi — import yangilaydi). */
+export async function confirmTransferAction(id: number): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    await requireWarehouse();
+    const tid = z.coerce.number().int().positive().parse(id);
+    const t = await prisma.branchTransfer.findUnique({ where: { id: tid }, select: { status: true, _count: { select: { items: true } } } });
+    if (!t) return { ok: false, error: "Ko'chirish topilmadi." };
+    if (t.status !== "DRAFT") return { ok: false, error: "Faqat qoralamani tasdiqlash mumkin." };
+    if (t._count.items === 0) return { ok: false, error: "Bo'sh ko'chirish." };
+    await prisma.branchTransfer.update({ where: { id: tid }, data: { status: "CONFIRMED", confirmedAt: new Date() } });
+    revalidatePath(`/logistika/kochirish/${tid}`);
+    revalidatePath("/logistika");
+    return { ok: true };
+  } catch (err) {
+    return actionError(err, "confirmTransfer");
+  }
+}
+
+/** Qoralama ko'chirishni o'chirish. */
+export async function deleteTransferAction(id: number): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    await requireWarehouse();
+    const tid = z.coerce.number().int().positive().parse(id);
+    const t = await prisma.branchTransfer.findUnique({ where: { id: tid }, select: { status: true } });
+    if (!t) return { ok: false, error: "Ko'chirish topilmadi." };
+    if (t.status !== "DRAFT") return { ok: false, error: "Faqat qoralama o'chiriladi." };
+    await prisma.branchTransfer.delete({ where: { id: tid } });
+    revalidatePath("/logistika");
+    return { ok: true };
+  } catch (err) {
+    return actionError(err, "deleteTransfer");
   }
 }
