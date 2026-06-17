@@ -9,7 +9,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Pill } from "@/components/common/page";
-import { Loader2, Save, CheckCircle2, Trash2, Truck } from "lucide-react";
+import { Loader2, Save, CheckCircle2, Trash2, Truck, FileDown } from "lucide-react";
 import { formatDateTimeUZ } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { updateDistributionItemsAction, confirmDistributionAction, deleteDistributionAction } from "../../actions";
@@ -76,6 +76,11 @@ export function TaqsimotDetail({ data }: { data: DetailData }) {
         <span className="text-xs text-muted-foreground">Yaratdi: {data.createdBy} · {formatDateTimeUZ(data.createdAt)}</span>
         {data.confirmedAt && <span className="text-xs text-muted-foreground">Tasdiqlandi: {formatDateTimeUZ(data.confirmedAt)}</span>}
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
+          <a href={`/api/taqsimot/${data.id}/pdf`} target="_blank" rel="noopener noreferrer"
+            title="Omborchi uchun pikking ro'yxati (PDF)"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
+            <FileDown className="h-3.5 w-3.5" /> Pikking (PDF)
+          </a>
           {isDraft ? (
             <>
               <Button size="sm" className="h-8 gap-1.5" disabled={busy} onClick={save}>
