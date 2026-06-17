@@ -87,6 +87,7 @@ model User {
   expenses          Expense[]
   distributions     Distribution[]
   branchTransfers   BranchTransfer[]
+  batches           ProductBatch[]
 }
 
 // Kategoriya menejeri ↔ kategoriya (ko'p-ko'p): bir xodim bir nechta kategoriyaga javobgar.
@@ -123,6 +124,7 @@ model Branch {
   distributions  Distribution[]
   transfersFrom  BranchTransfer[] @relation("TransferFrom")
   transfersTo    BranchTransfer[] @relation("TransferTo")
+  batches        ProductBatch[]
 }
 
 model BranchAlias {
@@ -329,6 +331,7 @@ model Product {
   warehouseStock WarehouseStock?
   distributionItems DistributionItem[]
   transferItems     BranchTransferItem[]
+  batches           ProductBatch[]
 
   @@index([categoryId])
   @@index([supplierId])
@@ -769,6 +772,30 @@ model BranchTransferItem {
 
   @@unique([transferId, productId])
   @@index([productId])
+}
+
+// Mahsulot partiyasi (lot) — yaroqlilik MUDDATI nazorati uchun. Qo'lda yoki fayl import
+// bilan kiritiladi. branchId null = markaziy ombor. Markdown (chegirma) xavfi: qoldiq vs
+// muddatgacha sotiladigan miqdor (kunlik o'rtacha × qolgan kun). Bir joyda bir muddat = bitta
+// partiya (productId + branchId + expiryDate unikal — COALESCE indeks migratsiyada).
+model ProductBatch {
+  id          Int      @id @default(autoincrement())
+  productId   Int
+  branchId    Int? // null = markaziy ombor
+  qty         Decimal  @db.Decimal(20, 3) // partiyadagi qoldiq
+  expiryDate  DateTime @db.Date // yaroqlilik muddati (tugash sanasi)
+  note        String?
+  createdById Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  branch    Branch? @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  createdBy User    @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([branchId])
+  @@index([expiryDate])
 }
 
 // Agent (brend) zakaz qabul kunlari — SupplierOrderDay'ga parallel, lekin agent darajasida.

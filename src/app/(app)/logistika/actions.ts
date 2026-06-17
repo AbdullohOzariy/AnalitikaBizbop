@@ -11,6 +11,7 @@ import { actionError } from "@/lib/action-error";
 import { warehouseStockList, parseWarehouseRows, type WarehouseRow } from "@/lib/warehouse";
 import { branchDistributionSuggest, type DistSuggest } from "@/lib/distribution";
 import { branchTransferSuggest, type TransferSuggest } from "@/lib/transfer";
+import { parseBatchRows } from "@/lib/expiry";
 
 async function requireView() {
   const s = await auth();
@@ -325,5 +326,148 @@ export async function deleteTransferAction(id: number): Promise<{ ok: true } | {
     return { ok: true };
   } catch (err) {
     return actionError(err, "deleteTransfer");
+  }
+}
+
+// ─── Muddat (ProductBatch — yaroqlilik muddati partiyalari) ──────────────────────
+
+const expiryStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Sana YYYY-MM-DD bo'lishi kerak");
+
+const addBatchSchema = z.object({
+  code: z.coerce.number().int().positive(),
+  branchId: z.coerce.number().int().positive().nullable(),
+  qty: z.coerce.number().min(0).max(1_000_000_000),
+  expiry: expiryStr,
+  note: z.string().trim().max(300).optional(),
+});
+
+/** Partiya qo'shish/yangilash (kod + joy + muddat unikal — mavjud bo'lsa qoldiq yangilanadi). */
+export async function addBatchAction(
+  input: z.input<typeof addBatchSchema>
+): Promise<{ ok: true; productName: string } | { ok: false; error: string }> {
+  try {
+    const user = await requireWarehouse();
+    const p = addBatchSchema.parse(input);
+    const product = await prisma.product.findFirst({ where: { code: p.code }, select: { id: true, name: true } });
+    if (!product) return { ok: false, error: `Kod ${p.code} bo'yicha mahsulot topilmadi.` };
+    if (p.branchId != null) {
+      const b = await prisma.branch.findUnique({ where: { id: p.branchId }, select: { id: true } });
+      if (!b) return { ok: false, error: "Filial topilmadi." };
+    }
+    const expiryDate = new Date(p.expiry + "T00:00:00.000Z");
+    const existing = await prisma.productBatch.findFirst({
+      where: { productId: product.id, branchId: p.branchId, expiryDate },
+      select: { id: true },
+    });
+    if (existing) {
+      await prisma.productBatch.update({ where: { id: existing.id }, data: { qty: p.qty, note: p.note?.trim() || null } });
+    } else {
+      await prisma.productBatch.create({
+        data: { productId: product.id, branchId: p.branchId, qty: p.qty, expiryDate, note: p.note?.trim() || null, createdById: Number(user.id) },
+      });
+    }
+    revalidatePath("/logistika");
+    return { ok: true, productName: product.name };
+  } catch (err) {
+    return actionError(err, "addBatch");
+  }
+}
+
+const updateBatchSchema = z.object({
+  id: z.coerce.number().int().positive(),
+  qty: z.coerce.number().min(0).max(1_000_000_000),
+  expiry: expiryStr,
+  note: z.string().trim().max(300).optional(),
+});
+
+/** Partiyani tahrirlash (qoldiq, muddat, izoh). */
+export async function updateBatchAction(
+  input: z.input<typeof updateBatchSchema>
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    await requireWarehouse();
+    const p = updateBatchSchema.parse(input);
+    const b = await prisma.productBatch.findUnique({ where: { id: p.id }, select: { id: true } });
+    if (!b) return { ok: false, error: "Partiya topilmadi." };
+    await prisma.productBatch.update({
+      where: { id: p.id },
+      data: { qty: p.qty, expiryDate: new Date(p.expiry + "T00:00:00.000Z"), note: p.note?.trim() || null },
+    });
+    revalidatePath("/logistika");
+    return { ok: true };
+  } catch (err) {
+    return actionError(err, "updateBatch");
+  }
+}
+
+/** Partiyani o'chirish. */
+export async function deleteBatchAction(id: number): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    await requireWarehouse();
+    const bid = z.coerce.number().int().positive().parse(id);
+    await prisma.productBatch.delete({ where: { id: bid } });
+    revalidatePath("/logistika");
+    return { ok: true };
+  } catch (err) {
+    return actionError(err, "deleteBatch");
+  }
+}
+
+/** Partiyalarni fayl orqali import — tanlangan joyga (kod + muddat + qoldiq). */
+export async function importBatchesAction(
+  formData: FormData
+): Promise<{ ok: true; matched: number; unmatched: number; unmatchedSample: number[]; rows: number } | { ok: false; error: string }> {
+  try {
+    const user = await requireWarehouse();
+    const file = formData.get("file");
+    if (!(file instanceof File) || file.size === 0) return { ok: false, error: "Fayl topilmadi." };
+    const branchRaw = String(formData.get("branchId") ?? "").trim();
+    let branchId: number | null = null;
+    if (branchRaw) {
+      branchId = z.coerce.number().int().positive().parse(branchRaw);
+      const b = await prisma.branch.findUnique({ where: { id: branchId }, select: { id: true } });
+      if (!b) return { ok: false, error: "Filial topilmadi." };
+    }
+    const buf = Buffer.from(await file.arrayBuffer());
+    const wb = XLSX.read(buf, { type: "buffer", cellDates: true });
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    if (!sheet) return { ok: false, error: "Bo'sh fayl." };
+    const aoa = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false }) as unknown[][];
+    const parsed = parseBatchRows(aoa);
+    if (parsed.length === 0) return { ok: false, error: "Faylda kod/muddat/qoldiq qatorlari topilmadi (ustunlar: kod, muddat, qoldiq)." };
+
+    // Bir (kod, muddat) ikki marta bo'lsa — oxirgi qiymat
+    const byKey = new Map<string, { code: number; qty: number; expiry: string }>();
+    for (const r of parsed) byKey.set(`${r.code}:${r.expiry}`, r);
+    const codes = [...new Set([...byKey.values()].map((r) => r.code))];
+
+    const prods = await prisma.product.findMany({ where: { code: { in: codes } }, select: { id: true, code: true } });
+    const idByCode = new Map(prods.map((p) => [p.code, p.id]));
+    const matched: { pid: number; qty: number; expiry: string }[] = [];
+    const unmatched = new Set<number>();
+    for (const r of byKey.values()) {
+      const pid = idByCode.get(r.code);
+      if (pid != null) matched.push({ pid, qty: r.qty, expiry: r.expiry });
+      else unmatched.add(r.code);
+    }
+
+    const uid = Number(user.id);
+    const BATCH = 500;
+    for (let i = 0; i < matched.length; i += BATCH) {
+      const chunk = matched.slice(i, i + BATCH);
+      const vals = chunk.map((r) =>
+        Prisma.sql`(${r.pid}, ${branchId}, ${new Prisma.Decimal(r.qty)}, ${r.expiry}::date, ${uid}, now(), now())`
+      );
+      await prisma.$executeRaw`
+        INSERT INTO "ProductBatch" ("productId", "branchId", "qty", "expiryDate", "createdById", "createdAt", "updatedAt")
+        VALUES ${Prisma.join(vals)}
+        ON CONFLICT ("productId", COALESCE("branchId", 0), "expiryDate")
+        DO UPDATE SET "qty" = EXCLUDED."qty", "updatedAt" = now()
+      `;
+    }
+    revalidatePath("/logistika");
+    return { ok: true, matched: matched.length, unmatched: unmatched.size, unmatchedSample: [...unmatched].slice(0, 10), rows: parsed.length };
+  } catch (err) {
+    return actionError(err, "importBatches");
   }
 }

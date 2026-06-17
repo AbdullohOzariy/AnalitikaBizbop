@@ -14,12 +14,14 @@ import { cn } from "@/lib/utils";
 import { formatDateUZ } from "@/lib/format";
 import { supplierLogistics } from "@/lib/logistics";
 import { expectedDeliveries } from "@/lib/delivery";
+import { expiryRisk } from "@/lib/expiry";
 import { LogistikaFilter } from "./filter";
 import { OmborTab } from "./ombor-tab";
+import { MuddatClient } from "./muddat-client";
 
 export const dynamic = "force-dynamic";
 
-type Tab = "scorecard" | "kalendar" | "ombor" | "taqsimot" | "kochirish";
+type Tab = "scorecard" | "kalendar" | "ombor" | "taqsimot" | "kochirish" | "muddat";
 
 const DIST_STATUS: Record<string, { label: string; tone: "muted" | "green" | "red" | "blue" }> = {
   DRAFT: { label: "Qoralama", tone: "muted" },
@@ -51,6 +53,7 @@ export default async function LogistikaPage({
   const sp = await searchParams;
   const tab: Tab = sp.tab === "kalendar" ? "kalendar"
     : sp.tab === "ombor" ? "ombor"
+    : sp.tab === "muddat" ? "muddat"
     : sp.tab === "taqsimot" && canWh ? "taqsimot"
     : sp.tab === "kochirish" && canWh ? "kochirish"
     : "scorecard";
@@ -62,6 +65,7 @@ export default async function LogistikaPage({
   const TABS: { v: Tab; l: string }[] = [
     { v: "scorecard", l: "Ta'minotchi" },
     { v: "kalendar", l: "Kalendar" },
+    { v: "muddat", l: "Muddat" },
     { v: "ombor", l: "Ombor" },
     ...(canWh ? [{ v: "taqsimot" as Tab, l: "Taqsimot" }, { v: "kochirish" as Tab, l: "Ko'chirish" }] : []),
   ];
@@ -89,9 +93,18 @@ export default async function LogistikaPage({
         : tab === "taqsimot" ? <TaqsimotList />
         : tab === "kochirish" ? <KochirishList />
         : tab === "kalendar" ? <DeliveryCalendar />
+        : tab === "muddat" ? <MuddatTab canEdit={canWh} />
         : <Scorecard startStr={startStr} endStr={endStr} />}
     </div>
   );
+}
+
+async function MuddatTab({ canEdit }: { canEdit: boolean }) {
+  const [rows, branches] = await Promise.all([
+    expiryRisk(),
+    prisma.branch.findMany({ orderBy: { sortOrder: "asc" }, select: { id: true, name: true } }),
+  ]);
+  return <MuddatClient rows={rows} branches={branches} canEdit={canEdit} />;
 }
 
 const dmy = (s: string) => s.split("-").reverse().join(".");
