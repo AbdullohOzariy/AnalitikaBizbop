@@ -42,8 +42,10 @@ export const isSupplyChain = (r: R): boolean => r === "SUPPLYCHAIN";
 export const canSeeSuppliers = (r: R): boolean =>
   isAdminTier(r) || isSupplyChain(r) || isHeadCatManager(r) || r === "CAT_MANAGER";
 
-/** Yetkazib beruvchilarni TAHRIRLAY oladiganlar (qo'shish, profil, shartnoma, lead time). */
-export const canEditSuppliers = (r: R): boolean => isSystemAdmin(r) || isSupplyChain(r);
+/** Yetkazib beruvchilarni TAHRIRLAY oladiganlar (profil, shartnoma, lead time, agent, SKU biriktirish, qo'shish/o'chirish).
+ *  CAT_MANAGER ham tahrirlaydi. Eslatma: ombor qoldig'i tahriri bundan MUSTAQIL — u `canManageWarehouse`. */
+export const canEditSuppliers = (r: R): boolean =>
+  isSystemAdmin(r) || isSupplyChain(r) || r === "CAT_MANAGER";
 
 /** PME analyze (P/M/E segment) bo'limini KO'RA oladiganlar — read-only ADMIN ham. */
 export const canSeePme = (r: R): boolean =>

@@ -6,7 +6,7 @@ import * as XLSX from "xlsx";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { auth } from "@/auth";
-import { canSeeSuppliers, canEditSuppliers, canManageWarehouse } from "@/lib/roles";
+import { canSeeSuppliers, canManageWarehouse } from "@/lib/roles";
 import { actionError } from "@/lib/action-error";
 import { warehouseStockList, parseWarehouseRows, type WarehouseRow } from "@/lib/warehouse";
 import { branchDistributionSuggest, type DistSuggest } from "@/lib/distribution";
@@ -20,7 +20,7 @@ async function requireView() {
 }
 async function requireEdit() {
   const s = await auth();
-  if (!s?.user || !canEditSuppliers(s.user.role)) throw new Error("Ruxsat yo'q");
+  if (!s?.user || !canManageWarehouse(s.user.role)) throw new Error("Ruxsat yo'q");
   return s.user;
 }
 

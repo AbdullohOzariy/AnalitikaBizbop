@@ -6,7 +6,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/auth";
-import { canSeeSuppliers, canEditSuppliers, canManageWarehouse } from "@/lib/roles";
+import { canSeeSuppliers, canManageWarehouse } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { Gauge, Truck, CheckCircle2, PackageCheck, Clock, Plus, Send, ArrowLeftRight, ArrowRight, CalendarClock, AlertTriangle } from "lucide-react";
 import { PageHeader, StatCard, EmptyState, Pill } from "@/components/common/page";
@@ -47,7 +47,7 @@ export default async function LogistikaPage({
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!canSeeSuppliers(session.user.role)) redirect("/dashboard-v2");
-  const canEdit = canEditSuppliers(session.user.role);
+  const canEdit = canManageWarehouse(session.user.role);
 
   const canWh = canManageWarehouse(session.user.role);
   const sp = await searchParams;
