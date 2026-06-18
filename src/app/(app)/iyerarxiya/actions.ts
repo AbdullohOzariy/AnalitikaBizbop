@@ -19,6 +19,8 @@ export type SkuRow = {
   subId: number | null;
   abc: string | null; // ABC×XYZ matritsa holati — rang uchun
   xyz: string | null;
+  supplierId: number | null; // biriktirilgan yetkazib beruvchi
+  supplier: string | null; // yetkazib beruvchi nomi
 };
 
 const SKU_PAGE = 50;
@@ -60,6 +62,8 @@ export async function searchSkusAction(input: {
         select: {
           id: true, code: true, name: true,
           abcClass: true, xyzClass: true,
+          supplierId: true,
+          supplier: { select: { name: true } },
           category: {
             select: {
               id: true, name: true,
@@ -84,6 +88,8 @@ export async function searchSkusAction(input: {
         subId: c?.id ?? null,
         abc: r.abcClass,
         xyz: r.xyzClass,
+        supplierId: r.supplierId,
+        supplier: r.supplier?.name ?? null,
       };
     });
     return { ok: true, rows: out, total, page, pageSize: SKU_PAGE };
@@ -98,6 +104,7 @@ export async function updateProductAction(input: {
   name?: string;
   subId?: number;
   code?: number; // 1C kodni keyin biriktirish/o'zgartirish (vaqtinchalik koddan haqiqiyga)
+  supplierId?: number | null; // yetkazib beruvchi (null — bo'shatish)
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     await requireAdmin();
@@ -118,12 +125,24 @@ export async function updateProductAction(input: {
       if (taken) return { ok: false, error: `Bu kod (${code}) allaqachon boshqa SKU'da bor.` };
       data.code = code;
     }
+    if (input.supplierId !== undefined) {
+      if (input.supplierId === null) {
+        data.supplier = { disconnect: true };
+      } else {
+        const sid = z.coerce.number().int().positive().parse(input.supplierId);
+        const sup = await prisma.supplier.findUnique({ where: { id: sid }, select: { id: true } });
+        if (!sup) return { ok: false, error: "Yetkazib beruvchi topilmadi." };
+        data.supplier = { connect: { id: sid } };
+      }
+    }
     if (Object.keys(data).length === 0) return { ok: false, error: "O'zgarish yo'q." };
     await prisma.product.update({ where: { id: pid }, data });
     revalidatePath("/iyerarxiya");
     revalidateTag("iyerarxiya", "max");
     // Mahsulot nomi/kategoriyasi marja/savdo keshlarida ko'rinadi
     revalidateTag(ANALYTICS_CACHE_TAG, "max");
+    // Yetkazib beruvchi o'zgarsa — ta'minotchi profili keshini ham yangilash
+    if (input.supplierId !== undefined) revalidateTag("suppliers", "max");
     return { ok: true };
   } catch (err) {
     return actionError(err, "updateProduct");

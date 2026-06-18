@@ -26,7 +26,7 @@ import {
 
 const ALL = "all";
 
-export function SkuList({ groups }: { groups: HGroup[] }) {
+export function SkuList({ groups, suppliers }: { groups: HGroup[]; suppliers: { id: number; name: string }[] }) {
   const [qInput, setQInput] = useState("");
   const [q, setQ] = useState("");
   const [groupId, setGroupId] = useState<string>(ALL);
@@ -204,16 +204,17 @@ export function SkuList({ groups }: { groups: HGroup[] }) {
                 <TableHead className="w-[110px]">Guruh</TableHead>
                 <TableHead className="w-[150px]">Kategoriya</TableHead>
                 <TableHead className="w-[160px]">Subkategoriya</TableHead>
+                <TableHead className="w-[150px]">Yetkazib beruvchi</TableHead>
                 <TableHead className="w-[60px] text-right">Amal</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isPending && rows.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
+                <TableRow><TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
                   <Loader2 className="mr-1.5 inline h-4 w-4 animate-spin" /> Yuklanmoqda…
                 </TableCell></TableRow>
               ) : rows.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
+                <TableRow><TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
                   Hech narsa topilmadi.
                 </TableCell></TableRow>
               ) : (
@@ -235,6 +236,7 @@ export function SkuList({ groups }: { groups: HGroup[] }) {
                     <TableCell className="text-xs text-muted-foreground">{r.group ?? "—"}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{r.cat ?? "—"}</TableCell>
                     <TableCell className="text-xs">{r.sub ?? <span className="text-amber-600 dark:text-amber-400">moslanmagan</span>}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{r.supplier ?? <span className="text-amber-600 dark:text-amber-400">yo&apos;q</span>}</TableCell>
                     <TableCell className="text-right">
                       <span className="inline-flex gap-0.5">
                         {holat !== "arxiv" ? (
@@ -285,6 +287,7 @@ export function SkuList({ groups }: { groups: HGroup[] }) {
           key={edit.id}
           row={edit}
           subs={subsFlat}
+          suppliers={suppliers}
           onClose={() => setEdit(null)}
           onSaved={() => {
             setEdit(null);
@@ -323,9 +326,12 @@ function FilterSelect({ label, value, onChange, options, allLabel }: {
   );
 }
 
-function SkuEditDialog({ row, subs, onClose, onSaved }: {
+const NO_SUPPLIER = "__none__";
+
+function SkuEditDialog({ row, subs, suppliers, onClose, onSaved }: {
   row: SkuRow;
   subs: SubItem[];
+  suppliers: { id: number; name: string }[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -334,22 +340,26 @@ function SkuEditDialog({ row, subs, onClose, onSaved }: {
   const [code, setCode] = useState(String(row.code));
   const [subId, setSubId] = useState<string>(row.subId != null ? String(row.subId) : "");
   const [subLabel, setSubLabel] = useState<string>(row.sub ?? "");
+  const [supplierId, setSupplierId] = useState<string>(row.supplierId != null ? String(row.supplierId) : NO_SUPPLIER);
 
   const save = () => {
     const nm = name.trim();
     if (!nm) { toast.error("Nom kerak."); return; }
     const codeNum = code.trim() === "" ? null : Number(code);
     if (codeNum !== null && (!Number.isInteger(codeNum) || codeNum <= 0)) { toast.error("Kod musbat butun son bo'lishi kerak."); return; }
+    const curSup = supplierId === NO_SUPPLIER ? null : Number(supplierId);
     const changedName = nm !== row.name;
     const changedSub = subId !== "" && Number(subId) !== row.subId;
     const changedCode = codeNum !== null && codeNum !== row.code;
-    if (!changedName && !changedSub && !changedCode) { onClose(); return; }
+    const changedSupplier = curSup !== row.supplierId;
+    if (!changedName && !changedSub && !changedCode && !changedSupplier) { onClose(); return; }
     start(async () => {
       const res = await updateProductAction({
         productId: row.id,
         name: changedName ? nm : undefined,
         subId: changedSub ? Number(subId) : undefined,
         code: changedCode ? codeNum : undefined,
+        supplierId: changedSupplier ? curSup : undefined,
       });
       if (res.ok) { toast.success("Saqlandi."); onSaved(); } else toast.error(res.error);
     });
@@ -387,6 +397,16 @@ function SkuEditDialog({ row, subs, onClose, onSaved }: {
                 onPick={(sid, label) => { setSubId(String(sid)); setSubLabel(label); }}
               />
             </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Yetkazib beruvchi</Label>
+            <Select value={supplierId} onValueChange={(v) => setSupplierId(typeof v === "string" ? v : NO_SUPPLIER)} disabled={isPending}>
+              <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder="— yo'q —" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NO_SUPPLIER}>— yo&apos;q —</SelectItem>
+                {suppliers.map((s) => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
         </div>
         <DialogFooter className="gap-2">

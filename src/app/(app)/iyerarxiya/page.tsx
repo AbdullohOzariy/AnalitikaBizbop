@@ -36,7 +36,10 @@ export default async function IyerarxiyaPage() {
   const session = await auth();
   if (!session?.user || !isAdminTier(session.user.role)) redirect("/dashboard-v2");
   const isAdmin = isSystemAdmin(session.user.role);
-  const groups = await getHierarchy();
+  const [groups, suppliers] = await Promise.all([
+    getHierarchy(),
+    prisma.supplier.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+  ]);
 
   const data: HGroup[] = groups.map((g) => ({
     id: g.id,
@@ -74,7 +77,7 @@ export default async function IyerarxiyaPage() {
           <IyerarxiyaClient groups={data} isAdmin={isAdmin} />
         </TabsContent>
         <TabsContent value="list" className="pt-3">
-          <SkuList groups={data} />
+          <SkuList groups={data} suppliers={suppliers} />
         </TabsContent>
         {isAdmin && (
           <TabsContent value="add" className="pt-3">
