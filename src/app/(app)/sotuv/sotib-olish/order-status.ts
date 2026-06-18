@@ -5,9 +5,9 @@
  * (ACCEPTED) → yetib keldi (RECEIVED, fakt solishtiriladi). RETURNED — qaytarildi.
  *
  * Rollar: CAT_MANAGER — o'z zakazini yaratadi/tasdiqqa yuboradi, qolganini kuzatadi.
- * SUPPLYCHAIN — tasdiqlash/yuborish/qabul/yetib keldi. HEAD_CAT_MANAGER — menejer
- * ishi (hamma zakazda) + yetib keldi/fakt. ADMIN (Bo'lim boshlig'i) va SYSTEM_ADMIN —
- * hamma tranzitsiya. Qolganlar — faqat kuzatadi.
+ * SUPPLYCHAIN — tasdiqlash/yuborish/qabul/yetib keldi. HEAD_CAT_MANAGER — hamma
+ * zakazda TO'LIQ workflow (ADMIN darajasida) + qatorlarni tahrirlash + fakt.
+ * ADMIN (Bo'lim boshlig'i) va SYSTEM_ADMIN — hamma tranzitsiya. Qolganlar — kuzatadi.
  */
 
 export const ORDER_STATUSES = [
@@ -62,19 +62,11 @@ type R = string | null | undefined;
 /** Rol shu tranzitsiyani bajara oladimi (isOwner — zakaz yaratuvchisimi). */
 export function canTransition(role: R, from: OrderStatusT, to: OrderStatusT, isOwner: boolean): boolean {
   if (!NEXT_STATUSES[from]?.includes(to)) return false;
-  // To'liq huquq: SYSTEM_ADMIN va Bo'lim boshlig'i (ADMIN)
-  if (role === "SYSTEM_ADMIN" || role === "ADMIN") return true;
+  // To'liq huquq: SYSTEM_ADMIN, Bo'lim boshlig'i (ADMIN), Kategoriya menejerlari boshi (HEAD_CAT_MANAGER)
+  if (role === "SYSTEM_ADMIN" || role === "ADMIN" || role === "HEAD_CAT_MANAGER") return true;
   // Menejer: o'z zakazini tasdiqqa yuboradi / qaytarib oladi
   if (role === "CAT_MANAGER") {
     return isOwner && ((from === "DRAFT" && to === "PENDING") || (from === "PENDING" && to === "DRAFT"));
-  }
-  // Menejerlar boshi: hamma zakazda menejer ishi + yetib keldi
-  if (role === "HEAD_CAT_MANAGER") {
-    return (
-      (from === "DRAFT" && to === "PENDING") ||
-      (from === "PENDING" && to === "DRAFT") ||
-      (from === "ACCEPTED" && to === "RECEIVED")
-    );
   }
   // Supplychain: o'z zakazini tasdiqqa yuboradi (o'zi yaratgan bo'lsa) +
   // tasdiqlash → yuborish → qabul → yetib keldi / qaytarish
@@ -93,9 +85,8 @@ export function canTransition(role: R, from: OrderStatusT, to: OrderStatusT, isO
 
 /** Qatorlarni (miqdor/narx) tahrirlash mumkinmi. */
 export function canEditItems(role: R, status: OrderStatusT, isOwner: boolean): boolean {
-  if (role === "SYSTEM_ADMIN" || role === "ADMIN") return status !== "RECEIVED";
+  if (role === "SYSTEM_ADMIN" || role === "ADMIN" || role === "HEAD_CAT_MANAGER") return status !== "RECEIVED";
   if (role === "CAT_MANAGER") return isOwner && status === "DRAFT";
-  if (role === "HEAD_CAT_MANAGER") return status === "DRAFT";
   if (role === "SUPPLYCHAIN") return (status === "DRAFT" && isOwner) || status === "PENDING" || status === "APPROVED";
   return false;
 }

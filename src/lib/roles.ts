@@ -8,8 +8,8 @@
 //                yetkazib beruvchilarni esa TO'LIQ boshqaradi (qo'shish, profil, lead time).
 // ADMIN (Bo'lim boshlig'i) va SUPPLYCHAIN — anketalarni ko'rib tasdiqlaydi.
 // HEAD_CAT_MANAGER (Kategoriya menejerlari boshi) — BARCHA kategoriyalar bo'yicha
-//                menejer ishi (zakaz, OOS/Stockday, barcha zakazlarni ko'rish) +
-//                yetkazib beruvchilar read-only.
+//                kengaytirilgan huquq: hamma zakazni ko'rish + TO'LIQ zakaz workflow
+//                (tasdiqlash/yuborish/qabul/fakt, ADMIN darajasida) + yetkazib beruvchilarni TAHRIRLASH.
 
 type R = string | null | undefined;
 
@@ -43,9 +43,9 @@ export const canSeeSuppliers = (r: R): boolean =>
   isAdminTier(r) || isSupplyChain(r) || isHeadCatManager(r) || r === "CAT_MANAGER";
 
 /** Yetkazib beruvchilarni TAHRIRLAY oladiganlar (profil, shartnoma, lead time, agent, SKU biriktirish, qo'shish/o'chirish).
- *  CAT_MANAGER ham tahrirlaydi. Eslatma: ombor qoldig'i tahriri bundan MUSTAQIL — u `canManageWarehouse`. */
+ *  CAT_MANAGER va HEAD_CAT_MANAGER ham tahrirlaydi. Eslatma: ombor qoldig'i tahriri bundan MUSTAQIL — u `canManageWarehouse`. */
 export const canEditSuppliers = (r: R): boolean =>
-  isSystemAdmin(r) || isSupplyChain(r) || r === "CAT_MANAGER";
+  isSystemAdmin(r) || isSupplyChain(r) || r === "CAT_MANAGER" || isHeadCatManager(r);
 
 /** PME analyze (P/M/E segment) bo'limini KO'RA oladiganlar — read-only ADMIN ham. */
 export const canSeePme = (r: R): boolean =>
