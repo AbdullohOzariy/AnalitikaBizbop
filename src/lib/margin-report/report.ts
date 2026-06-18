@@ -1,8 +1,10 @@
 /**
- * Marjasi MINUS hisoboti: oxirgi yuklangan davr bo'yicha filial × subkategoriya
- * kesmida marjasi manfiy (tannarx > sotuv) bo'lgan kataklar Excel'i — sozlangan
- * bot orqali guruh topigiga yuboriladi.
- * Marja = (sotuv − tannarx) / sotuv. Manba: CategorySales (tannarxi bor kataklar).
+ * Marja hisoboti — oxirgi yuklangan davr bo'yicha sozlangan bot orqali guruh topigiga
+ * 3 ta Excel yuboradi:
+ *  1) Marjasi MINUS — filial × subkategoriya (tannarx > sotuv). Manba: CategorySales.
+ *  2) Subkat o'rtacha marja vs reja. Manba: CategorySales + MarginPlan.
+ *  3) Marjasi LOW_MARGIN_PCT (15%) dan PAST mahsulotlar — SKU × filial. Manba: ProductSales.
+ * Marja = (sotuv − tannarx) / sotuv.
  */
 import * as XLSX from "xlsx";
 import { Telegram } from "telegraf";
@@ -12,6 +14,10 @@ import { getMarginReportConfig } from "./sozlama";
 
 type Row = { branch: string; grp: string | null; cat: string | null; sub: string; sales: number; cost: number };
 type SubRow = { cid: number; grp: string | null; cat: string | null; sub: string; sales: number; cost: number | null };
+type LowRow = { branch: string; grp: string | null; cat: string | null; sub: string | null; code: number; pname: string; sales: number; cost: number };
+
+/** Marja chegarasi — shundan PAST marjali mahsulotlar hisobotga tushadi. */
+export const LOW_MARGIN_PCT = 15;
 
 /** Oxirgi yuklangan davr (periodStart, periodEnd) + yorlig'i. null — ma'lumot yo'q. */
 async function latestPeriod(): Promise<{ start: Date; end: Date; label: string; tag: string } | null> {
@@ -118,6 +124,50 @@ export async function buildSubcatMarginReport(): Promise<
 }
 
 /**
+ * Marjasi LOW_MARGIN_PCT (15%) dan PAST mahsulotlar (SKU × filial) — oxirgi davr.
+ * Manba: ProductSales (tannarxi bor, sotuvi > 0). Marja % o'sish tartibida (eng yomon avval).
+ */
+export async function buildLowMarginProductsReport(): Promise<
+  { buffer: Buffer; count: number; periodLabel: string; fileTag: string } | null
+> {
+  const period = await latestPeriod();
+  if (!period) return null;
+  const { start, end, label: periodLabel, tag: fileTag } = period;
+  const frac = LOW_MARGIN_PCT / 100;
+
+  const rows = await prisma.$queryRaw<LowRow[]>(Prisma.sql`
+    SELECT b.name AS branch, g.name AS grp, par.name AS cat, sub.name AS sub,
+           p.code AS code, p.name AS pname,
+           ps.amount::float8 AS sales, ps."costAmount"::float8 AS cost
+    FROM "ProductSales" ps
+    JOIN "Branch" b ON b.id = ps."branchId"
+    JOIN "Product" p ON p.id = ps."productId" AND p."archivedAt" IS NULL
+    LEFT JOIN "Category" sub ON sub.id = p."categoryId"
+    LEFT JOIN "Category" par ON par.id = sub."parentId"
+    LEFT JOIN "CategoryGroup" g ON g.id = COALESCE(par."groupId", sub."groupId")
+    WHERE ps."periodStart" = ${start} AND ps."periodEnd" = ${end}
+      AND ps."costAmount" IS NOT NULL
+      AND ps.amount > 0
+      AND (ps.amount - ps."costAmount") < ps.amount * ${frac}
+    ORDER BY (ps.amount - ps."costAmount") / ps.amount ASC, b."sortOrder"
+  `);
+
+  const header = ["Filial", "Bo'lim", "Kategoriya", "Subkategoriya", "Kod", "Mahsulot", "Sotuv", "Tannarx", "Marja %"];
+  const data = rows.map((r) => {
+    const marja = r.sales > 0 ? ((r.sales - r.cost) / r.sales) * 100 : 0;
+    return [
+      r.branch, r.grp ?? "", r.cat ?? "", r.sub ?? "", r.code, r.pname,
+      Math.round(r.sales), Math.round(r.cost), Math.round(marja * 10) / 10,
+    ];
+  });
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([header, ...data]), `Marja ${LOW_MARGIN_PCT}% dan past`);
+  const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
+  return { buffer, count: rows.length, periodLabel, fileTag };
+}
+
+/**
  * Hisobotni sozlangan guruhga (topic) yuboradi. Minus katak bo'lmasa — qisqa matn.
  * Sozlanmagan (token/chat yo'q) bo'lsa — xato qaytaradi (cron jim o'tkazadi).
  */
@@ -162,6 +212,19 @@ export async function sendMarginReport(): Promise<{ ok: true; count: number } | 
       await tg.sendDocument(
         cfg.chatId,
         { source: sub.buffer, filename: `subkat-marja-${sub.fileTag}.xlsx` },
+        { caption, parse_mode: "HTML", ...thread }
+      );
+    }
+
+    // 3) Marjasi 15% dan PAST mahsulotlar (SKU × filial)
+    const low = await buildLowMarginProductsReport();
+    if (low && low.count > 0) {
+      const caption =
+        `🔻 <b>Marjasi ${LOW_MARGIN_PCT}% dan past mahsulotlar</b> (SKU × filial)\n` +
+        `🗓 ${low.periodLabel} · <b>${low.count}</b> ta`;
+      await tg.sendDocument(
+        cfg.chatId,
+        { source: low.buffer, filename: `marja-past-${LOW_MARGIN_PCT}-${low.fileTag}.xlsx` },
         { caption, parse_mode: "HTML", ...thread }
       );
     }
