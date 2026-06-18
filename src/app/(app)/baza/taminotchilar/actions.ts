@@ -4,6 +4,7 @@ import { revalidatePath, revalidateTag } from "next/cache";
 
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@/generated/prisma/client";
 import { ANALYTICS_CACHE_TAG } from "@/lib/analytics";
 import { auth } from "@/auth";
 import { canSeeSuppliers, canEditSuppliers } from "@/lib/roles";
@@ -523,6 +524,77 @@ export async function bulkAssignSkuAgentAction(
     return { ok: true, count: res.count };
   } catch (err) {
     return actionError(err, "bulkAssignSkuAgent");
+  }
+}
+
+// ── Ta'minotchisiz SKU'larni biriktirish ──
+// supplierId = null bo'lgan SKU'larni tanlab, joriy yetkazib beruvchiga biriktirish.
+
+export type UnassignedSku = { id: number; code: number; name: string; sub: string | null };
+
+const UNASSIGNED_PAGE = 30;
+
+/** Ta'minotchisi YO'Q (supplierId = null) SKU'lar — qidiruv (nom/kod) + pagination. */
+export async function unassignedSkusAction(input: {
+  q?: string; page?: number;
+}): Promise<{ ok: true; rows: UnassignedSku[]; total: number; page: number; pageSize: number } | { ok: false; error: string }> {
+  try {
+    await requireSupplierEditor();
+    const q = (input.q ?? "").trim();
+    const page = Math.max(1, Math.floor(input.page ?? 1));
+    const where: Prisma.ProductWhereInput = { supplierId: null, archivedAt: null };
+    if (q) {
+      const num = /^\d+$/.test(q) ? parseInt(q, 10) : undefined;
+      where.OR = [
+        { name: { contains: q, mode: "insensitive" } },
+        ...(num !== undefined ? [{ code: num }] : []),
+      ];
+    }
+    const [rows, total] = await Promise.all([
+      prisma.product.findMany({
+        where,
+        select: { id: true, code: true, name: true, category: { select: { name: true } } },
+        orderBy: [{ currentSold: { sort: "desc", nulls: "last" } }, { name: "asc" }],
+        skip: (page - 1) * UNASSIGNED_PAGE,
+        take: UNASSIGNED_PAGE,
+      }),
+      prisma.product.count({ where }),
+    ]);
+    return {
+      ok: true,
+      rows: rows.map((r) => ({ id: r.id, code: r.code, name: r.name, sub: r.category?.name ?? null })),
+      total, page, pageSize: UNASSIGNED_PAGE,
+    };
+  } catch (err) {
+    return actionError(err, "unassignedSkus");
+  }
+}
+
+const assignSupplierSchema = z.object({
+  supplierId: z.coerce.number().int().positive(),
+  productIds: z.array(z.coerce.number().int().positive()).min(1, "Kamida bitta SKU tanlang").max(2000),
+});
+
+/** Tanlangan (ta'minotchisiz) SKU'larni shu yetkazib beruvchiga biriktirish.
+ *  Faqat supplierId = null bo'lganlar biriktiriladi (boshqasinikini "o'g'irlamaydi"). */
+export async function assignSkusToSupplierAction(
+  input: z.input<typeof assignSupplierSchema>
+): Promise<{ ok: true; count: number } | { ok: false; error: string }> {
+  try {
+    await requireSupplierEditor();
+    const p = assignSupplierSchema.parse(input);
+    const sup = await prisma.supplier.findUnique({ where: { id: p.supplierId }, select: { id: true } });
+    if (!sup) return { ok: false, error: "Yetkazib beruvchi topilmadi." };
+    const res = await prisma.product.updateMany({
+      where: { id: { in: p.productIds }, supplierId: null },
+      data: { supplierId: p.supplierId },
+    });
+    revalidateTag(SUPPLIERS_TAG, "max");
+    revalidateTag(ANALYTICS_CACHE_TAG, "max");
+    revalidatePath(`/baza/taminotchilar/${p.supplierId}`);
+    return { ok: true, count: res.count };
+  } catch (err) {
+    return actionError(err, "assignSkusToSupplier");
   }
 }
 

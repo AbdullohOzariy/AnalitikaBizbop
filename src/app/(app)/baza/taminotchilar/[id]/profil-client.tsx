@@ -4,7 +4,7 @@ import { Fragment as FragmentRows, useMemo, useRef, useState, useTransition } fr
 import { useRouter } from "next/navigation";
 import {
   Star, Phone, User, Save, Loader2, Check, AlertCircle, Plus, Trash2, Pencil,
-  ExternalLink, X, ChevronRight, ChevronLeft, Users, CalendarDays,
+  ExternalLink, X, ChevronRight, ChevronLeft, Users, CalendarDays, Search,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
@@ -31,8 +31,11 @@ import {
   deleteAgentAction,
   assignSkuAgentAction,
   bulkAssignSkuAgentAction,
+  unassignedSkusAction,
+  assignSkusToSupplierAction,
   type ContractRow,
   type AgentRow,
+  type UnassignedSku,
 } from "../actions";
 
 // ─── Tiplar ───────────────────────────────────────────────────────────────────
@@ -461,6 +464,138 @@ const FIELD_CFG: Record<SkuField, { label: string; max: number; int: boolean }> 
 };
 
 const AGENT_NONE = "__none__"; // Radix Select bo'sh qiymatni qo'llamaydi — "agentsiz" sentineli
+
+// ─── Ta'minotchisiz SKU biriktirish ───────────────────────────────────────────
+export function AssignSkusSection({ supplierId, canEdit = true }: { supplierId: number; canEdit?: boolean }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [qInput, setQInput] = useState("");
+  const [q, setQ] = useState("");
+  const [rows, setRows] = useState<UnassignedSku[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(30);
+  const [sel, setSel] = useState<Set<number>>(new Set());
+  const [loading, startLoad] = useTransition();
+  const [saving, startSave] = useTransition();
+  const debounce = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const reqId = useRef(0);
+
+  const doLoad = (p: number, query: string) => {
+    const myId = ++reqId.current;
+    startLoad(async () => {
+      const res = await unassignedSkusAction({ q: query || undefined, page: p });
+      if (myId !== reqId.current) return;
+      if (res.ok) { setRows(res.rows); setTotal(res.total); setPageSize(res.pageSize); setPage(res.page); }
+      else { toast.error(res.error); setRows([]); setTotal(0); }
+    });
+  };
+
+  const toggleOpen = () => {
+    const willOpen = !open;
+    setOpen(willOpen);
+    if (willOpen && rows.length === 0) doLoad(1, q);
+  };
+
+  const onSearch = (v: string) => {
+    setQInput(v);
+    clearTimeout(debounce.current);
+    debounce.current = setTimeout(() => { setQ(v.trim()); doLoad(1, v.trim()); }, 350);
+  };
+
+  const toggleSel = (id: number) => setSel((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const allOnPageSelected = rows.length > 0 && rows.every((r) => sel.has(r.id));
+  const toggleAllPage = () => setSel((s) => {
+    const n = new Set(s);
+    if (allOnPageSelected) rows.forEach((r) => n.delete(r.id));
+    else rows.forEach((r) => n.add(r.id));
+    return n;
+  });
+
+  const assign = () => {
+    if (sel.size === 0) { toast.error("Kamida bitta SKU tanlang."); return; }
+    startSave(async () => {
+      const res = await assignSkusToSupplierAction({ supplierId, productIds: [...sel] });
+      if (res.ok) {
+        toast.success(`${res.count.toLocaleString("uz-UZ")} ta SKU biriktirildi.`);
+        setSel(new Set());
+        doLoad(1, q);     // biriktirilganlar ro'yxatdan chiqadi
+        router.refresh(); // pastdagi SKU jadvalida ko'rinadi
+      } else toast.error(res.error);
+    });
+  };
+
+  if (!canEdit) return null;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between gap-2">
+        <CardTitle className="text-base">Ta&apos;minotchisiz SKU biriktirish</CardTitle>
+        <Button size="sm" variant={open ? "secondary" : "default"} className="h-8 gap-1.5" onClick={toggleOpen}>
+          <Plus className="h-3.5 w-3.5" /> {open ? "Yopish" : "SKU qo'shish"}
+        </Button>
+      </CardHeader>
+      {open && (
+        <CardContent className="space-y-3">
+          <p className="text-xs text-muted-foreground">
+            Hech qaysi yetkazib beruvchiga biriktirilmagan SKU&apos;lar. Tanlab, shu yetkazib beruvchiga qo&apos;shing.
+          </p>
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input value={qInput} onChange={(e) => onSearch(e.target.value)} placeholder="Qidirish — SKU nomi yoki kodi..." className="h-9 pl-8 pr-8" />
+            {qInput && <button onClick={() => { setQInput(""); setQ(""); doLoad(1, ""); }} aria-label="Tozalash" className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button>}
+          </div>
+
+          <div className="overflow-hidden rounded-xl border border-border">
+            <div className="max-h-[360px] overflow-auto">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-muted/60">
+                  <tr className="text-xs text-muted-foreground">
+                    <th className="w-[40px] px-2 py-2">
+                      <input type="checkbox" checked={allOnPageSelected} onChange={toggleAllPage} aria-label="Sahifani tanlash" className="h-4 w-4 rounded border-border accent-primary" />
+                    </th>
+                    <th className="w-[80px] px-2 py-2 text-left font-semibold">Kod</th>
+                    <th className="px-2 py-2 text-left font-semibold">Nom (SKU)</th>
+                    <th className="w-[150px] px-2 py-2 text-left font-semibold">Subkategoriya</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading && rows.length === 0 ? (
+                    <tr><td colSpan={4} className="py-8 text-center text-sm text-muted-foreground"><Loader2 className="mr-1.5 inline h-4 w-4 animate-spin" /> Yuklanmoqda…</td></tr>
+                  ) : rows.length === 0 ? (
+                    <tr><td colSpan={4} className="py-8 text-center text-sm text-muted-foreground">{q ? "Topilmadi." : "Ta'minotchisiz SKU yo'q."}</td></tr>
+                  ) : rows.map((r) => (
+                    <tr key={r.id} className={cn("cursor-pointer border-t border-border/40 hover:bg-muted/20", sel.has(r.id) && "bg-emerald-500/10")} onClick={() => toggleSel(r.id)}>
+                      <td className="px-2 py-1.5 text-center"><input type="checkbox" checked={sel.has(r.id)} onChange={() => toggleSel(r.id)} onClick={(e) => e.stopPropagation()} className="h-4 w-4 rounded border-border accent-primary" /></td>
+                      <td className="px-2 py-1.5 font-mono text-xs text-muted-foreground">{r.code}</td>
+                      <td className="max-w-[280px] truncate px-2 py-1.5" title={r.name}>{r.name}</td>
+                      <td className="px-2 py-1.5 text-xs text-muted-foreground">{r.sub ?? "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex items-center justify-between gap-2 border-t border-border/60 px-3 py-2">
+              <span className="text-xs tabular-nums text-muted-foreground">{total.toLocaleString("uz-UZ")} ta · sahifa {page}/{totalPages}</span>
+              <div className="flex gap-1">
+                <Button size="icon" variant="outline" className="h-8 w-8" disabled={loading || page <= 1} onClick={() => doLoad(page - 1, q)} aria-label="Oldingi"><ChevronLeft className="h-3.5 w-3.5" /></Button>
+                <Button size="icon" variant="outline" className="h-8 w-8" disabled={loading || page >= totalPages} onClick={() => doLoad(page + 1, q)} aria-label="Keyingi"><ChevronRight className="h-3.5 w-3.5" /></Button>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-sm"><span className="text-muted-foreground">Tanlandi:</span> <span className="font-semibold text-emerald-700 dark:text-emerald-400">{sel.size}</span></span>
+            <Button className="gap-1.5" disabled={saving || sel.size === 0} onClick={assign}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Qo&apos;shish{sel.size > 0 ? ` (${sel.size})` : ""}
+            </Button>
+          </div>
+        </CardContent>
+      )}
+    </Card>
+  );
+}
 
 export function LeadTimeEditor({ supplierId, skus, agents, canEdit = true }: { supplierId: number; skus: ProfilSku[]; agents: { id: number; name: string }[]; canEdit?: boolean }) {
   const router = useRouter();

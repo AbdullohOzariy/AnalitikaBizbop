@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { Truck, ArrowLeft, Layers, Clock, FileText, ShoppingCart, Users } from "lucide-react";
 import { PageHeader, StatCard } from "@/components/common/page";
 import type { ContractRow, AgentRow } from "../actions";
-import { ProfilHeader, OrderDaysCalendar, LeadTimeEditor, ContractsSection, AgentsSection, type ProfilSku } from "./profil-client";
+import { ProfilHeader, OrderDaysCalendar, LeadTimeEditor, ContractsSection, AgentsSection, AssignSkusSection, type ProfilSku } from "./profil-client";
 
 export const dynamic = "force-dynamic";
 
@@ -164,6 +164,7 @@ export default async function SupplierProfilePage({
         </div>
 
         {/* O'ng: SKU + agent + lead time */}
+        <AssignSkusSection supplierId={supplier.id} canEdit={canEdit} />
         <LeadTimeEditor supplierId={supplier.id} skus={skus} agents={agentOptions} canEdit={canEdit} />
       </div>
     </div>
