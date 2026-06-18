@@ -121,3 +121,17 @@ export function hisobMinStock(
   const buffer = XYZ_BUFFER[xyz ?? ""] ?? 1.25;
   return Math.ceil(dailyAvg * (orderGap + lead) * buffer);
 }
+
+// Max stock (to'ldirish darajasi / "order-up-to") = min + yana bitta zakaz sikli (orderGap):
+//   max = kunlik × (2·orderGap + lead) × XYZ buferi
+// Qoldiq min'dan past bo'lsa — shu max'gacha to'ldiriladi; qoldiq max'dan ko'p — ortiqcha zaxira.
+export function hisobMaxStock(
+  dailyAvg: number,
+  orderGap: number,
+  lead: number | null,
+  xyz: string | null
+): number | null {
+  if (lead == null || lead < 0) return null;
+  const buffer = XYZ_BUFFER[xyz ?? ""] ?? 1.25;
+  return Math.ceil(dailyAvg * (2 * orderGap + lead) * buffer);
+}

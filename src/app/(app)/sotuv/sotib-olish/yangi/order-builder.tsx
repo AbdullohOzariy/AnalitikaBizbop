@@ -21,7 +21,7 @@ import {
   suppliersForOrderAction, supplierItemsAction, createOrderAction,
   type SupplierOption, type BuilderItem,
 } from "../actions";
-import { hisobMinStock } from "../order-status";
+import { hisobMinStock, hisobMaxStock } from "../order-status";
 
 // qty (dona) — saqlanadigan asosiy qiymat; blok×pack kiritilsa qty avtomatik hisoblanadi.
 // lead — zakaz berishda kiritilsa SKU'ga bog'lanadi (eslab qolinadi).
@@ -304,6 +304,7 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
     // Lead kiritilsa — min stock JONLI qayta hisoblanadi (formula serverniki bilan bir xil)
     const effLead = l.lead.trim() !== "" && Number(l.lead) >= 0 ? Number(l.lead) : it.lead;
     const liveMin = hisobMinStock(it.dailyAvg, orderGap, effLead, it.xyz);
+    const liveMax = hisobMaxStock(it.dailyAvg, orderGap, effLead, it.xyz);
     return (
       // Fon: tanlangan — yashil (zakazga kiradi); aks holda ABC×XYZ matritsa rangi
       <TableRow key={it.productId}
@@ -337,12 +338,17 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
         <TableCell className="text-right tabular-nums text-xs">
           {liveMin == null ? (
             <span className="text-muted-foreground/40" title="Lead kiritilmagan — yonidagi katakka kiriting (SKU'ga saqlanadi)">—</span>
-          ) : it.stock < liveMin ? (
-            <span className="font-bold text-destructive" title="Qoldiq min stock'dan past — buyurtma shart!">
-              ⚠ {liveMin.toLocaleString("uz-UZ")}
-            </span>
           ) : (
-            <span className="text-muted-foreground">{liveMin.toLocaleString("uz-UZ")}</span>
+            <span className="inline-flex items-center justify-end gap-1" title="Min / Max stock — qoldiq min'dan past bo'lsa max'gacha to'ldiriladi">
+              {it.stock < liveMin ? (
+                <span className="font-bold text-destructive" title="Qoldiq min stock'dan past — buyurtma shart!">⚠ {liveMin.toLocaleString("uz-UZ")}</span>
+              ) : liveMax != null && it.stock > liveMax ? (
+                <span className="font-semibold text-amber-600 dark:text-amber-400" title="Qoldiq max stock'dan ko'p — ortiqcha zaxira">⬆ {liveMin.toLocaleString("uz-UZ")}</span>
+              ) : (
+                <span className="text-muted-foreground">{liveMin.toLocaleString("uz-UZ")}</span>
+              )}
+              {liveMax != null && <span className="text-muted-foreground/40">/ {liveMax.toLocaleString("uz-UZ")}</span>}
+            </span>
           )}
         </TableCell>
         <TableCell className="px-2">
@@ -470,8 +476,8 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
 
       {items.length > 0 && (
         <p className="text-[11px] text-muted-foreground">
-          Min stock = kunlik sotuv × (zakaz oralig'i + lead time) × XYZ buferi (X 1.1 · Y 1.25 · Z 1.5).
-          ⚠ — qoldiq min stock'dan past. Faqat MIQDOR kiritilgan SKU zakazga (va nakladnoyga) kiradi —
+          Min = kunlik × (zakaz oralig'i + lead) × XYZ buferi (X 1.1 · Y 1.25 · Z 1.5); Max = kunlik × (2·zakaz oralig'i + lead) × bufer.
+          ⚠ — qoldiq min'dan past (avto-zakaz max'gacha to'ldiradi); ⬆ — qoldiq max'dan ko'p (ortiqcha zaxira). Faqat MIQDOR kiritilgan SKU zakazga (va nakladnoyga) kiradi —
           bo'sh/0 qoldirilganlar kirmaydi. Xira sonlar — taklif miqdori va eslab qolingan narx/pachka
           (narxni bo'sh qoldirsangiz o'sha ishlatiladi). Lead'ni kiritsangiz — SKU'ga saqlanadi. Enter — keyingi qatorga.
         </p>
@@ -496,7 +502,7 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
                     <TableHead>SKU</TableHead>
                     <TableHead className="text-right w-[80px]">Qoldiq</TableHead>
                     <TableHead className="text-right w-[80px]" title="Kunlik o'rtacha sotuv (oxirgi ma'lumot oynasi, filiallar yig'indisi)">Kunlik</TableHead>
-                    <TableHead className="text-right w-[90px]" title="Min stock = kunlik sotuv × (zakaz oralig'i + lead time) × XYZ buferi">Min stock</TableHead>
+                    <TableHead className="text-right w-[110px]" title="Min / Max stock. Min = kunlik × (zakaz oralig'i + lead) × XYZ buferi. Max = kunlik × (2·zakaz oralig'i + lead) × XYZ buferi (to'ldirish darajasi)">Min / Max</TableHead>
                     <TableHead className="text-right w-[70px]" title="Lead time — zakazdan kelguncha kunlar">Lead</TableHead>
                     <TableHead className="w-[130px] border-l border-border/60 bg-primary/[0.03]" title="Blok/yashik soni × pachkadagi dona — Miqdor avtomatik hisoblanadi">Blok × Pachka</TableHead>
                     <TableHead className="w-[90px] bg-primary/[0.03]">Miqdor</TableHead>

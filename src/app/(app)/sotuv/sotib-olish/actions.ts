@@ -5,7 +5,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireOrderCreator } from "@/lib/auth-helpers";
 import { auth } from "@/auth";
-import { ORDER_STATUSES, canTransition, canEditItems, canEnterFact, hisobMinStock, type OrderStatusT } from "./order-status";
+import { ORDER_STATUSES, canTransition, canEditItems, canEnterFact, hisobMinStock, hisobMaxStock, type OrderStatusT } from "./order-status";
 import { isSystemAdmin } from "@/lib/roles";
 import { actionError } from "@/lib/action-error";
 import { scopeParentIds, scopeProductWhere } from "@/lib/scope";
@@ -50,6 +50,7 @@ export type BuilderItem = {
   packSize: number | null; // blok/pachkadagi dona soni (Product'da eslab qolinadi)
   purchasePrice: number | null; // oxirgi kelishilgan dona narxi (eslab qolinadi)
   minStock: number | null; // kunlik × (zakaz oralig'i + lead) × XYZ buferi; lead yo'q — null
+  maxStock: number | null; // kunlik × (2·zakaz oralig'i + lead) × XYZ buferi; to'ldirish darajasi
   // Iyerarxiya: guruh → kategoriya → subkategoriya (SKU shu yerga tegishli) — daraxt ko'rinishi uchun
   groupId: number | null; groupName: string | null; groupSort: number;
   catId: number | null; catName: string | null; catSort: number;
@@ -206,9 +207,10 @@ export async function supplierItemsAction(
       // Min stock = kunlik × (zakaz oralig'i + lead) × XYZ buferi —
       // "bugun zakaz bermasangiz, keyingi imkoniyat + yetib kelish davrini qoplaydigan zaxira"
       const minStock = hisobMinStock(dailyAvg, orderGap, p.leadTimeDays, p.xyzClass);
-      // Taklif: min stock'gacha to'ldirish; lead kiritilmagan — eski qo'pol formula
+      const maxStock = hisobMaxStock(dailyAvg, orderGap, p.leadTimeDays, p.xyzClass);
+      // Taklif: qoldiq min'dan past bo'lsa — MAX gacha to'ldirish (order-up-to); lead yo'q — eski qo'pol formula
       const suggested = minStock != null
-        ? Math.max(0, minStock - stock)
+        ? (stock < minStock ? Math.max(0, (maxStock ?? minStock) - stock) : 0)
         : Math.max(0, sold - stock);
       // Iyerarxiya: leaf = product.category. parentId bo'lsa — leaf subkategoriya, otasi kategoriya;
       // aks holda leaf to'g'ridan kategoriya (sub yo'q). Guruh leaf yoki ota orqali.
@@ -218,7 +220,7 @@ export async function supplierItemsAction(
       return {
         productId: p.id, code: p.code, name: p.name, sub: c?.name ?? null,
         stock, sold, suggested, abc: p.abcClass, xyz: p.xyzClass, lead: p.leadTimeDays,
-        arxiv: p.archivedAt != null, dailyAvg: Math.round(dailyAvg * 10) / 10, minStock,
+        arxiv: p.archivedAt != null, dailyAvg: Math.round(dailyAvg * 10) / 10, minStock, maxStock,
         packSize: p.packSize != null ? Number(p.packSize) : null,
         purchasePrice: p.purchasePrice != null ? Number(p.purchasePrice) : null,
         groupId: g?.id ?? null, groupName: g?.name ?? null, groupSort: g?.sortOrder ?? 0,
