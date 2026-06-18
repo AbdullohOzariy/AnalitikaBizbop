@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatCard, EmptyState } from "@/components/common/page";
 import {
-  Search, ChevronRight, Eye, Pencil, FoldVertical, UnfoldVertical, X, Loader2, Package, Layers, Tag, AlertTriangle,
+  Search, ChevronRight, ChevronDown, Eye, Pencil, FoldVertical, UnfoldVertical, X, Loader2, Package, Layers, Tag, AlertTriangle,
 } from "lucide-react";
 import { HierarchyEditor } from "./hierarchy-editor";
 import { subProductsAction, searchSkuAction, type SubProduct, type SkuSearchResult } from "./actions";
@@ -46,6 +46,7 @@ export function IyerarxiyaClient({
   const [openSubs, setOpenSubs] = useState<Set<number>>(new Set());
   // Subkategoriya SKU'lari lazy yuklanadi (25k ni birdan emas)
   const [subData, setSubData] = useState<Map<number, { products: SubProduct[]; total: number } | "loading" | "error">>(new Map());
+  const [expanding, setExpanding] = useState<Set<number>>(new Set()); // "barchasini ko'rsatish" yuklanmoqda
   const [, startLoad] = useTransition();
 
   // SKU server-qidiruvi (butun katalog bo'yicha — nom/kod)
@@ -75,6 +76,16 @@ export function IyerarxiyaClient({
         setSubData((m) => new Map(m).set(sub.id, res.ok ? { products: res.products, total: res.total } : "error"));
       });
     }
+  };
+
+  // Subkategoriyadagi BARCHA SKU'larni yuklash (kengaytirish tugmasi — limitdan ko'pini ko'rsatadi)
+  const expandSub = (subId: number) => {
+    setExpanding((s) => new Set(s).add(subId));
+    startLoad(async () => {
+      const res = await subProductsAction(subId, true);
+      if (res.ok) setSubData((m) => new Map(m).set(subId, { products: res.products, total: res.total }));
+      setExpanding((s) => { const n = new Set(s); n.delete(subId); return n; });
+    });
   };
 
   const q = query.trim();
@@ -339,9 +350,18 @@ export function IyerarxiyaClient({
                                                 ))}
                                               </div>
                                               {d.total > d.products.length && (
-                                                <p className="mt-1.5 text-[11px] text-muted-foreground">
-                                                  Ko&apos;rsatilgan {d.products.length} / jami {d.total}
-                                                </p>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => expandSub(sub.id)}
+                                                  disabled={expanding.has(sub.id)}
+                                                  title={`Yana ${(d.total - d.products.length).toLocaleString("uz-UZ")} ta SKU ko'rsatish`}
+                                                  className="mt-1.5 inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-60"
+                                                >
+                                                  {expanding.has(sub.id)
+                                                    ? <Loader2 className="h-3 w-3 animate-spin" />
+                                                    : <ChevronDown className="h-3 w-3" />}
+                                                  Yana {(d.total - d.products.length).toLocaleString("uz-UZ")} ta ({d.products.length} / {d.total})
+                                                </button>
                                               )}
                                             </>
                                           )}

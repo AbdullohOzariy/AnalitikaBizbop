@@ -183,7 +183,8 @@ const SUB_PRODUCTS_LIMIT = 250; // ko'rsatiladigan maksimal — qolganini qidiru
 
 /** Subkategoriya (yoki kategoriya) ostidagi SKU mahsulotlarni lazy yuklaydi. */
 export async function subProductsAction(
-  subId: number
+  subId: number,
+  all = false
 ): Promise<{ ok: true; products: SubProduct[]; total: number } | { ok: false; error: string }> {
   try {
     await requireAdmin();
@@ -193,7 +194,7 @@ export async function subProductsAction(
         where: { categoryId: id },
         select: { code: true, name: true },
         orderBy: { name: "asc" },
-        take: SUB_PRODUCTS_LIMIT,
+        take: all ? undefined : SUB_PRODUCTS_LIMIT, // "all" — barchasini ko'rsatish (kengaytirish tugmasi)
       }),
       prisma.product.count({ where: { categoryId: id } }),
     ]);
