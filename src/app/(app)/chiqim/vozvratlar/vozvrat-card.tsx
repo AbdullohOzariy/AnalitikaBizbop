@@ -43,6 +43,13 @@ function fmtDateTime(s: string) {
   return s.slice(0, 16).replace("T", " ");
 }
 
+// Ixcham: "2026-06-18T14:30" → "18.06 14:30"
+function fmtShort(s: string) {
+  const [date, time = ""] = s.slice(0, 16).split("T");
+  const [, m, d] = date.split("-");
+  return d && m ? `${d}.${m}${time ? " " + time : ""}` : s.slice(0, 16).replace("T", " ");
+}
+
 export function VozvratCard({ v, canEdit = true }: { v: VozvratCardData; canEdit?: boolean }) {
   const router = useRouter();
   const [isPending, start] = useTransition();
@@ -69,12 +76,15 @@ export function VozvratCard({ v, canEdit = true }: { v: VozvratCardData; canEdit
         onClick={() => setDetailOpen(true)}
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setDetailOpen(true); } }}
         title={v.tovar}
-        className="flex w-full items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-1.5 text-left shadow-sm transition-colors hover:bg-muted/50"
+        className="block w-full rounded-lg border border-border bg-card px-2.5 py-1.5 text-left shadow-sm transition-colors hover:bg-muted/50"
       >
-        <span className="min-w-0 flex-1 truncate text-xs font-medium">{v.tovar}</span>
-        <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">{miqdorStr}</span>
-        <span className="shrink-0 text-xs font-semibold tabular-nums">{formatUZS(v.summa, { compact: true })}</span>
-        {v.rasm_file_id && <ImageIcon className="h-3 w-3 shrink-0 text-primary" />}
+        <div className="flex items-center gap-2">
+          <span className="min-w-0 flex-1 truncate text-xs font-medium">{v.tovar}</span>
+          <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">{miqdorStr}</span>
+          <span className="shrink-0 text-xs font-semibold tabular-nums">{formatUZS(v.summa, { compact: true })}</span>
+          {v.rasm_file_id && <ImageIcon className="h-3 w-3 shrink-0 text-primary" />}
+        </div>
+        <div className="mt-0.5 text-[10px] tabular-nums text-muted-foreground">🕒 {fmtShort(v.vaqt)}</div>
       </div>
 
       {/* To'liq ma'lumot */}
