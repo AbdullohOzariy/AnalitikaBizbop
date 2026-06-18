@@ -496,7 +496,7 @@ export async function ensureSozlamalarSchema(): Promise<void> {
     xodim_ism         VARCHAR(255),
     xodim_username    VARCHAR(255),
     xodim_id          BIGINT,
-    status            VARCHAR(30) NOT NULL DEFAULT 'xabar_berildi',
+    status            VARCHAR(30) NOT NULL DEFAULT 'saqlash_xonasida',
     qaytarilmadi_sabab TEXT,
     chiqim_yozuv_id   INTEGER,
     guruh_message_id  BIGINT,
@@ -550,7 +550,7 @@ const VOZVRAT_COLS = `id, tovar, miqdor::float8, birlik, summa::float8, sabab, f
 export async function vozvratYarat(d: VozvratKirim): Promise<number> {
   const p = requirePool();
   await ensureSozlamalarSchema();
-  const status = VOZVRAT_HOLATLAR.includes(d.status as VozvratHolat) ? d.status : "xabar_berildi";
+  const status = VOZVRAT_HOLATLAR.includes(d.status as VozvratHolat) ? d.status : "saqlash_xonasida";
   const yonalish = d.yonalish === "taminotchi" ? "taminotchi" : "asosiy_filial";
   const { rows } = await p.query(
     `INSERT INTO vozvratlar
@@ -603,7 +603,11 @@ export async function vozvratKanban(
       `SELECT ${VOZVRAT_COLS} FROM vozvratlar WHERE ${cond.join(" AND ")} ORDER BY vaqt DESC`,
       params
     );
-    return rows as VozvratYozuv[];
+    // Eski/bot statuslarini joriy 3 ga moslab ko'rsatamiz: xabar_berildi→saqlash_xonasida, qaytarilmadi→qaytarildi
+    return (rows as VozvratYozuv[]).map((r) => ({
+      ...r,
+      status: r.status === "xabar_berildi" ? "saqlash_xonasida" : r.status === "qaytarilmadi" ? "qaytarildi" : r.status,
+    }));
   } catch (err) {
     logDbXato(err);
     return [];
@@ -614,9 +618,9 @@ export async function vozvratKanban(
 export async function vozvratSummary(
   range: ChiqimRange,
   filial?: string
-): Promise<{ qaytarildiSumma: number; qaytarilmadiSumma: number; jamiSoni: number }> {
+): Promise<{ qaytarildiSumma: number; jamiSoni: number }> {
   const p = getPool();
-  if (!p) return { qaytarildiSumma: 0, qaytarilmadiSumma: 0, jamiSoni: 0 };
+  if (!p) return { qaytarildiSumma: 0, jamiSoni: 0 };
   try {
     await ensureSozlamalarSchema();
     const [start, end] = dayParams(range);
@@ -626,20 +630,18 @@ export async function vozvratSummary(
     if (filial) { params.push(filial); cond.push(`filial = $${params.length}`); }
     const { rows } = await p.query(
       `SELECT
-         COALESCE(SUM(summa) FILTER (WHERE status='qaytarildi'), 0)::float8    AS qaytarildi,
-         COALESCE(SUM(summa) FILTER (WHERE status='qaytarilmadi'), 0)::float8  AS qaytarilmadi,
+         COALESCE(SUM(summa) FILTER (WHERE status IN ('qaytarildi','qaytarilmadi')), 0)::float8 AS qaytarildi,
          COUNT(*)::int AS jami
        FROM vozvratlar WHERE ${cond.join(" AND ")}`,
       params
     );
     return {
       qaytarildiSumma: rows[0].qaytarildi as number,
-      qaytarilmadiSumma: rows[0].qaytarilmadi as number,
       jamiSoni: rows[0].jami as number,
     };
   } catch (err) {
     logDbXato(err);
-    return { qaytarildiSumma: 0, qaytarilmadiSumma: 0, jamiSoni: 0 };
+    return { qaytarildiSumma: 0, jamiSoni: 0 };
   }
 }
 

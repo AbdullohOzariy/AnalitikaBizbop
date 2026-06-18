@@ -9,10 +9,11 @@ import {
   chiqimDefaultRange,
 } from "@/lib/spisaniya/db";
 import { formatUZS } from "@/lib/format";
-import { Recycle, WifiOff, CheckCircle2, AlertTriangle, Layers } from "lucide-react";
+import { Recycle, WifiOff, CheckCircle2, Layers } from "lucide-react";
 import { PageHeader, StatCard, EmptyState } from "@/components/common/page";
 import { ChiqimFilter } from "../chiqim-filter";
 import { VozvratViews } from "./vozvrat-views";
+import { VozvratImportButton } from "./vozvrat-import-button";
 
 function parseDate(s: string | undefined): Date | undefined {
   if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return undefined;
@@ -59,31 +60,27 @@ export default async function VozvratlarPage({
   return (
     <div className="space-y-5">
       <PageHeader icon={Recycle} title="Vozvratlar" description="Qaytarish jarayoni — kanban yoki ro'yxat">
-        <ChiqimFilter
-          filials={filials}
-          defaultStart={sp.start ?? fmtDate(def.start)}
-          defaultEnd={sp.end ?? fmtDate(def.end)}
-          defaultFilial={sp.filial}
-          hideTur
-          basePath="/chiqim/vozvratlar"
-        />
+        <div className="flex flex-wrap items-end gap-2">
+          <ChiqimFilter
+            filials={filials}
+            defaultStart={sp.start ?? fmtDate(def.start)}
+            defaultEnd={sp.end ?? fmtDate(def.end)}
+            defaultFilial={sp.filial}
+            hideTur
+            basePath="/chiqim/vozvratlar"
+          />
+          {isSystemAdmin(role) && <VozvratImportButton />}
+        </div>
       </PageHeader>
 
       {/* Yuqori summary */}
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         <StatCard
           label="Qaytarilgan"
           value={formatUZS(summary.qaytarildiSumma, { compact: true })}
           hint="qabul qilinib qaytarilgan summa"
           icon={CheckCircle2}
           tone="green"
-        />
-        <StatCard
-          label="Qaytarilmagan"
-          value={formatUZS(summary.qaytarilmadiSumma, { compact: true })}
-          hint="qabul qilinib qaytarilmagan summa"
-          icon={AlertTriangle}
-          tone="red"
         />
         <StatCard
           label="Jami vozvratlar"

@@ -12,23 +12,20 @@ import { rateLimit } from "@/lib/spisaniya/rate-limit";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const schema = z
-  .object({
-    tovar: z.string().trim().min(1).max(255),
-    miqdor: z.coerce.number().positive().max(1_000_000_000),
-    birlik: z.string().trim().max(20).optional().nullable(),
-    summa: z.coerce.number().nonnegative().max(1_000_000_000_000),
-    sabab: z.string().trim().max(255).optional().nullable(),
-    filial: z.string().trim().min(1).max(100),
-    yonalish: z.enum(["asosiy_filial", "taminotchi"]),
-    taminotchi: z.string().trim().max(255).optional().nullable(),
-    status: z.enum(["xabar_berildi", "saqlash_xonasida", "yuborildi", "qaytarildi", "qaytarilmadi"]).optional(),
-    qaytarilmadi_sabab: z.string().trim().max(500).optional().nullable(),
-    rasm_file_id: z.string().max(500).optional().nullable(),
-  })
-  .refine((d) => d.status !== "qaytarilmadi" || !!d.qaytarilmadi_sabab?.trim(), {
-    message: "Qaytarilmadi sababi shart",
-  });
+const schema = z.object({
+  tovar: z.string().trim().min(1).max(255),
+  miqdor: z.coerce.number().positive().max(1_000_000_000),
+  birlik: z.string().trim().max(20).optional().nullable(),
+  summa: z.coerce.number().nonnegative().max(1_000_000_000_000),
+  sabab: z.string().trim().max(255).optional().nullable(),
+  filial: z.string().trim().min(1).max(100),
+  yonalish: z.enum(["asosiy_filial", "taminotchi"]),
+  taminotchi: z.string().trim().max(255).optional().nullable(),
+  // status — lenient: eski qiymat kelsa ham vozvratYarat joriy holatga normallashtiradi
+  status: z.string().trim().optional(),
+  qaytarilmadi_sabab: z.string().trim().max(500).optional().nullable(),
+  rasm_file_id: z.string().max(500).optional().nullable(),
+});
 
 export async function POST(req: Request) {
   const user = verifyInitData(req.headers.get("x-telegram-init-data") || "");

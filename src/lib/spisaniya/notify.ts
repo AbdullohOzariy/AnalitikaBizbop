@@ -92,11 +92,9 @@ export async function guruhgaYuborish(d: YozuvKirim, yozuvId: number): Promise<v
 // ─── Yangi Vozvrat jarayoni xabarlari ─────────────────────────────────────────
 
 const VOZVRAT_HOLAT_EMOJI: Record<string, string> = {
-  xabar_berildi: "📣",
   saqlash_xonasida: "🏬",
   yuborildi: "📤",
   qaytarildi: "✅",
-  qaytarilmadi: "⚠️",
 };
 
 /** Yangi vozvrat yaratilganda guruhga (filial topigiga) yuboradi. */
@@ -107,7 +105,7 @@ export async function vozvratGuruhgaYuborish(v: VozvratKirim, vozvratId: number)
   if (!chatId) return;
 
   const threadId = await filialTopicId(v.filial);
-  const holat = v.status || "xabar_berildi";
+  const holat = v.status || "saqlash_xonasida";
 
   let matn =
     `🔁 <b>VOZVRAT</b>\n\n` +
@@ -119,8 +117,6 @@ export async function vozvratGuruhgaYuborish(v: VozvratKirim, vozvratId: number)
   if (v.yonalish === "taminotchi" && v.taminotchi) matn += ` (${esc(v.taminotchi)})`;
   matn += `\n`;
   matn += `📊 <b>Holat:</b> ${VOZVRAT_HOLAT_EMOJI[holat] || ""} ${VOZVRAT_HOLAT_LABEL[holat] || esc(holat)}\n`;
-  if (holat === "qaytarilmadi" && v.qaytarilmadi_sabab)
-    matn += `❗ <b>Qaytarilmadi sababi:</b> ${esc(v.qaytarilmadi_sabab)}\n`;
   matn +=
     `📍 <b>Filial:</b> ${esc(v.filial)}\n` +
     `👤 <b>Xodim:</b> ${esc(v.xodim_ism)}${v.xodim_username ? ` (@${esc(v.xodim_username)})` : ""}\n` +
