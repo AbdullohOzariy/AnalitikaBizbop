@@ -54,6 +54,7 @@ type NavItem = {
   icon: React.ComponentType<{ className?: string }>;
   adminOnly?: boolean;
   roles?: Role[];
+  disabled?: boolean; // vaqtinchalik ish faoliyatida emas — kulrang, bosilmaydi
 };
 
 type NavGroup = { label: string; items: NavItem[] };
@@ -123,7 +124,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/sotuv/bugun",       label: "Bugun",       icon: CalendarCheck, roles: [SA, A, "CAT_MANAGER", "SUPPLYCHAIN", "HEAD_CAT_MANAGER"] },
       { href: "/sotuv/sotib-olish", label: "Sotib olish", icon: ShoppingCart, roles: [SA, A, "CAT_MANAGER", "SUPPLYCHAIN", "HEAD_CAT_MANAGER", "CEO"] },
       { href: "/sverka",            label: "Sverka",      icon: FileCheck2,   roles: [SA, A, "SUPPLYCHAIN", "CEO"] },
-      { href: "/logistika",         label: "Logistika",   icon: Gauge,        roles: [SA, A, "SUPPLYCHAIN", "HEAD_CAT_MANAGER"] },
+      { href: "/logistika",         label: "Logistika",   icon: Gauge,        roles: [SA, A, "SUPPLYCHAIN", "HEAD_CAT_MANAGER"], disabled: true },
       { href: "/sotuv/finans",      label: "Finans",      icon: Wallet,       roles: [SA, A, "CEO"] },
     ],
   },
@@ -264,6 +265,23 @@ function SidebarNav({
                 group.items.map((item) => {
                   const Icon = item.icon;
                   const active = item.href === activeHref;
+                  if (item.disabled) {
+                    return (
+                      <div key={item.href} title="Vaqtinchalik ish faoliyatida emas"
+                        className={cn(
+                          "relative flex cursor-not-allowed items-center rounded-xl text-sm font-medium text-muted-foreground opacity-50",
+                          collapsed ? "justify-center px-0 py-2.5" : "gap-3 px-3 py-2.5"
+                        )}>
+                        <Icon className="h-4 w-4 shrink-0 opacity-70" />
+                        {!collapsed && (
+                          <span className="flex items-center gap-1.5">
+                            {item.label}
+                            <span className="rounded bg-muted px-1 py-px text-[9px] font-semibold uppercase tracking-wide text-muted-foreground/70">soon</span>
+                          </span>
+                        )}
+                      </div>
+                    );
+                  }
                   return (
                     <div
                       key={item.href}

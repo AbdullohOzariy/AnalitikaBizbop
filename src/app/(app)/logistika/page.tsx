@@ -47,6 +47,23 @@ export default async function LogistikaPage({
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!canSeeSuppliers(session.user.role)) redirect("/dashboard-v2");
+
+  // Logistika VAQTINCHALIK o'chirilgan (qayta ishlanmoqda) — Filiallar aro avto-zakaz
+  // Sotuv bo'limida tashkil etilmoqda. Qayta yoqish uchun: LOGISTIKA_ENABLED = true.
+  const LOGISTIKA_ENABLED = false;
+  if (!LOGISTIKA_ENABLED) {
+    return (
+      <div className="space-y-5">
+        <PageHeader icon={Gauge} title="Logistika" description="Vaqtinchalik ish faoliyatida emas" />
+        <EmptyState
+          icon={Gauge}
+          title="Vaqtinchalik ish faoliyatida emas"
+          description="Logistika bo'limi qayta ishlanmoqda. Filiallar aro avto-zakaz tez orada Sotuv bo'limida ishga tushadi."
+        />
+      </div>
+    );
+  }
+
   const canEdit = canManageWarehouse(session.user.role);
 
   const canWh = canManageWarehouse(session.user.role);
