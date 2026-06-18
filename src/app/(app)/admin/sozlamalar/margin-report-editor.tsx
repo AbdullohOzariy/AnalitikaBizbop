@@ -41,17 +41,17 @@ export function MarginReportEditor({
       const res = await marginReportYuborAction();
       if (res.ok) {
         toast.success(res.count > 0
-          ? `Yuborildi — ${res.count} ta marjasi minus filial×subkat.`
-          : "Yuborildi — marjasi minus katak topilmadi.");
+          ? `Yuborildi — ${res.count} ta past marjali mahsulot.`
+          : "Yuborildi — past marjali mahsulot topilmadi.");
       } else toast.error(res.error);
     });
 
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        <b>Oxirgi yuklangan davr</b> bo&apos;yicha <b>filial × subkategoriya</b> kesmida marjasi
-        <b> minus</b> (tannarx &gt; sotuv) bo&apos;lgan kataklar Excel sifatida shu guruh topigiga
-        yuboriladi. Bot guruhga a&apos;zo va topikka yozish huquqiga ega bo&apos;lishi shart.
+        <b>Oxirgi yuklangan davr</b> bo&apos;yicha (1) marjasi <b>15% dan past mahsulotlar</b> (SKU×filial)
+        va (2) subkat o&apos;rtacha marja vs reja Excel sifatida shu guruh topigiga yuboriladi.
+        Bot guruhga a&apos;zo va topikka yozish huquqiga ega bo&apos;lishi shart.
       </p>
 
       <div className="grid gap-3 sm:grid-cols-2">

@@ -1,9 +1,9 @@
 /**
  * Marja hisoboti — oxirgi yuklangan davr bo'yicha sozlangan bot orqali guruh topigiga
- * 3 ta Excel yuboradi:
- *  1) Marjasi MINUS — filial × subkategoriya (tannarx > sotuv). Manba: CategorySales.
+ * Excel yuboradi:
+ *  1) Marjasi LOW_MARGIN_PCT (15%) dan PAST mahsulotlar — SKU × filial. Manba: ProductSales.
  *  2) Subkat o'rtacha marja vs reja. Manba: CategorySales + MarginPlan.
- *  3) Marjasi LOW_MARGIN_PCT (15%) dan PAST mahsulotlar — SKU × filial. Manba: ProductSales.
+ * (Marjasi MINUS filial×subkat — buildMarginReport — hozir YUBORILMAYDI; funksiya saqlangan.)
  * Marja = (sotuv − tannarx) / sotuv.
  */
 import * as XLSX from "xlsx";
@@ -180,44 +180,16 @@ export async function sendMarginReport(): Promise<{ ok: true; count: number } | 
     const tg = new Telegram(cfg.token);
     const thread = cfg.topicId ? { message_thread_id: cfg.topicId } : {};
 
-    // 1) Marjasi MINUS (filial×subkat, tannarx > sotuv)
-    const built = await buildMarginReport();
-    if (!built) {
+    // 1) Marjasi LOW_MARGIN_PCT (15%) dan PAST mahsulotlar (SKU × filial) — asosiy hisobot
+    const low = await buildLowMarginProductsReport();
+    // 2) Subkat o'rtacha marja vs reja
+    const sub = await buildSubcatMarginReport();
+
+    if (!low && !sub) {
       await tg.sendMessage(cfg.chatId, "ℹ️ <b>Marja hisoboti</b>\nSotuv ma'lumoti topilmadi.", { parse_mode: "HTML", ...thread });
       return { ok: true, count: 0 };
     }
-    if (built.count === 0) {
-      await tg.sendMessage(
-        cfg.chatId,
-        `✅ <b>Marja</b> · ${built.periodLabel}\nMarjasi minus filial×subkat topilmadi.`,
-        { parse_mode: "HTML", ...thread }
-      );
-    } else {
-      const caption =
-        `📉 <b>Marjasi MINUS</b> — filial×subkat (tannarx > sotuv)\n` +
-        `🗓 ${built.periodLabel} · <b>${built.count}</b> ta katak`;
-      await tg.sendDocument(
-        cfg.chatId,
-        { source: built.buffer, filename: `marja-minus-${built.fileTag}.xlsx` },
-        { caption, parse_mode: "HTML", ...thread }
-      );
-    }
 
-    // 2) Subkat o'rtacha marja vs reja (barcha sotuvi bor subkat)
-    const sub = await buildSubcatMarginReport();
-    if (sub && sub.count > 0) {
-      const caption =
-        `📊 <b>Subkat o'rtacha marja vs reja</b> (Farq = marja − reja)\n` +
-        `🗓 ${sub.periodLabel} · <b>${sub.count}</b> ta subkat`;
-      await tg.sendDocument(
-        cfg.chatId,
-        { source: sub.buffer, filename: `subkat-marja-${sub.fileTag}.xlsx` },
-        { caption, parse_mode: "HTML", ...thread }
-      );
-    }
-
-    // 3) Marjasi 15% dan PAST mahsulotlar (SKU × filial)
-    const low = await buildLowMarginProductsReport();
     if (low && low.count > 0) {
       const caption =
         `🔻 <b>Marjasi ${LOW_MARGIN_PCT}% dan past mahsulotlar</b> (SKU × filial)\n` +
@@ -229,7 +201,18 @@ export async function sendMarginReport(): Promise<{ ok: true; count: number } | 
       );
     }
 
-    return { ok: true, count: built.count };
+    if (sub && sub.count > 0) {
+      const caption =
+        `📊 <b>Subkat o'rtacha marja vs reja</b> (Farq = marja − reja)\n` +
+        `🗓 ${sub.periodLabel} · <b>${sub.count}</b> ta subkat`;
+      await tg.sendDocument(
+        cfg.chatId,
+        { source: sub.buffer, filename: `subkat-marja-${sub.fileTag}.xlsx` },
+        { caption, parse_mode: "HTML", ...thread }
+      );
+    }
+
+    return { ok: true, count: low?.count ?? 0 };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Yuborishda xato.";
     console.error("[margin-report] sendMarginReport:", msg);

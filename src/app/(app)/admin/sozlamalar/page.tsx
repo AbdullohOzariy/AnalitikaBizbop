@@ -54,7 +54,7 @@ export default async function SozlamalarPage({
           { v: "spisaniya", l: "Spisaniya sozlamalari" },
           { v: "sverka", l: "Sverka sozlamalari" },
           { v: "inventarizatsiya", l: "Inventarizatsiya" },
-          { v: "marja", l: "Marja minus" },
+          { v: "marja", l: "Marja" },
           { v: "yetkazish", l: "Yetkazish kechikishi" },
         ] as { v: Tab; l: string }[]).map((t) => (
           <Link
@@ -108,8 +108,8 @@ async function MarjaTab() {
   return (
     <div className="space-y-5">
       <SectionCard
-        title="Marja minus xabarnoma bot"
-        description="Oxirgi davr — filial×subkat marjasi minus (tannarx > sotuv) Excel'i"
+        title="Marja xabarnoma bot"
+        description="Oxirgi davr — marjasi 15% dan past mahsulotlar + subkat marja vs reja Excel'i"
         actions={<MessageSquare className="h-4 w-4 text-muted-foreground" />}
       >
         <MarginReportEditor
