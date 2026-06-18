@@ -9,7 +9,7 @@ import {
   chiqimDefaultRange,
 } from "@/lib/spisaniya/db";
 import { formatUZS } from "@/lib/format";
-import { Recycle, WifiOff, CheckCircle2, Layers } from "lucide-react";
+import { Recycle, WifiOff, CheckCircle2, Layers, Warehouse } from "lucide-react";
 import { PageHeader, StatCard, EmptyState } from "@/components/common/page";
 import { ChiqimFilter } from "../chiqim-filter";
 import { VozvratViews } from "./vozvrat-views";
@@ -74,7 +74,14 @@ export default async function VozvratlarPage({
       </PageHeader>
 
       {/* Yuqori summary */}
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <StatCard
+          label="Saqlash xonasida"
+          value={formatUZS(summary.saqlashSumma, { compact: true })}
+          hint="saqlash xonasidagi vozvratlar summasi"
+          icon={Warehouse}
+          tone="violet"
+        />
         <StatCard
           label="Qaytarilgan"
           value={formatUZS(summary.qaytarildiSumma, { compact: true })}

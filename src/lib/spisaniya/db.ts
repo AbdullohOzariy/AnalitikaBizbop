@@ -618,9 +618,9 @@ export async function vozvratKanban(
 export async function vozvratSummary(
   range: ChiqimRange,
   filial?: string
-): Promise<{ qaytarildiSumma: number; jamiSoni: number }> {
+): Promise<{ qaytarildiSumma: number; saqlashSumma: number; jamiSoni: number }> {
   const p = getPool();
-  if (!p) return { qaytarildiSumma: 0, jamiSoni: 0 };
+  if (!p) return { qaytarildiSumma: 0, saqlashSumma: 0, jamiSoni: 0 };
   try {
     await ensureSozlamalarSchema();
     const [start, end] = dayParams(range);
@@ -631,17 +631,19 @@ export async function vozvratSummary(
     const { rows } = await p.query(
       `SELECT
          COALESCE(SUM(summa) FILTER (WHERE status IN ('qaytarildi','qaytarilmadi')), 0)::float8 AS qaytarildi,
+         COALESCE(SUM(summa) FILTER (WHERE status IN ('saqlash_xonasida','xabar_berildi')), 0)::float8 AS saqlash,
          COUNT(*)::int AS jami
        FROM vozvratlar WHERE ${cond.join(" AND ")}`,
       params
     );
     return {
       qaytarildiSumma: rows[0].qaytarildi as number,
+      saqlashSumma: rows[0].saqlash as number,
       jamiSoni: rows[0].jami as number,
     };
   } catch (err) {
     logDbXato(err);
-    return { qaytarildiSumma: 0, jamiSoni: 0 };
+    return { qaytarildiSumma: 0, saqlashSumma: 0, jamiSoni: 0 };
   }
 }
 
