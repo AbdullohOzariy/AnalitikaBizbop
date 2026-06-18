@@ -11,16 +11,16 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Loader2, ArrowRightLeft, PackageMinus, Image as ImageIcon, Building2 } from "lucide-react";
+import { Loader2, PackageMinus, Image as ImageIcon } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { formatUZS } from "@/lib/format";
 import {
-  VOZVRAT_HOLATLAR as HOLATLAR,
   VOZVRAT_HOLAT_LABEL as HOLAT_LABEL,
   VOZVRAT_YONALISH_LABEL as YONALISH_LABEL,
   CHIQIM_OTKAZ_TURLAR as CHIQIM_TURLAR,
 } from "@/lib/spisaniya/labels";
-import { vozvratHolatAction, vozvratOtkazAction } from "./actions";
+import { vozvratOtkazAction } from "./actions";
 
 export type VozvratCardData = {
   id: number;
@@ -46,123 +46,69 @@ function fmtDateTime(s: string) {
 export function VozvratCard({ v, canEdit = true }: { v: VozvratCardData; canEdit?: boolean }) {
   const router = useRouter();
   const [isPending, start] = useTransition();
-  const [holatOpen, setHolatOpen] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
   const [otkazOpen, setOtkazOpen] = useState(false);
-  const [status, setStatus] = useState(v.status);
-  const [sabab, setSabab] = useState(v.qaytarilmadi_sabab ?? "");
   const [tur, setTur] = useState("spisaniya");
   const [otkazSabab, setOtkazSabab] = useState("");
 
-  const run = (fn: () => Promise<{ ok: boolean; error?: string }>, ok: string, done?: () => void) =>
+  const miqdorStr = `${v.miqdor.toLocaleString("uz-UZ", { maximumFractionDigits: 2 })} ${v.birlik}`;
+
+  const onOtkaz = () =>
     start(async () => {
-      const res = await fn();
-      if (res.ok) { toast.success(ok); done?.(); router.refresh(); }
+      const res = await vozvratOtkazAction({ id: v.id, tur, sabab: otkazSabab.trim() || undefined });
+      if (res.ok) { toast.success("Hisobdan chiqarishga o'tkazildi."); setOtkazOpen(false); setDetailOpen(false); router.refresh(); }
       else toast.error(res.error ?? "Xato.");
     });
 
-  const onHolatSave = () => {
-    if (status === "qaytarilmadi" && !sabab.trim()) { toast.error("Qaytarilmadi sababi kerak."); return; }
-    run(
-      () => vozvratHolatAction({ id: v.id, status, qaytarilmadiSabab: sabab.trim() || undefined }),
-      "Holat yangilandi.",
-      () => setHolatOpen(false)
-    );
-  };
-
-  const onOtkaz = () =>
-    run(
-      () => vozvratOtkazAction({ id: v.id, tur, sabab: otkazSabab.trim() || undefined }),
-      "Hisobdan chiqarishga o'tkazildi.",
-      () => setOtkazOpen(false)
-    );
-
   return (
-    <div className="rounded-xl border border-border bg-card p-3 shadow-sm">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="truncate text-sm font-semibold" title={v.tovar}>{v.tovar}</div>
-          <div className="text-xs text-muted-foreground">
-            {v.miqdor.toLocaleString("uz-UZ", { maximumFractionDigits: 2 })} {v.birlik}
-          </div>
-        </div>
-        <div className="shrink-0 text-right text-sm font-bold tabular-nums">{formatUZS(v.summa)}</div>
+    <>
+      {/* Ixcham bir qatorlik karta — bosilsa to'liq ma'lumot chiqadi */}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => setDetailOpen(true)}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setDetailOpen(true); } }}
+        title={v.tovar}
+        className="flex w-full items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-1.5 text-left shadow-sm transition-colors hover:bg-muted/50"
+      >
+        <span className="min-w-0 flex-1 truncate text-xs font-medium">{v.tovar}</span>
+        <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">{miqdorStr}</span>
+        <span className="shrink-0 text-xs font-semibold tabular-nums">{formatUZS(v.summa, { compact: true })}</span>
+        {v.rasm_file_id && <ImageIcon className="h-3 w-3 shrink-0 text-primary" />}
       </div>
 
-      <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-        <div className="flex items-center gap-1.5">
-          <Building2 className="h-3 w-3 shrink-0" />
-          <span className="truncate">{v.filial}</span>
-          <span className="opacity-50">·</span>
-          <span className="truncate">{YONALISH_LABEL[v.yonalish] ?? v.yonalish}{v.taminotchi ? ` (${v.taminotchi})` : ""}</span>
-        </div>
-        {v.sabab && <div className="truncate" title={v.sabab}>📝 {v.sabab}</div>}
-        {v.status === "qaytarilmadi" && v.qaytarilmadi_sabab && (
-          <div className="truncate text-amber-600 dark:text-amber-400" title={v.qaytarilmadi_sabab}>
-            ❗ {v.qaytarilmadi_sabab}
-          </div>
-        )}
-        <div className="flex items-center gap-2 pt-0.5">
-          <span className="font-mono">{fmtDateTime(v.vaqt)}</span>
-          {v.xodim_ism && <><span className="opacity-50">·</span><span className="truncate">{v.xodim_ism}</span></>}
-          {v.rasm_file_id && (
-            <a href={`/api/rasm-preview/${v.rasm_file_id}`} target="_blank" rel="noreferrer"
-               className="ml-auto inline-flex items-center gap-1 text-primary hover:underline">
-              <ImageIcon className="h-3 w-3" /> rasm
-            </a>
-          )}
-        </div>
-      </div>
-
-      {canEdit && (
-        <div className="mt-2.5 flex gap-1.5">
-          <Button variant="outline" size="sm" className="h-8 flex-1 rounded-lg text-xs" disabled={isPending}
-            onClick={() => { setStatus(v.status); setSabab(v.qaytarilmadi_sabab ?? ""); setHolatOpen(true); }}>
-            <ArrowRightLeft className="mr-1 h-3 w-3" /> Holat
-          </Button>
-          {v.status === "qaytarilmadi" && (
-            <Button size="sm" className="h-8 flex-1 rounded-lg text-xs" disabled={isPending}
-              onClick={() => { setTur("spisaniya"); setOtkazSabab(""); setOtkazOpen(true); }}>
-              <PackageMinus className="mr-1 h-3 w-3" /> Chiqimga
-            </Button>
-          )}
-        </div>
-      )}
-
-      {/* Holatni o'zgartirish */}
-      <Dialog open={holatOpen} onOpenChange={(o) => !o && setHolatOpen(false)}>
-        <DialogContent className="sm:max-w-sm">
+      {/* To'liq ma'lumot */}
+      <Dialog open={detailOpen} onOpenChange={(o) => !o && setDetailOpen(false)}>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Vozvrat holati</DialogTitle>
-            <DialogDescription className="text-sm text-muted-foreground">
-              Holat o&apos;zgarsa, filial guruhiga xabar yuboriladi.
+            <DialogTitle className="pr-6 leading-snug">{v.tovar}</DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              {fmtDateTime(v.vaqt)}{v.xodim_ism ? ` · ${v.xodim_ism}` : ""}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3 py-1">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Holat</Label>
-              <Select value={status} onValueChange={(x) => setStatus(x ?? v.status)} disabled={isPending}>
-                <SelectTrigger className="h-10 rounded-xl"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {HOLATLAR.map((s) => <SelectItem key={s} value={s}>{HOLAT_LABEL[s]}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            {status === "qaytarilmadi" && (
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Qaytarilmadi sababi *
-                </Label>
-                <Input value={sabab} onChange={(e) => setSabab(e.target.value)} disabled={isPending}
-                  className="h-10 rounded-xl" placeholder="Nega qaytarilmadi?" />
-              </div>
-            )}
-          </div>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" className="rounded-xl" disabled={isPending} onClick={() => setHolatOpen(false)}>Bekor</Button>
-            <Button className="rounded-xl" disabled={isPending} onClick={onHolatSave}>
-              {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Saqlash"}
-            </Button>
-          </DialogFooter>
+          <dl className="grid grid-cols-3 gap-x-3 gap-y-2 py-1 text-sm">
+            <Row label="Miqdor" value={miqdorStr} />
+            <Row label="Summa" value={formatUZS(v.summa)} strong />
+            <Row label="Holat" value={HOLAT_LABEL[v.status] ?? v.status} />
+            <Row label="Filial" value={v.filial} />
+            <Row label="Yo'nalish" value={`${YONALISH_LABEL[v.yonalish] ?? v.yonalish}${v.taminotchi ? ` (${v.taminotchi})` : ""}`} />
+            {v.sabab && <Row label="Sabab" value={v.sabab} />}
+          </dl>
+          {v.rasm_file_id && (
+            <a href={`/api/rasm-preview/${v.rasm_file_id}`} target="_blank" rel="noreferrer"
+               className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline">
+              <ImageIcon className="h-4 w-4" /> Rasmni ko&apos;rish
+            </a>
+          )}
+          {canEdit && (
+            <DialogFooter className="gap-2 sm:justify-between">
+              <Button variant="outline" size="sm" className="rounded-xl" disabled={isPending}
+                onClick={() => { setTur("spisaniya"); setOtkazSabab(""); setOtkazOpen(true); }}>
+                <PackageMinus className="mr-1.5 h-4 w-4" /> Chiqimga o&apos;tkazish
+              </Button>
+              <Button variant="ghost" size="sm" className="rounded-xl" onClick={() => setDetailOpen(false)}>Yopish</Button>
+            </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
 
@@ -199,6 +145,15 @@ export function VozvratCard({ v, canEdit = true }: { v: VozvratCardData; canEdit
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
+  );
+}
+
+function Row({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+  return (
+    <>
+      <dt className="col-span-1 text-xs text-muted-foreground">{label}</dt>
+      <dd className={cn("col-span-2 break-words", strong && "font-semibold tabular-nums")}>{value}</dd>
+    </>
   );
 }
