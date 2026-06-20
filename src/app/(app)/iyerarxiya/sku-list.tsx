@@ -8,6 +8,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { SubcatTreePicker, type SubItem } from "@/components/common/subcat-tree-picker";
+import { SearchablePicker } from "@/components/common/searchable-picker";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -400,13 +401,18 @@ function SkuEditDialog({ row, subs, suppliers, onClose, onSaved }: {
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Yetkazib beruvchi</Label>
-            <Select value={supplierId} onValueChange={(v) => setSupplierId(typeof v === "string" ? v : NO_SUPPLIER)} disabled={isPending}>
-              <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder="— yo'q —" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NO_SUPPLIER}>— yo&apos;q —</SelectItem>
-                {suppliers.map((s) => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <SearchablePicker
+              title="Yetkazib beruvchi"
+              placeholder="— yo'q —"
+              searchPlaceholder="Yetkazib beruvchi qidirish..."
+              disabled={isPending}
+              value={supplierId}
+              onPick={setSupplierId}
+              options={[
+                { id: NO_SUPPLIER, label: "— yo'q —" },
+                ...suppliers.map((s) => ({ id: String(s.id), label: s.name })),
+              ]}
+            />
           </div>
         </div>
         <DialogFooter className="gap-2">
