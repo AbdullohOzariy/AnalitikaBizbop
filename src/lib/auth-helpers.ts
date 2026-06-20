@@ -1,5 +1,6 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { canEditPromo, canSeePromo } from "@/lib/roles";
 
 export class AuthorizationError extends Error {
   constructor(message = "Ruxsat yo'q") {
@@ -52,6 +53,35 @@ export async function requireOrderCreator() {
     !session?.user ||
     (role !== "SYSTEM_ADMIN" && role !== "CAT_MANAGER" && role !== "HEAD_CAT_MANAGER" && role !== "SUPPLYCHAIN")
   ) {
+    throw new AuthorizationError();
+  }
+  return session.user;
+}
+
+/**
+ * Promo (Aksiyalar)ni KO'RISH huquqi — sahifa server-componentlarida ishlatiladi.
+ * canSeePromo bilan mos: SYSTEM_ADMIN, ADMIN (read-only), CAT_MANAGER, CEO,
+ * HEAD_CAT_MANAGER, MERCHANDISER. Read-only ADMIN ham o'tadi (faqat ko'rish).
+ */
+export async function requirePromoView() {
+  const session = await auth();
+  if (!session?.user || !canSeePromo(session.user.role)) {
+    throw new AuthorizationError();
+  }
+  return session.user;
+}
+
+/**
+ * Promo (Aksiyalar)ni TAHRIRLASH huquqi — Promo server-actionlari uchun.
+ * canEditPromo bilan mos: SYSTEM_ADMIN, CAT_MANAGER, CEO, HEAD_CAT_MANAGER,
+ * MERCHANDISER. Read-only ADMIN bu yerdan O'TMAYDI.
+ * Qaytaradi: sessiyadagi user (createdById uchun `Number(user.id)` ishlatilsin —
+ * requireOrderCreator naqshidagi kabi). Yozuv yaratishda eskirgan JWT xavfi bo'lsa
+ * (foydalanuvchi o'chirilgan/qayta seed), requireAdminUser kabi baza tekshiruvi qo'shilishi mumkin.
+ */
+export async function requirePromoEdit() {
+  const session = await auth();
+  if (!session?.user || !canEditPromo(session.user.role)) {
     throw new AuthorizationError();
   }
   return session.user;

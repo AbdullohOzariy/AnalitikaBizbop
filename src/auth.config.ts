@@ -42,11 +42,25 @@ export const authConfig = {
       if (isOnLogin) {
         if (isLoggedIn) {
           const role = (auth as { user?: { role?: string } })?.user?.role;
-          const dest = role === "CAT_MANAGER" || role === "SUPPLYCHAIN" || role === "HEAD_CAT_MANAGER" ? "/dashboard-v2" : "/dashboard";
+          const dest =
+            role === "MERCHANDISER"
+              ? "/promo/doimiy"
+              : role === "CAT_MANAGER" || role === "SUPPLYCHAIN" || role === "HEAD_CAT_MANAGER"
+              ? "/dashboard-v2"
+              : "/dashboard";
           return Response.redirect(new URL(dest, request.nextUrl));
         }
         return true;
       }
+      // MERCHANDISER izolatsiyasi: /promo tashqarisidagi har qanday sahifada
+      // /promo/doimiy ga yo'naltiriladi — cheksiz loop oldini oladi.
+      if (isLoggedIn) {
+        const role = (auth as { user?: { role?: string } })?.user?.role;
+        if (role === "MERCHANDISER" && !pathname.startsWith("/promo")) {
+          return Response.redirect(new URL("/promo/doimiy", request.nextUrl));
+        }
+      }
+
       // Hamma boshqa route'lar uchun login talab qilinadi.
       return isLoggedIn;
     },

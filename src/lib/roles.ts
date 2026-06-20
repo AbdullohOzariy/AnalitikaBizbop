@@ -57,3 +57,21 @@ export const canEditPme = (r: R): boolean =>
 
 /** Ombor + taqsimot (logistika operatsiyalari) — qoldiq import, ombor→filial taqsimot. */
 export const canManageWarehouse = (r: R): boolean => isSystemAdmin(r) || isSupplyChain(r);
+
+// ─── Promo (Aksiyalar) ────────────────────────────────────────────────────
+// MERCHANDISER — IZOLATSIYALANGAN rol: FAQAT Promo bo'limini ko'radi/tahrirlaydi.
+// Yuqoridagi hech bir canSee*/canEdit*/canManage*/isAdminTier predikatida
+// "MERCHANDISER" yo'q — shuning uchun u boshqa hech bir bo'limga kira olmaydi.
+
+/** Merchandiser roli (yordamchi — redirect/izolatsiya tekshiruvlari uchun). */
+export const isMerchandiser = (r: R): boolean => r === "MERCHANDISER";
+
+/** Promo (Aksiyalar) bo'limini KO'RA oladiganlar — read-only ADMIN ham ko'radi. */
+export const canSeePromo = (r: R): boolean =>
+  r === "SYSTEM_ADMIN" || r === "ADMIN" || r === "CAT_MANAGER" || r === "CEO" ||
+  r === "HEAD_CAT_MANAGER" || r === "MERCHANDISER";
+
+/** Promo (Aksiyalar)ni TAHRIRLAY oladiganlar — read-only ADMIN bundan MUSTASNO. */
+export const canEditPromo = (r: R): boolean =>
+  r === "SYSTEM_ADMIN" || r === "CAT_MANAGER" || r === "CEO" ||
+  r === "HEAD_CAT_MANAGER" || r === "MERCHANDISER";

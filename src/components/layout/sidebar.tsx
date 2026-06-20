@@ -37,6 +37,9 @@ import {
   FileCheck2,
   Gem,
   Gauge,
+  Megaphone,
+  Zap,
+  BarChart2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -47,6 +50,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import type { Role } from "@/generated/prisma/enums";
+import { canSeePromo } from "@/lib/roles";
 
 type NavItem = {
   href: string;
@@ -57,7 +61,12 @@ type NavItem = {
   disabled?: boolean; // vaqtinchalik ish faoliyatida emas — kulrang, bosilmaydi
 };
 
-type NavGroup = { label: string; items: NavItem[] };
+type NavGroup = {
+  label: string;
+  items: NavItem[];
+  /** Agar rol predikati berilsa, guruh faqat shu predikat true qaytargandagina ko'rinadi. */
+  guard?: (role: Role) => boolean;
+};
 
 // ─── localStorage UI sozlamalari ─────────────────────────────────────────────
 const PREF_EVENT = "sidebar-pref";
@@ -148,6 +157,18 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    // MERCHANDISER izolatsiyasi: bu guruh canSeePromo predikatiga bog'liq.
+    // Boshqa guruhlarning har biri o'z roles[] massiviga ega bo'lib, MERCHANDISER
+    // u massiвlarda yo'q — shuning uchun Promo'dan boshqa hech bir guruh ko'rinmaydi.
+    label: "Promo",
+    guard: canSeePromo,
+    items: [
+      { href: "/promo/doimiy",  label: "Doimiy aksiyalar", icon: Megaphone, roles: [SA, A, "CAT_MANAGER", "CEO", "HEAD_CAT_MANAGER", "MERCHANDISER"] },
+      { href: "/promo/flash",   label: "Flash aksiyalar",  icon: Zap,       roles: [SA, A, "CAT_MANAGER", "CEO", "HEAD_CAT_MANAGER", "MERCHANDISER"] },
+      { href: "/promo/hisobot", label: "Hisobot",          icon: BarChart2, roles: [SA, A, "CAT_MANAGER", "CEO", "HEAD_CAT_MANAGER", "MERCHANDISER"] },
+    ],
+  },
+  {
     label: "Tizim",
     items: [
       { href: "/branches",          label: "Filiallar",        icon: Building2, roles: [SA] },
@@ -180,7 +201,11 @@ function SidebarNav({
     emitPref();
   };
 
-  const visibleGroups = NAV_GROUPS.map((g) => ({
+  const visibleGroups = NAV_GROUPS.filter((g) => {
+    // Guruh darajasidagi guard (predikat funksiya) — guruhni butunlay yashiradi.
+    if (g.guard && !g.guard(role)) return false;
+    return true;
+  }).map((g) => ({
     ...g,
     items: g.items.filter((i) => {
       if (i.adminOnly && role !== "SYSTEM_ADMIN") return false;
@@ -331,6 +356,8 @@ function SidebarNav({
                 ? "Kategoriya menejeri"
                 : role === "CEO"
                 ? "CEO"
+                : role === "MERCHANDISER"
+                ? "Merchandiser"
                 : "Ko'ruvchi"}{" "}
               · v0.1
             </span>

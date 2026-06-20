@@ -18,6 +18,24 @@ enum Role {
   CEO
   SUPPLYCHAIN // ta'minot zanjiri: analitika/sotuv/spisaniya ko'radi + yetkazib beruvchilarni boshqaradi
   HEAD_CAT_MANAGER // kategoriya menejerlari boshi: BARCHA kategoriyalar bo'yicha menejer ishi + yetkazib beruvchilarni ko'rish
+  MERCHANDISER // merchandayzer — faqat Promo (Aksiyalar) bo'limini ko'radi/tahrirlaydi
+}
+
+// Promo (Aksiyalar) turi — har biri odatiy davom etish muddatiga ega
+enum PromoType {
+  KUN_TAKLIFI // Kun taklifi — 1 kun
+  HAFTA_CHEGIRMA // Hafta chegirmasi — 7 kun
+  BIZBOP_NARX // Bizbop narx — 1 oy/doimiy (endDate null bo'lishi mumkin)
+  AAARZON // A-a-arzon narx! — 14 kun
+  FLASH // Flash/bayram aksiyalari
+}
+
+// Promo kampaniya holati
+enum PromoStatus {
+  DRAFT // Qoralama
+  ACTIVE // Faol
+  ENDED // Tugadi
+  CANCELLED // Bekor qilindi
 }
 
 // Zakaz (sotib olish buyurtmasi) holati — to'liq workflow:
@@ -88,6 +106,7 @@ model User {
   distributions     Distribution[]
   branchTransfers   BranchTransfer[]
   batches           ProductBatch[]
+  promoCampaigns    PromoCampaign[] // yaratgan promo aksiyalari (createdBy)
 }
 
 // Kategoriya menejeri ↔ kategoriya (ko'p-ko'p): bir xodim bir nechta kategoriyaga javobgar.
@@ -123,9 +142,10 @@ model Branch {
   forecastRuns   ForecastRun[]
   forecastDays   ForecastDay[]
   distributions  Distribution[]
-  transfersFrom  BranchTransfer[] @relation("TransferFrom")
-  transfersTo    BranchTransfer[] @relation("TransferTo")
+  transfersFrom  BranchTransfer[]     @relation("TransferFrom")
+  transfersTo    BranchTransfer[]     @relation("TransferTo")
   batches        ProductBatch[]
+  promoCampaigns PromoCampaign[] // shu filialga oid promo aksiyalar (null = barcha filiallar)
 }
 
 model BranchAlias {
@@ -319,20 +339,21 @@ model Product {
   xyzClass       String?   @db.Char(1) // XYZ sinfi (talab barqarorligi) — sotuv yuklashda yangilanadi
   leadTimeDays   Int? // zakazdan kelguncha kunlar — yetkazib beruvchi profilida kiritiladi
   archivedAt     DateTime? // no-aktiv (arxiv) — buyurtma/OOS/Stockday'dan chiqadi, tarix saqlanadi
-  packSize       Decimal? @db.Decimal(20, 3) // pachkadagi dona soni/hajmi (og'irlik/hajm uchun kasr ham) — buyurtmada eslab qolinadi
+  packSize       Decimal?  @db.Decimal(20, 3) // pachkadagi dona soni/hajmi (og'irlik/hajm uchun kasr ham) — buyurtmada eslab qolinadi
   purchasePrice  Decimal?  @db.Decimal(20, 2) // kelishilgan sotib olish narxi (dona) — zakazdan eslab qolinadi
   lastSalePeriod DateTime? @db.Date // so'nggi yuklangan davr (eskini bosib o'tmaslik uchun)
 
-  category     Category?            @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  supplier     Supplier?            @relation(fields: [supplierId], references: [id], onDelete: SetNull)
-  agent        Agent?               @relation(fields: [agentId], references: [id], onDelete: SetNull)
-  sales        ProductSales[]
-  nameMismatch ProductNameMismatch?
-  orderItems   PurchaseOrderItem[]
-  warehouseStock WarehouseStock?
+  category          Category?            @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  supplier          Supplier?            @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  agent             Agent?               @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  sales             ProductSales[]
+  nameMismatch      ProductNameMismatch?
+  orderItems        PurchaseOrderItem[]
+  warehouseStock    WarehouseStock?
   distributionItems DistributionItem[]
   transferItems     BranchTransferItem[]
   batches           ProductBatch[]
+  promoItems        PromoItem[] // aksiyalardagi qatnashuvi
 
   @@index([categoryId])
   @@index([supplierId])
@@ -817,4 +838,49 @@ model SverkaQabulchi {
   id        Int      @id @default(autoincrement())
   ism       String   @unique
   createdAt DateTime @default(now())
+}
+
+// Promo (Aksiya) kampaniyasi — bir turdagi, sanali aksiya.
+// branchId null bo'lsa BARCHA filiallarga tegishli, aks holda bitta filialga.
+model PromoCampaign {
+  id          Int         @id @default(autoincrement())
+  type        PromoType
+  title       String
+  status      PromoStatus @default(DRAFT)
+  startDate   DateTime    @db.Date
+  endDate     DateTime?   @db.Date // null = BIZBOP_NARX doimiy
+  branchId    Int? // null = barcha filiallar
+  note        String?
+  createdById Int
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  branch    Branch?     @relation(fields: [branchId], references: [id])
+  createdBy User        @relation(fields: [createdById], references: [id])
+  items     PromoItem[]
+
+  @@index([type, status])
+  @@index([startDate, endDate])
+  @@index([branchId])
+  @@index([createdById])
+}
+
+// Promo kampaniyasidagi alohida tovar — narxlar dona uchun.
+model PromoItem {
+  id            Int      @id @default(autoincrement())
+  campaignId    Int
+  productId     Int
+  regularPrice  Decimal  @db.Decimal(20, 2) // sotilish (oddiy) narxi
+  promoPrice    Decimal  @db.Decimal(20, 2) // aksiya narxi
+  promoLimit    Decimal? @db.Decimal(20, 3) // aksiya limiti (dona, kasr ham bo'lishi mumkin)
+  priceReturned Boolean? // aksiya tugagach narx asliga qaytdimi (hisobot to'ldiradi)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  campaign PromoCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  product  Product       @relation(fields: [productId], references: [id])
+
+  @@unique([campaignId, productId])
+  @@index([productId])
+  @@index([campaignId])
 }
