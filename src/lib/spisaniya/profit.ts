@@ -144,9 +144,12 @@ async function _computeProfitTree(
 export function computeProfitTree(range: ChiqimRange, branchId?: number): Promise<ProfitTree> {
   return unstable_cache(
     async () => {
-      const branchName = branchId
-        ? (await prisma.branch.findUnique({ where: { id: branchId }, select: { name: true } }))?.name
-        : undefined;
+      // Chiqim bizbop bazasida NOM bo'yicha filtrlanadi. Bog'langan bo'lsa chiqimFilial,
+      // aks holda Branch.name (avvalgi xatti-harakat — mos kelsa ishlaydi, kelmasa 0).
+      const branch = branchId
+        ? await prisma.branch.findUnique({ where: { id: branchId }, select: { name: true, chiqimFilial: true } })
+        : null;
+      const branchName = branch ? (branch.chiqimFilial ?? branch.name) : undefined;
       return _computeProfitTree(range, branchId, branchName);
     },
     ["computeProfitTree_v3", isoDay(range.start), isoDay(range.end), branchId ? String(branchId) : "all"],

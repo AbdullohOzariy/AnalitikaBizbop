@@ -105,6 +105,7 @@ model CategoryManager {
 model Branch {
   id            Int      @id @default(autoincrement())
   name          String   @unique
+  chiqimFilial  String? // bizbop (spisaniya bot) yozuvlar.filial nomi — chiqim filtri uchun; null bo'lsa name ishlatiladi. Sozlamalar → Filiallar'da bog'lanadi
   sortOrder     Int      @default(0)
   sverkaTopicId Int? // sverka guruhidagi topic (message_thread_id) — Sozlamalar → Sverka'da
   createdAt     DateTime @default(now())

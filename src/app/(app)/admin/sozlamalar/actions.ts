@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth-helpers";
 import {
@@ -68,6 +68,33 @@ export async function filialOchirAction(id: number): Promise<Result> {
   try {
     await requireAdmin();
     await filialOchir(z.coerce.number().int().positive().parse(id));
+    revalidatePath(RP);
+    return { ok: true };
+  } catch (err) { return xato(err); }
+}
+
+// ─── Analitika filial → bizbop (chiqim) filial nomi bog'lash ───────────────────
+// Foyda (Iyerarxiya) hisobotidagi chiqim bizbop "yozuvlar.filial" bo'yicha filtrlanadi.
+// Analitika Branch nomi bizbop nomi bilan har doim mos kelmaydi — shu bog'lash orqali ulaymiz.
+const chiqimFilialSchema = z.object({
+  branchId: z.coerce.number().int().positive(),
+  filial: z.string().trim().max(120), // bo'sh — bog'lashni olib tashlash (name'ga qaytadi)
+});
+
+export async function chiqimFilialBoglaAction(input: {
+  branchId: number; filial: string;
+}): Promise<Result> {
+  try {
+    await requireAdmin();
+    const p = chiqimFilialSchema.parse(input);
+    const { prisma } = await import("@/lib/prisma");
+    await prisma.branch.update({
+      where: { id: p.branchId },
+      data: { chiqimFilial: p.filial || null },
+    });
+    // Foyda hisoboti keshi chiqim filtri o'zgargani uchun yangilanishi shart
+    const { ANALYTICS_CACHE_TAG } = await import("@/lib/analytics");
+    revalidateTag(ANALYTICS_CACHE_TAG, "max");
     revalidatePath(RP);
     return { ok: true };
   } catch (err) { return xato(err); }

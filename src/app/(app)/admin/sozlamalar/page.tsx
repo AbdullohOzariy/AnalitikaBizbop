@@ -5,15 +5,17 @@ import { prisma } from "@/lib/prisma";
 import {
   botConfigured,
   filialarToliq,
+  chiqimFilials,
   guruhChatIdOl,
   ruxsatList,
 } from "@/lib/spisaniya/db";
 import { getSverkaGroupChatId } from "@/lib/sverka/sozlama";
-import { Settings, WifiOff, Building2, MessageSquare, Users } from "lucide-react";
+import { Settings, WifiOff, Building2, MessageSquare, Users, Link2 } from "lucide-react";
 import { PageHeader, SectionCard, EmptyState } from "@/components/common/page";
 import { cn } from "@/lib/utils";
 import { GuruhEditor } from "./guruh-editor";
 import { FilialarEditor } from "./filialar-editor";
+import { ChiqimFilialEditor } from "./chiqim-filial-editor";
 import { RuxsatEditor } from "./ruxsat-editor";
 import { SverkaGuruhEditor } from "./sverka-guruh-editor";
 import { SverkaXodimlar, type XodimRow } from "../../sverka/sverka-client";
@@ -156,10 +158,12 @@ async function SpisaniyaTab() {
       />
     );
   }
-  const [filialar, chatId, ruxsatlar] = await Promise.all([
+  const [filialar, chatId, ruxsatlar, branches, bizbopFilials] = await Promise.all([
     filialarToliq(),
     guruhChatIdOl(),
     ruxsatList(),
+    prisma.branch.findMany({ orderBy: { sortOrder: "asc" }, select: { id: true, name: true, chiqimFilial: true } }),
+    chiqimFilials(),
   ]);
 
   return (
@@ -186,6 +190,14 @@ async function SpisaniyaTab() {
         actions={<Building2 className="h-4 w-4 text-muted-foreground" />}
       >
         <FilialarEditor filialar={filialar} />
+      </SectionCard>
+
+      <SectionCard
+        title="Chiqim filialiga bog'lash"
+        description="Analitika filiali → bizbop chiqim filiali (Foyda hisobotidagi chiqim shu nom bo'yicha olinadi)"
+        actions={<Link2 className="h-4 w-4 text-muted-foreground" />}
+      >
+        <ChiqimFilialEditor branches={branches} bizbopFilials={bizbopFilials} />
       </SectionCard>
     </div>
   );
