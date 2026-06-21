@@ -101,6 +101,30 @@ export async function register() {
     }
   }
 
+  // PROMO aksiyalar — har kuni 09:00 (Toshkent): muddati o'tgan FAOL aksiyalarni
+  // avtomatik ENDED qiladi (ACTIVE → ENDED). Telegram'siz, sozlamasiz.
+  {
+    const gg = globalThis as typeof globalThis & { __promoEndCron?: boolean };
+    if (!gg.__promoEndCron) {
+      gg.__promoEndCron = true;
+      try {
+        const { schedule } = await import("node-cron");
+        schedule("0 9 * * *", async () => {
+          try {
+            const { endExpiredPromos } = await import("@/lib/promo-jobs");
+            const n = await endExpiredPromos();
+            if (n > 0) console.log(`[promo-end] ${n} ta muddati o'tgan aksiya ENDED qilindi`);
+          } catch (e) {
+            console.error("[promo-end] xato:", e instanceof Error ? e.message : e);
+          }
+        }, { timezone: "Asia/Tashkent" });
+        console.log("[instrumentation] Promo cron o'rnatildi: har kuni 09:00 (Asia/Tashkent)");
+      } catch (e) {
+        console.warn("[instrumentation] promo cron o'rnatilmadi:", e instanceof Error ? e.message : e);
+      }
+    }
+  }
+
   const token = process.env.BOT_TOKEN;
   const base = (process.env.WEBHOOK_URL || "").replace(/\/$/, "");
   if (!token || !base) {
