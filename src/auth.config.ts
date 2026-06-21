@@ -45,6 +45,8 @@ export const authConfig = {
           const dest =
             role === "MERCHANDISER"
               ? "/promo/doimiy"
+              : role === "OPERATOR"
+              ? "/chiqim"
               : role === "CAT_MANAGER" || role === "SUPPLYCHAIN" || role === "HEAD_CAT_MANAGER"
               ? "/dashboard-v2"
               : "/dashboard";
@@ -58,6 +60,10 @@ export const authConfig = {
         const role = (auth as { user?: { role?: string } })?.user?.role;
         if (role === "MERCHANDISER" && !pathname.startsWith("/promo")) {
           return Response.redirect(new URL("/promo/doimiy", request.nextUrl));
+        }
+        // OPERATOR izolatsiyasi: faqat /chiqim va /sverka — boshqasidan /chiqim ga
+        if (role === "OPERATOR" && !pathname.startsWith("/chiqim") && !pathname.startsWith("/sverka")) {
+          return Response.redirect(new URL("/chiqim", request.nextUrl));
         }
       }
 

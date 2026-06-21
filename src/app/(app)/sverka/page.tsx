@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
-import { isSystemAdmin, isSupplyChain } from "@/lib/roles";
+import { isSystemAdmin, isSupplyChain, canSeeSverka } from "@/lib/roles";
 import { FileCheck2, Wallet, ListChecks, CalendarDays } from "lucide-react";
 import { PageHeader, StatCard, EmptyState } from "@/components/common/page";
 import { Card, CardContent } from "@/components/ui/card";
@@ -23,10 +23,7 @@ export default async function SverkaPage({
 }) {
   const session = await auth();
   const role = session?.user?.role;
-  if (
-    !session?.user ||
-    (role !== "SYSTEM_ADMIN" && role !== "ADMIN" && role !== "SUPPLYCHAIN" && role !== "CEO")
-  ) {
+  if (!session?.user || !canSeeSverka(role)) {
     redirect("/dashboard-v2");
   }
   const canDelete = isSystemAdmin(role) || isSupplyChain(role);

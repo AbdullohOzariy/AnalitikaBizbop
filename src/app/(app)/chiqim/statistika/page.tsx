@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { canSeeAnalytics } from "@/lib/roles";
+import { canSeeChiqim } from "@/lib/roles";
 import {
   botConfigured,
   chiqimDefaultRange,
@@ -60,7 +60,7 @@ export default async function ChiqimStatistikaPage({
   const session = await auth();
   if (!session) redirect("/login");
   const role = session.user.role;
-  if (!canSeeAnalytics(role)) redirect("/dashboard-v2");
+  if (!canSeeChiqim(role)) redirect("/dashboard-v2");
 
   if (!botConfigured()) {
     return (

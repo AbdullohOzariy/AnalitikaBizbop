@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { canSeeAnalytics, isSystemAdmin } from "@/lib/roles";
+import { canSeeChiqim, isSystemAdmin } from "@/lib/roles";
 import {
   botConfigured,
   aktivFilialNomlari,
@@ -32,7 +32,7 @@ export default async function VozvratlarPage({
   const session = await auth();
   if (!session) redirect("/login");
   const role = session.user.role;
-  if (!canSeeAnalytics(role)) redirect("/dashboard-v2");
+  if (!canSeeChiqim(role)) redirect("/dashboard-v2");
 
   if (!botConfigured()) {
     return (

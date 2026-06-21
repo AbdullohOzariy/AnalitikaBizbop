@@ -75,3 +75,19 @@ export const canSeePromo = (r: R): boolean =>
 export const canEditPromo = (r: R): boolean =>
   r === "SYSTEM_ADMIN" || r === "CAT_MANAGER" || r === "CEO" ||
   r === "HEAD_CAT_MANAGER" || r === "MERCHANDISER";
+
+// ─── Operator (Hisobdan chiqarish + Sverka kuzatuvchisi) ──────────────────────
+// OPERATOR — IZOLATSIYALANGAN rol: FAQAT Hisobdan chiqarish (chiqim) va Sverkani
+// KUZATADI (read-only). Yuqoridagi hech bir canSee*/canEdit*/canManage*/isAdminTier
+// predikatida "OPERATOR" yo'q — boshqa bo'limga kira olmaydi, hech narsa tahrirlay
+// olmaydi (o'zgartirish actionlari uni o'tkazmaydi).
+
+/** Operator roli (redirect/izolatsiya tekshiruvlari uchun). */
+export const isOperator = (r: R): boolean => r === "OPERATOR";
+
+/** Hisobdan chiqarish (chiqim) bo'limini KO'RA oladiganlar — analitika ko'ruvchilar + operator. */
+export const canSeeChiqim = (r: R): boolean => canSeeAnalytics(r) || isOperator(r);
+
+/** Sverka bo'limini KO'RA oladiganlar — SYSTEM_ADMIN, ADMIN, SUPPLYCHAIN, CEO + operator. */
+export const canSeeSverka = (r: R): boolean =>
+  isAdminTier(r) || isSupplyChain(r) || r === "CEO" || isOperator(r);
