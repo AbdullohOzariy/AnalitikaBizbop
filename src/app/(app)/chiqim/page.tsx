@@ -42,6 +42,7 @@ import { BazaPagination } from "../baza/baza-pagination";
 import { ChiqimFilter } from "./chiqim-filter";
 import { ChiqimExportButton } from "./chiqim-export-button";
 import { ChiqimRowActions } from "./chiqim-row-actions";
+import { ImageThumb } from "@/components/common/image-thumb";
 import type { LucideIcon } from "lucide-react";
 
 const PAGE_SIZE = 50;
@@ -280,9 +281,12 @@ export default async function ChiqimPage({
                           </Pill>
                         </TableCell>
 
-                        {/* Tovar */}
-                        <TableCell className="text-xs max-w-[180px] truncate" title={r.tovar}>
-                          {r.tovar}
+                        {/* Tovar + rasm (bo'lsa) */}
+                        <TableCell className="text-xs max-w-[210px]">
+                          <span className="flex items-center gap-2">
+                            {r.rasm_file_id && <ImageThumb fileId={r.rasm_file_id} caption={r.tovar} />}
+                            <span className="truncate" title={r.tovar}>{r.tovar}</span>
+                          </span>
                         </TableCell>
 
                         {/* Miqdor + birlik */}

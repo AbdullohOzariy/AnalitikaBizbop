@@ -149,6 +149,7 @@ export type ChiqimRecord = {
   kategoriya: string | null;
   vaqt: string;
   status: string | null;
+  rasm_file_id: string | null; // Telegram file_id — /api/rasm-preview/<id> orqali ko'riladi
 };
 
 /** Yozuvlar ro'yxati (filtr + sahifalash). */
@@ -178,7 +179,7 @@ export async function chiqimRecords(
     const offsetIdx = params.length;
     const { rows } = await p.query(
       `SELECT id, tur, tovar, miqdor::float8, birlik, summa::float8, sabab, filial, firma,
-              kafe_nomi, xodim_ism, kategoriya, vaqt::text, status
+              kafe_nomi, xodim_ism, kategoriya, vaqt::text, status, rasm_file_id
        FROM yozuvlar WHERE ${where}
        ORDER BY vaqt DESC
        LIMIT $${limitIdx} OFFSET $${offsetIdx}`,

@@ -12,6 +12,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Loader2, PackageMinus, Image as ImageIcon } from "lucide-react";
+import { ImageThumb } from "@/components/common/image-thumb";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { formatUZS } from "@/lib/format";
@@ -105,10 +106,10 @@ export function VozvratCard({ v, canEdit = true }: { v: VozvratCardData; canEdit
             {v.sabab && <Row label="Sabab" value={v.sabab} />}
           </dl>
           {v.rasm_file_id && (
-            <a href={`/api/rasm-preview/${v.rasm_file_id}`} target="_blank" rel="noreferrer"
-               className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline">
-              <ImageIcon className="h-4 w-4" /> Rasmni ko&apos;rish
-            </a>
+            <div className="flex items-center gap-2">
+              <ImageThumb fileId={v.rasm_file_id} caption={v.tovar} className="h-12 w-12" />
+              <span className="text-xs text-muted-foreground">Rasmni kattalashtirish uchun bosing</span>
+            </div>
           )}
           {canEdit && (
             <DialogFooter className="gap-2 sm:justify-between">

@@ -4,7 +4,7 @@
  */
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { canSeeAnalytics } from "@/lib/roles";
+import { canSeeChiqim, canSeeSverka } from "@/lib/roles";
 import { telegramFileUrl } from "@/lib/spisaniya/bot";
 import { rasmFileIdMavjud } from "@/lib/spisaniya/db";
 import { prisma } from "@/lib/prisma";
@@ -18,7 +18,7 @@ export async function GET(
 ) {
   const session = await auth();
   const role = session?.user?.role;
-  if (!session || (!canSeeAnalytics(role))) {
+  if (!session || (!canSeeChiqim(role) && !canSeeSverka(role))) {
     return new NextResponse("Ruxsat yo'q", { status: 403 });
   }
 

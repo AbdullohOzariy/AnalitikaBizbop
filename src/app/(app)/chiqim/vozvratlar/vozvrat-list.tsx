@@ -16,7 +16,8 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Pill, EmptyState } from "@/components/common/page";
-import { Pencil, Trash2, Loader2, Recycle, Image as ImageIcon } from "lucide-react";
+import { Pencil, Trash2, Loader2, Recycle } from "lucide-react";
+import { ImageThumb } from "@/components/common/image-thumb";
 import { formatUZS } from "@/lib/format";
 import {
   VOZVRAT_HOLATLAR as HOLATLAR,
@@ -181,15 +182,10 @@ export function VozvratList({
                     {HOLAT_LABEL[v.status] ?? v.status}
                   </Pill>
                 </TableCell>
-                <TableCell className="text-xs max-w-[110px] truncate" title={v.xodim_ism ?? undefined}>
+                <TableCell className="text-xs max-w-[140px]">
                   <span className="inline-flex items-center gap-1.5">
-                    {v.rasm_file_id && (
-                      <a href={`/api/rasm-preview/${v.rasm_file_id}`} target="_blank" rel="noreferrer"
-                         className="text-primary hover:underline" title="Rasm">
-                        <ImageIcon className="h-3 w-3" />
-                      </a>
-                    )}
-                    {v.xodim_ism || "—"}
+                    {v.rasm_file_id && <ImageThumb fileId={v.rasm_file_id} caption={v.tovar} className="h-7 w-7" />}
+                    <span className="truncate" title={v.xodim_ism ?? undefined}>{v.xodim_ism || "—"}</span>
                   </span>
                 </TableCell>
                 {canEdit && (
