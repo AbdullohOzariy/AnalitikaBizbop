@@ -44,6 +44,7 @@ export type PromoCampaignRow = {
   endDate: string | null;
   branchId: number | null;
   branchName: string | null;
+  note: string | null; // izoh (asosan Flash aksiyalar uchun)
   itemsCount: number;
   createdAt: string; // ISO
 };
@@ -82,7 +83,7 @@ export async function listCampaignsAction(
       orderBy: [{ startDate: "desc" }, { id: "desc" }],
       select: {
         id: true, type: true, title: true, status: true, startDate: true, endDate: true,
-        branchId: true, createdAt: true,
+        branchId: true, note: true, createdAt: true,
         branch: { select: { name: true } },
         _count: { select: { items: true } },
       },
@@ -94,6 +95,7 @@ export async function listCampaignsAction(
         startDate: ymd(c.startDate),
         endDate: c.endDate ? ymd(c.endDate) : null,
         branchId: c.branchId, branchName: c.branch?.name ?? null,
+        note: c.note,
         itemsCount: c._count.items,
         createdAt: c.createdAt.toISOString(),
       })),
