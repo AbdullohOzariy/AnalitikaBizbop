@@ -1,0 +1,334 @@
+"use client";
+
+import { useEffect, useRef, useState, useTransition } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog";
+import { Search, X, Loader2, Plus, Trash2, Check } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { formatUZS } from "@/lib/format";
+import { toast } from "sonner";
+import {
+  listItemsAction, addItemAction, updateItemAction, deleteItemAction,
+  searchProductsAction, suggestPriceAction,
+  type PromoItemRow, type ProductSearchRow,
+} from "./actions";
+
+function fmtMoney(n: number) {
+  return formatUZS(n, { compact: false });
+}
+function diffPctClass(pct: number) {
+  return pct > 0 ? "text-emerald-600 dark:text-emerald-400" : pct < 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground";
+}
+
+/** Aksiya SKU qatorlari — narxlar (ruchnoy) + farq/% (auto). */
+export function CampaignItems({
+  campaignId, branchId, canEdit,
+}: {
+  campaignId: number;
+  branchId: number | null;
+  canEdit: boolean;
+}) {
+  const [rows, setRows] = useState<PromoItemRow[]>([]);
+  const [loading, startLoad] = useTransition();
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [addOpen, setAddOpen] = useState(false);
+  const reqId = useRef(0);
+
+  useEffect(() => {
+    const my = ++reqId.current;
+    startLoad(async () => {
+      const res = await listItemsAction({ campaignId });
+      if (my !== reqId.current) return;
+      if (res.ok) setRows(res.rows);
+      else toast.error(res.error);
+    });
+  }, [campaignId, refreshKey]);
+
+  const reload = () => setRefreshKey((k) => k + 1);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-muted-foreground">
+          {rows.length} ta SKU{loading && <Loader2 className="ml-1.5 inline h-3 w-3 animate-spin" />}
+        </span>
+        {canEdit && (
+          <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => setAddOpen(true)}>
+            <Plus className="h-3.5 w-3.5" /> SKU qo&apos;shish
+          </Button>
+        )}
+      </div>
+
+      <div className="overflow-x-auto rounded-lg border border-border/60">
+        <table className="w-full min-w-[760px] text-sm">
+          <thead>
+            <tr className="border-b border-border bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
+              <th className="px-3 py-2 text-left font-semibold">Nomi (SKU)</th>
+              <th className="px-2 py-2 text-right font-semibold">Sotilish narxi</th>
+              <th className="px-2 py-2 text-right font-semibold">Aksiya narxi</th>
+              <th className="px-2 py-2 text-right font-semibold">Limit</th>
+              <th className="px-2 py-2 text-right font-semibold">Farqi</th>
+              <th className="px-2 py-2 text-right font-semibold">% farqi</th>
+              {canEdit && <th className="w-10" />}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={canEdit ? 7 : 6} className="px-3 py-6 text-center text-xs text-muted-foreground">
+                  {loading ? "Yuklanmoqda…" : "Hali SKU qo'shilmagan."}
+                </td>
+              </tr>
+            ) : (
+              rows.map((r) => (
+                <ItemRow key={r.id} row={r} canEdit={canEdit} onChanged={reload} />
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {addOpen && (
+        <AddItemDialog
+          campaignId={campaignId}
+          branchId={branchId}
+          existing={rows.map((r) => r.productId)}
+          onClose={() => setAddOpen(false)}
+          onAdded={() => { setAddOpen(false); reload(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Bir SKU qatori — narxlar ruchnoy (blur'da saqlanadi), farq/% live derive. */
+function ItemRow({ row, canEdit, onChanged }: { row: PromoItemRow; canEdit: boolean; onChanged: () => void }) {
+  const [reg, setReg] = useState(String(row.regularPrice));
+  const [promo, setPromo] = useState(String(row.promoPrice));
+  const [limit, setLimit] = useState(row.promoLimit != null ? String(row.promoLimit) : "");
+  const [isPending, start] = useTransition();
+  const [saved, setSaved] = useState(false);
+
+  // Live derive (render — effekt EMAS)
+  const regN = Number(reg) || 0;
+  const promoN = Number(promo) || 0;
+  const diff = regN - promoN;
+  const pct = regN > 0 ? (diff / regN) * 100 : 0;
+
+  const save = () => {
+    const r = Number(reg), p = Number(promo);
+    const l = limit.trim() === "" ? null : Number(limit);
+    if (!(r > 0) || !(p > 0)) { toast.error("Narxlar musbat bo'lishi kerak."); return; }
+    if (l != null && !(l > 0)) { toast.error("Limit musbat bo'lishi kerak."); return; }
+    const changed = r !== row.regularPrice || p !== row.promoPrice || l !== row.promoLimit;
+    if (!changed) return;
+    start(async () => {
+      const res = await updateItemAction({ id: row.id, regularPrice: r, promoPrice: p, promoLimit: l });
+      if (res.ok) { setSaved(true); onChanged(); setTimeout(() => setSaved(false), 1200); }
+      else toast.error(res.error);
+    });
+  };
+
+  const del = () => {
+    start(async () => {
+      const res = await deleteItemAction({ id: row.id });
+      if (res.ok) onChanged();
+      else toast.error(res.error);
+    });
+  };
+
+  const numInput = "h-8 w-28 rounded-lg text-right tabular-nums";
+  return (
+    <tr className="border-b border-border/40 last:border-0 hover:bg-muted/20">
+      <td className="px-3 py-1.5">
+        <div className="max-w-[260px] truncate" title={row.name}>{row.name}</div>
+        <div className="font-mono text-[11px] text-muted-foreground">{row.code}</div>
+      </td>
+      <td className="px-2 py-1.5 text-right">
+        {canEdit
+          ? <Input value={reg} disabled={isPending} type="number" inputMode="decimal" className={numInput}
+              onChange={(e) => setReg(e.target.value)} onBlur={save} onKeyDown={(e) => e.key === "Enter" && save()} />
+          : <span className="tabular-nums">{fmtMoney(row.regularPrice)}</span>}
+      </td>
+      <td className="px-2 py-1.5 text-right">
+        {canEdit
+          ? <Input value={promo} disabled={isPending} type="number" inputMode="decimal" className={numInput}
+              onChange={(e) => setPromo(e.target.value)} onBlur={save} onKeyDown={(e) => e.key === "Enter" && save()} />
+          : <span className="tabular-nums">{fmtMoney(row.promoPrice)}</span>}
+      </td>
+      <td className="px-2 py-1.5 text-right">
+        {canEdit
+          ? <Input value={limit} disabled={isPending} type="number" inputMode="decimal" placeholder="—" className={numInput}
+              onChange={(e) => setLimit(e.target.value)} onBlur={save} onKeyDown={(e) => e.key === "Enter" && save()} />
+          : <span className="tabular-nums text-muted-foreground">{row.promoLimit != null ? fmtMoney(row.promoLimit) : "—"}</span>}
+      </td>
+      <td className="px-2 py-1.5 text-right tabular-nums font-medium">{diff > 0 ? `−${fmtMoney(diff)}` : diff < 0 ? `+${fmtMoney(-diff)}` : "—"}</td>
+      <td className={cn("px-2 py-1.5 text-right tabular-nums font-semibold", diffPctClass(pct))}>{pct ? `${pct.toFixed(1)}%` : "—"}</td>
+      {canEdit && (
+        <td className="px-1 py-1.5 text-center">
+          {isPending ? <Loader2 className="inline h-3.5 w-3.5 animate-spin text-muted-foreground" />
+            : saved ? <Check className="inline h-3.5 w-3.5 text-emerald-500" />
+            : <button onClick={del} aria-label="O'chirish" title="O'chirish" className="text-muted-foreground hover:text-destructive">
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>}
+        </td>
+      )}
+    </tr>
+  );
+}
+
+/** SKU qidirib (server-side) aksiyaga qo'shish — sotilish narxi auto-taklif. */
+function AddItemDialog({
+  campaignId, branchId, existing, onClose, onAdded,
+}: {
+  campaignId: number;
+  branchId: number | null;
+  existing: number[];
+  onClose: () => void;
+  onAdded: () => void;
+}) {
+  const [q, setQ] = useState("");
+  const [results, setResults] = useState<ProductSearchRow[]>([]);
+  const [searching, startSearch] = useTransition();
+  const [picked, setPicked] = useState<ProductSearchRow | null>(null);
+  const [reg, setReg] = useState("");
+  const [promo, setPromo] = useState("");
+  const [limit, setLimit] = useState("");
+  const [isPending, start] = useTransition();
+  const debounce = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const reqId = useRef(0);
+
+  const onQ = (v: string) => {
+    setQ(v);
+    clearTimeout(debounce.current);
+    debounce.current = setTimeout(() => {
+      const my = ++reqId.current;
+      startSearch(async () => {
+        const res = await searchProductsAction({ q: v.trim() });
+        if (my !== reqId.current) return;
+        if (res.ok) setResults(res.rows);
+      });
+    }, 350);
+  };
+
+  const pick = (p: ProductSearchRow) => {
+    setPicked(p);
+    setResults([]);
+    setQ("");
+    // Sotilish narxi auto-taklif (ProductSales oxirgi davr o'rtacha narxi)
+    start(async () => {
+      const res = await suggestPriceAction({ productId: p.id, branchId });
+      if (res.ok && res.price != null) setReg(String(res.price));
+    });
+  };
+
+  const submit = () => {
+    if (!picked) { toast.error("SKU tanlang."); return; }
+    const r = Number(reg), pr = Number(promo);
+    const l = limit.trim() === "" ? null : Number(limit);
+    if (!(r > 0) || !(pr > 0)) { toast.error("Sotilish va aksiya narxini kiriting."); return; }
+    if (l != null && !(l > 0)) { toast.error("Limit musbat bo'lishi kerak."); return; }
+    start(async () => {
+      const res = await addItemAction({ campaignId, productId: picked.id, regularPrice: r, promoPrice: pr, promoLimit: l });
+      if (res.ok) { toast.success("SKU qo'shildi."); onAdded(); }
+      else toast.error(res.error);
+    });
+  };
+
+  const dup = picked != null && existing.includes(picked.id);
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>SKU qo&apos;shish</DialogTitle>
+          <DialogDescription className="text-sm text-muted-foreground">
+            SKU ni nomi yoki kodi bo&apos;yicha qidiring, narxlarni kiriting.
+          </DialogDescription>
+        </DialogHeader>
+
+        {!picked ? (
+          <div className="space-y-2">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input value={q} onChange={(e) => onQ(e.target.value)} autoFocus
+                placeholder="SKU nomi yoki kodi (≥2 belgi)…" className="h-9 pl-8 pr-8" />
+              {q && (
+                <button onClick={() => { setQ(""); setResults([]); }} aria-label="Tozalash"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+            <div className="max-h-[40vh] overflow-y-auto rounded-lg border border-border/60">
+              {searching ? (
+                <p className="p-4 text-center text-xs text-muted-foreground"><Loader2 className="mr-1 inline h-3.5 w-3.5 animate-spin" />Qidirilmoqda…</p>
+              ) : results.length === 0 ? (
+                <p className="p-4 text-center text-xs text-muted-foreground">{q.trim().length >= 2 ? "Topilmadi." : "Qidirish uchun yozing."}</p>
+              ) : (
+                <div className="divide-y divide-border/40">
+                  {results.map((p) => (
+                    <button key={p.id} onClick={() => pick(p)} disabled={existing.includes(p.id)}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted/50 disabled:opacity-40">
+                      <span className="min-w-0 flex-1 truncate">{p.name}</span>
+                      <span className="shrink-0 font-mono text-[11px] text-muted-foreground">{p.code}</span>
+                      {existing.includes(p.id) && <span className="shrink-0 text-[11px] text-amber-600">qo&apos;shilgan</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3 py-1">
+            <div className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
+              <div className="text-sm font-medium">{picked.name}</div>
+              <div className="font-mono text-[11px] text-muted-foreground">{picked.code}</div>
+              <button onClick={() => { setPicked(null); setReg(""); setPromo(""); setLimit(""); }}
+                className="mt-1 text-[11px] text-primary underline underline-offset-2">boshqa SKU tanlash</button>
+            </div>
+            {dup && <p className="text-xs text-amber-600">Bu SKU allaqachon qo&apos;shilgan.</p>}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Sotilish narxi *</Label>
+                <Input value={reg} disabled={isPending} type="number" inputMode="decimal" className="h-9"
+                  placeholder="auto-taklif" onChange={(e) => setReg(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Aksiya narxi *</Label>
+                <Input value={promo} disabled={isPending} type="number" inputMode="decimal" className="h-9"
+                  autoFocus onChange={(e) => setPromo(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Aksiya limiti</Label>
+                <Input value={limit} disabled={isPending} type="number" inputMode="decimal" className="h-9"
+                  placeholder="ixtiyoriy" onChange={(e) => setLimit(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Farqi</Label>
+                <div className="flex h-9 items-center rounded-lg border border-border/60 bg-muted/20 px-3 text-sm tabular-nums">
+                  {Number(reg) > 0 && Number(promo) > 0
+                    ? `−${fmtMoney(Number(reg) - Number(promo))} (${(((Number(reg) - Number(promo)) / Number(reg)) * 100).toFixed(1)}%)`
+                    : "—"}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <DialogFooter className="gap-2">
+          <Button variant="outline" className="rounded-xl" disabled={isPending} onClick={onClose}>Bekor</Button>
+          {picked && (
+            <Button className="rounded-xl" disabled={isPending || dup} onClick={submit}>
+              {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Qo'shish"}
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
