@@ -384,9 +384,45 @@ export async function setOrderStatusAction(
     });
     revalidatePath(`/sotuv/sotib-olish/${oid}`);
     revalidatePath("/sotuv/sotib-olish");
+    // "Zakaz qabul qilindi" (ACCEPTED) ga o'tganda nakladnoyni Telegram guruhga
+    // avto-yuborish (sozlamada yoqilgan bo'lsa). Fire-and-forget — status o'zgarishi
+    // yuborish natijasiga bog'liq emas (Railway doimiy server).
+    if (st === "ACCEPTED") {
+      void (async () => {
+        try {
+          const { getZakazPdfConfig } = await import("@/lib/zakaz-pdf/sozlama");
+          if (!(await getZakazPdfConfig()).autoEnabled) return;
+          const { sendZakazPdf } = await import("@/lib/zakaz-pdf/send");
+          const r = await sendZakazPdf(oid);
+          if (!r.ok) console.warn("[zakaz-pdf] avto yuborilmadi:", r.error);
+          else console.log(`[zakaz-pdf] zakaz #${oid} avto yuborildi`);
+        } catch (e) {
+          console.error("[zakaz-pdf] avto xato:", e instanceof Error ? e.message : e);
+        }
+      })();
+    }
     return { ok: true };
   } catch (err) {
     return actionError(err, "setOrderStatus");
+  }
+}
+
+/** Zakaz nakladnoyini PDF qilib Telegram guruhga qo'lda yuboradi (qayta yuborish tugmasi). */
+export async function sendZakazPdfAction(orderId: number): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const session = await auth();
+    const user = session?.user;
+    if (!user) return { ok: false, error: "Ruxsat yo'q." };
+    const oid = z.coerce.number().int().positive().parse(orderId);
+    const order = await prisma.purchaseOrder.findUnique({ where: { id: oid }, select: { createdById: true } });
+    if (!order) return { ok: false, error: "Zakaz topilmadi." };
+    if (user.role === "CAT_MANAGER" && order.createdById !== Number(user.id)) {
+      return { ok: false, error: "Ruxsat yo'q." };
+    }
+    const { sendZakazPdf } = await import("@/lib/zakaz-pdf/send");
+    return await sendZakazPdf(oid);
+  } catch (err) {
+    return actionError(err, "sendZakazPdf");
   }
 }
 

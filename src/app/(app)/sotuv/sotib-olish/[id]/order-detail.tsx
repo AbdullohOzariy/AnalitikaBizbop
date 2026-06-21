@@ -18,7 +18,7 @@ import {
   ORDER_STATUS_LABEL, ORDER_STATUS_TONE, TRANSITION_LABEL, NEXT_STATUSES,
   canTransition, canEditItems, canEnterFact, type OrderStatusT,
 } from "../order-status";
-import { updateOrderItemsAction, setOrderStatusAction, deleteOrderAction, saveOrderFactAction } from "../actions";
+import { updateOrderItemsAction, setOrderStatusAction, deleteOrderAction, saveOrderFactAction, sendZakazPdfAction } from "../actions";
 
 export type OrderData = {
   id: number;
@@ -53,6 +53,14 @@ export function OrderDetail({ order, role, isOwner }: { order: OrderData; role: 
   const [delOpen, setDelOpen] = useState(false);
   const [saving, startSave] = useTransition();
   const [statusing, startStatus] = useTransition();
+  const [sending, startSend] = useTransition();
+
+  const sendPdf = () =>
+    startSend(async () => {
+      const res = await sendZakazPdfAction(order.id);
+      if (res.ok) toast.success("Nakladnoy Telegram guruhga yuborildi.");
+      else toast.error(res.error);
+    });
 
   const status = order.status as OrderStatusT;
   const editable = canEditItems(role, status, isOwner);
@@ -149,6 +157,15 @@ export function OrderDetail({ order, role, isOwner }: { order: OrderData; role: 
         >
           <FileDown className="h-3.5 w-3.5" /> Nakladnoy (PDF)
         </a>
+
+        <button
+          onClick={sendPdf}
+          disabled={sending}
+          title="Nakladnoyni PDF qilib Telegram guruhga (topic) yuborish"
+          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50"
+        >
+          {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />} Telegramga yuborish
+        </button>
 
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
           {allowedNexts.map((to) => {

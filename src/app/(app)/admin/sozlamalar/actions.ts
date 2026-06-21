@@ -341,3 +341,52 @@ export async function deliveryAlertYuborAction(): Promise<
     return { ok: false, error: msg.includes("Ruxsat") ? "Ruxsat yo'q." : msg };
   }
 }
+
+// ─── Zakaz PDF (ACCEPTED'da nakladnoy Telegram guruhga) ─────────────────────────
+
+/** Bot token + guruh chat id + topic id + avto-yoqish'ni saqlash. token bo'sh — o'zgartirilmaydi. */
+export async function zakazPdfSaqlaAction(input: {
+  token: string; chatId: string; topicId: string; autoEnabled: boolean;
+}): Promise<Result> {
+  try {
+    await requireAdmin();
+    const token = input.token.trim();
+    const chatId = input.chatId.trim();
+    const topicId = input.topicId.trim();
+    if (!chatId) {
+      return { ok: false, error: "Guruh chat ID kiritilishi shart (bo'sh saqlasangiz yuborish o'chadi)." };
+    }
+    if (!/^-?\d{5,20}$/.test(chatId)) {
+      return { ok: false, error: "Guruh chat ID raqam bo'lishi kerak (odatda -100... ko'rinishida)." };
+    }
+    if (topicId && !/^\d{1,12}$/.test(topicId)) {
+      return { ok: false, error: "Topic ID musbat raqam bo'lishi kerak." };
+    }
+    if (token && !/^\d{6,}:[A-Za-z0-9_-]{20,}$/.test(token)) {
+      return { ok: false, error: "Bot token noto'g'ri (123456:ABC... ko'rinishida)." };
+    }
+    const { setZakazPdfConfig } = await import("@/lib/zakaz-pdf/sozlama");
+    await setZakazPdfConfig({ token, chatId, topicId, autoEnabled: !!input.autoEnabled });
+    revalidatePath(RP);
+    return { ok: true };
+  } catch (err) { return xato(err); }
+}
+
+/** Sinov: eng oxirgi qabul qilingan (yoki istalgan oxirgi) zakazni hozir yuboradi. */
+export async function zakazPdfTestAction(): Promise<{ ok: true; orderId: number } | { ok: false; error: string }> {
+  try {
+    await requireAdmin();
+    const { prisma } = await import("@/lib/prisma");
+    const target =
+      (await prisma.purchaseOrder.findFirst({ where: { status: "ACCEPTED" }, orderBy: { updatedAt: "desc" }, select: { id: true } })) ??
+      (await prisma.purchaseOrder.findFirst({ orderBy: { id: "desc" }, select: { id: true } }));
+    if (!target) return { ok: false, error: "Sinov uchun zakaz topilmadi." };
+    const { sendZakazPdf } = await import("@/lib/zakaz-pdf/send");
+    const r = await sendZakazPdf(target.id);
+    if (!r.ok) return { ok: false, error: r.error };
+    return { ok: true, orderId: target.id };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Xato.";
+    return { ok: false, error: msg.includes("Ruxsat") ? "Ruxsat yo'q." : msg };
+  }
+}

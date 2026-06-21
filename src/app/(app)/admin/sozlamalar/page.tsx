@@ -27,8 +27,10 @@ import { MarginReportEditor } from "./margin-report-editor";
 import { getMarginReportConfig } from "@/lib/margin-report/sozlama";
 import { DeliveryAlertEditor } from "./delivery-alert-editor";
 import { getDeliveryAlertConfig } from "@/lib/delivery-alert/sozlama";
+import { ZakazPdfEditor } from "./zakaz-pdf-editor";
+import { getZakazPdfConfig } from "@/lib/zakaz-pdf/sozlama";
 
-type Tab = "spisaniya" | "sverka" | "inventarizatsiya" | "marja" | "yetkazish";
+type Tab = "spisaniya" | "sverka" | "inventarizatsiya" | "marja" | "yetkazish" | "zakaz";
 
 export default async function SozlamalarPage({
   searchParams,
@@ -40,7 +42,7 @@ export default async function SozlamalarPage({
   if (session.user.role !== "SYSTEM_ADMIN") redirect("/dashboard");
 
   const sp = await searchParams;
-  const tab: Tab = sp.tab === "sverka" ? "sverka" : sp.tab === "inventarizatsiya" ? "inventarizatsiya" : sp.tab === "marja" ? "marja" : sp.tab === "yetkazish" ? "yetkazish" : "spisaniya";
+  const tab: Tab = sp.tab === "sverka" ? "sverka" : sp.tab === "inventarizatsiya" ? "inventarizatsiya" : sp.tab === "marja" ? "marja" : sp.tab === "yetkazish" ? "yetkazish" : sp.tab === "zakaz" ? "zakaz" : "spisaniya";
 
   return (
     <div className="space-y-5">
@@ -58,6 +60,7 @@ export default async function SozlamalarPage({
           { v: "inventarizatsiya", l: "Inventarizatsiya" },
           { v: "marja", l: "Marja" },
           { v: "yetkazish", l: "Yetkazish kechikishi" },
+          { v: "zakaz", l: "Zakaz PDF" },
         ] as { v: Tab; l: string }[]).map((t) => (
           <Link
             key={t.v}
@@ -76,7 +79,29 @@ export default async function SozlamalarPage({
         ))}
       </div>
 
-      {tab === "spisaniya" ? <SpisaniyaTab /> : tab === "sverka" ? <SverkaTab /> : tab === "inventarizatsiya" ? <InventarizatsiyaTab /> : tab === "marja" ? <MarjaTab /> : <YetkazishTab />}
+      {tab === "spisaniya" ? <SpisaniyaTab /> : tab === "sverka" ? <SverkaTab /> : tab === "inventarizatsiya" ? <InventarizatsiyaTab /> : tab === "marja" ? <MarjaTab /> : tab === "yetkazish" ? <YetkazishTab /> : <ZakazTab />}
+    </div>
+  );
+}
+
+// ─── Zakaz PDF (qabul qilinganda nakladnoy Telegram guruhga) ──────────────────
+
+async function ZakazTab() {
+  const cfg = await getZakazPdfConfig();
+  return (
+    <div className="space-y-5">
+      <SectionCard
+        title="Zakaz nakladnoy (PDF) bot"
+        description="Zakaz 'Zakaz qabul qilindi' holatiga o'tganda nakladnoy PDF sifatida guruh topigiga yuboriladi"
+        actions={<MessageSquare className="h-4 w-4 text-muted-foreground" />}
+      >
+        <ZakazPdfEditor
+          tokenSet={!!cfg.token}
+          chatId={cfg.chatId ?? ""}
+          topicId={cfg.topicId != null ? String(cfg.topicId) : ""}
+          autoEnabled={cfg.autoEnabled}
+        />
+      </SectionCard>
     </div>
   );
 }
