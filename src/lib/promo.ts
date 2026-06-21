@@ -20,13 +20,13 @@ export const DOIMIY_PROMO_TYPES = [
 export type DoimiyPromoType = (typeof DOIMIY_PROMO_TYPES)[number];
 
 // Doimiy aksiya turlari uchun meta — tab nomi, mijoz signali, odatiy davomiyligi
-// (kun; null = doimiy/oylik), mas'ul boshqaruvchi. Rasmdagi jadvalga mos.
+// (kun; null = doimiy/oylik). Rasmdagi jadvalga mos.
 export const PROMO_TYPE_META: Record<
   DoimiyPromoType,
-  { label: string; signal: string; durationDays: number | null; owner: string }
+  { label: string; signal: string; durationDays: number | null }
 > = {
-  KUN_TAKLIFI: { label: "Kun taklifi", signal: "FAQAT BUGUN!", durationDays: 1, owner: "Kategoriyalar bo'yicha menejer (KM)" },
-  HAFTA_CHEGIRMA: { label: "Hafta chegirmasi", signal: "HAFTALIK FOYDA", durationDays: 7, owner: "KM va marketing" },
-  BIZBOP_NARX: { label: "Bizbop narx", signal: "HAR DOIM ARZON", durationDays: null, owner: "KM / Tijorat departamenti" },
-  AAARZON: { label: "A-a-arzon narx!", signal: "ENG KUCHLI CHEGIRMA!", durationDays: 14, owner: "KM, marketing va 1C operatori" },
+  KUN_TAKLIFI: { label: "Kun taklifi", signal: "FAQAT BUGUN!", durationDays: 1 },
+  HAFTA_CHEGIRMA: { label: "Hafta chegirmasi", signal: "HAFTALIK FOYDA", durationDays: 7 },
+  BIZBOP_NARX: { label: "Bizbop narx", signal: "HAR DOIM ARZON", durationDays: null },
+  AAARZON: { label: "A-a-arzon narx!", signal: "ENG KUCHLI CHEGIRMA!", durationDays: 14 },
 };
