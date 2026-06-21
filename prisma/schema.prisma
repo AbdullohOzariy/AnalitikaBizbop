@@ -405,6 +405,8 @@ model Agent {
   contactName String? // mas'ul shaxs
   sortOrder   Int      @default(0)
   createdAt   DateTime @default(now())
+  // Haftalik takrorlanuvchi zakaz qabul kunlari: 0=Yakshanba ... 6=Shanba (JS getUTCDay)
+  orderWeekdays Int[]  @default([])
 
   supplier  Supplier        @relation(fields: [supplierId], references: [id], onDelete: Cascade)
   products  Product[]

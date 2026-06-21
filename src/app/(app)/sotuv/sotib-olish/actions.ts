@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { requireOrderCreator } from "@/lib/auth-helpers";
 import { auth } from "@/auth";
 import { ORDER_STATUSES, canTransition, canEditItems, canEnterFact, hisobMinStock, hisobMaxStock, type OrderStatusT } from "./order-status";
+import { nextOrderDate } from "@/lib/order-days";
 import { isSystemAdmin } from "@/lib/roles";
 import { actionError } from "@/lib/action-error";
 import { scopeParentIds, scopeProductWhere } from "@/lib/scope";
@@ -92,10 +93,10 @@ export async function suppliersForOrderAction(): Promise<
     const agentIds = [...new Set(grouped.map((g) => g.agentId).filter((x): x is number => x != null))];
     const todayD = new Date(new Date(Date.now() + 5 * 3_600_000).toISOString().slice(0, 10) + "T00:00:00.000Z");
     const [sups, agentsRaw, supNextDays, agentNextDays] = await Promise.all([
-      prisma.supplier.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } }),
+      prisma.supplier.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, orderWeekdays: true } }),
       agentIds.length
-        ? prisma.agent.findMany({ where: { id: { in: agentIds } }, select: { id: true, name: true, supplierId: true } })
-        : Promise.resolve([] as { id: number; name: string; supplierId: number }[]),
+        ? prisma.agent.findMany({ where: { id: { in: agentIds } }, select: { id: true, name: true, supplierId: true, orderWeekdays: true } })
+        : Promise.resolve([] as { id: number; name: string; supplierId: number; orderWeekdays: number[] }[]),
       prisma.supplierOrderDay.groupBy({
         by: ["supplierId"],
         where: { supplierId: { in: ids }, sana: { gte: todayD } },
@@ -105,9 +106,15 @@ export async function suppliersForOrderAction(): Promise<
         ? prisma.agentOrderDay.groupBy({ by: ["agentId"], where: { agentId: { in: agentIds }, sana: { gte: todayD } }, _min: { sana: true } })
         : Promise.resolve([] as { agentId: number; _min: { sana: Date | null } }[]),
     ]);
+    const todayStr = todayD.toISOString().slice(0, 10);
     const supNextBy = new Map(supNextDays.map((r) => [r.supplierId, r._min.sana!.toISOString().slice(0, 10)]));
     const agentNextBy = new Map(agentNextDays.map((r) => [r.agentId, r._min.sana!.toISOString().slice(0, 10)]));
+    const supWd = new Map(sups.map((s) => [s.id, s.orderWeekdays]));
+    const agentWd = new Map(agentsRaw.map((a) => [a.id, a.orderWeekdays]));
     const supName = new Map(sups.map((s) => [s.id, s.name]));
+    // Keyingi zakaz kuni = eng yaqin aniq sana yoki doimiy hafta kuni
+    const supNext = (sid: number) => nextOrderDate(todayStr, supNextBy.get(sid) ? [supNextBy.get(sid)!] : [], supWd.get(sid) ?? []);
+    const agentNext = (aid: number) => nextOrderDate(todayStr, agentNextBy.get(aid) ? [agentNextBy.get(aid)!] : [], agentWd.get(aid) ?? []);
 
     const agentCount = new Map<number, number>(); // agentId → SKU soni
     const supTotal = new Map<number, number>();
@@ -121,7 +128,7 @@ export async function suppliersForOrderAction(): Promise<
     const agentsBySup = new Map<number, AgentOption[]>();
     for (const a of agentsRaw) {
       const arr = agentsBySup.get(a.supplierId) ?? [];
-      arr.push({ id: a.id, name: a.name, skuCount: agentCount.get(a.id) ?? 0, nextOrderDate: agentNextBy.get(a.id) ?? null });
+      arr.push({ id: a.id, name: a.name, skuCount: agentCount.get(a.id) ?? 0, nextOrderDate: agentNext(a.id) });
       agentsBySup.set(a.supplierId, arr);
     }
     const suppliers: SupplierOption[] = ids
@@ -130,7 +137,7 @@ export async function suppliersForOrderAction(): Promise<
         name: supName.get(sid) ?? "—",
         skuCount: supTotal.get(sid) ?? 0,
         agentlessSkuCount: supAgentless.get(sid) ?? 0,
-        nextOrderDate: supNextBy.get(sid) ?? null,
+        nextOrderDate: supNext(sid),
         agents: (agentsBySup.get(sid) ?? []).sort((a, b) => a.name.localeCompare(b.name, "uz")),
       }))
       .sort((a, b) => a.name.localeCompare(b.name, "uz"));

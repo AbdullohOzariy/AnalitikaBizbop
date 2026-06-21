@@ -69,13 +69,14 @@ export default async function BugunPage() {
   const todayD = new Date(todayStr + "T00:00:00.000Z");
   const tomorrowD = new Date(todayD.getTime() + 86_400_000);
   const scopeProd = scopeProductWhere(scopeParents);
+  // Zakaz kuni = aniq sana (OrderDay) YOKI doimiy hafta kuni (orderWeekdays)
   const agentWhere = (d: Date) => ({
-    orderDays: { some: { sana: d } },
+    OR: [{ orderDays: { some: { sana: d } } }, { orderWeekdays: { has: d.getUTCDay() } }],
     products: { some: { archivedAt: null, ...scopeProd } },
   });
   // Agentsiz: faqat agentga biriktirilmagan (agentId:null) SKU'lari bor supplier
   const supplierWhere = (d: Date) => ({
-    orderDays: { some: { sana: d } },
+    OR: [{ orderDays: { some: { sana: d } } }, { orderWeekdays: { has: d.getUTCDay() } }],
     products: { some: { archivedAt: null, agentId: null, ...scopeProd } },
   });
 

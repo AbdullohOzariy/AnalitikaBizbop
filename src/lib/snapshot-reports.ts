@@ -213,20 +213,24 @@ function sdCte(f: SnapshotFilters, todayStr: string): Prisma.Sql {
     sd AS (
       SELECT l."productId", l."branchId", l.code, l.pname, l."categoryId", l.bname, l."periodEnd",
              l.abc, l.xyz, l.lead,
-             -- Yetib kelish kunlari = keyingi zakaz sanasigacha (kalendar kunlari,
-             -- belgilanmagan bo'lsa 0 — istalgan kuni) + SKU lead time. Lead kiritilmagan — NULL.
+             -- Yetib kelish kunlari = keyingi zakaz kunigacha + SKU lead time.
+             -- Keyingi zakaz kuni = eng yaqin ANIQ sana (OrderDay) YOKI DOIMIY hafta kuni
+             -- (orderWeekdays: (wd - bugun_DOW + 7) % 7 kun ichida). Belgilanmagan — 0
+             -- (istalgan kuni). Lead kiritilmagan — NULL.
              CASE WHEN l.lead IS NOT NULL THEN
-               COALESCE(
-                 CASE WHEN l.agid IS NOT NULL THEN (
-                   SELECT MIN(aod.sana - ${todayStr}::date)
-                   FROM "AgentOrderDay" aod
-                   WHERE aod."agentId" = l.agid AND aod.sana >= ${todayStr}::date
-                 ) ELSE (
-                   SELECT MIN(od.sana - ${todayStr}::date)
-                   FROM "SupplierOrderDay" od
-                   WHERE od."supplierId" = l.supid AND od.sana >= ${todayStr}::date
+               COALESCE(NULLIF(
+                 CASE WHEN l.agid IS NOT NULL THEN LEAST(
+                   COALESCE((SELECT MIN(aod.sana - ${todayStr}::date) FROM "AgentOrderDay" aod
+                             WHERE aod."agentId" = l.agid AND aod.sana >= ${todayStr}::date), 99999),
+                   COALESCE((SELECT MIN((wd - EXTRACT(DOW FROM ${todayStr}::date)::int + 7) % 7)
+                             FROM "Agent" ag, unnest(ag."orderWeekdays") wd WHERE ag.id = l.agid), 99999)
+                 ) ELSE LEAST(
+                   COALESCE((SELECT MIN(od.sana - ${todayStr}::date) FROM "SupplierOrderDay" od
+                             WHERE od."supplierId" = l.supid AND od.sana >= ${todayStr}::date), 99999),
+                   COALESCE((SELECT MIN((wd - EXTRACT(DOW FROM ${todayStr}::date)::int + 7) % 7)
+                             FROM "Supplier" s, unnest(s."orderWeekdays") wd WHERE s.id = l.supid), 99999)
                  ) END
-               , 0) + l.lead
+               , 99999), 0) + l.lead
              END AS arrival_days,
              l."stockQty",
              (a.sold_total / NULLIF(a.tracked_days, 0)) AS avg_daily,

@@ -17,10 +17,13 @@ import {
 import { Pill } from "@/components/common/page";
 import { cn } from "@/lib/utils";
 import { skuRowBg, skuBadgeCls, skuBadgeLabel, skuBadgeTitle } from "@/lib/sku-rang";
+import { weekdayOf, WEEKDAY_FULL, nextOrderDate } from "@/lib/order-days";
 import {
   updateSupplierProfileAction,
   toggleOrderDateAction,
   toggleAgentOrderDateAction,
+  toggleOrderWeekdayAction,
+  toggleAgentOrderWeekdayAction,
   saveContractAction,
   deleteContractAction,
   updateSkuPurchaseAction,
@@ -171,17 +174,32 @@ export function ProfilHeader({
 // KUNI butun oyda yonadi/o'chadi (yetkazib beruvchilar haftalik jadval bilan ishlaydi).
 
 export function OrderDaysCalendar({
-  supplierId, agentId, orderDates, canEdit = true, title = "Zakaz qabul kunlari", compact = false,
+  supplierId, agentId, orderDates, orderWeekdays = [], canEdit = true, title = "Zakaz qabul kunlari", compact = false,
 }: {
   // supplierId YOKI agentId beriladi — agentId bo'lsa agent kalendari (AgentOrderDay)
-  supplierId?: number; agentId?: number; orderDates: string[]; canEdit?: boolean; title?: string; compact?: boolean;
+  supplierId?: number; agentId?: number; orderDates: string[]; orderWeekdays?: number[]; canEdit?: boolean; title?: string; compact?: boolean;
 }) {
   const [dates, setDates] = useState<Set<string>>(new Set(orderDates));
+  const [weekdays, setWeekdays] = useState<Set<number>>(new Set(orderWeekdays));
   const [isPending, start] = useTransition();
   const toggleAction = (dstr: string) =>
     agentId != null
       ? toggleAgentOrderDateAction({ agentId, sana: dstr })
       : toggleOrderDateAction({ supplierId: supplierId!, sana: dstr });
+
+  // Doimiy hafta kunini belgilash/bekor — optimistik
+  const toggleWeekday = (wd: number) => {
+    if (!canEdit) return;
+    const next = new Set(weekdays);
+    if (next.has(wd)) next.delete(wd); else next.add(wd);
+    setWeekdays(next);
+    start(async () => {
+      const res = agentId != null
+        ? await toggleAgentOrderWeekdayAction({ agentId, weekday: wd })
+        : await toggleOrderWeekdayAction({ supplierId: supplierId!, weekday: wd });
+      if (!res.ok) { toast.error(res.error); setWeekdays(new Set(weekdays)); }
+    });
+  };
 
   // Joriy vaqt faqat mount'da o'qiladi (render purity — React Compiler talabi)
   const [now] = useState(() => new Date());
@@ -214,8 +232,8 @@ export function OrderDaysCalendar({
     });
   };
 
-  const future = [...dates].filter((d) => d >= todayStr).sort();
-  const nextDate = future[0] ?? null;
+  const futureCount = [...dates].filter((d) => d >= todayStr).length;
+  const nextDate = nextOrderDate(todayStr, [...dates], [...weekdays]);
   const fmtUz = (dstr: string) => {
     const [y, m, d] = dstr.split("-").map(Number);
     const OYLAR = ["yanvar", "fevral", "mart", "aprel", "may", "iyun", "iyul", "avgust", "sentabr", "oktabr", "noyabr", "dekabr"];
@@ -233,12 +251,39 @@ export function OrderDaysCalendar({
         </CardTitle>
         {!compact && (
           <p className="text-xs text-muted-foreground">
-            Kalendardan kunlarni BITTALAB belgilang (qayta bossangiz — bekor). Belgilangan sanalar
+            Hafta kuni tugmalari — <b>doimiy</b> qabul kunlari (har hafta takror, ko&apos;k).
+            Kalendardan <b>qo&apos;shimcha aniq kun</b> ham belgilash mumkin (yashil).
             &quot;Bugun&quot;, buyurtma oynasi va Stockday hisoblarida ishlatiladi.
           </p>
         )}
       </CardHeader>
       <CardContent className="space-y-3">
+        {/* Doimiy hafta kunlari — bir marta bosing, har hafta shu kun qabul kuni bo'ladi */}
+        <div className="space-y-1.5">
+          <p className="text-[11px] font-medium text-muted-foreground">Doimiy hafta kunlari (har hafta takror):</p>
+          <div className="grid grid-cols-7 gap-1">
+            {[1, 2, 3, 4, 5, 6, 0].map((wd) => {
+              const on = weekdays.has(wd);
+              return (
+                <button
+                  key={wd}
+                  onClick={() => toggleWeekday(wd)}
+                  disabled={!canEdit || isPending}
+                  title={`${WEEKDAY_FULL[wd]} — har hafta ${on ? "bekor qilish" : "belgilash"}`}
+                  className={cn(
+                    "h-8 rounded-lg border text-xs font-semibold transition-colors disabled:opacity-50",
+                    on
+                      ? "border-sky-500/60 bg-sky-500/20 text-sky-700 dark:text-sky-300"
+                      : "border-border/50 text-muted-foreground hover:bg-muted/40"
+                  )}
+                >
+                  {WD_SHORT[wd]}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Oy navigatsiyasi */}
         <div className="flex items-center justify-between">
           <button onClick={() => shiftMonth(-1)} aria-label="Oldingi oy"
@@ -261,18 +306,28 @@ export function OrderDaysCalendar({
           {Array.from({ length: daysInMonth }).map((_, i) => {
             const dnum = i + 1;
             const dstr = ymd(view.y, view.m, dnum);
-            const active = dates.has(dstr);
+            const explicit = dates.has(dstr);
+            const recurring = weekdays.has(weekdayOf(dstr));
+            const active = explicit || recurring;
             const isToday = dstr === todayStr;
             const otgan = dstr < todayStr;
             return (
               <button
                 key={dnum}
                 onClick={() => toggle(dstr)}
-                title={active ? "Zakaz kuni — bekor qilish uchun bosing" : "Belgilash uchun bosing"}
+                title={
+                  recurring && !explicit
+                    ? `Doimiy (${WEEKDAY_FULL[weekdayOf(dstr)]}) — hafta kuni tugmasidan boshqariladi`
+                    : explicit
+                    ? "Aniq kun — bekor qilish uchun bosing"
+                    : "Qo'shimcha aniq kun belgilash uchun bosing"
+                }
                 className={cn(
                   "flex h-9 items-center justify-center rounded-lg border text-xs tabular-nums transition-colors",
-                  active
+                  explicit
                     ? "border-emerald-500/60 bg-emerald-500/20 font-bold text-emerald-800 dark:text-emerald-300"
+                    : recurring
+                    ? "border-sky-500/50 bg-sky-500/15 font-semibold text-sky-700 dark:text-sky-300"
                     : "border-border/50 text-muted-foreground hover:bg-muted/40",
                   otgan && !active && "opacity-40",
                   isToday && "ring-2 ring-primary/60"
@@ -286,21 +341,24 @@ export function OrderDaysCalendar({
 
         {/* Holat: keyingi kun + tugayotgan kunlar ogohlantirishi */}
         <div className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-sm">
-          {future.length === 0 ? (
-            <span className="text-muted-foreground">Kelgusi zakaz kunlari belgilanmagan.</span>
+          {!nextDate ? (
+            <span className="text-muted-foreground">Zakaz kunlari belgilanmagan.</span>
           ) : (
             <>
               Keyingi zakaz kuni:{" "}
               <span className="font-semibold">
-                {nextDate === todayStr ? "Bugun" : fmtUz(nextDate!)}
+                {nextDate === todayStr ? "Bugun" : fmtUz(nextDate)}
               </span>
-              <span className="ml-2 text-xs text-muted-foreground">· oldinda {future.length} ta kun belgilangan</span>
+              <span className="ml-2 text-xs text-muted-foreground">
+                {weekdays.size > 0 && `· ${weekdays.size} ta doimiy hafta kuni`}
+                {futureCount > 0 && ` · ${futureCount} ta qo'shimcha aniq kun`}
+              </span>
             </>
           )}
         </div>
-        {future.length > 0 && future.length < 3 && (
+        {weekdays.size === 0 && futureCount > 0 && futureCount < 3 && (
           <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
-            ⚠ Kelgusi kunlar kam qoldi — keyingi oylar uchun ham kalendardan belgilab qo&apos;ying.
+            ⚠ Kelgusi aniq kunlar kam qoldi — doimiy hafta kunini belgilang (yuqorida) yoki kalendardan qo&apos;shing.
           </p>
         )}
       </CardContent>
@@ -356,7 +414,7 @@ export function AgentsSection({ supplierId, agents, canEdit = true }: { supplier
     const pad = (n: number) => String(n).padStart(2, "0");
     return `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`;
   });
-  const nextDate = (a: AgentRow) => a.orderDates.filter((d) => d >= todayStr).sort()[0] ?? null;
+  const nextDate = (a: AgentRow) => nextOrderDate(todayStr, a.orderDates, a.orderWeekdays);
 
   return (
     <Card>
@@ -437,7 +495,7 @@ export function AgentsSection({ supplierId, agents, canEdit = true }: { supplier
                   </div>
                   {openCal === a.id && (
                     <div className="border-t border-border/60 p-3">
-                      <OrderDaysCalendar agentId={a.id} orderDates={a.orderDates} canEdit={canEdit} title={`Zakaz kunlari — ${a.name}`} compact />
+                      <OrderDaysCalendar agentId={a.id} orderDates={a.orderDates} orderWeekdays={a.orderWeekdays} canEdit={canEdit} title={`Zakaz kunlari — ${a.name}`} compact />
                     </div>
                   )}
                 </div>

@@ -164,6 +164,62 @@ export async function toggleOrderDateAction(
   }
 }
 
+const weekdaySchema = z.object({
+  supplierId: z.coerce.number().int().positive(),
+  weekday: z.coerce.number().int().min(0).max(6),
+});
+
+/** Doimiy hafta kunini (0=Yakshanba..6=Shanba) belgilash/bekor qilish — har hafta takror. */
+export async function toggleOrderWeekdayAction(
+  input: z.input<typeof weekdaySchema>
+): Promise<{ ok: true; belgilandi: boolean } | { ok: false; error: string }> {
+  try {
+    await requireSupplierEditor();
+    const p = weekdaySchema.parse(input);
+    const cur = await prisma.supplier.findUnique({ where: { id: p.supplierId }, select: { orderWeekdays: true } });
+    if (!cur) return { ok: false, error: "Yetkazib beruvchi topilmadi." };
+    const has = cur.orderWeekdays.includes(p.weekday);
+    const next = has
+      ? cur.orderWeekdays.filter((w) => w !== p.weekday)
+      : [...cur.orderWeekdays, p.weekday].sort((a, b) => a - b);
+    await prisma.supplier.update({ where: { id: p.supplierId }, data: { orderWeekdays: next } });
+    revalidateTag(SUPPLIERS_TAG, "max");
+    revalidateTag(ANALYTICS_CACHE_TAG, "max");
+    revalidatePath(`/baza/taminotchilar/${p.supplierId}`);
+    return { ok: true, belgilandi: !has };
+  } catch (err) {
+    return actionError(err, "toggleOrderWeekday");
+  }
+}
+
+const agentWeekdaySchema = z.object({
+  agentId: z.coerce.number().int().positive(),
+  weekday: z.coerce.number().int().min(0).max(6),
+});
+
+/** Agent uchun doimiy hafta kunini belgilash/bekor qilish. */
+export async function toggleAgentOrderWeekdayAction(
+  input: z.input<typeof agentWeekdaySchema>
+): Promise<{ ok: true; belgilandi: boolean } | { ok: false; error: string }> {
+  try {
+    await requireSupplierEditor();
+    const p = agentWeekdaySchema.parse(input);
+    const cur = await prisma.agent.findUnique({ where: { id: p.agentId }, select: { orderWeekdays: true, supplierId: true } });
+    if (!cur) return { ok: false, error: "Agent topilmadi." };
+    const has = cur.orderWeekdays.includes(p.weekday);
+    const next = has
+      ? cur.orderWeekdays.filter((w) => w !== p.weekday)
+      : [...cur.orderWeekdays, p.weekday].sort((a, b) => a - b);
+    await prisma.agent.update({ where: { id: p.agentId }, data: { orderWeekdays: next } });
+    revalidateTag(SUPPLIERS_TAG, "max");
+    revalidateTag(ANALYTICS_CACHE_TAG, "max");
+    revalidatePath(`/baza/taminotchilar/${cur.supplierId}`);
+    return { ok: true, belgilandi: !has };
+  } catch (err) {
+    return actionError(err, "toggleAgentOrderWeekday");
+  }
+}
+
 // ── Shartnomalar ──
 
 export type ContractRow = {
@@ -339,7 +395,8 @@ export type AgentRow = {
   contactName: string | null;
   sortOrder: number;
   skuCount: number;
-  orderDates: string[]; // YYYY-MM-DD — kalendar uchun
+  orderDates: string[]; // YYYY-MM-DD — aniq kunlar (kalendar uchun)
+  orderWeekdays: number[]; // 0..6 doimiy hafta kunlari
 };
 
 const agentCreateSchema = z.object({

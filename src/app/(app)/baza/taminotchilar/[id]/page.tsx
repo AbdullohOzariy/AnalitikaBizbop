@@ -90,6 +90,7 @@ export default async function SupplierProfilePage({
     sortOrder: a.sortOrder,
     skuCount: agentSkuCount.get(a.id) ?? 0,
     orderDates: a.orderDays.map((d) => d.sana.toISOString().slice(0, 10)),
+    orderWeekdays: a.orderWeekdays,
   }));
   const agentOptions = agents.map((a) => ({ id: a.id, name: a.name }));
 
@@ -157,6 +158,7 @@ export default async function SupplierProfilePage({
           <OrderDaysCalendar
             supplierId={supplier.id}
             orderDates={supplier.orderDays.map((d) => d.sana.toISOString().slice(0, 10))}
+            orderWeekdays={supplier.orderWeekdays}
             canEdit={canEdit}
             title={agents.length > 0 ? "Zakaz kunlari — agentsiz SKU" : "Zakaz qabul kunlari"}
           />
