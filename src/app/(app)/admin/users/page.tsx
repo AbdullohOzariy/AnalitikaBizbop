@@ -25,6 +25,9 @@ const ROLE_CONFIG: Record<
   CEO:          { label: "CEO",                  tone: "blue",   icon: "C" },
   CAT_MANAGER:  { label: "Kategoriya menejeri", tone: "blue",   icon: "K" },
   SUPPLYCHAIN:  { label: "Supplychain",         tone: "blue",   icon: "S" },
+  HEAD_CAT_MANAGER: { label: "Kat. menejerlari boshi", tone: "blue", icon: "H" },
+  MERCHANDISER: { label: "Merchandayzer",       tone: "blue",   icon: "M" },
+  OPERATOR:     { label: "Operator",            tone: "muted",  icon: "O" },
   VIEWER:       { label: "Ko'ruvchi",           tone: "muted",  icon: "V" },
 };
 

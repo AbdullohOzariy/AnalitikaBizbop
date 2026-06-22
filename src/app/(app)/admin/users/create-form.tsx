@@ -48,13 +48,15 @@ const ROLE_OPTIONS = [
   { value: "CEO",          label: "CEO",                 desc: "Dashboard V1+V2, Spisaniya, OOS — faqat ko'rish" },
   { value: "ADMIN",        label: "Bo'lim boshlig'i",    desc: "Hammasini ko'radi (Tizimsiz) + anketalarni tasdiqlaydi" },
   { value: "HEAD_CAT_MANAGER", label: "Kategoriya menejerlari boshi", desc: "BARCHA kategoriyalar bo'yicha menejer ishi + yetkazib beruvchilarni ko'rish" },
+  { value: "MERCHANDISER", label: "Merchandayzer",       desc: "Faqat Promo (Aksiyalar) — ko'rish va tahrirlash" },
+  { value: "OPERATOR",     label: "Operator",            desc: "Faqat Hisobdan chiqarish + Sverka — kuzatish (read-only)" },
   { value: "SYSTEM_ADMIN", label: "System Admin",        desc: "To'liq huquq — barcha tahrir + Tizim bo'limi" },
 ] as const;
 
 // ── Forma ─────────────────────────────────────────────────────────────────────
 export function CreateUserForm() {
   const formRef = useRef<HTMLFormElement>(null);
-  const [role, setRole]           = useState<"CAT_MANAGER" | "CEO" | "ADMIN" | "SYSTEM_ADMIN" | "SUPPLYCHAIN" | "HEAD_CAT_MANAGER">("CAT_MANAGER");
+  const [role, setRole]           = useState<"CAT_MANAGER" | "CEO" | "ADMIN" | "SYSTEM_ADMIN" | "SUPPLYCHAIN" | "HEAD_CAT_MANAGER" | "MERCHANDISER" | "OPERATOR">("CAT_MANAGER");
   const [showPass, setShowPass]   = useState(false);
   const [isPending, start]        = useTransition();
 
