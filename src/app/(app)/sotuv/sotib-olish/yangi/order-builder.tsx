@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { SearchablePicker } from "@/components/common/searchable-picker";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -225,12 +226,7 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
   // Joriy vaqt faqat mount'da o'qiladi (render purity); hisob arzon — memo shart emas.
   const [hintNow] = useState(() => new Date());
   const selectedSupplier = useMemo(() => suppliers.find((s) => String(s.id) === supplierId), [suppliers, supplierId]);
-  // base-ui Select: trigger'da qiymat (id) emas, NOM ko'rinishi uchun items (qiymat→label) kerak
-  const supplierLabels = useMemo(() => {
-    const o: Record<string, React.ReactNode> = {};
-    for (const s of suppliers) o[String(s.id)] = s.name;
-    return o;
-  }, [suppliers]);
+  // base-ui Select (agent): trigger'da NOM ko'rinishi uchun items (qiymat→label) kerak
   const agentLabels = useMemo(() => {
     const o: Record<string, React.ReactNode> = { none: "Agentsiz (umumiy)" };
     for (const a of selectedSupplier?.agents ?? []) o[String(a.id)] = a.name;
@@ -410,16 +406,16 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
       <div className="flex flex-wrap items-end gap-3">
         <div className="space-y-1">
           <Label className="text-xs text-muted-foreground">Yetkazib beruvchi</Label>
-          <Select value={supplierId} onValueChange={(v) => onSupplier(v ?? "")} disabled={loadingSup || saving} items={supplierLabels}>
-            <SelectTrigger className="h-9 w-72 text-sm">
-              <SelectValue placeholder={loadingSup ? "Yuklanmoqda…" : "Yetkazib beruvchi tanlang…"} />
-            </SelectTrigger>
-            <SelectContent>
-              {suppliers.map((s) => (
-                <SelectItem key={s.id} value={String(s.id)}>{s.name} · {s.skuCount} SKU</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <SearchablePicker
+            title="Yetkazib beruvchi tanlash"
+            placeholder={loadingSup ? "Yuklanmoqda…" : "Yetkazib beruvchi tanlang…"}
+            searchPlaceholder="Nomi bo'yicha qidirish..."
+            disabled={loadingSup || saving}
+            value={supplierId || null}
+            onPick={(id) => onSupplier(id)}
+            options={suppliers.map((s) => ({ id: String(s.id), label: s.name, hint: `${s.skuCount} SKU` }))}
+            triggerClassName="h-9 w-72"
+          />
         </div>
         {selectedSupplier && selectedSupplier.agents.length > 0 && (
           <div className="space-y-1">
