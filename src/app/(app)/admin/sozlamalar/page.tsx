@@ -29,8 +29,10 @@ import { DeliveryAlertEditor } from "./delivery-alert-editor";
 import { getDeliveryAlertConfig } from "@/lib/delivery-alert/sozlama";
 import { ZakazPdfEditor } from "./zakaz-pdf-editor";
 import { getZakazPdfConfig } from "@/lib/zakaz-pdf/sozlama";
+import { SpisaniyaDailyEditor } from "./spisaniya-daily-editor";
+import { getSpisaniyaDailyConfig } from "@/lib/spisaniya-daily/sozlama";
 
-type Tab = "spisaniya" | "sverka" | "inventarizatsiya" | "marja" | "yetkazish" | "zakaz";
+type Tab = "spisaniya" | "sverka" | "inventarizatsiya" | "marja" | "yetkazish" | "zakaz" | "spdaily";
 
 export default async function SozlamalarPage({
   searchParams,
@@ -42,7 +44,7 @@ export default async function SozlamalarPage({
   if (session.user.role !== "SYSTEM_ADMIN") redirect("/dashboard");
 
   const sp = await searchParams;
-  const tab: Tab = sp.tab === "sverka" ? "sverka" : sp.tab === "inventarizatsiya" ? "inventarizatsiya" : sp.tab === "marja" ? "marja" : sp.tab === "yetkazish" ? "yetkazish" : sp.tab === "zakaz" ? "zakaz" : "spisaniya";
+  const tab: Tab = sp.tab === "sverka" ? "sverka" : sp.tab === "inventarizatsiya" ? "inventarizatsiya" : sp.tab === "marja" ? "marja" : sp.tab === "yetkazish" ? "yetkazish" : sp.tab === "zakaz" ? "zakaz" : sp.tab === "spdaily" ? "spdaily" : "spisaniya";
 
   return (
     <div className="space-y-5">
@@ -61,6 +63,7 @@ export default async function SozlamalarPage({
           { v: "marja", l: "Marja" },
           { v: "yetkazish", l: "Yetkazish kechikishi" },
           { v: "zakaz", l: "Zakaz PDF" },
+          { v: "spdaily", l: "Spisaniya kunlik" },
         ] as { v: Tab; l: string }[]).map((t) => (
           <Link
             key={t.v}
@@ -79,7 +82,29 @@ export default async function SozlamalarPage({
         ))}
       </div>
 
-      {tab === "spisaniya" ? <SpisaniyaTab /> : tab === "sverka" ? <SverkaTab /> : tab === "inventarizatsiya" ? <InventarizatsiyaTab /> : tab === "marja" ? <MarjaTab /> : tab === "yetkazish" ? <YetkazishTab /> : <ZakazTab />}
+      {tab === "spisaniya" ? <SpisaniyaTab /> : tab === "sverka" ? <SverkaTab /> : tab === "inventarizatsiya" ? <InventarizatsiyaTab /> : tab === "marja" ? <MarjaTab /> : tab === "yetkazish" ? <YetkazishTab /> : tab === "zakaz" ? <ZakazTab /> : <SpisaniyaDailyTab />}
+    </div>
+  );
+}
+
+// ─── Spisaniya kunlik indikator hisoboti (eng xavfli subkat + filial) ─────────
+
+async function SpisaniyaDailyTab() {
+  const cfg = await getSpisaniyaDailyConfig();
+  return (
+    <div className="space-y-5">
+      <SectionCard
+        title="Spisaniya kunlik indikator boti"
+        description="Har kuni 09:30 (Toshkent) — kechagi kun bo'yicha eng xavfli subkategoriya va filial"
+        actions={<MessageSquare className="h-4 w-4 text-muted-foreground" />}
+      >
+        <SpisaniyaDailyEditor
+          tokenSet={!!cfg.token}
+          chatId={cfg.chatId ?? ""}
+          topicId={cfg.topicId != null ? String(cfg.topicId) : ""}
+          autoEnabled={cfg.autoEnabled}
+        />
+      </SectionCard>
     </div>
   );
 }

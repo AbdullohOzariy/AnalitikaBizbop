@@ -125,6 +125,33 @@ export async function register() {
     }
   }
 
+  // SPISANIYA kunlik indikator hisoboti — har kuni 09:30 (Toshkent): kechagi kun
+  // bo'yicha eng xavfli subkategoriya + filial sozlangan guruhga. Faqat YOQILGAN bo'lsa.
+  {
+    const gg = globalThis as typeof globalThis & { __spDailyCron?: boolean };
+    if (!gg.__spDailyCron) {
+      gg.__spDailyCron = true;
+      try {
+        const { schedule } = await import("node-cron");
+        schedule("30 9 * * *", async () => {
+          try {
+            const { getSpisaniyaDailyConfig } = await import("@/lib/spisaniya-daily/sozlama");
+            if (!(await getSpisaniyaDailyConfig()).autoEnabled) return; // avto yuborish o'chirilgan
+            const { sendSpisaniyaDailyReport } = await import("@/lib/spisaniya-daily/report");
+            const r = await sendSpisaniyaDailyReport();
+            if (!r.ok) console.warn("[spisaniya-daily] yuborilmadi:", r.error);
+            else console.log(`[spisaniya-daily] yuborildi: jami ${r.total}`);
+          } catch (e) {
+            console.error("[spisaniya-daily] xato:", e instanceof Error ? e.message : e);
+          }
+        }, { timezone: "Asia/Tashkent" });
+        console.log("[instrumentation] Spisaniya kunlik cron o'rnatildi: har kuni 09:30 (Asia/Tashkent)");
+      } catch (e) {
+        console.warn("[instrumentation] spisaniya-daily cron o'rnatilmadi:", e instanceof Error ? e.message : e);
+      }
+    }
+  }
+
   const token = process.env.BOT_TOKEN;
   const base = (process.env.WEBHOOK_URL || "").replace(/\/$/, "");
   if (!token || !base) {

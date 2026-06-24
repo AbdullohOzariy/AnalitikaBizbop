@@ -390,3 +390,45 @@ export async function zakazPdfTestAction(): Promise<{ ok: true; orderId: number 
     return { ok: false, error: msg.includes("Ruxsat") ? "Ruxsat yo'q." : msg };
   }
 }
+
+// ─── Spisaniya kunlik indikator hisoboti (eng xavfli subkat + filial) ──────────
+
+/** Bot token + guruh chat id + topic id + avto-yoqish'ni saqlash. token bo'sh — o'zgartirilmaydi. */
+export async function spisaniyaDailySaqlaAction(input: {
+  token: string; chatId: string; topicId: string; autoEnabled: boolean;
+}): Promise<Result> {
+  try {
+    await requireAdmin();
+    const token = input.token.trim();
+    const chatId = input.chatId.trim();
+    const topicId = input.topicId.trim();
+    if (!chatId) {
+      return { ok: false, error: "Guruh chat ID kiritilishi shart (bo'sh saqlasangiz yuborish o'chadi)." };
+    }
+    if (!/^-?\d{5,20}$/.test(chatId)) {
+      return { ok: false, error: "Guruh chat ID raqam bo'lishi kerak (odatda -100... ko'rinishida)." };
+    }
+    if (topicId && !/^\d{1,12}$/.test(topicId)) {
+      return { ok: false, error: "Topic ID musbat raqam bo'lishi kerak." };
+    }
+    if (token && !/^\d{6,}:[A-Za-z0-9_-]{20,}$/.test(token)) {
+      return { ok: false, error: "Bot token noto'g'ri (123456:ABC... ko'rinishida)." };
+    }
+    const { setSpisaniyaDailyConfig } = await import("@/lib/spisaniya-daily/sozlama");
+    await setSpisaniyaDailyConfig({ token, chatId, topicId, autoEnabled: !!input.autoEnabled });
+    revalidatePath(RP);
+    return { ok: true };
+  } catch (err) { return xato(err); }
+}
+
+/** Kunlik hisobotni hoziroq yuborish (sinov). Jami chiqim summasini qaytaradi. */
+export async function spisaniyaDailyYuborAction(): Promise<{ ok: true; total: number } | { ok: false; error: string }> {
+  try {
+    await requireAdmin();
+    const { sendSpisaniyaDailyReport } = await import("@/lib/spisaniya-daily/report");
+    return await sendSpisaniyaDailyReport();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Xato.";
+    return { ok: false, error: msg.includes("Ruxsat") ? "Ruxsat yo'q." : msg };
+  }
+}

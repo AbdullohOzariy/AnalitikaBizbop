@@ -1,0 +1,83 @@
+import { Telegram } from "telegraf";
+import { getSpisaniyaDailyConfig } from "./sozlama";
+import { chiqimByBranch, chiqimByKategoriya, type ChiqimRange } from "@/lib/spisaniya/db";
+
+const NF = new Intl.NumberFormat("uz-UZ");
+const money = (n: number) => NF.format(Math.round(n));
+
+/** Kechagi kun (Toshkent UTC+5) — bir kunlik davr + ko'rinadigan sana yorlig'i. */
+function yesterdayRange(): { range: ChiqimRange; label: string } {
+  const todayStr = new Date(Date.now() + 5 * 3_600_000).toISOString().slice(0, 10);
+  const today = new Date(todayStr + "T00:00:00.000Z");
+  const y = new Date(today.getTime() - 86_400_000);
+  const [yy, mm, dd] = y.toISOString().slice(0, 10).split("-");
+  return { range: { start: y, end: y }, label: `${dd}.${mm}.${yy}` };
+}
+
+/**
+ * Kechagi kun bo'yicha indikatorli matn — jami + eng xavfli subkategoriya va
+ * eng xavfli filial (summa bo'yicha tartib, chiqim soni indikator sifatida).
+ * Ma'lumot bo'lmasa null.
+ */
+export async function buildSpisaniyaDailyText(): Promise<{ text: string; total: number; label: string } | null> {
+  const { range, label } = yesterdayRange();
+  const [byBranch, byKat] = await Promise.all([
+    chiqimByBranch(range),       // ORDER BY summa DESC → [0] eng xavfli filial
+    chiqimByKategoriya(range),   // ORDER BY summa DESC → [0] eng xavfli subkategoriya
+  ]);
+  const total = byBranch.reduce((s, r) => s + r.summa, 0);
+  const totalCount = byBranch.reduce((s, r) => s + r.count, 0);
+  if (total === 0 && totalCount === 0) return null;
+
+  const pct = (n: number) => (total > 0 ? Math.round((n / total) * 100) : 0);
+  const topKat = byKat[0];
+  const topBranch = byBranch[0];
+
+  const lines: string[] = [
+    "📉 <b>Spisaniya — kunlik hisobot</b>",
+    `🗓 ${label}`,
+    "",
+    `Jami chiqim: <b>${money(total)}</b> so'm · ${totalCount} ta yozuv`,
+    "",
+  ];
+  if (topKat) {
+    lines.push(
+      "🔴 <b>Eng xavfli subkategoriya</b>",
+      `   ${topKat.kategoriya} — <b>${money(topKat.summa)}</b> so'm · ${topKat.count} ta (jami ${pct(topKat.summa)}%)`,
+      ""
+    );
+  }
+  if (topBranch) {
+    lines.push(
+      "🏢 <b>Eng xavfli filial</b>",
+      `   ${topBranch.filial} — <b>${money(topBranch.summa)}</b> so'm · ${topBranch.count} ta (jami ${pct(topBranch.summa)}%)`
+    );
+  }
+  return { text: lines.join("\n"), total, label };
+}
+
+/**
+ * Kunlik indikator hisobotini sozlangan guruh (topic) ga yuboradi.
+ * Sozlanmagan bo'lsa — xato (avto-yuborishda jim o'tkaziladi).
+ */
+export async function sendSpisaniyaDailyReport(): Promise<{ ok: true; total: number } | { ok: false; error: string }> {
+  try {
+    const cfg = await getSpisaniyaDailyConfig();
+    if (!cfg.token) return { ok: false, error: "Bot token sozlanmagan." };
+    if (!cfg.chatId) return { ok: false, error: "Guruh chat ID sozlanmagan." };
+
+    const tg = new Telegram(cfg.token);
+    const thread = cfg.topicId ? { message_thread_id: cfg.topicId } : {};
+    const built = await buildSpisaniyaDailyText();
+    if (!built) {
+      await tg.sendMessage(cfg.chatId, "📉 <b>Spisaniya — kunlik hisobot</b>\nKecha hisobdan chiqarish bo'lmadi.", { parse_mode: "HTML", ...thread });
+      return { ok: true, total: 0 };
+    }
+    await tg.sendMessage(cfg.chatId, built.text, { parse_mode: "HTML", ...thread });
+    return { ok: true, total: built.total };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Yuborishda xato.";
+    console.error("[spisaniya-daily] send:", msg);
+    return { ok: false, error: `Yuborilmadi: ${msg}` };
+  }
+}
