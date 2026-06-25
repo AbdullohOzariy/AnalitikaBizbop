@@ -342,6 +342,36 @@ export async function deleteGroupAction(input: { id: number }): Promise<Result> 
   } catch (err) { return xato(err); }
 }
 
+// Mavjud SKU'ni guruhga ko'chirish (drag-drop). groupId=null → guruhdan chiqarish.
+// Xavfsizlik: SKU va guruh AYNAN bir kampaniyaga tegishli bo'lishi shart.
+const moveItemSchema = z.object({ itemId: idSchema, groupId: idSchema.nullable() });
+
+export async function moveItemToGroupAction(input: {
+  itemId: number; groupId: number | null;
+}): Promise<Result> {
+  try {
+    await requirePromoEdit();
+    const p = moveItemSchema.parse(input);
+    const item = await prisma.promoItem.findUnique({
+      where: { id: p.itemId },
+      select: { campaignId: true, groupId: true },
+    });
+    if (!item) return { ok: false, error: "SKU topilmadi." };
+    if (item.groupId === p.groupId) return { ok: true }; // o'zgarish yo'q
+    if (p.groupId != null) {
+      const group = await prisma.promoItemGroup.findUnique({
+        where: { id: p.groupId },
+        select: { campaignId: true },
+      });
+      if (!group) return { ok: false, error: "Guruh topilmadi." };
+      if (group.campaignId !== item.campaignId) return { ok: false, error: "Guruh boshqa aksiyaga tegishli." };
+    }
+    await prisma.promoItem.update({ where: { id: p.itemId }, data: { groupId: p.groupId } });
+    invalidate();
+    return { ok: true };
+  } catch (err) { return xato(err); }
+}
+
 const addItemSchema = z.object({
   campaignId: idSchema,
   productId: idSchema,

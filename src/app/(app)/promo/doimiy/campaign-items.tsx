@@ -7,14 +7,14 @@ import { Label } from "@/components/ui/label";
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
-import { Search, X, Loader2, Plus, Trash2, Check, FolderPlus, Folder, Pencil } from "lucide-react";
+import { Search, X, Loader2, Plus, Trash2, Check, FolderPlus, Folder, Pencil, GripVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatUZS } from "@/lib/format";
 import { toast } from "sonner";
 import {
   listItemsAction, addItemAction, updateItemAction, deleteItemAction,
   searchProductsAction, suggestPriceAction,
-  createGroupAction, renameGroupAction, deleteGroupAction,
+  createGroupAction, renameGroupAction, deleteGroupAction, moveItemToGroupAction,
   type PromoItemRow, type PromoGroupRow, type ProductSearchRow,
 } from "./actions";
 
@@ -35,10 +35,16 @@ export function CampaignItems({
   const [rows, setRows] = useState<PromoItemRow[]>([]);
   const [groups, setGroups] = useState<PromoGroupRow[]>([]);
   const [loading, startLoad] = useTransition();
+  const [, startMove] = useTransition();
   const [refreshKey, setRefreshKey] = useState(0);
   const [addOpen, setAddOpen] = useState(false);
   const [groupOpen, setGroupOpen] = useState(false);
   const reqId = useRef(0);
+
+  // Drag-drop: drag qilinayotgan SKU id'si dataTransfer orqali uzatiladi (ref'siz —
+  // native DnD standarti). overTarget/dragging faqat highlight uchun (state).
+  const [overTarget, setOverTarget] = useState<number | "ungrouped" | null>(null);
+  const [dragging, setDragging] = useState(false);
 
   useEffect(() => {
     const my = ++reqId.current;
@@ -54,6 +60,37 @@ export function CampaignItems({
 
   const colCount = canEdit ? 7 : 6;
   const ungrouped = rows.filter((r) => r.groupId == null);
+
+  // SKU'ni guruhga (yoki guruhsizga) ko'chirish — ref'siz (eslint react-hooks/refs:
+  // ref faqat event handler ichida o'qiladi, render'da uzatilmaydi).
+  const applyMove = (itemId: number, groupId: number | null) => {
+    startMove(async () => {
+      const res = await moveItemToGroupAction({ itemId, groupId });
+      if (res.ok) reload();
+      else toast.error(res.error);
+    });
+  };
+
+  const onItemDragStart = (e: React.DragEvent, id: number) => {
+    e.dataTransfer.setData("text/plain", String(id));
+    e.dataTransfer.effectAllowed = "move";
+    setDragging(true);
+  };
+  const onItemDragEnd = () => { setDragging(false); setOverTarget(null); };
+  const dropProps = (target: number | "ungrouped") =>
+    canEdit
+      ? {
+          onDragOver: (e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setOverTarget((t) => (t === target ? t : target)); },
+          onDragLeave: () => setOverTarget((t) => (t === target ? null : t)),
+          onDrop: (e: React.DragEvent) => {
+            e.preventDefault();
+            const itemId = Number(e.dataTransfer.getData("text/plain"));
+            setOverTarget(null);
+            setDragging(false);
+            if (Number.isInteger(itemId) && itemId > 0) applyMove(itemId, target === "ungrouped" ? null : target);
+          },
+        }
+      : {};
 
   return (
     <div className="space-y-3">
@@ -106,19 +143,45 @@ export function CampaignItems({
                       canEdit={canEdit}
                       colCount={colCount}
                       onChanged={reload}
+                      isOver={overTarget === g.id}
+                      dragging={dragging}
+                      dropProps={dropProps(g.id)}
+                      onItemDragStart={onItemDragStart}
+                      onItemDragEnd={onItemDragEnd}
                     />
                   );
                 })}
-                {ungrouped.length > 0 && groups.length > 0 && (
-                  <tr className="border-b border-border bg-muted/20">
+                {groups.length > 0 && (
+                  <tr
+                    className={cn(
+                      "border-b border-border bg-muted/20 transition-colors",
+                      overTarget === "ungrouped" && "outline outline-2 -outline-offset-2 outline-primary bg-primary/10"
+                    )}
+                    {...dropProps("ungrouped")}
+                  >
                     <td colSpan={colCount} className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                       Guruhsiz
+                      {dragging && <span className="ml-2 font-normal normal-case text-primary">— guruhdan chiqarish uchun shu yerga tashlang</span>}
                     </td>
                   </tr>
                 )}
                 {ungrouped.map((r) => (
-                  <ItemRow key={r.id} row={r} canEdit={canEdit} onChanged={reload} />
+                  <ItemRow
+                    key={r.id}
+                    row={r}
+                    canEdit={canEdit}
+                    onChanged={reload}
+                    onDragStartItem={canEdit ? (e) => onItemDragStart(e, r.id) : undefined}
+                    onDragEndItem={canEdit ? onItemDragEnd : undefined}
+                  />
                 ))}
+                {ungrouped.length === 0 && groups.length > 0 && (
+                  <tr {...dropProps("ungrouped")}>
+                    <td colSpan={colCount} className={cn("px-3 py-2.5 pl-9 text-center text-xs text-muted-foreground", overTarget === "ungrouped" && "bg-primary/10")}>
+                      {dragging ? "SKU'ni shu yerga tashlab guruhdan chiqaring" : "Guruhsiz SKU yo'q"}
+                    </td>
+                  </tr>
+                )}
               </>
             )}
           </tbody>
@@ -145,15 +208,21 @@ export function CampaignItems({
   );
 }
 
-/** Guruh bloki — sarlavha qatori (nom, SKU soni, tahrir/o'chir) + ichidagi SKU qatorlar. */
+/** Guruh bloki — sarlavha qatori (nom, SKU soni, tahrir/o'chir) + ichidagi SKU qatorlar.
+ *  Sarlavha drop nishoni (drag-drop bilan SKU shu guruhga ko'chiriladi). */
 function GroupBlock({
-  group, items, canEdit, colCount, onChanged,
+  group, items, canEdit, colCount, onChanged, isOver, dragging, dropProps, onItemDragStart, onItemDragEnd,
 }: {
   group: PromoGroupRow;
   items: PromoItemRow[];
   canEdit: boolean;
   colCount: number;
   onChanged: () => void;
+  isOver: boolean;
+  dragging: boolean;
+  dropProps: Record<string, unknown>;
+  onItemDragStart: (e: React.DragEvent, id: number) => void;
+  onItemDragEnd: () => void;
 }) {
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(group.name);
@@ -180,7 +249,13 @@ function GroupBlock({
 
   return (
     <>
-      <tr className="border-b border-border bg-primary/5">
+      <tr
+        className={cn(
+          "border-b border-border bg-primary/5 transition-colors",
+          isOver && "outline outline-2 -outline-offset-2 outline-primary bg-primary/15"
+        )}
+        {...dropProps}
+      >
         <td colSpan={colCount} className="px-3 py-1.5">
           <div className="flex items-center gap-2">
             <Folder className="h-3.5 w-3.5 shrink-0 text-primary" />
@@ -196,6 +271,7 @@ function GroupBlock({
               <span className="font-semibold">{group.name}</span>
             )}
             <span className="text-[11px] text-muted-foreground">({items.length} SKU)</span>
+            {dragging && !isOver && <span className="text-[10px] text-primary/70">← shu yerga tashlang</span>}
             {canEdit && !renaming && (
               <span className="ml-auto flex items-center gap-0.5">
                 <button onClick={() => setRenaming(true)} title="Nomini o'zgartirish" aria-label="Nomini o'zgartirish"
@@ -212,18 +288,34 @@ function GroupBlock({
         </td>
       </tr>
       {items.length === 0 ? (
-        <tr className="border-b border-border/40">
-          <td colSpan={colCount} className="px-3 py-2 pl-9 text-xs text-muted-foreground">Guruh bo&apos;sh.</td>
+        <tr className="border-b border-border/40" {...dropProps}>
+          <td colSpan={colCount} className={cn("px-3 py-2 pl-9 text-xs text-muted-foreground", isOver && "bg-primary/10")}>
+            {dragging ? "SKU'ni shu yerga tashlang" : "Guruh bo'sh."}
+          </td>
         </tr>
       ) : (
-        items.map((r) => <ItemRow key={r.id} row={r} canEdit={canEdit} onChanged={onChanged} grouped />)
+        items.map((r) => (
+          <ItemRow
+            key={r.id}
+            row={r}
+            canEdit={canEdit}
+            onChanged={onChanged}
+            grouped
+            onDragStartItem={canEdit ? (e) => onItemDragStart(e, r.id) : undefined}
+            onDragEndItem={canEdit ? onItemDragEnd : undefined}
+          />
+        ))
       )}
     </>
   );
 }
 
-/** Bir SKU qatori — narxlar ruchnoy (blur'da saqlanadi), farq/% live derive. */
-function ItemRow({ row, canEdit, onChanged, grouped }: { row: PromoItemRow; canEdit: boolean; onChanged: () => void; grouped?: boolean }) {
+/** Bir SKU qatori — narxlar ruchnoy (blur'da saqlanadi), farq/% live derive.
+ *  Drag handle (GripVertical) bilan guruhga sudrab ko'chiriladi. */
+function ItemRow({ row, canEdit, onChanged, grouped, onDragStartItem, onDragEndItem }: {
+  row: PromoItemRow; canEdit: boolean; onChanged: () => void; grouped?: boolean;
+  onDragStartItem?: (e: React.DragEvent) => void; onDragEndItem?: () => void;
+}) {
   const [reg, setReg] = useState(String(row.regularPrice));
   const [promo, setPromo] = useState(String(row.promoPrice));
   const [limit, setLimit] = useState(row.promoLimit != null ? String(row.promoLimit) : "");
@@ -262,8 +354,23 @@ function ItemRow({ row, canEdit, onChanged, grouped }: { row: PromoItemRow; canE
   return (
     <tr className="border-b border-border/40 last:border-0 hover:bg-muted/20">
       <td className={cn("px-3 py-1.5", grouped && "pl-9")}>
-        <div className="max-w-[260px] truncate" title={row.name}>{row.name}</div>
-        <div className="font-mono text-[11px] text-muted-foreground">{row.code}</div>
+        <div className="flex items-start gap-1.5">
+          {canEdit && onDragStartItem && (
+            <span
+              draggable
+              onDragStart={onDragStartItem}
+              onDragEnd={onDragEndItem}
+              title="Sudrab guruhga ko'chiring"
+              className="mt-px shrink-0 cursor-grab text-muted-foreground/40 transition-colors hover:text-muted-foreground active:cursor-grabbing"
+            >
+              <GripVertical className="h-4 w-4" />
+            </span>
+          )}
+          <div className="min-w-0">
+            <div className="max-w-[340px] leading-snug" title={row.name}>{row.name}</div>
+            <div className="font-mono text-[11px] text-muted-foreground">{row.code}</div>
+          </div>
+        </div>
       </td>
       <td className="px-2 py-1.5 text-right">
         {canEdit
@@ -390,7 +497,7 @@ function AddItemDialog({
                   {results.map((p) => (
                     <button key={p.id} onClick={() => pick(p)} disabled={existing.includes(p.id)}
                       className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted/50 disabled:opacity-40">
-                      <span className="min-w-0 flex-1 truncate">{p.name}</span>
+                      <span className="min-w-0 flex-1 break-words leading-snug">{p.name}</span>
                       <span className="shrink-0 font-mono text-[11px] text-muted-foreground">{p.code}</span>
                       {existing.includes(p.id) && <span className="shrink-0 text-[11px] text-amber-600">qo&apos;shilgan</span>}
                     </button>
@@ -571,7 +678,7 @@ function AddGroupDialog({
                         <span className={cn("flex h-4 w-4 shrink-0 items-center justify-center rounded border", isPicked ? "border-primary bg-primary text-primary-foreground" : "border-border")}>
                           {isPicked && <Check className="h-3 w-3" />}
                         </span>
-                        <span className="min-w-0 flex-1 truncate">{p.name}</span>
+                        <span className="min-w-0 flex-1 break-words leading-snug">{p.name}</span>
                         <span className="shrink-0 font-mono text-[11px] text-muted-foreground">{p.code}</span>
                         {isExisting && <span className="shrink-0 text-[11px] text-amber-600">qo&apos;shilgan</span>}
                       </button>
