@@ -26,10 +26,9 @@ function diffPctClass(pct: number) {
 
 /** Aksiya SKU qatorlari — narxlar (ruchnoy) + farq/% (auto). */
 export function CampaignItems({
-  campaignId, branchId, canEdit,
+  campaignId, canEdit,
 }: {
   campaignId: number;
-  branchId: number | null;
   canEdit: boolean;
 }) {
   const [rows, setRows] = useState<PromoItemRow[]>([]);
@@ -95,7 +94,6 @@ export function CampaignItems({
       {addOpen && (
         <AddItemDialog
           campaignId={campaignId}
-          branchId={branchId}
           existing={rows.map((r) => r.productId)}
           onClose={() => setAddOpen(false)}
           onAdded={() => { setAddOpen(false); reload(); }}
@@ -183,10 +181,9 @@ function ItemRow({ row, canEdit, onChanged }: { row: PromoItemRow; canEdit: bool
 
 /** SKU qidirib (server-side) aksiyaga qo'shish — sotilish narxi auto-taklif. */
 function AddItemDialog({
-  campaignId, branchId, existing, onClose, onAdded,
+  campaignId, existing, onClose, onAdded,
 }: {
   campaignId: number;
-  branchId: number | null;
   existing: number[];
   onClose: () => void;
   onAdded: () => void;
@@ -219,9 +216,9 @@ function AddItemDialog({
     setPicked(p);
     setResults([]);
     setQ("");
-    // Sotilish narxi auto-taklif (ProductSales oxirgi davr o'rtacha narxi)
+    // Sotilish narxi auto-taklif — MEGA filial (Mega Center) oxirgi davr sotuv narxi
     start(async () => {
-      const res = await suggestPriceAction({ productId: p.id, branchId });
+      const res = await suggestPriceAction({ productId: p.id });
       if (res.ok && res.price != null) setReg(String(res.price));
     });
   };

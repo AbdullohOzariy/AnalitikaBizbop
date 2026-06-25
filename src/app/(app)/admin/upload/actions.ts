@@ -463,22 +463,27 @@ async function uploadV3(
           row.soldQty != null ? new Prisma.Decimal(row.soldQty) : null;
         const costAmount =
           row.costAmount != null ? new Prisma.Decimal(row.costAmount) : null;
+        // Tayyor narxlar (yangi formatda; eski formatda null)
+        const salePrice = row.salePrice != null ? new Prisma.Decimal(row.salePrice) : null;
+        const costPrice = row.costPrice != null ? new Prisma.Decimal(row.costPrice) : null;
         return [
-          Prisma.sql`(${fileRecord.id}, ${productId}, ${branchId}, ${result.periodStart}::date, ${result.periodEnd}::date, ${stockQty}, ${soldQty}, ${new Prisma.Decimal(row.amount)}, ${costAmount})`,
+          Prisma.sql`(${fileRecord.id}, ${productId}, ${branchId}, ${result.periodStart}::date, ${result.periodEnd}::date, ${stockQty}, ${soldQty}, ${new Prisma.Decimal(row.amount)}, ${costAmount}, ${salePrice}, ${costPrice})`,
         ];
       });
       if (vals.length === 0) continue;
       await prisma.$executeRaw`
         INSERT INTO "ProductSales"
           ("uploadedFileId", "productId", "branchId", "periodStart", "periodEnd",
-           "stockQty", "soldQty", "amount", "costAmount")
+           "stockQty", "soldQty", "amount", "costAmount", "salePrice", "costPrice")
         VALUES ${Prisma.join(vals)}
         ON CONFLICT ("productId", "branchId", "periodStart", "periodEnd") DO UPDATE SET
           "uploadedFileId" = EXCLUDED."uploadedFileId",
           "stockQty"       = EXCLUDED."stockQty",
           "soldQty"        = EXCLUDED."soldQty",
           "amount"         = EXCLUDED."amount",
-          "costAmount"     = EXCLUDED."costAmount"
+          "costAmount"     = EXCLUDED."costAmount",
+          "salePrice"      = EXCLUDED."salePrice",
+          "costPrice"      = EXCLUDED."costPrice"
       `;
     }
 

@@ -136,7 +136,7 @@ function TypePanel({ type, branches, canEdit }: { type: DoimiyPromoType; branche
                 </div>
                 {open && (
                   <div className="border-t border-border/60 bg-muted/10 p-4">
-                    <CampaignItems campaignId={c.id} branchId={c.branchId} canEdit={canEdit} />
+                    <CampaignItems campaignId={c.id} canEdit={canEdit} />
                   </div>
                 )}
               </div>

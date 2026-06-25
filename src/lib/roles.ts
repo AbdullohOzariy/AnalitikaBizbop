@@ -58,6 +58,11 @@ export const canEditPme = (r: R): boolean =>
 /** Ombor + taqsimot (logistika operatsiyalari) — qoldiq import, ombor→filial taqsimot. */
 export const canManageWarehouse = (r: R): boolean => isSystemAdmin(r) || isSupplyChain(r);
 
+/** Analyze (narx sifati: filiallar narx farqi, summa÷soni ≠ narx) bo'limini KO'RA oladiganlar.
+ *  Narx anomaliyalarini ko'rsatuvchi tahliliy bo'lim — analitika ko'ruvchilar uchun (read-only ADMIN ham). */
+export const canSeeAnalyze = (r: R): boolean =>
+  isAdminTier(r) || isSupplyChain(r) || r === "CAT_MANAGER" || isHeadCatManager(r);
+
 // ─── Promo (Aksiyalar) ────────────────────────────────────────────────────
 // MERCHANDISER — IZOLATSIYALANGAN rol: FAQAT Promo bo'limini ko'radi/tahrirlaydi.
 // Yuqoridagi hech bir canSee*/canEdit*/canManage*/isAdminTier predikatida

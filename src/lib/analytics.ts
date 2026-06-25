@@ -91,48 +91,41 @@ async function _salesByBranch(range: DateRange): Promise<Map<number, number>> {
   return map;
 }
 
-/** Kategoriya bo'yicha pro-rated savdo — bitta query. */
-async function _salesByCategory(
+/**
+ * TOP-LEVEL kategoriya bo'yicha sotuv + marja (narxdan, vaznli) — bitta query.
+ * Manba ProductSales (SKU → Product.categoryId = SUBKAT), subkat → top-level
+ * kategoriyaga COALESCE(sub.parentId, sub.id) orqali yig'iladi. Har top-level uchun:
+ *   fact  — ko'rsatiladigan savdo summasi (amount, haqiqiy savdo, proratsiyali)
+ *   sales — marja maxraji: Σ(COALESCE(salePrice×soni, amount))  (narxdan, vaznli)
+ *   cost  — marja surati: Σ(COALESCE(costPrice×soni, costAmount, 0)) (narxdan, vaznli)
+ * marja = (sales − cost) / sales. fact KPI/grafik uchun, sales/cost faqat marja uchun.
+ */
+type CatMargin = { fact: number; sales: number; cost: number };
+async function _priceMarginByCategory(
   range: DateRange,
   branchId?: number
-): Promise<Map<number, number>> {
-  const rows = await prisma.$queryRaw<{ categoryId: number; total: number | null }[]>`
-    SELECT "categoryId", COALESCE(SUM(
-      "amount"::numeric * (
-        (LEAST("periodEnd", ${range.end}::date) - GREATEST("periodStart", ${range.start}::date) + 1)::numeric
-        / NULLIF(("periodEnd" - "periodStart" + 1), 0)::numeric
-      )
-    ), 0)::float8 AS total
-    FROM "CategorySales"
-    WHERE "periodStart" <= ${range.end}::date
-      AND "periodEnd"   >= ${range.start}::date
-      ${branchId ? Prisma.sql`AND "branchId" = ${branchId}` : Prisma.empty}    GROUP BY "categoryId"
+): Promise<Map<number, CatMargin>> {
+  const frac = Prisma.sql`(
+    (LEAST(ps."periodEnd", ${range.end}::date) - GREATEST(ps."periodStart", ${range.start}::date) + 1)::numeric
+    / NULLIF((ps."periodEnd" - ps."periodStart" + 1), 0)::numeric
+  )`;
+  const rows = await prisma.$queryRaw<{ categoryId: number; fact: number | null; sales: number | null; cost: number | null }[]>`
+    SELECT COALESCE(sub."parentId", sub.id) AS "categoryId",
+      COALESCE(SUM(ps."amount"::numeric * ${frac}), 0)::float8 AS fact,
+      COALESCE(SUM(COALESCE(ps."salePrice" * ps."soldQty", ps."amount")::numeric * ${frac}), 0)::float8 AS sales,
+      COALESCE(SUM(COALESCE(ps."costPrice" * ps."soldQty", ps."costAmount", 0)::numeric * ${frac}), 0)::float8 AS cost
+    FROM "ProductSales" ps
+    JOIN "Product" p ON p.id = ps."productId"
+    JOIN "Category" sub ON sub.id = p."categoryId"
+    WHERE ps."periodStart" <= ${range.end}::date
+      AND ps."periodEnd"   >= ${range.start}::date
+      ${branchId ? Prisma.sql`AND ps."branchId" = ${branchId}` : Prisma.empty}
+    GROUP BY COALESCE(sub."parentId", sub.id)
   `;
-  const map = new Map<number, number>();
-  for (const r of rows) map.set(r.categoryId, Number(r.total ?? 0));
-  return map;
-}
-
-/** Tannarx: kategoriya bo'yicha (costAmount mavjud qatorlar uchun). */
-async function _costByCategory(
-  range: DateRange,
-  branchId?: number
-): Promise<Map<number, number>> {
-  const rows = await prisma.$queryRaw<{ categoryId: number; total: number | null }[]>`
-    SELECT "categoryId", COALESCE(SUM(
-      "costAmount"::numeric * (
-        (LEAST("periodEnd", ${range.end}::date) - GREATEST("periodStart", ${range.start}::date) + 1)::numeric
-        / NULLIF(("periodEnd" - "periodStart" + 1), 0)::numeric
-      )
-    ), 0)::float8 AS total
-    FROM "CategorySales"
-    WHERE "periodStart" <= ${range.end}::date
-      AND "periodEnd"   >= ${range.start}::date
-      AND "costAmount"  IS NOT NULL
-      ${branchId ? Prisma.sql`AND "branchId" = ${branchId}` : Prisma.empty}    GROUP BY "categoryId"
-  `;
-  const map = new Map<number, number>();
-  for (const r of rows) map.set(r.categoryId, Number(r.total ?? 0));
+  const map = new Map<number, CatMargin>();
+  for (const r of rows) {
+    map.set(r.categoryId, { fact: Number(r.fact ?? 0), sales: Number(r.sales ?? 0), cost: Number(r.cost ?? 0) });
+  }
   return map;
 }
 
@@ -181,7 +174,7 @@ async function _visitsByBranch(range: DateRange): Promise<Map<number, number>> {
  * KPI (umumiy yoki bitta filial uchun). Hamma so'rovlar parallel.
  */
 async function _computeKPI(range: DateRange, branchId?: number): Promise<KPI> {
-  const [totalSales, metricsAgg, visitsAgg, costMap] = await Promise.all([
+  const [totalSales, metricsAgg, visitsAgg, marginMap] = await Promise.all([
     _sumCategorySalesProRated(range, branchId),
     prisma.dailyReceiptMetric.aggregate({
       where: {
@@ -197,7 +190,7 @@ async function _computeKPI(range: DateRange, branchId?: number): Promise<KPI> {
       },
       _sum: { visitCount: true },
     }),
-    _costByCategory(range, branchId),
+    _priceMarginByCategory(range, branchId),
   ]);
 
   const totalReceipts = metricsAgg._sum.receiptCount ?? 0;
@@ -205,8 +198,11 @@ async function _computeKPI(range: DateRange, branchId?: number): Promise<KPI> {
   // O'rt. chek = sotuv ÷ chek soni (SKU sotuv / qo'lda chek)
   const avgReceipt = totalReceipts > 0 ? totalSales / totalReceipts : 0;
   const conversion = totalVisits > 0 ? (totalReceipts / totalVisits) * 100 : 0;
-  const totalCost = [...costMap.values()].reduce((a, b) => a + b, 0);
-  const marja = totalSales > 0 ? ((totalSales - totalCost) / totalSales) * 100 : null;
+  // Marja narxlardan (vaznli), kasrning IKKALA tomoni bir ProductSales bazasidan —
+  // breakdown/hierarchy bilan izchil. totalSales (KPI) esa amount'da (haqiqiy savdo).
+  let priceSales = 0, priceCost = 0;
+  for (const v of marginMap.values()) { priceSales += v.sales; priceCost += v.cost; }
+  const marja = priceSales > 0 ? ((priceSales - priceCost) / priceSales) * 100 : null;
 
   return { totalSales, totalReceipts, totalVisits, avgReceipt, conversion, marja };
 }
@@ -346,16 +342,15 @@ async function _topCategories(
   branchId?: number,
   limit = 18
 ): Promise<CategoryRow[]> {
-  const [cats, factMap, costMap] = await Promise.all([
+  const [cats, marginMap] = await Promise.all([
     prisma.category.findMany({ where: { parentId: null }, orderBy: { sortOrder: "asc" } }),
-    _salesByCategory(range, branchId),
-    _costByCategory(range, branchId),
+    _priceMarginByCategory(range, branchId),
   ]);
   const rows: CategoryRow[] = cats.map((c) => {
-    const fact = factMap.get(c.id) ?? 0;
-    const cost = costMap.get(c.id);
-    const marja =
-      cost != null && fact > 0 ? ((fact - cost) / fact) * 100 : null;
+    const v = marginMap.get(c.id);
+    const fact = v?.fact ?? 0; // ko'rsatiladigan savdo = amount (haqiqiy savdo)
+    // marja narxlardan (vaznli), top-level kategoriyaga yig'ilgan
+    const marja = v && v.sales > 0 ? ((v.sales - v.cost) / v.sales) * 100 : null;
     return {
       categoryId: c.id,
       categoryName: c.name,
@@ -416,53 +411,36 @@ export const branchPerformance = (range: DateRange) =>
     { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
   )();
 
-/** Filial × kategoriya bo'yicha pro-rated sotuv (2D map). */
-async function _salesByBranchCategory(
+/**
+ * Filial × TOP-LEVEL kategoriya bo'yicha sotuv + marja (narxdan, vaznli) — bitta query.
+ * ProductSales (subkat → Product.categoryId) → top-level COALESCE(sub.parentId, sub.id).
+ * Har (filial, top-level) uchun: fact (amount, haqiqiy savdo), sales/cost (narxdan, marja uchun).
+ */
+async function _priceMarginByBranchCategory(
   range: DateRange
-): Promise<Map<number, Map<number, number>>> {
+): Promise<Map<number, Map<number, CatMargin>>> {
+  const frac = Prisma.sql`(
+    (LEAST(ps."periodEnd", ${range.end}::date) - GREATEST(ps."periodStart", ${range.start}::date) + 1)::numeric
+    / NULLIF((ps."periodEnd" - ps."periodStart" + 1), 0)::numeric
+  )`;
   const rows = await prisma.$queryRaw<
-    { branchId: number; categoryId: number; total: number | null }[]
+    { branchId: number; categoryId: number; fact: number | null; sales: number | null; cost: number | null }[]
   >`
-    SELECT "branchId", "categoryId", COALESCE(SUM(
-      "amount"::numeric * (
-        (LEAST("periodEnd", ${range.end}::date) - GREATEST("periodStart", ${range.start}::date) + 1)::numeric
-        / NULLIF(("periodEnd" - "periodStart" + 1), 0)::numeric
-      )
-    ), 0)::float8 AS total
-    FROM "CategorySales"
-    WHERE "periodStart" <= ${range.end}::date
-      AND "periodEnd"   >= ${range.start}::date    GROUP BY "branchId", "categoryId"
+    SELECT ps."branchId" AS "branchId", COALESCE(sub."parentId", sub.id) AS "categoryId",
+      COALESCE(SUM(ps."amount"::numeric * ${frac}), 0)::float8 AS fact,
+      COALESCE(SUM(COALESCE(ps."salePrice" * ps."soldQty", ps."amount")::numeric * ${frac}), 0)::float8 AS sales,
+      COALESCE(SUM(COALESCE(ps."costPrice" * ps."soldQty", ps."costAmount", 0)::numeric * ${frac}), 0)::float8 AS cost
+    FROM "ProductSales" ps
+    JOIN "Product" p ON p.id = ps."productId"
+    JOIN "Category" sub ON sub.id = p."categoryId"
+    WHERE ps."periodStart" <= ${range.end}::date
+      AND ps."periodEnd"   >= ${range.start}::date
+    GROUP BY ps."branchId", COALESCE(sub."parentId", sub.id)
   `;
-  const map = new Map<number, Map<number, number>>();
+  const map = new Map<number, Map<number, CatMargin>>();
   for (const r of rows) {
     if (!map.has(r.branchId)) map.set(r.branchId, new Map());
-    map.get(r.branchId)!.set(r.categoryId, Number(r.total ?? 0));
-  }
-  return map;
-}
-
-/** Filial × kategoriya bo'yicha pro-rated tannarx (2D map). */
-async function _costByBranchCategory(
-  range: DateRange
-): Promise<Map<number, Map<number, number>>> {
-  const rows = await prisma.$queryRaw<
-    { branchId: number; categoryId: number; total: number | null }[]
-  >`
-    SELECT "branchId", "categoryId", COALESCE(SUM(
-      "costAmount"::numeric * (
-        (LEAST("periodEnd", ${range.end}::date) - GREATEST("periodStart", ${range.start}::date) + 1)::numeric
-        / NULLIF(("periodEnd" - "periodStart" + 1), 0)::numeric
-      )
-    ), 0)::float8 AS total
-    FROM "CategorySales"
-    WHERE "periodStart" <= ${range.end}::date
-      AND "periodEnd"   >= ${range.start}::date
-      AND "costAmount"  IS NOT NULL    GROUP BY "branchId", "categoryId"
-  `;
-  const map = new Map<number, Map<number, number>>();
-  for (const r of rows) {
-    if (!map.has(r.branchId)) map.set(r.branchId, new Map());
-    map.get(r.branchId)!.set(r.categoryId, Number(r.total ?? 0));
+    map.get(r.branchId)!.set(r.categoryId, { fact: Number(r.fact ?? 0), sales: Number(r.sales ?? 0), cost: Number(r.cost ?? 0) });
   }
   return map;
 }
@@ -471,6 +449,9 @@ export type CategoryBreakdown = {
   categoryId: number;
   categoryName: string;
   sales: number;
+  /** Marja maxraji (narxdan, vaznli: Σ COALESCE(salePrice×soni, amount)). Jami marjani
+   *  to'g'ri (simmetrik) hisoblash uchun — `sales` (amount) bilan adashtirmang. */
+  saleBase: number;
   cost: number;
   hasCost: boolean;
   marja: number | null;
@@ -479,12 +460,14 @@ export type CategoryBreakdown = {
 export type BranchReportRow = {
   branchId: number;
   branchName: string;
-  /** Sotuv = CategorySales jami (SKU-derive, pro-rated). */
+  /** Sotuv = ProductSales amount jami (pro-rated, haqiqiy savdo). */
   sales: number;
-  /** Tannarx — CategorySales.costAmount dan. */
+  /** Marja maxraji (narxdan: Σ COALESCE(salePrice×soni, amount)) — jami marja uchun. */
+  saleBase: number;
+  /** Tannarx — narxdan (vaznli: Σ COALESCE(costPrice×soni, costAmount, 0)). */
   cost: number;
   hasCost: boolean;
-  /** Marja = (categorySales - cost) / categorySales * 100 (CategorySales asosida). */
+  /** Marja = (saleBase − cost) / saleBase * 100 (narxlardan, vaznli). */
   marja: number | null;
   receipts: number;
   avgReceipt: number;
@@ -495,54 +478,53 @@ export type BranchReportRow = {
 };
 
 async function _branchReport(range: DateRange): Promise<BranchReportRow[]> {
-  const [branches, allCategories, salesBCMap, costBCMap, metricsMap, visitsMap] =
+  const [branches, allCategories, marginBCMap, metricsMap, visitsMap] =
     await Promise.all([
       prisma.branch.findMany({ orderBy: { sortOrder: "asc" } }),
       prisma.category.findMany({ where: { parentId: null }, orderBy: { sortOrder: "asc" } }),
-      _salesByBranchCategory(range),
-      _costByBranchCategory(range),
+      _priceMarginByBranchCategory(range),
       _metricsByBranch(range),
       _visitsByBranch(range),
     ]);
 
   return branches.map((b) => {
-    const catSalesMap = salesBCMap.get(b.id) ?? new Map<number, number>();
-    const catCostMap  = costBCMap.get(b.id)  ?? new Map<number, number>();
+    const catMap = marginBCMap.get(b.id) ?? new Map<number, CatMargin>();
 
-    // CategorySales aggregates (for marja)
-    let categorySales = 0, cost = 0;
-    for (const v of catSalesMap.values()) categorySales += v;
-    for (const v of catCostMap.values())  cost          += v;
+    // Filial jami: sotuv = amount (haqiqiy savdo), marja = narxdan (priceSales/priceCost).
+    let salesAmount = 0, priceSales = 0, cost = 0;
+    for (const v of catMap.values()) { salesAmount += v.fact; priceSales += v.sales; cost += v.cost; }
 
     const hasCost = cost > 0;
-    const marja   = hasCost && categorySales > 0 ? ((categorySales - cost) / categorySales) * 100 : null;
+    const marja   = priceSales > 0 ? ((priceSales - cost) / priceSales) * 100 : null;
 
     const m      = metricsMap.get(b.id) ?? { receipts: 0, avgItemsPerReceipt: 0 };
     const visits = visitsMap.get(b.id) ?? 0;
 
     const categories: CategoryBreakdown[] = allCategories.map((c) => {
-      const cSales   = catSalesMap.get(c.id) ?? 0;
-      const cCost    = catCostMap.get(c.id)  ?? 0;
-      const cHasCost = cCost > 0;
+      const v = catMap.get(c.id);
+      const cFact  = v?.fact ?? 0;
+      const cCost  = v?.cost ?? 0;
       return {
         categoryId:   c.id,
         categoryName: c.name,
-        sales:   cSales,
+        sales:   cFact, // ko'rsatiladigan savdo = amount
+        saleBase: v?.sales ?? 0, // marja maxraji (narxdan)
         cost:    cCost,
-        hasCost: cHasCost,
-        marja:   cHasCost && cSales > 0 ? ((cSales - cCost) / cSales) * 100 : null,
+        hasCost: cCost > 0,
+        marja:   v && v.sales > 0 ? ((v.sales - v.cost) / v.sales) * 100 : null,
       };
     });
 
     return {
       branchId:           b.id,
       branchName:         b.name,
-      sales:              categorySales,         // CategorySales jami (barcha kategoriyalar)
+      sales:              salesAmount,           // ProductSales amount jami (haqiqiy savdo)
+      saleBase:           priceSales,            // marja maxraji (narxdan)
       cost,
       hasCost,
       marja,
       receipts:           m.receipts,
-      avgReceipt:         m.receipts > 0 ? categorySales / m.receipts : 0,
+      avgReceipt:         m.receipts > 0 ? salesAmount / m.receipts : 0,
       avgItemsPerReceipt: m.avgItemsPerReceipt,
       visits,
       conversion:         visits > 0 ? (m.receipts / visits) * 100 : 0,

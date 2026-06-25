@@ -49,9 +49,10 @@ const getCategoryTree = unstable_cache(
 );
 
 // Saralanadigan ustunlar → SQL ifoda (raw ORDER BY uchun; barchasi fiksirlangan — xavfsiz)
-const MARJA_SQL = `(CASE WHEN ps."costAmount" IS NOT NULL AND ps."amount" > 0 THEN (ps."amount" - ps."costAmount") / ps."amount" * 100 ELSE NULL END)`;
+// Marja narxlardan (tayyor salePrice/costPrice); narx yo'q bo'lsa eski summalarga (amount/costAmount) fallback.
+const MARJA_SQL = `(CASE WHEN ps."salePrice" IS NOT NULL AND ps."salePrice" > 0 AND ps."costPrice" IS NOT NULL THEN (ps."salePrice" - ps."costPrice") / ps."salePrice" * 100 WHEN ps."costAmount" IS NOT NULL AND ps."amount" > 0 THEN (ps."amount" - ps."costAmount") / ps."amount" * 100 ELSE NULL END)`;
 // Ustama = (sotuv − tannarx) ÷ tannarx — tannarx ustiga necha % qo'yilgan
-const USTAMA_SQL = `(CASE WHEN ps."costAmount" IS NOT NULL AND ps."costAmount" > 0 THEN (ps."amount" - ps."costAmount") / ps."costAmount" * 100 ELSE NULL END)`;
+const USTAMA_SQL = `(CASE WHEN ps."salePrice" IS NOT NULL AND ps."costPrice" IS NOT NULL AND ps."costPrice" > 0 THEN (ps."salePrice" - ps."costPrice") / ps."costPrice" * 100 WHEN ps."costAmount" IS NOT NULL AND ps."costAmount" > 0 THEN (ps."amount" - ps."costAmount") / ps."costAmount" * 100 ELSE NULL END)`;
 const SORT_SQL: Record<string, string> = {
   code: 'p."code"',
   name: 'p."name"',
@@ -68,6 +69,8 @@ type SalesRow = {
   id: number; pcode: number; pname: string; cname: string | null; bname: string;
   periodStart: string; periodEnd: string;
   stockQty: string | null; soldQty: string | null; amount: string; costAmount: string | null;
+  salePrice: string | null; costPrice: string | null; // tayyor narxlar (dona)
+  mj: number | null; ustama: number | null; // marja/ustama — MARJA_SQL/USTAMA_SQL'dan (display = sort = filter)
   abc: string | null; xyz: string | null; // matritsa holati — qator rangi
 };
 
@@ -169,15 +172,19 @@ export default async function BazaSotuvPage({
       SELECT ps.id, p."code" AS pcode, p."name" AS pname, c."name" AS cname, b."name" AS bname,
              p."abcClass" AS abc, p."xyzClass" AS xyz,
              ps."periodStart"::text AS "periodStart", ps."periodEnd"::text AS "periodEnd",
-             ps."stockQty", ps."soldQty", ps."amount", ps."costAmount"
+             ps."stockQty", ps."soldQty", ps."amount", ps."costAmount",
+             ps."salePrice", ps."costPrice",
+             (${Prisma.raw(MARJA_SQL)})::float8 AS mj, (${Prisma.raw(USTAMA_SQL)})::float8 AS ustama
       ${baseFrom}
       ORDER BY ${orderRaw}
       LIMIT ${PAGE_SIZE} OFFSET ${skip}`),
     prisma.$queryRaw<{ n: number }[]>(Prisma.sql`SELECT COUNT(*)::int AS n ${baseFrom}`),
-    prisma.$queryRaw<{ amount: number; cost: number; sold: number }[]>(Prisma.sql`
+    prisma.$queryRaw<{ amount: number; cost: number; sold: number; saleBase: number; priceCost: number }[]>(Prisma.sql`
       SELECT COALESCE(SUM(ps."amount"),0)::float8 AS amount,
              COALESCE(SUM(ps."costAmount"),0)::float8 AS cost,
-             COALESCE(SUM(ps."soldQty"),0)::float8 AS sold
+             COALESCE(SUM(ps."soldQty"),0)::float8 AS sold,
+             COALESCE(SUM(COALESCE(ps."salePrice" * ps."soldQty", ps."amount")),0)::float8 AS "saleBase",
+             COALESCE(SUM(COALESCE(ps."costPrice" * ps."soldQty", ps."costAmount", 0)),0)::float8 AS "priceCost"
       ${baseFrom}`),
     prisma.branch.findMany({ orderBy: { sortOrder: "asc" }, select: { id: true, name: true } }),
     getCategoryTree(),
@@ -188,7 +195,11 @@ export default async function BazaSotuvPage({
   const totalCost = aggRes[0]?.cost ?? 0;
   const totalSold = aggRes[0]?.sold ?? 0;
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
-  const margin = totalAmount > 0 ? ((totalAmount - totalCost) / totalAmount) * 100 : 0;
+  // Jami marja narxlardan (vaznli): maxraj = saleBase (Σ COALESCE(salePrice×soni, amount)),
+  // surat = priceCost (Σ COALESCE(costPrice×soni, costAmount, 0)) — per-row mj bilan izchil.
+  const totalSaleBase = aggRes[0]?.saleBase ?? 0;
+  const totalPriceCost = aggRes[0]?.priceCost ?? 0;
+  const margin = totalSaleBase > 0 ? ((totalSaleBase - totalPriceCost) / totalSaleBase) * 100 : 0;
 
   const exportQs = (() => {
     const p = new URLSearchParams();
@@ -295,11 +306,13 @@ export default async function BazaSotuvPage({
                       const amt = Number(r.amount);
                       const cost = r.costAmount != null ? Number(r.costAmount) : null;
                       const sold = r.soldQty != null ? Number(r.soldQty) : 0;
-                      const mj = cost !== null && amt > 0 ? ((amt - cost) / amt * 100) : null;
-                      // Ustama % = (sotuv − tannarx) ÷ tannarx (marja sotuvga, ustama tannarxga nisbatan)
-                      const ustama = cost !== null && cost > 0 ? ((amt - cost) / cost * 100) : null;
-                      const unitPrice = sold > 0 ? amt / sold : null; // bir dona narxi
-                      const unitCost = cost !== null && sold > 0 ? cost / sold : null; // bir dona tannarxi
+                      // Marja/Ustama — SQL'dan (MARJA_SQL/USTAMA_SQL): narxlardan, narx yo'q bo'lsa
+                      // summalarga fallback. Display = saralash = filtr (bir manba, izchil).
+                      const mj = r.mj;
+                      const ustama = r.ustama;
+                      // Bir dona narxi: tayyor salePrice/costPrice bo'lsa o'shandan, aks holda summa÷soni
+                      const unitPrice = r.salePrice != null ? Number(r.salePrice) : (sold > 0 ? amt / sold : null);
+                      const unitCost = r.costPrice != null ? Number(r.costPrice) : (cost !== null && sold > 0 ? cost / sold : null);
                       const mjColor =
                         mj === null ? "text-muted-foreground" :
                         mj >= 15 ? "text-primary font-medium" :

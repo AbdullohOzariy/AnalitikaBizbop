@@ -41,13 +41,16 @@ export function ReportTable({
       return next;
     });
 
-  // Jami — sales va cost kategoriyalardan jamlanadi (ko'rinadigan kategoriyalar bilan kelishilgan)
+  // Jami — sales/cost kategoriyalardan jamlanadi (ko'rinadigan kategoriyalar bilan kelishilgan).
+  // Marja narxlardan: maxraj = saleBase (Σ COALESCE(salePrice×soni, amount)), sotuv ustuni = amount.
   const total = rows.reduce(
     (a, r) => {
-      const catSales = r.categories.reduce((s, c) => s + c.sales, 0);
-      const catCost  = r.categories.reduce((s, c) => s + c.cost, 0);
+      const catSales    = r.categories.reduce((s, c) => s + c.sales, 0);
+      const catSaleBase = r.categories.reduce((s, c) => s + c.saleBase, 0);
+      const catCost     = r.categories.reduce((s, c) => s + c.cost, 0);
       return {
         sales:    a.sales    + catSales,
+        saleBase: a.saleBase + catSaleBase,
         cost:     a.cost     + catCost,
         receipts: a.receipts + r.receipts,
         visits:   a.visits   + r.visits,
@@ -55,11 +58,11 @@ export function ReportTable({
         itemsSum: a.itemsSum + r.avgItemsPerReceipt * r.receipts,
       };
     },
-    { sales: 0, cost: 0, receipts: 0, visits: 0, itemsSum: 0 }
+    { sales: 0, saleBase: 0, cost: 0, receipts: 0, visits: 0, itemsSum: 0 }
   );
 
-  const totalMarja   = hasCostAny && total.sales > 0
-    ? ((total.sales - total.cost) / total.sales) * 100
+  const totalMarja   = hasCostAny && total.saleBase > 0
+    ? ((total.saleBase - total.cost) / total.saleBase) * 100
     : null;
   const totalAvg     = total.receipts > 0 ? total.sales / total.receipts : 0;
   const totalAvgItems = total.receipts > 0 ? total.itemsSum / total.receipts : 0;

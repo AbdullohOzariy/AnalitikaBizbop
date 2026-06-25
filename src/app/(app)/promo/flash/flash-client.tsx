@@ -106,7 +106,7 @@ export function FlashClient({ branches, canEdit }: { branches: Branch[]; canEdit
                 {c.note && <div className="px-4 pb-2 -mt-1 text-xs text-muted-foreground">{c.note}</div>}
                 {open && (
                   <div className="border-t border-border/60 bg-muted/10 p-4">
-                    <CampaignItems campaignId={c.id} branchId={c.branchId} canEdit={canEdit} />
+                    <CampaignItems campaignId={c.id} canEdit={canEdit} />
                   </div>
                 )}
               </div>

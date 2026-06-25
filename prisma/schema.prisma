@@ -487,8 +487,10 @@ model ProductSales {
   periodEnd      DateTime @db.Date
   stockQty       Decimal? @db.Decimal(20, 3) // Остаток (qoldiq dona)
   soldQty        Decimal? @db.Decimal(20, 3) // Количество (sotilgan dona)
-  amount         Decimal  @db.Decimal(20, 2) // Продажи (savdo summasi)
-  costAmount     Decimal? @db.Decimal(20, 2) // Себестоимость (tannarx)
+  amount         Decimal  @db.Decimal(20, 2) // Продажи / Сумма (savdo summasi)
+  costAmount     Decimal? @db.Decimal(20, 2) // Себестоимость / Сумма (tannarx summasi)
+  salePrice      Decimal? @db.Decimal(20, 3) // Продажи / Цена — sotuv narxi (dona, tayyor; faylda bo'lsa)
+  costPrice      Decimal? @db.Decimal(20, 3) // Себестоимость / Цена — tannarx narxi (dona, tayyor; faylda bo'lsa)
 
   uploadedFile UploadedFile @relation(fields: [uploadedFileId], references: [id], onDelete: Cascade)
   product      Product      @relation(fields: [productId], references: [id], onDelete: Cascade)

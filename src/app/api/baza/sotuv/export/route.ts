@@ -8,7 +8,8 @@ import { getDefaultRange } from "@/lib/analytics";
 
 const MAX_ROWS = 10_000;
 
-const MARJA_SQL = `(CASE WHEN ps."costAmount" IS NOT NULL AND ps."amount" > 0 THEN (ps."amount" - ps."costAmount") / ps."amount" * 100 ELSE NULL END)`;
+// Marja narxlardan (tayyor salePrice/costPrice); narx yo'q bo'lsa eski summalarga (amount/costAmount) fallback.
+const MARJA_SQL = `(CASE WHEN ps."salePrice" IS NOT NULL AND ps."salePrice" > 0 AND ps."costPrice" IS NOT NULL THEN (ps."salePrice" - ps."costPrice") / ps."salePrice" * 100 WHEN ps."costAmount" IS NOT NULL AND ps."amount" > 0 THEN (ps."amount" - ps."costAmount") / ps."amount" * 100 ELSE NULL END)`;
 const SORT_SQL: Record<string, string> = {
   code: 'p."code"', name: 'p."name"', period: 'ps."periodStart"',
   stockQty: 'ps."stockQty"', soldQty: 'ps."soldQty"', amount: 'ps."amount"', costAmount: 'ps."costAmount"',
@@ -19,6 +20,8 @@ type Row = {
   pcode: number; pname: string; cname: string | null; bname: string;
   periodStart: string; periodEnd: string;
   stockQty: string | null; soldQty: string | null; amount: string; costAmount: string | null;
+  salePrice: string | null; costPrice: string | null; // tayyor narxlar (dona)
+  mj: number | null; // marja — MARJA_SQL'dan (display = sort = filter)
 };
 
 function parseDate(s: string | null): Date | undefined {
@@ -66,7 +69,8 @@ export async function GET(req: NextRequest) {
   const rows = await prisma.$queryRaw<Row[]>(Prisma.sql`
     SELECT p."code" AS pcode, p."name" AS pname, c."name" AS cname, b."name" AS bname,
            ps."periodStart"::text AS "periodStart", ps."periodEnd"::text AS "periodEnd",
-           ps."stockQty", ps."soldQty", ps."amount", ps."costAmount"
+           ps."stockQty", ps."soldQty", ps."amount", ps."costAmount",
+           ps."salePrice", ps."costPrice", (${Prisma.raw(MARJA_SQL)})::float8 AS mj
     FROM "ProductSales" ps
     JOIN "Product" p ON p.id = ps."productId"
     JOIN "Branch" b ON b.id = ps."branchId"
@@ -80,16 +84,20 @@ export async function GET(req: NextRequest) {
     const amt = num(r.amount);
     const cost = r.costAmount != null ? num(r.costAmount) : null;
     const sold = r.soldQty != null ? num(r.soldQty) : 0;
-    const mj = cost !== null && amt > 0 ? Number((((amt - cost) / amt) * 100).toFixed(1)) : null;
+    // Marja — SQL'dan (MARJA_SQL): narxlardan, narx yo'q bo'lsa summaga fallback (sort/filtr bilan izchil).
+    const mj = r.mj != null ? Number(r.mj.toFixed(1)) : null;
+    // Bir dona narx/tannarx: tayyor salePrice/costPrice bo'lsa o'shandan, aks holda summa÷soni.
+    const unitPrice = r.salePrice != null ? Math.round(num(r.salePrice)) : (sold > 0 ? Math.round(amt / sold) : "");
+    const unitCost = r.costPrice != null ? Math.round(num(r.costPrice)) : (cost !== null && sold > 0 ? Math.round(cost / sold) : "");
     return [
       r.pcode, r.pname, r.cname ?? "", r.bname,
       r.periodStart, r.periodEnd,
       r.stockQty != null ? num(r.stockQty) : "",
       sold || "",
       amt,
-      sold > 0 ? Math.round(amt / sold) : "",
+      unitPrice,
       cost ?? "",
-      cost !== null && sold > 0 ? Math.round(cost / sold) : "",
+      unitCost,
       mj ?? "",
     ];
   });

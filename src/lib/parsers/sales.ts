@@ -30,8 +30,10 @@ export type ParsedProductRow = {
   parentCategoryCode: number | null;
   stockQty: number | null;
   soldQty: number | null;
-  amount: number;
-  costAmount: number | null;
+  amount: number;            // Продажи / Сумма
+  costAmount: number | null; // Себестоимость / Сумма
+  salePrice: number | null;  // Продажи / Цена (tayyor; yangi formatda)
+  costPrice: number | null;  // Себестоимость / Цена (tayyor; yangi formatda)
 };
 
 export type ParsedSalesResult =
@@ -54,19 +56,33 @@ export type ParsedSalesResult =
 // ─── Ichki tip: ustun → (filial, metrika) mapping ────────────────────────────
 type MetricLabel = "Остаток" | "Количество" | "Продажи" | "Себестоимость";
 
+// Ustun aniq qaysi ProductSales maydoniga boradi. Yangi formatda Продажи va
+// Себестоимость ikki ustun bo'ladi: Цена (narx) + Сумма (summa).
+type SalesField = "stock" | "sold" | "amount" | "salePrice" | "costAmount" | "costPrice";
+
 interface ColMapping {
   colIndex: number;
   branchAlias: string;
   metric: MetricLabel;
+  field: SalesField;
 }
 
-// Ruxsat etilgan metrika yorliqlari
+// Ruxsat etilgan metrika yorliqlari (R6)
 const ALLOWED_METRICS = new Set<string>([
   "Остаток",
   "Количество",
   "Продажи",
   "Себестоимость",
 ]);
+
+// (metrika R6, sub-yorliq R7) → ProductSales maydoni. R7 "Цена"=narx, "Сумма"=summa.
+// Eski formatda Продажи/Себестоимость bitta ustun (sub yo'q) → summa.
+function resolveField(metric: MetricLabel, sub: string | null): SalesField {
+  if (metric === "Остаток") return "stock";
+  if (metric === "Количество") return "sold";
+  if (metric === "Продажи") return sub === "Цена" ? "salePrice" : "amount";
+  return sub === "Цена" ? "costPrice" : "costAmount"; // Себестоимость
+}
 
 // ─── Yordamchi: R5 da filial nomi yoki sana bloki ekanini aniqlash ───────────
 function isBranchName(v: unknown): v is string {
@@ -75,6 +91,9 @@ function isBranchName(v: unknown): v is string {
   if (!trimmed) return false;
   // Sana formati: DD.MM.YYYY
   if (/^\d{2}\.\d{2}\.\d{4}$/.test(trimmed)) return false;
+  // Pure raqam — sana seriyasi ("46195") yoki kod; filial nomi EMAS (yangi formatda
+  // har filial bloki sana-serial ustun bilan takrorlanadi — uni tashlash uchun).
+  if (/^\d+$/.test(trimmed)) return false;
   // Kod va Номенклатура ustunlarini o'tkazib yuborish
   if (
     trimmed.toLowerCase() === "код" ||
@@ -103,49 +122,56 @@ function isBranchName(v: unknown): v is string {
  */
 function buildColumnMapping(
   branchRow: (unknown | null)[],
-  metricRow: (unknown | null)[]
+  metricRow: (unknown | null)[],
+  subRow: (unknown | null)[]
 ): { mappings: ColMapping[]; version: TemplateVersion } {
   const mappings: ColMapping[] = [];
   let currentBranch: string | null = null;
+  let currentMetric: MetricLabel | null = null;
 
   for (let c = 2; c < branchRow.length; c++) {
     const branchVal = branchRow[c];
-    const metricVal = metricRow[c];
 
     // Agar bu ustunda filial nomi bo'lsa — yangi filial bloki boshlanadi
     if (isBranchName(branchVal)) {
       const alias = (branchVal as string).trim();
-      // "Итого" (grand total) va sana-dublikat ustunlari ("30.05.2026" —
-      // bir kunlik davr uchun 1C filial ustunini takrorlaydi) filial EMAS — tashlanadi.
+      // "Итого" (grand total) va sana-dublikat ustunlari filial EMAS — tashlanadi.
       const isDateHeader = /^\d{1,2}\.\d{1,2}\.\d{2,4}$/.test(alias);
-      if (alias.toLowerCase() === "итого" || isDateHeader) {
-        currentBranch = null;
-      } else {
-        currentBranch = alias;
-      }
-      // Filial nomli ustunning o'zi ham metrika bo'lishi mumkin
-      // (v2 da R5 da filial nomi, R6 da "Продажи" — bir ustunda)
+      currentBranch = alias.toLowerCase() === "итого" || isDateHeader ? null : alias;
+      currentMetric = null; // yangi blok — metrika boshidan
     }
 
     if (!currentBranch) continue;
 
-    // Metrika yorlig'ini tekshirish
-    const metricStr =
-      typeof metricVal === "string" ? metricVal.trim() : null;
-    if (!metricStr) continue;
-
-    if (!ALLOWED_METRICS.has(metricStr)) {
-      throw new Error(
-        `Kutilmagan metrika yorlig'i "${metricStr}" (ustun ${c}). ` +
-          `Ruxsat etilganlar: ${[...ALLOWED_METRICS].join(", ")}. ` +
-          `Fayl tuzilishini tekshiring.`
-      );
+    // R6 metrika: bo'lsa — yangi metrika ustuni; bo'sh — oldingi metrika davom etadi
+    // (yangi formatda Продажи/Себестоимость 2 ustun: Цена+Сумма, R6 faqat 1-ustunda).
+    const metricStr = typeof metricRow[c] === "string" ? (metricRow[c] as string).trim() : "";
+    const hasMetric = metricStr !== "";
+    if (hasMetric) {
+      if (!ALLOWED_METRICS.has(metricStr)) {
+        throw new Error(
+          `Kutilmagan metrika yorlig'i "${metricStr}" (ustun ${c}). ` +
+            `Ruxsat etilganlar: ${[...ALLOWED_METRICS].join(", ")}. ` +
+            `Fayl tuzilishini tekshiring.`
+        );
+      }
+      currentMetric = metricStr as MetricLabel;
     }
+
+    // R7 sub-yorlig'i: "Цена"(narx) yoki "Сумма"(summa). Eski formatda yo'q.
+    const subRaw = typeof subRow[c] === "string" ? (subRow[c] as string).trim() : "";
+    const sub = subRaw === "Цена" || subRaw === "Сумма" ? subRaw : null;
+
+    if (!currentMetric) continue;
+    // Ustun map qilinadi: R6 da metrika bor (asosiy ustun) YOKI R7 da Цена/Сумма bor
+    // (Продажи/Себестоимость ikkinchi ustuni). Bo'sh ustun — o'tkaziladi.
+    if (!hasMetric && !sub) continue;
 
     mappings.push({
       colIndex: c,
       branchAlias: currentBranch,
-      metric: metricStr as MetricLabel,
+      metric: currentMetric,
+      field: resolveField(currentMetric, sub),
     });
   }
 
@@ -260,11 +286,12 @@ export function parseSalesWorkbook(
   // R(headerIdx+2) = "Сумма" qatori (R7, o'tkazib yuboriladi)
   const branchRow = rows[headerIdx] as (unknown | null)[];
   const metricRow =
-    headerIdx + 1 < rows.length
-      ? (rows[headerIdx + 1] as (unknown | null)[])
-      : [];
+    headerIdx + 1 < rows.length ? (rows[headerIdx + 1] as (unknown | null)[]) : [];
+  // R7 — yangi formatda Продажи/Себестоимость ostidagi "Цена"/"Сумма" sub-yorliqlari
+  const subRow =
+    headerIdx + 2 < rows.length ? (rows[headerIdx + 2] as (unknown | null)[]) : [];
 
-  const { mappings, version } = buildColumnMapping(branchRow, metricRow);
+  const { mappings, version } = buildColumnMapping(branchRow, metricRow, subRow);
 
   // Data qatori boshlanishi: header dan keyin sub-headerlarni o'tkazib yuborish
   let dataStartIdx = headerIdx + 1;
@@ -387,25 +414,27 @@ function parseProductLevel(
     {
       stockIdx: number | null;
       qtyIdx: number | null;
-      salesIdx: number | null;
-      costIdx: number | null;
+      salesIdx: number | null;     // Продажи / Сумма
+      costIdx: number | null;      // Себестоимость / Сумма
+      salePriceIdx: number | null; // Продажи / Цена
+      costPriceIdx: number | null; // Себестоимость / Цена
     }
   >();
 
   for (const m of mappings) {
     if (!branchMetrics.has(m.branchAlias)) {
       branchMetrics.set(m.branchAlias, {
-        stockIdx: null,
-        qtyIdx: null,
-        salesIdx: null,
-        costIdx: null,
+        stockIdx: null, qtyIdx: null, salesIdx: null, costIdx: null,
+        salePriceIdx: null, costPriceIdx: null,
       });
     }
     const entry = branchMetrics.get(m.branchAlias)!;
-    if (m.metric === "Остаток") entry.stockIdx = m.colIndex;
-    else if (m.metric === "Количество") entry.qtyIdx = m.colIndex;
-    else if (m.metric === "Продажи") entry.salesIdx = m.colIndex;
-    else if (m.metric === "Себестоимость") entry.costIdx = m.colIndex;
+    if (m.field === "stock") entry.stockIdx = m.colIndex;
+    else if (m.field === "sold") entry.qtyIdx = m.colIndex;
+    else if (m.field === "amount") entry.salesIdx = m.colIndex;
+    else if (m.field === "costAmount") entry.costIdx = m.colIndex;
+    else if (m.field === "salePrice") entry.salePriceIdx = m.colIndex;
+    else if (m.field === "costPrice") entry.costPriceIdx = m.colIndex;
   }
 
   // ── Data qatorlarini yig'ish (kod=raqam, nom=matn) ──────────────────────────
@@ -414,7 +443,7 @@ function parseProductLevel(
   // shuning uchun GROUP vs LEAF ni SUBTOTAL orqali qayta quramiz:
   // qator GROUP, agar uning Продажи (umumiy) qiymati o'zidan keyingi ketma-ket
   // qatorlar yig'indisiga teng bo'lsa (parent bolalardan oldin keladi).
-  const salesIdxs = mappings.filter((m) => m.metric === "Продажи").map((m) => m.colIndex);
+  const salesIdxs = mappings.filter((m) => m.field === "amount").map((m) => m.colIndex);
   const totalOf = (r: (unknown | null)[]) =>
     salesIdxs.reduce((s, idx) => s + (parseAmount(r[idx]) ?? 0), 0);
 
@@ -471,6 +500,9 @@ function parseProductLevel(
       const stockQty = cols.stockIdx != null ? (parseAmount(d.r[cols.stockIdx]) ?? null) : null;
       const soldQty = cols.qtyIdx != null ? (parseAmount(d.r[cols.qtyIdx]) ?? null) : null;
       const costAmount = cols.costIdx != null ? (parseAmount(d.r[cols.costIdx]) ?? null) : null;
+      // Yangi format: tayyor narxlar (Продажи Цена / Себестоимость Цена). Eski formatda null.
+      const salePrice = cols.salePriceIdx != null ? (parseAmount(d.r[cols.salePriceIdx]) ?? null) : null;
+      const costPrice = cols.costPriceIdx != null ? (parseAmount(d.r[cols.costPriceIdx]) ?? null) : null;
       productRows.push({
         branchAlias,
         productCode: d.code,
@@ -480,6 +512,8 @@ function parseProductLevel(
         soldQty,
         amount,
         costAmount,
+        salePrice,
+        costPrice,
       });
     }
   }

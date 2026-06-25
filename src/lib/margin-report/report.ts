@@ -40,20 +40,26 @@ export async function buildMarginReport(): Promise<
   const { start, end, label: periodLabel, tag: fileTag } = period;
 
   // Aynan shu davr kataklari (bir davr → har filial×subkat bittadan qator).
-  // Tannarxi bor, sotuvi > 0, va sotuv − tannarx < 0 (marja minus) bo'lganlar.
+  // Sotuvi > 0 va sotuv − tannarx < 0 (marja minus) bo'lganlar.
+  // Marja narxlardan (vaznli): sotuv=Σ(salePrice×soni), tannarx=Σ(costPrice×soni);
+  // tayyor narx yo'q bo'lsa eski summalarga (amount/costAmount) fallback. Manba ProductSales.
   const rows = await prisma.$queryRaw<Row[]>(Prisma.sql`
     SELECT b.name AS branch, g.name AS grp, par.name AS cat, sub.name AS sub,
-           cs.amount::float8 AS sales, cs."costAmount"::float8 AS cost
-    FROM "CategorySales" cs
-    JOIN "Branch" b ON b.id = cs."branchId"
-    JOIN "Category" sub ON sub.id = cs."categoryId"
+           SUM(COALESCE(ps."salePrice" * ps."soldQty", ps.amount))::float8 AS sales,
+           SUM(COALESCE(ps."costPrice" * ps."soldQty", ps."costAmount", 0))::float8 AS cost
+    FROM "ProductSales" ps
+    JOIN "Product" pr ON pr.id = ps."productId"
+    JOIN "Branch" b ON b.id = ps."branchId"
+    JOIN "Category" sub ON sub.id = pr."categoryId"
     LEFT JOIN "Category" par ON par.id = sub."parentId"
     LEFT JOIN "CategoryGroup" g ON g.id = COALESCE(par."groupId", sub."groupId")
-    WHERE cs."periodStart" = ${start}
-      AND cs."periodEnd" = ${end}
-      AND cs."costAmount" IS NOT NULL
-      AND cs.amount > 0
-      AND cs.amount - cs."costAmount" < 0
+    WHERE ps."periodStart" = ${start}
+      AND ps."periodEnd" = ${end}
+      AND pr."categoryId" IS NOT NULL
+    GROUP BY b.name, g.name, par.name, sub.name, g."sortOrder", par."sortOrder", sub."sortOrder", b."sortOrder"
+    HAVING SUM(COALESCE(ps."salePrice" * ps."soldQty", ps.amount)) > 0
+      AND SUM(COALESCE(ps."salePrice" * ps."soldQty", ps.amount))
+        - SUM(COALESCE(ps."costPrice" * ps."soldQty", ps."costAmount", 0)) < 0
     ORDER BY g."sortOrder" NULLS LAST, par."sortOrder" NULLS LAST, sub."sortOrder", b."sortOrder"
   `);
 
@@ -85,17 +91,20 @@ export async function buildSubcatMarginReport(): Promise<
   if (!period) return null;
   const { start, end, label: periodLabel, tag: fileTag } = period;
 
+  // Marja narxlardan (vaznli): sotuv=salePrice×soni, tannarx=costPrice×soni; narx yo'q
+  // bo'lsa eski summalarga fallback. Subkat = Product.categoryId (ProductSales SKU darajasi).
   const rows = await prisma.$queryRaw<SubRow[]>(Prisma.sql`
-    SELECT cs."categoryId" AS cid, g.name AS grp, par.name AS cat, sub.name AS sub,
-           SUM(cs.amount)::float8 AS sales,
-           SUM(cs."costAmount")::float8 AS cost
-    FROM "CategorySales" cs
-    JOIN "Category" sub ON sub.id = cs."categoryId"
+    SELECT pr."categoryId" AS cid, g.name AS grp, par.name AS cat, sub.name AS sub,
+           SUM(COALESCE(ps."salePrice" * ps."soldQty", ps.amount))::float8 AS sales,
+           SUM(COALESCE(ps."costPrice" * ps."soldQty", ps."costAmount"))::float8 AS cost
+    FROM "ProductSales" ps
+    JOIN "Product" pr ON pr.id = ps."productId"
+    JOIN "Category" sub ON sub.id = pr."categoryId"
     LEFT JOIN "Category" par ON par.id = sub."parentId"
     LEFT JOIN "CategoryGroup" g ON g.id = COALESCE(par."groupId", sub."groupId")
-    WHERE cs."periodStart" = ${start} AND cs."periodEnd" = ${end}
-    GROUP BY cs."categoryId", g.name, par.name, sub.name, g."sortOrder", par."sortOrder", sub."sortOrder"
-    HAVING SUM(cs.amount) > 0
+    WHERE ps."periodStart" = ${start} AND ps."periodEnd" = ${end} AND pr."categoryId" IS NOT NULL
+    GROUP BY pr."categoryId", g.name, par.name, sub.name, g."sortOrder", par."sortOrder", sub."sortOrder"
+    HAVING SUM(COALESCE(ps."salePrice" * ps."soldQty", ps.amount)) > 0
     ORDER BY g."sortOrder" NULLS LAST, par."sortOrder" NULLS LAST, sub."sortOrder"
   `);
 
@@ -135,10 +144,14 @@ export async function buildLowMarginProductsReport(): Promise<
   const { start, end, label: periodLabel, tag: fileTag } = period;
   const frac = LOW_MARGIN_PCT / 100;
 
+  // Marja narxlardan (vaznli): sotuv=salePrice×soni, tannarx=costPrice×soni;
+  // tayyor narx yo'q bo'lsa eski summalarga (amount/costAmount) fallback.
+  const saleExpr = Prisma.sql`COALESCE(ps."salePrice" * ps."soldQty", ps.amount)`;
+  const costExpr = Prisma.sql`COALESCE(ps."costPrice" * ps."soldQty", ps."costAmount", 0)`;
   const rows = await prisma.$queryRaw<LowRow[]>(Prisma.sql`
     SELECT b.name AS branch, g.name AS grp, par.name AS cat, sub.name AS sub,
            p.code AS code, p.name AS pname,
-           ps.amount::float8 AS sales, ps."costAmount"::float8 AS cost
+           ${saleExpr}::float8 AS sales, ${costExpr}::float8 AS cost
     FROM "ProductSales" ps
     JOIN "Branch" b ON b.id = ps."branchId"
     JOIN "Product" p ON p.id = ps."productId" AND p."archivedAt" IS NULL
@@ -146,10 +159,10 @@ export async function buildLowMarginProductsReport(): Promise<
     LEFT JOIN "Category" par ON par.id = sub."parentId"
     LEFT JOIN "CategoryGroup" g ON g.id = COALESCE(par."groupId", sub."groupId")
     WHERE ps."periodStart" = ${start} AND ps."periodEnd" = ${end}
-      AND ps."costAmount" IS NOT NULL
-      AND ps.amount > 0
-      AND (ps.amount - ps."costAmount") < ps.amount * ${frac}
-    ORDER BY (ps.amount - ps."costAmount") / ps.amount ASC, b."sortOrder"
+      AND (ps."costPrice" IS NOT NULL OR ps."costAmount" IS NOT NULL)
+      AND ${saleExpr} > 0
+      AND (${saleExpr} - ${costExpr}) < ${saleExpr} * ${frac}
+    ORDER BY (${saleExpr} - ${costExpr}) / NULLIF(${saleExpr}, 0) ASC, b."sortOrder"
   `);
 
   const header = ["Filial", "Bo'lim", "Kategoriya", "Subkategoriya", "Kod", "Mahsulot", "Sotuv", "Tannarx", "Marja %"];

@@ -102,29 +102,31 @@ async function _marjaBreakdown(range: DateRange, branchId?: number, scope?: numb
   byCategory: MarjaRow[];
   byBranch:   MarjaRow[];
 }> {
-  const branchSql = branchId ? Prisma.sql`AND cs."branchId" = ${branchId}` : Prisma.empty;
-  const scopeSql = scope ? Prisma.sql`AND cs."categoryId" = ANY(${scope}::int[])` : Prisma.empty;
+  // Marja narxlardan (vaznli): sotuv = Σ(sotuv narxi × soni), tannarx = Σ(tannarx narxi × soni).
+  // Tayyor narx (salePrice/costPrice) bo'lmasa — eski summalarga (amount/costAmount) fallback.
+  // Manba: ProductSales (SKU darajasi) → Product.categoryId (subkat) → parent kategoriya.
+  const branchSql = branchId ? Prisma.sql`AND ps."branchId" = ${branchId}` : Prisma.empty;
+  const scopeSql = scope ? Prisma.sql`AND p."categoryId" = ANY(${scope}::int[])` : Prisma.empty;
 
-  const proRated = Prisma.sql`
-    cs.amount::numeric * (
-      (LEAST(cs."periodEnd", ${range.end}::date) - GREATEST(cs."periodStart", ${range.start}::date) + 1)::float8
-      / NULLIF((cs."periodEnd" - cs."periodStart" + 1)::float8, 0)
-    )
-  `;
-  const proRatedCost = Prisma.sql`
-    cs."costAmount"::numeric * (
-      (LEAST(cs."periodEnd", ${range.end}::date) - GREATEST(cs."periodStart", ${range.start}::date) + 1)::float8
-      / NULLIF((cs."periodEnd" - cs."periodStart" + 1)::float8, 0)
-    )
-  `;
+  // Period proratsiya ulushi (davr chetidagi qisman yozuvlar uchun)
+  const frac = Prisma.sql`(
+    (LEAST(ps."periodEnd", ${range.end}::date) - GREATEST(ps."periodStart", ${range.start}::date) + 1)::float8
+    / NULLIF((ps."periodEnd" - ps."periodStart" + 1)::float8, 0)
+  )`;
+  // Sotuv (vaznli narx, narx yo'q bo'lsa amount) va tannarx (narx yo'q bo'lsa costAmount)
+  const proRated = Prisma.sql`COALESCE(ps."salePrice" * ps."soldQty", ps.amount)::numeric * ${frac}`;
+  const proRatedCost = Prisma.sql`COALESCE(ps."costPrice" * ps."soldQty", ps."costAmount", 0)::numeric * ${frac}`;
 
   const byCat = await prisma.$queryRaw<{ id: number; name: string; sales: number | null; cost: number | null }[]>`
     SELECT c.id AS id, c.name AS name,
            COALESCE(SUM(${proRated}), 0)::float8 AS sales,
            COALESCE(SUM(${proRatedCost}), 0)::float8 AS cost
-    FROM "CategorySales" cs
-    JOIN "Category" c ON c.id = cs."categoryId"
-    WHERE cs."periodEnd" >= ${range.start} AND cs."periodStart" <= ${range.end}    ${branchSql} ${scopeSql}
+    FROM "ProductSales" ps
+    JOIN "Product" p ON p.id = ps."productId"
+    JOIN "Category" sub ON sub.id = p."categoryId"
+    JOIN "Category" c ON c.id = COALESCE(sub."parentId", sub.id)
+    WHERE ps."periodEnd" >= ${range.start} AND ps."periodStart" <= ${range.end}
+      AND p."categoryId" IS NOT NULL ${branchSql} ${scopeSql}
     GROUP BY c.id, c.name, c."sortOrder"
     ORDER BY c."sortOrder" ASC
   `;
@@ -132,10 +134,11 @@ async function _marjaBreakdown(range: DateRange, branchId?: number, scope?: numb
     SELECT b.id AS id, b.name AS name,
            COALESCE(SUM(${proRated}), 0)::float8 AS sales,
            COALESCE(SUM(${proRatedCost}), 0)::float8 AS cost
-    FROM "CategorySales" cs
-    JOIN "Branch" b ON b.id = cs."branchId"
-    JOIN "Category" cat ON cat.id = cs."categoryId"
-    WHERE cs."periodEnd" >= ${range.start} AND cs."periodStart" <= ${range.end}    ${branchSql} ${scopeSql}
+    FROM "ProductSales" ps
+    JOIN "Branch" b ON b.id = ps."branchId"
+    JOIN "Product" p ON p.id = ps."productId"
+    WHERE ps."periodEnd" >= ${range.start} AND ps."periodStart" <= ${range.end}
+      AND p."categoryId" IS NOT NULL ${branchSql} ${scopeSql}
     GROUP BY b.id, b.name, b."sortOrder"
     ORDER BY b."sortOrder" ASC
   `;
@@ -169,25 +172,28 @@ export const marjaBreakdown = (range: DateRange, branchId?: number, scope?: numb
 export type MarjaGroupNode = MarjaRow & { categories: MarjaRow[] };
 
 async function _marjaHierarchy(range: DateRange, branchId?: number, scope?: number[] | null): Promise<MarjaGroupNode[]> {
-  const branchSql = branchId ? Prisma.sql`AND cs."branchId" = ${branchId}` : Prisma.empty;
-  const scopeSql = scope ? Prisma.sql`AND cs."categoryId" = ANY(${scope}::int[])` : Prisma.empty;
+  // Marja narxlardan (vaznli), narx yo'q bo'lsa eski summalarga fallback. Manba: ProductSales.
+  const branchSql = branchId ? Prisma.sql`AND ps."branchId" = ${branchId}` : Prisma.empty;
+  const scopeSql = scope ? Prisma.sql`AND p."categoryId" = ANY(${scope}::int[])` : Prisma.empty;
   const frac = Prisma.sql`(
-    (LEAST(cs."periodEnd", ${range.end}::date) - GREATEST(cs."periodStart", ${range.start}::date) + 1)::float8
-    / NULLIF((cs."periodEnd" - cs."periodStart" + 1)::float8, 0)
+    (LEAST(ps."periodEnd", ${range.end}::date) - GREATEST(ps."periodStart", ${range.start}::date) + 1)::float8
+    / NULLIF((ps."periodEnd" - ps."periodStart" + 1)::float8, 0)
   )`;
 
-  // CategorySales (subkat darajasi) → ota-kategoriya → guruh
+  // ProductSales (SKU) → subkat (Product.categoryId) → ota-kategoriya → guruh
   const rows = await prisma.$queryRaw<
     { gid: number; gname: string; cid: number; cname: string; sales: number | null; cost: number | null }[]
   >`
     SELECT g.id AS gid, g.name AS gname, par.id AS cid, par.name AS cname,
-           COALESCE(SUM(cs.amount::numeric * ${frac}), 0)::float8 AS sales,
-           COALESCE(SUM(cs."costAmount"::numeric * ${frac}), 0)::float8 AS cost
-    FROM "CategorySales" cs
-    JOIN "Category" sub ON sub.id = cs."categoryId"
+           COALESCE(SUM(COALESCE(ps."salePrice" * ps."soldQty", ps.amount)::numeric * ${frac}), 0)::float8 AS sales,
+           COALESCE(SUM(COALESCE(ps."costPrice" * ps."soldQty", ps."costAmount", 0)::numeric * ${frac}), 0)::float8 AS cost
+    FROM "ProductSales" ps
+    JOIN "Product" p ON p.id = ps."productId"
+    JOIN "Category" sub ON sub.id = p."categoryId"
     JOIN "Category" par ON par.id = sub."parentId"
     JOIN "CategoryGroup" g ON g.id = par."groupId"
-    WHERE cs."periodEnd" >= ${range.start} AND cs."periodStart" <= ${range.end}    ${branchSql} ${scopeSql}
+    WHERE ps."periodEnd" >= ${range.start} AND ps."periodStart" <= ${range.end}
+      AND p."categoryId" IS NOT NULL ${branchSql} ${scopeSql}
     GROUP BY g.id, g.name, g."sortOrder", par.id, par.name, par."sortOrder"
     ORDER BY g."sortOrder" ASC, par."sortOrder" ASC
   `;

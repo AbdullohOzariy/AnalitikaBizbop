@@ -60,11 +60,13 @@ async function _computeProfitTree(
         },
       },
     }),
-    // Sotuv/tannarx — subkat (Product.categoryId) bo'yicha, period proratsiyasi
+    // Sotuv/tannarx — subkat (Product.categoryId) bo'yicha, period proratsiyasi.
+    // Marja narxlardan (vaznli): sotuv=Σ(salePrice×soni), tannarx=Σ(costPrice×soni);
+    // tayyor narx yo'q bo'lsa eski summalarga (amount/costAmount) fallback.
     prisma.$queryRaw<{ cid: number; sales: number; cost: number }[]>`
       SELECT p."categoryId" AS cid,
-        SUM(ps.amount::numeric * frac.f)::float8 AS sales,
-        SUM(COALESCE(ps."costAmount", 0)::numeric * frac.f)::float8 AS cost
+        SUM(COALESCE(ps."salePrice" * ps."soldQty", ps.amount)::numeric * frac.f)::float8 AS sales,
+        SUM(COALESCE(ps."costPrice" * ps."soldQty", ps."costAmount", 0)::numeric * frac.f)::float8 AS cost
       FROM "ProductSales" ps
       JOIN "Product" p ON p.id = ps."productId"
       JOIN LATERAL (

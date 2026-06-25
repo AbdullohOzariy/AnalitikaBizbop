@@ -308,30 +308,39 @@ export async function searchProductsAction(
   } catch (err) { return xato(err); }
 }
 
-// ─── Narx auto-taklif (ProductSales oxirgi davr o'rtacha sotuv narxi) ────────────
-const suggestSchema = z.object({ productId: idSchema, branchId: idSchema.nullable().optional() });
+// ─── Narx auto-taklif — MEGA filial (Mega Center) oxirgi davr SOTUV NARXI ────────
+// Promo sotilish narxi har doim MEGA filial narxidan (aksiya filialidan qat'i nazar).
+// Asosiy: salePrice (Продажи Цена, tayyor narx). Eski formatda (salePrice yo'q) —
+// fallback amount/soldQty (Продажи Сумма ÷ Количество).
+const suggestSchema = z.object({ productId: idSchema });
 
 export async function suggestPriceAction(
-  input: { productId: number; branchId?: number | null }
+  input: { productId: number }
 ): Promise<{ ok: true; price: number | null } | Err> {
   try {
     await requirePromoView();
     const p = suggestSchema.parse(input);
-    // Eng oxirgi davr (max periodEnd) bo'yicha o'rtacha narx = SUM(amount)/SUM(soldQty).
-    // branchId berilsa o'sha filial; aks holda barcha filiallar yig'indisi.
-    const branchCond = p.branchId ? Prisma.sql`AND ps."branchId" = ${p.branchId}` : Prisma.empty;
-    const rows = await prisma.$queryRaw<{ price: number | null }[]>`
+    // MEGA filialni nom bo'yicha topamiz (BranchAlias "Market MEGA market" → "Mega Center").
+    const mega = await prisma.branch.findFirst({
+      where: { name: { contains: "mega", mode: "insensitive" } },
+      orderBy: { sortOrder: "asc" },
+      select: { id: true },
+    });
+    const branchCond = mega ? Prisma.sql`AND ps."branchId" = ${mega.id}` : Prisma.empty;
+    const rows = await prisma.$queryRaw<{ sale_price: number | null; avg_price: number | null }[]>`
       WITH latest AS (
         SELECT MAX("periodEnd") AS pe
         FROM "ProductSales" ps
         WHERE ps."productId" = ${p.productId} ${branchCond}
       )
-      SELECT (SUM(ps.amount) / NULLIF(SUM(ps."soldQty"), 0))::float8 AS price
+      SELECT
+        AVG(ps."salePrice")::float8 AS sale_price,
+        (SUM(ps.amount) / NULLIF(SUM(ps."soldQty"), 0))::float8 AS avg_price
       FROM "ProductSales" ps, latest
       WHERE ps."productId" = ${p.productId} ${branchCond}
         AND ps."periodEnd" = latest.pe
     `;
-    const raw = rows[0]?.price ?? null;
+    const raw = rows[0]?.sale_price ?? rows[0]?.avg_price ?? null;
     return { ok: true, price: raw != null ? Math.round(raw * 100) / 100 : null };
   } catch (err) { return xato(err); }
 }
