@@ -875,12 +875,15 @@ model PromoCampaign {
 // Dolina Sok 1L" → Abrikos, Persik, …). Faqat shu kampaniyaga tegishli (qayta ishlatilmaydi).
 // Guruh o'chsa SKU'lar guruhsiz bo'lib qoladi (PromoItem.groupId → SetNull).
 model PromoItemGroup {
-  id         Int      @id @default(autoincrement())
-  campaignId Int
-  name       String
-  sortOrder  Int      @default(0)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id            Int      @id @default(autoincrement())
+  campaignId    Int
+  name          String
+  sortOrder     Int      @default(0)
+  designTitle   String? // dizayn banner uchun chiroyli nom (uz); null = guruh nomi fallback
+  designTitleRu String? // ixtiyoriy ru qator (null = ko'rsatilmaydi)
+  imageData     String?  @db.Text // oq/shaffof fonli mahsulot rasmi — "data:image/png;base64,..."
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   campaign PromoCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   items    PromoItem[]
@@ -898,6 +901,9 @@ model PromoItem {
   promoPrice    Decimal  @db.Decimal(20, 2) // aksiya narxi
   promoLimit    Decimal? @db.Decimal(20, 3) // aksiya limiti (dona, kasr ham bo'lishi mumkin)
   priceReturned Boolean? // aksiya tugagach narx asliga qaytdimi (hisobot to'ldiradi)
+  designTitle   String? // dizayn banner uchun chiroyli nom (uz; guruhsiz SKU uchun) — null = Product.name fallback
+  designTitleRu String? // ixtiyoriy ru qator (null = ko'rsatilmaydi)
+  imageData     String?  @db.Text // oq/shaffof fonli mahsulot rasmi — "data:image/png;base64,..."
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

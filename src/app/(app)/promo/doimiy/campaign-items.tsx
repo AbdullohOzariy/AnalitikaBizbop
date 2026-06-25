@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
-import { Search, X, Loader2, Plus, Trash2, Check, FolderPlus, Folder, Pencil, GripVertical } from "lucide-react";
+import { Search, X, Loader2, Plus, Trash2, Check, FolderPlus, Folder, Pencil, GripVertical, ImageIcon, Download, Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatUZS } from "@/lib/format";
 import { toast } from "sonner";
@@ -15,8 +15,34 @@ import {
   listItemsAction, addItemAction, updateItemAction, deleteItemAction,
   searchProductsAction, suggestPriceAction,
   createGroupAction, renameGroupAction, deleteGroupAction, moveItemToGroupAction,
+  saveDesignAction, getDesignAction,
   type PromoItemRow, type PromoGroupRow, type ProductSearchRow,
 } from "./actions";
+
+// Rasmni brauzerda (canvas) max o'lchamga proporsional kichraytirib base64 PNG qaytaradi.
+function resizeImageToDataUrl(file: File, maxSize: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("o'qib bo'lmadi"));
+    reader.onload = () => {
+      const img = new window.Image();
+      img.onerror = () => reject(new Error("rasm emas"));
+      img.onload = () => {
+        let { width, height } = img;
+        const m = Math.max(width, height);
+        if (m > maxSize) { const s = maxSize / m; width = Math.round(width * s); height = Math.round(height * s); }
+        const canvas = document.createElement("canvas");
+        canvas.width = width; canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { reject(new Error("canvas")); return; }
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/png"));
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 function fmtMoney(n: number) {
   return formatUZS(n, { compact: false });
@@ -39,6 +65,7 @@ export function CampaignItems({
   const [refreshKey, setRefreshKey] = useState(0);
   const [addOpen, setAddOpen] = useState(false);
   const [groupOpen, setGroupOpen] = useState(false);
+  const [design, setDesign] = useState<{ kind: "item" | "group"; id: number; title: string } | null>(null);
   const reqId = useRef(0);
 
   // Drag-drop: drag qilinayotgan SKU id'si dataTransfer orqali uzatiladi (ref'siz —
@@ -148,6 +175,7 @@ export function CampaignItems({
                       dropProps={dropProps(g.id)}
                       onItemDragStart={onItemDragStart}
                       onItemDragEnd={onItemDragEnd}
+                      onDesign={canEdit ? () => setDesign({ kind: "group", id: g.id, title: g.name }) : undefined}
                     />
                   );
                 })}
@@ -173,6 +201,7 @@ export function CampaignItems({
                     onChanged={reload}
                     onDragStartItem={canEdit ? (e) => onItemDragStart(e, r.id) : undefined}
                     onDragEndItem={canEdit ? onItemDragEnd : undefined}
+                    onDesign={canEdit ? () => setDesign({ kind: "item", id: r.id, title: r.name }) : undefined}
                   />
                 ))}
                 {ungrouped.length === 0 && groups.length > 0 && (
@@ -204,6 +233,14 @@ export function CampaignItems({
           onAdded={() => { setGroupOpen(false); reload(); }}
         />
       )}
+      {design && (
+        <DesignDialog
+          kind={design.kind}
+          id={design.id}
+          fallbackTitle={design.title}
+          onClose={() => setDesign(null)}
+        />
+      )}
     </div>
   );
 }
@@ -211,7 +248,7 @@ export function CampaignItems({
 /** Guruh bloki — sarlavha qatori (nom, SKU soni, tahrir/o'chir) + ichidagi SKU qatorlar.
  *  Sarlavha drop nishoni (drag-drop bilan SKU shu guruhga ko'chiriladi). */
 function GroupBlock({
-  group, items, canEdit, colCount, onChanged, isOver, dragging, dropProps, onItemDragStart, onItemDragEnd,
+  group, items, canEdit, colCount, onChanged, isOver, dragging, dropProps, onItemDragStart, onItemDragEnd, onDesign,
 }: {
   group: PromoGroupRow;
   items: PromoItemRow[];
@@ -223,9 +260,11 @@ function GroupBlock({
   dropProps: Record<string, unknown>;
   onItemDragStart: (e: React.DragEvent, id: number) => void;
   onItemDragEnd: () => void;
+  onDesign?: () => void;
 }) {
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(group.name);
+  const [delOpen, setDelOpen] = useState(false);
   const [isPending, start] = useTransition();
 
   const saveName = () => {
@@ -238,11 +277,10 @@ function GroupBlock({
     });
   };
 
-  const del = () => {
-    if (!confirm(`"${group.name}" guruhi va undagi ${items.length} ta SKU o'chiriladi. Davom etamizmi?`)) return;
+  const doDelete = (keepItems: boolean) => {
     start(async () => {
-      const res = await deleteGroupAction({ id: group.id });
-      if (res.ok) onChanged();
+      const res = await deleteGroupAction({ id: group.id, keepItems });
+      if (res.ok) { setDelOpen(false); onChanged(); }
       else toast.error(res.error);
     });
   };
@@ -274,11 +312,17 @@ function GroupBlock({
             {dragging && !isOver && <span className="text-[10px] text-primary/70">← shu yerga tashlang</span>}
             {canEdit && !renaming && (
               <span className="ml-auto flex items-center gap-0.5">
+                {onDesign && (
+                  <button onClick={onDesign} title="Dizayn banner (rasm + nom)" aria-label="Dizayn"
+                    className="text-muted-foreground hover:text-primary">
+                    <ImageIcon className="h-3.5 w-3.5" />
+                  </button>
+                )}
                 <button onClick={() => setRenaming(true)} title="Nomini o'zgartirish" aria-label="Nomini o'zgartirish"
                   className="text-muted-foreground hover:text-foreground">
                   <Pencil className="h-3.5 w-3.5" />
                 </button>
-                <button onClick={del} title="Guruhni o'chirish" aria-label="Guruhni o'chirish"
+                <button onClick={() => setDelOpen(true)} title="Guruhni o'chirish" aria-label="Guruhni o'chirish"
                   className="text-muted-foreground hover:text-destructive">
                   {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                 </button>
@@ -306,15 +350,66 @@ function GroupBlock({
           />
         ))
       )}
+      {delOpen && (
+        <DeleteGroupDialog
+          groupName={group.name}
+          count={items.length}
+          isPending={isPending}
+          onDelete={doDelete}
+          onClose={() => setDelOpen(false)}
+        />
+      )}
     </>
+  );
+}
+
+/** Guruhni o'chirish — 2 variant: tarqatish (SKU saqlanadi) yoki guruh+SKU o'chirish. */
+function DeleteGroupDialog({
+  groupName, count, isPending, onDelete, onClose,
+}: {
+  groupName: string;
+  count: number;
+  isPending: boolean;
+  onDelete: (keepItems: boolean) => void;
+  onClose: () => void;
+}) {
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>&quot;{groupName}&quot; guruhini o&apos;chirish</DialogTitle>
+          <DialogDescription className="text-sm text-muted-foreground">
+            Guruhda {count} ta SKU bor. Qaysi biri kerak?
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-2 py-1">
+          <Button variant="outline" className="h-auto justify-start rounded-xl py-2.5 text-left" disabled={isPending} onClick={() => onDelete(true)}>
+            <div className="flex flex-col items-start">
+              <span className="font-medium">Faqat guruhni o&apos;chirish</span>
+              <span className="text-xs text-muted-foreground">SKU&apos;lar saqlanadi (guruhsiz bo&apos;ladi)</span>
+            </div>
+          </Button>
+          <Button variant="outline" className="h-auto justify-start rounded-xl border-destructive/30 py-2.5 text-left text-destructive hover:bg-destructive/5 hover:text-destructive" disabled={isPending} onClick={() => onDelete(false)}>
+            <div className="flex flex-col items-start">
+              <span className="font-medium">Guruh + {count} ta SKU o&apos;chirish</span>
+              <span className="text-xs text-muted-foreground">Hammasi butunlay o&apos;chiriladi</span>
+            </div>
+          </Button>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" className="rounded-xl" disabled={isPending} onClick={onClose}>Bekor</Button>
+          {isPending && <Loader2 className="h-4 w-4 animate-spin self-center" />}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
 /** Bir SKU qatori — narxlar ruchnoy (blur'da saqlanadi), farq/% live derive.
  *  Drag handle (GripVertical) bilan guruhga sudrab ko'chiriladi. */
-function ItemRow({ row, canEdit, onChanged, grouped, onDragStartItem, onDragEndItem }: {
+function ItemRow({ row, canEdit, onChanged, grouped, onDragStartItem, onDragEndItem, onDesign }: {
   row: PromoItemRow; canEdit: boolean; onChanged: () => void; grouped?: boolean;
-  onDragStartItem?: (e: React.DragEvent) => void; onDragEndItem?: () => void;
+  onDragStartItem?: (e: React.DragEvent) => void; onDragEndItem?: () => void; onDesign?: () => void;
 }) {
   const [reg, setReg] = useState(String(row.regularPrice));
   const [promo, setPromo] = useState(String(row.promoPrice));
@@ -393,12 +488,19 @@ function ItemRow({ row, canEdit, onChanged, grouped, onDragStartItem, onDragEndI
       <td className="px-2 py-1.5 text-right tabular-nums font-medium">{diff > 0 ? `−${fmtMoney(diff)}` : diff < 0 ? `+${fmtMoney(-diff)}` : "—"}</td>
       <td className={cn("px-2 py-1.5 text-right tabular-nums font-semibold", diffPctClass(pct))}>{pct ? `${pct.toFixed(1)}%` : "—"}</td>
       {canEdit && (
-        <td className="px-1 py-1.5 text-center">
-          {isPending ? <Loader2 className="inline h-3.5 w-3.5 animate-spin text-muted-foreground" />
-            : saved ? <Check className="inline h-3.5 w-3.5 text-emerald-500" />
-            : <button onClick={del} aria-label="O'chirish" title="O'chirish" className="text-muted-foreground hover:text-destructive">
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>}
+        <td className="px-1 py-1.5">
+          <div className="flex items-center justify-center gap-1.5">
+            {onDesign && !isPending && !saved && (
+              <button onClick={onDesign} aria-label="Dizayn" title="Dizayn banner (rasm + nom)" className="text-muted-foreground hover:text-primary">
+                <ImageIcon className="h-3.5 w-3.5" />
+              </button>
+            )}
+            {isPending ? <Loader2 className="inline h-3.5 w-3.5 animate-spin text-muted-foreground" />
+              : saved ? <Check className="inline h-3.5 w-3.5 text-emerald-500" />
+              : <button onClick={del} aria-label="O'chirish" title="O'chirish" className="text-muted-foreground hover:text-destructive">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>}
+          </div>
         </td>
       )}
     </tr>
@@ -707,6 +809,136 @@ function AddGroupDialog({
           <Button variant="outline" className="rounded-xl" disabled={isPending} onClick={onClose}>Bekor</Button>
           <Button className="rounded-xl" disabled={isPending || picked.length === 0} onClick={submit}>
             {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : `Qo'shish${picked.length > 0 ? ` (${picked.length})` : ""}`}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * Dizayn banner — mahsulot rasmi (oq/shaffof fon) + nom (uz/ru). Saqlangach A4 va
+ * Instagram formatida PNG yuklab olinadi. Rasm brauzerda canvas bilan kichraytiriladi.
+ */
+function DesignDialog({
+  kind, id, fallbackTitle, onClose,
+}: {
+  kind: "item" | "group";
+  id: number;
+  fallbackTitle: string;
+  onClose: () => void;
+}) {
+  const [loading, startLoad] = useTransition();
+  const [title, setTitle] = useState("");
+  const [titleRu, setTitleRu] = useState("");
+  const [imageData, setImageData] = useState<string | null>(null);
+  const [dirty, setDirty] = useState(false); // saqlanmagan o'zgarish bormi
+  const [isPending, startSave] = useTransition();
+  const reqId = useRef(0);
+
+  useEffect(() => {
+    const my = ++reqId.current;
+    startLoad(async () => {
+      const res = await getDesignAction({ kind, id });
+      if (my !== reqId.current) return;
+      if (res.ok) { setTitle(res.design.designTitle ?? ""); setTitleRu(res.design.designTitleRu ?? ""); setImageData(res.design.imageData); }
+      else toast.error(res.error);
+    });
+  }, [kind, id]);
+
+  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // bir xil faylni qayta tanlash mumkin bo'lsin
+    if (!file) return;
+    try {
+      let data = await resizeImageToDataUrl(file, 800);
+      if (data.length > 900_000) data = await resizeImageToDataUrl(file, 600);
+      if (data.length > 900_000) { toast.error("Rasm juda katta — soddaroq/kichikroq rasm tanlang."); return; }
+      setImageData(data); setDirty(true);
+    } catch { toast.error("Rasmni o'qib bo'lmadi."); }
+  };
+
+  const save = () => {
+    startSave(async () => {
+      const res = await saveDesignAction({
+        kind, id,
+        designTitle: title.trim() || null,
+        designTitleRu: titleRu.trim() || null,
+        imageData: dirty ? imageData : undefined,
+      });
+      if (res.ok) { setDirty(false); toast.success("Dizayn saqlandi."); }
+      else toast.error(res.error);
+    });
+  };
+
+  const base = `/api/promo/design?kind=${kind}&id=${id}`;
+  const guardDownload = (e: React.MouseEvent) => { if (dirty) { e.preventDefault(); toast.error("Avval saqlang."); } };
+  const dlCls = (active: boolean) =>
+    cn("inline-flex h-9 items-center gap-1.5 rounded-xl border border-border bg-card px-3 text-xs font-medium transition-colors hover:bg-secondary", !active && "pointer-events-none opacity-50");
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Dizayn banner</DialogTitle>
+          <DialogDescription className="text-sm text-muted-foreground">
+            Mahsulot rasmi (oq/shaffof fon) + nom. Narx, chegirma, sana, limit avtomatik. A4 va Instagram formatida yuklab olinadi.
+          </DialogDescription>
+        </DialogHeader>
+
+        {loading ? (
+          <p className="py-6 text-center text-sm text-muted-foreground"><Loader2 className="mr-1.5 inline h-4 w-4 animate-spin" />Yuklanmoqda…</p>
+        ) : (
+          <div className="space-y-3 py-1">
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Nom (uz)</Label>
+              <Input value={title} disabled={isPending} placeholder={fallbackTitle}
+                onChange={(e) => { setTitle(e.target.value); setDirty(true); }} className="h-9" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Nom (ru, ixtiyoriy)</Label>
+              <Input value={titleRu} disabled={isPending} placeholder="Молочный коктейль…"
+                onChange={(e) => { setTitleRu(e.target.value); setDirty(true); }} className="h-9" />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Mahsulot rasmi (oq/shaffof fonli PNG)</Label>
+              {imageData ? (
+                <div className="relative flex items-center justify-center rounded-xl border border-border p-3"
+                  style={{ backgroundImage: "repeating-conic-gradient(#eef2f6 0% 25%, #ffffff 0% 50%)", backgroundSize: "20px 20px" }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={imageData} alt="" className="max-h-44 object-contain" />
+                  <label className="absolute bottom-2 right-2 inline-flex cursor-pointer items-center gap-1 rounded-lg bg-card/90 px-2 py-1 text-[11px] text-primary shadow hover:bg-card">
+                    <Upload className="h-3 w-3" /> Boshqa rasm
+                    <input type="file" accept="image/png,image/webp" className="hidden" onChange={onFile} disabled={isPending} />
+                  </label>
+                  <button onClick={() => { setImageData(null); setDirty(true); }} disabled={isPending} aria-label="Rasmni olib tashlash"
+                    className="absolute right-2 top-2 rounded-full bg-card/90 p-1 text-muted-foreground shadow hover:text-destructive">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <label className="flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-border px-4 py-7 text-center text-xs text-muted-foreground hover:bg-muted/30">
+                  <Upload className="h-5 w-5" />
+                  PNG yuklash (oq yoki shaffof fon)
+                  <input type="file" accept="image/png,image/webp" className="hidden" onChange={onFile} disabled={isPending} />
+                </label>
+              )}
+            </div>
+          </div>
+        )}
+
+        <DialogFooter className="flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex gap-2">
+            <a href={`${base}&format=a4`} download onClick={guardDownload} className={dlCls(!dirty)} title={dirty ? "Avval saqlang" : "A4 yuklab olish"}>
+              <Download className="h-3.5 w-3.5" /> A4
+            </a>
+            <a href={`${base}&format=instagram`} download onClick={guardDownload} className={dlCls(!dirty)} title={dirty ? "Avval saqlang" : "Instagram yuklab olish"}>
+              <Download className="h-3.5 w-3.5" /> Instagram
+            </a>
+          </div>
+          <Button className="rounded-xl" disabled={isPending || !dirty} onClick={save}>
+            {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Saqlash"}
           </Button>
         </DialogFooter>
       </DialogContent>

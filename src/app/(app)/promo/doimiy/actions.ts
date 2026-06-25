@@ -327,18 +327,71 @@ export async function renameGroupAction(input: { id: number; name: string }): Pr
   } catch (err) { return xato(err); }
 }
 
-// Guruhni o'chirish: guruh + ICHIDAGI barcha SKU o'chiriladi (foydalanuvchi guruhni
-// butunlay olib tashlaydi). SetNull bo'lgani uchun SKU'larni qo'lda o'chiramiz.
-export async function deleteGroupAction(input: { id: number }): Promise<Result> {
+// Guruhni o'chirish. keepItems=true → faqat guruh o'chadi, SKU'lar GURUHSIZ bo'lib qoladi
+// (groupId → SetNull avtomatik). keepItems=false (yoki berilmasa) → guruh + ichidagi SKU'lar o'chadi.
+const deleteGroupSchema = z.object({ id: idSchema, keepItems: z.boolean().optional() });
+
+export async function deleteGroupAction(input: { id: number; keepItems?: boolean }): Promise<Result> {
   try {
     await requirePromoEdit();
-    const id = idSchema.parse(input.id);
-    await prisma.$transaction([
-      prisma.promoItem.deleteMany({ where: { groupId: id } }),
-      prisma.promoItemGroup.delete({ where: { id } }),
-    ]);
+    const p = deleteGroupSchema.parse(input);
+    if (p.keepItems) {
+      // Guruhni tarqatish — SKU'lar saqlanadi (groupId SetNull bilan null bo'ladi).
+      await prisma.promoItemGroup.delete({ where: { id: p.id } });
+    } else {
+      // Guruh + ichidagi barcha SKU o'chiriladi (SetNull bo'lgani uchun SKU'larni qo'lda).
+      await prisma.$transaction([
+        prisma.promoItem.deleteMany({ where: { groupId: p.id } }),
+        prisma.promoItemGroup.delete({ where: { id: p.id } }),
+      ]);
+    }
     invalidate();
     return { ok: true };
+  } catch (err) { return xato(err); }
+}
+
+// ─── Dizayn banner (rasm + nom) ─────────────────────────────────────────────
+const saveDesignSchema = z.object({
+  kind: z.enum(["item", "group"]),
+  id: idSchema,
+  designTitle: z.string().trim().max(200).nullable().optional(),
+  designTitleRu: z.string().trim().max(200).nullable().optional(),
+  // base64 data URL (client canvas resize qilingan); ~900KB cheklov (server-action 1MB limiti).
+  imageData: z.string().max(900_000).regex(/^data:image\/(png|webp);base64,/, "Rasm formati noto'g'ri").nullable().optional(),
+});
+
+export async function saveDesignAction(input: {
+  kind: "item" | "group"; id: number; designTitle?: string | null; designTitleRu?: string | null; imageData?: string | null;
+}): Promise<Result> {
+  try {
+    await requirePromoEdit();
+    const p = saveDesignSchema.parse(input);
+    const data: { designTitle: string | null; designTitleRu: string | null; imageData?: string | null } = {
+      designTitle: p.designTitle?.trim() || null,
+      designTitleRu: p.designTitleRu?.trim() || null,
+    };
+    if (p.imageData !== undefined) data.imageData = p.imageData; // undefined = rasm o'zgartirilmaydi
+    if (p.kind === "group") await prisma.promoItemGroup.update({ where: { id: p.id }, data });
+    else await prisma.promoItem.update({ where: { id: p.id }, data });
+    invalidate();
+    return { ok: true };
+  } catch (err) { return xato(err); }
+}
+
+// Dizayn dialog ochilganda nom + rasm (katta base64) — listItemsAction'ga kirmaydi (yengil).
+export type DesignFields = { designTitle: string | null; designTitleRu: string | null; imageData: string | null };
+
+export async function getDesignAction(input: {
+  kind: "item" | "group"; id: number;
+}): Promise<{ ok: true; design: DesignFields } | Err> {
+  try {
+    await requirePromoView();
+    const p = z.object({ kind: z.enum(["item", "group"]), id: idSchema }).parse(input);
+    const row = p.kind === "group"
+      ? await prisma.promoItemGroup.findUnique({ where: { id: p.id }, select: { designTitle: true, designTitleRu: true, imageData: true } })
+      : await prisma.promoItem.findUnique({ where: { id: p.id }, select: { designTitle: true, designTitleRu: true, imageData: true } });
+    if (!row) return { ok: false, error: "Topilmadi." };
+    return { ok: true, design: { designTitle: row.designTitle, designTitleRu: row.designTitleRu, imageData: row.imageData } };
   } catch (err) { return xato(err); }
 }
 
