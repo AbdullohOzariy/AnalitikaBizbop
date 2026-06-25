@@ -860,9 +860,10 @@ model PromoCampaign {
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
-  branch    Branch?     @relation(fields: [branchId], references: [id])
-  createdBy User        @relation(fields: [createdById], references: [id])
-  items     PromoItem[]
+  branch     Branch?          @relation(fields: [branchId], references: [id])
+  createdBy  User             @relation(fields: [createdById], references: [id])
+  items      PromoItem[]
+  itemGroups PromoItemGroup[]
 
   @@index([type, status])
   @@index([startDate, endDate])
@@ -870,11 +871,29 @@ model PromoCampaign {
   @@index([createdById])
 }
 
+// Aksiya ICHIDAGI SKU guruhi — bir mahsulotning har xil ta'm/turlari (mas. "Sochnaya
+// Dolina Sok 1L" → Abrikos, Persik, …). Faqat shu kampaniyaga tegishli (qayta ishlatilmaydi).
+// Guruh o'chsa SKU'lar guruhsiz bo'lib qoladi (PromoItem.groupId → SetNull).
+model PromoItemGroup {
+  id         Int      @id @default(autoincrement())
+  campaignId Int
+  name       String
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  campaign PromoCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  items    PromoItem[]
+
+  @@index([campaignId])
+}
+
 // Promo kampaniyasidagi alohida tovar — narxlar dona uchun.
 model PromoItem {
   id            Int      @id @default(autoincrement())
   campaignId    Int
   productId     Int
+  groupId       Int? // aksiya ichidagi SKU guruhi (ixtiyoriy; null = guruhsiz)
   regularPrice  Decimal  @db.Decimal(20, 2) // sotilish (oddiy) narxi
   promoPrice    Decimal  @db.Decimal(20, 2) // aksiya narxi
   promoLimit    Decimal? @db.Decimal(20, 3) // aksiya limiti (dona, kasr ham bo'lishi mumkin)
@@ -882,10 +901,12 @@ model PromoItem {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  campaign PromoCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  product  Product       @relation(fields: [productId], references: [id])
+  campaign PromoCampaign   @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  product  Product         @relation(fields: [productId], references: [id])
+  group    PromoItemGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
 
   @@unique([campaignId, productId])
   @@index([productId])
   @@index([campaignId])
+  @@index([groupId])
 }

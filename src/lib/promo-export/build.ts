@@ -40,6 +40,7 @@ export type PromoExportItem = {
   n: number;
   code: number;
   name: string;
+  groupName: string | null; // aksiya ichidagi SKU guruhi (null = guruhsiz)
   regularPrice: number;
   promoPrice: number;
   diff: number; // regularPrice − promoPrice
@@ -66,10 +67,11 @@ export async function getCampaignExport(campaignId: number): Promise<PromoExport
     select: {
       id: true, type: true, title: true, status: true, startDate: true, endDate: true, note: true,
       branch: { select: { name: true } },
+      itemGroups: { orderBy: [{ sortOrder: "asc" }, { id: "asc" }], select: { id: true, name: true } },
       items: {
         orderBy: { id: "asc" },
         select: {
-          regularPrice: true, promoPrice: true, promoLimit: true,
+          groupId: true, regularPrice: true, promoPrice: true, promoLimit: true,
           product: { select: { code: true, name: true } },
         },
       },
@@ -77,7 +79,18 @@ export async function getCampaignExport(campaignId: number): Promise<PromoExport
   });
   if (!c) return null;
 
-  const items: PromoExportItem[] = c.items.map((it, i) => {
+  // Tartib: guruhlar (sortOrder bo'yicha) ichidagi SKU'lar, oxirida guruhsizlar.
+  const groupName = new Map(c.itemGroups.map((g) => [g.id, g.name]));
+  const ordered = [...c.items].sort((a, b) => {
+    const ga = c.itemGroups.findIndex((g) => g.id === a.groupId);
+    const gb = c.itemGroups.findIndex((g) => g.id === b.groupId);
+    // guruhsizlar (−1) oxirida
+    const ra = ga === -1 ? c.itemGroups.length : ga;
+    const rb = gb === -1 ? c.itemGroups.length : gb;
+    return ra - rb;
+  });
+
+  const items: PromoExportItem[] = ordered.map((it, i) => {
     const reg = Number(it.regularPrice);
     const promo = Number(it.promoPrice);
     const diff = reg - promo;
@@ -85,6 +98,7 @@ export async function getCampaignExport(campaignId: number): Promise<PromoExport
       n: i + 1,
       code: it.product.code,
       name: it.product.name,
+      groupName: it.groupId != null ? (groupName.get(it.groupId) ?? null) : null,
       regularPrice: reg,
       promoPrice: promo,
       diff,
@@ -112,14 +126,27 @@ export async function getCampaignExport(campaignId: number): Promise<PromoExport
 // ─── Excel (.xlsx) ───────────────────────────────────────────────────────────
 export function buildPromoExcel(d: PromoExportData): Buffer {
   const header = ["№", "Sana", "Kod", "Nomlari", "Sotilish narxi", "Aksiya narxi", "Aksiya farqi", "%", "Aksiya limiti"];
+  const lastCol = header.length - 1;
+  const hasGroups = d.items.some((it) => it.groupName != null);
 
   const aoa: (string | number)[][] = [];
+  const merges: XLSX.Range[] = [];
   aoa.push([d.title]);
   aoa.push([`${d.typeLabel} · ${d.branchName} · ${d.statusLabel}`]);
   aoa.push([]);
-  const headerRowIdx = aoa.length; // 0-based
+  merges.push({ s: { r: 0, c: 0 }, e: { r: 0, c: lastCol } });
+  merges.push({ s: { r: 1, c: 0 }, e: { r: 1, c: lastCol } });
   aoa.push(header);
+
+  // Guruhlangan: guruh o'zgarganda butun kenglikda sarlavha qatori.
+  let lastGroup: string | null | undefined = undefined;
   for (const it of d.items) {
+    if (hasGroups && it.groupName !== lastGroup) {
+      lastGroup = it.groupName;
+      const rowIdx = aoa.length;
+      aoa.push([it.groupName ?? "Guruhsiz"]);
+      merges.push({ s: { r: rowIdx, c: 0 }, e: { r: rowIdx, c: lastCol } });
+    }
     aoa.push([
       it.n,
       d.periodLabel,
@@ -136,17 +163,6 @@ export function buildPromoExcel(d: PromoExportData): Buffer {
   aoa.push(["", "", "", `Jami: ${d.items.length} ta SKU`]);
 
   const ws = XLSX.utils.aoa_to_sheet(aoa);
-
-  // Birlashtirishlar: sarlavha (2 qator) butun kenglikda; Sana ustuni (B) data bo'ylab.
-  const merges: XLSX.Range[] = [
-    { s: { r: 0, c: 0 }, e: { r: 0, c: header.length - 1 } },
-    { s: { r: 1, c: 0 }, e: { r: 1, c: header.length - 1 } },
-  ];
-  if (d.items.length > 1) {
-    const firstData = headerRowIdx + 1;
-    const lastData = headerRowIdx + d.items.length;
-    merges.push({ s: { r: firstData, c: 1 }, e: { r: lastData, c: 1 } });
-  }
   ws["!merges"] = merges;
   ws["!cols"] = [
     { wch: 4 }, { wch: 22 }, { wch: 9 }, { wch: 42 },
@@ -208,12 +224,26 @@ export async function buildPromoPdf(d: PromoExportData): Promise<Buffer> {
   };
   drawHead();
 
+  const hasGroups = d.items.some((it) => it.groupName != null);
+  let lastGroup: string | null | undefined = undefined;
+  let zebra = 0;
   doc.font(FONT).fontSize(8);
-  d.items.forEach((r, i) => {
+  d.items.forEach((r) => {
+    // Guruh sarlavhasi (guruh o'zgarganda) — butun kenglikda, yashil fon.
+    if (hasGroups && r.groupName !== lastGroup) {
+      lastGroup = r.groupName;
+      if (y + 15 > doc.page.height - 70) { doc.addPage(); y = M; drawHead(); }
+      doc.rect(M, y, inner, 15).fillColor("#E7F3EC").fill();
+      doc.font(FONT_BOLD).fontSize(8).fillColor("#15803D").text(r.groupName ?? "Guruhsiz", M + 4, y + 4, { width: inner - 8 });
+      y += 15;
+      doc.font(FONT).fontSize(8);
+      zebra = 0;
+    }
     const nameH = doc.heightOfString(r.name, { width: cols[2].w - 6 });
     const rowH = Math.max(16, nameH + 7);
     if (y + rowH > doc.page.height - 70) { doc.addPage(); y = M; drawHead(); doc.font(FONT).fontSize(8); }
-    if (i % 2 === 1) doc.rect(M, y, inner, rowH).fillColor("#F3F7F4").fill();
+    if (zebra % 2 === 1) doc.rect(M, y, inner, rowH).fillColor("#F3F7F4").fill();
+    zebra++;
     doc.fillColor("#222");
     doc.text(String(r.n), cols[0].x + 3, y + 4, { width: cols[0].w - 6, align: "left" });
     doc.text(String(r.code), cols[1].x + 3, y + 4, { width: cols[1].w - 6, align: "left" });

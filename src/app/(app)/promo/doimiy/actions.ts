@@ -52,6 +52,7 @@ export type PromoCampaignRow = {
 export type PromoItemRow = {
   id: number;
   productId: number;
+  groupId: number | null; // aksiya ichidagi SKU guruhi (null = guruhsiz)
   name: string;
   code: number; // 1C kod
   regularPrice: number; // sotilish narxi
@@ -59,6 +60,12 @@ export type PromoItemRow = {
   promoLimit: number | null; // aksiya limiti (dona)
   priceDiff: number; // = regularPrice − promoPrice (auto)
   pctDiff: number; // = diff / regularPrice * 100 (auto)
+};
+
+export type PromoGroupRow = {
+  id: number;
+  name: string;
+  sortOrder: number;
 };
 
 // ─── Validatsiya ────────────────────────────────────────────────────────────────
@@ -184,18 +191,25 @@ export async function deleteCampaignAction(input: { id: number }): Promise<Resul
 
 export async function listItemsAction(
   input: { campaignId: number }
-): Promise<{ ok: true; rows: PromoItemRow[] } | Err> {
+): Promise<{ ok: true; rows: PromoItemRow[]; groups: PromoGroupRow[] } | Err> {
   try {
     await requirePromoView();
     const campaignId = idSchema.parse(input.campaignId);
-    const items = await prisma.promoItem.findMany({
-      where: { campaignId },
-      orderBy: { id: "asc" },
-      select: {
-        id: true, productId: true, regularPrice: true, promoPrice: true, promoLimit: true,
-        product: { select: { name: true, code: true } },
-      },
-    });
+    const [items, groups] = await Promise.all([
+      prisma.promoItem.findMany({
+        where: { campaignId },
+        orderBy: { id: "asc" },
+        select: {
+          id: true, productId: true, groupId: true, regularPrice: true, promoPrice: true, promoLimit: true,
+          product: { select: { name: true, code: true } },
+        },
+      }),
+      prisma.promoItemGroup.findMany({
+        where: { campaignId },
+        orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+        select: { id: true, name: true, sortOrder: true },
+      }),
+    ]);
     return {
       ok: true,
       rows: items.map((it): PromoItemRow => {
@@ -206,6 +220,7 @@ export async function listItemsAction(
         return {
           id: it.id,
           productId: it.productId,
+          groupId: it.groupId,
           name: it.product.name,
           code: it.product.code,
           regularPrice: reg,
@@ -215,7 +230,115 @@ export async function listItemsAction(
           pctDiff: reg > 0 ? (diff / reg) * 100 : 0,
         };
       }),
+      groups: groups.map((g): PromoGroupRow => ({ id: g.id, name: g.name, sortOrder: g.sortOrder })),
     };
+  } catch (err) { return xato(err); }
+}
+
+// ─── SKU guruhlari (aksiya ichida) ──────────────────────────────────────────────
+// Bir mahsulotning har xil ta'm/turlarini guruhga jamlash. "Guruhga bitta narx":
+// guruhdagi har SKU bir xil aksiya narxi bilan alohida PromoItem bo'ladi (keyin
+// alohida tahrirlanadi). Sotilish narxi MEGA filial oxirgi davr narxidan avto.
+
+const createGroupSchema = z.object({
+  campaignId: idSchema,
+  name: z.string().trim().min(1, "Guruh nomi kerak").max(200),
+  productIds: z.array(idSchema).min(1, "Kamida bitta SKU tanlang").max(300),
+  promoPrice: priceSchema,
+  promoLimit: limitSchema,
+});
+
+export async function createGroupAction(input: {
+  campaignId: number; name: string; productIds: number[]; promoPrice: number; promoLimit?: number | null;
+}): Promise<{ ok: true; added: number; skipped: number } | Err> {
+  try {
+    await requirePromoEdit();
+    const p = createGroupSchema.parse(input);
+
+    // Allaqachon qo'shilgan SKU'lar — o'tkazib yuboriladi (unique campaignId+productId).
+    const dup = await prisma.promoItem.findMany({
+      where: { campaignId: p.campaignId, productId: { in: p.productIds } },
+      select: { productId: true },
+    });
+    const dupSet = new Set(dup.map((d) => d.productId));
+    const newIds = p.productIds.filter((id) => !dupSet.has(id));
+    if (newIds.length === 0) return { ok: false, error: "Tanlangan SKU'lar allaqachon qo'shilgan." };
+
+    // Sotilish narxlari — MEGA filial (Mega Center) oxirgi davr (batch, bitta query).
+    const mega = await prisma.branch.findFirst({
+      where: { name: { contains: "mega", mode: "insensitive" } },
+      orderBy: { sortOrder: "asc" },
+      select: { id: true },
+    });
+    const megaCond = mega ? Prisma.sql`AND ps."branchId" = ${mega.id}` : Prisma.empty;
+    const priceRows = await prisma.$queryRaw<{ productId: number; price: number | null }[]>`
+      WITH latest AS (
+        SELECT ps."productId" AS pid, MAX(ps."periodEnd") AS pe
+        FROM "ProductSales" ps
+        WHERE ps."productId" IN (${Prisma.join(newIds)}) ${megaCond}
+        GROUP BY ps."productId"
+      )
+      SELECT ps."productId" AS "productId",
+        COALESCE(
+          AVG(ps."salePrice")::float8,
+          (SUM(ps.amount) / NULLIF(SUM(ps."soldQty"), 0))::float8
+        ) AS price
+      FROM "ProductSales" ps
+      JOIN latest l ON l.pid = ps."productId" AND ps."periodEnd" = l.pe
+      WHERE ps."productId" IN (${Prisma.join(newIds)}) ${megaCond}
+      GROUP BY ps."productId"
+    `;
+    const priceMap = new Map<number, number>();
+    // Faqat MUSBAT narx (0/manfiy = "topilmadi" → promoPrice fallback'ga o'tadi; aks holda
+    // `?? promoPrice` 0'ni ushlamay regularPrice=0 saqlardi — bitta qo'shish yo'li bilan nomuvofiq).
+    for (const r of priceRows) if (r.price != null && r.price > 0) priceMap.set(r.productId, Math.round(r.price * 100) / 100);
+
+    // Guruh + SKU'lar bitta tranzaksiyada.
+    await prisma.$transaction(async (tx) => {
+      const grp = await tx.promoItemGroup.create({
+        data: { campaignId: p.campaignId, name: p.name },
+        select: { id: true },
+      });
+      await tx.promoItem.createMany({
+        data: newIds.map((pid) => ({
+          campaignId: p.campaignId,
+          productId: pid,
+          groupId: grp.id,
+          // Sotilish narxi topilmasa aksiya narxiga teng (farq 0) — xodim keyin to'g'irlaydi.
+          regularPrice: priceMap.get(pid) ?? p.promoPrice,
+          promoPrice: p.promoPrice,
+          promoLimit: p.promoLimit ?? null,
+        })),
+      });
+    });
+
+    invalidate();
+    return { ok: true, added: newIds.length, skipped: p.productIds.length - newIds.length };
+  } catch (err) { return xato(err); }
+}
+
+export async function renameGroupAction(input: { id: number; name: string }): Promise<Result> {
+  try {
+    await requirePromoEdit();
+    const p = z.object({ id: idSchema, name: z.string().trim().min(1, "Nom kerak").max(200) }).parse(input);
+    await prisma.promoItemGroup.update({ where: { id: p.id }, data: { name: p.name } });
+    invalidate();
+    return { ok: true };
+  } catch (err) { return xato(err); }
+}
+
+// Guruhni o'chirish: guruh + ICHIDAGI barcha SKU o'chiriladi (foydalanuvchi guruhni
+// butunlay olib tashlaydi). SetNull bo'lgani uchun SKU'larni qo'lda o'chiramiz.
+export async function deleteGroupAction(input: { id: number }): Promise<Result> {
+  try {
+    await requirePromoEdit();
+    const id = idSchema.parse(input.id);
+    await prisma.$transaction([
+      prisma.promoItem.deleteMany({ where: { groupId: id } }),
+      prisma.promoItemGroup.delete({ where: { id } }),
+    ]);
+    invalidate();
+    return { ok: true };
   } catch (err) { return xato(err); }
 }
 
