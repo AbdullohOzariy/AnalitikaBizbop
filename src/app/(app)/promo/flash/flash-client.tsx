@@ -16,6 +16,7 @@ import { formatDateUZ } from "@/lib/format";
 import { toast } from "sonner";
 import type { PromoCampaignRow } from "../doimiy/actions";
 import { CampaignItems } from "../doimiy/campaign-items";
+import { PromoExportButtons } from "../export-buttons";
 import { listFlashAction, createFlashAction, updateFlashAction, deleteFlashAction } from "./actions";
 
 type Branch = { id: number; name: string };
@@ -92,6 +93,7 @@ export function FlashClient({ branches, canEdit }: { branches: Branch[]; canEdit
                   <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                     <Boxes className="h-3.5 w-3.5" />{c.itemsCount} SKU
                   </span>
+                  <PromoExportButtons campaignId={c.id} itemsCount={c.itemsCount} />
                   {canEdit && (
                     <span className="flex items-center gap-0.5">
                       <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setForm({ mode: "edit", row: c })} aria-label="Tahrirlash">

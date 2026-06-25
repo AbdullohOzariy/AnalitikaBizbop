@@ -21,6 +21,7 @@ import {
   type PromoCampaignRow,
 } from "./actions";
 import { CampaignItems } from "./campaign-items";
+import { PromoExportButtons } from "../export-buttons";
 
 type Branch = { id: number; name: string };
 // Prisma client'ni (server-only) import qilmaymiz — string union yetarli
@@ -123,6 +124,7 @@ function TypePanel({ type, branches, canEdit }: { type: DoimiyPromoType; branche
                   <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                     <Boxes className="h-3.5 w-3.5" />{c.itemsCount} SKU
                   </span>
+                  <PromoExportButtons campaignId={c.id} itemsCount={c.itemsCount} />
                   {canEdit && (
                     <span className="flex items-center gap-0.5">
                       <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setForm({ mode: "edit", row: c })} aria-label="Tahrirlash">
