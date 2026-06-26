@@ -191,11 +191,13 @@ export async function deleteCampaignAction(input: { id: number }): Promise<Resul
 
 export async function listItemsAction(
   input: { campaignId: number }
-): Promise<{ ok: true; rows: PromoItemRow[]; groups: PromoGroupRow[] } | Err> {
+): Promise<{ ok: true; rows: PromoItemRow[]; groups: PromoGroupRow[]; preparedCount: number } | Err> {
   try {
     await requirePromoView();
     const campaignId = idSchema.parse(input.campaignId);
-    const [items, groups] = await Promise.all([
+    // preparedCount = rasm yuklangan dizaynlar (guruh + guruhsiz SKU) — birdan yuklash tugmasi uchun.
+    // imageData (Text) yuklanmaydi — faqat IS NOT NULL filtri (yengil count).
+    const [items, groups, gImg, iImg] = await Promise.all([
       prisma.promoItem.findMany({
         where: { campaignId },
         orderBy: { id: "asc" },
@@ -209,9 +211,12 @@ export async function listItemsAction(
         orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
         select: { id: true, name: true, sortOrder: true },
       }),
+      prisma.promoItemGroup.count({ where: { campaignId, imageData: { not: null } } }),
+      prisma.promoItem.count({ where: { campaignId, groupId: null, imageData: { not: null } } }),
     ]);
     return {
       ok: true,
+      preparedCount: gImg + iImg,
       rows: items.map((it): PromoItemRow => {
         // Decimal → number (Prisma Decimal client'ga uzatib bo'lmaydi). Farq/% saqlanmaydi — hisoblanadi.
         const reg = Number(it.regularPrice);
@@ -243,17 +248,31 @@ export async function listItemsAction(
 const createGroupSchema = z.object({
   campaignId: idSchema,
   name: z.string().trim().min(1, "Guruh nomi kerak").max(200),
-  productIds: z.array(idSchema).min(1, "Kamida bitta SKU tanlang").max(300),
-  promoPrice: priceSchema,
+  // SKU ixtiyoriy — bo'sh guruh yaratib, keyin drag-drop bilan to'ldirish mumkin.
+  productIds: z.array(idSchema).max(300).optional().default([]),
+  promoPrice: priceSchema.nullable().optional(),
   promoLimit: limitSchema,
 });
 
 export async function createGroupAction(input: {
-  campaignId: number; name: string; productIds: number[]; promoPrice: number; promoLimit?: number | null;
+  campaignId: number; name: string; productIds?: number[]; promoPrice?: number | null; promoLimit?: number | null;
 }): Promise<{ ok: true; added: number; skipped: number } | Err> {
   try {
     await requirePromoEdit();
     const p = createGroupSchema.parse(input);
+
+    // SKU'siz bo'sh guruh — keyin SKU'lar sudrab (drag-drop) qo'shiladi.
+    if (p.productIds.length === 0) {
+      await prisma.promoItemGroup.create({ data: { campaignId: p.campaignId, name: p.name } });
+      invalidate();
+      return { ok: true, added: 0, skipped: 0 };
+    }
+
+    // SKU bilan birga yaratilsa — aksiya narxi shart (hammasiga qo'yiladi).
+    if (p.promoPrice == null || !(p.promoPrice > 0)) {
+      return { ok: false, error: "Aksiya narxini kiriting." };
+    }
+    const promoPrice = p.promoPrice;
 
     // Allaqachon qo'shilgan SKU'lar — o'tkazib yuboriladi (unique campaignId+productId).
     const dup = await prisma.promoItem.findMany({
@@ -305,8 +324,8 @@ export async function createGroupAction(input: {
           productId: pid,
           groupId: grp.id,
           // Sotilish narxi topilmasa aksiya narxiga teng (farq 0) — xodim keyin to'g'irlaydi.
-          regularPrice: priceMap.get(pid) ?? p.promoPrice,
-          promoPrice: p.promoPrice,
+          regularPrice: priceMap.get(pid) ?? promoPrice,
+          promoPrice,
           promoLimit: p.promoLimit ?? null,
         })),
       });

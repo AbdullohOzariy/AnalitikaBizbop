@@ -60,6 +60,7 @@ export function CampaignItems({
 }) {
   const [rows, setRows] = useState<PromoItemRow[]>([]);
   const [groups, setGroups] = useState<PromoGroupRow[]>([]);
+  const [preparedCount, setPreparedCount] = useState(0);
   const [loading, startLoad] = useTransition();
   const [, startMove] = useTransition();
   const [refreshKey, setRefreshKey] = useState(0);
@@ -78,7 +79,7 @@ export function CampaignItems({
     startLoad(async () => {
       const res = await listItemsAction({ campaignId });
       if (my !== reqId.current) return;
-      if (res.ok) { setRows(res.rows); setGroups(res.groups); }
+      if (res.ok) { setRows(res.rows); setGroups(res.groups); setPreparedCount(res.preparedCount); }
       else toast.error(res.error);
     });
   }, [campaignId, refreshKey]);
@@ -126,16 +127,28 @@ export function CampaignItems({
           {rows.length} ta SKU{groups.length > 0 && ` · ${groups.length} guruh`}
           {loading && <Loader2 className="ml-1.5 inline h-3 w-3 animate-spin" />}
         </span>
-        {canEdit && (
-          <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => setGroupOpen(true)}>
-              <FolderPlus className="h-3.5 w-3.5" /> Guruh qo&apos;shish
-            </Button>
-            <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => setAddOpen(true)}>
-              <Plus className="h-3.5 w-3.5" /> SKU qo&apos;shish
-            </Button>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          {preparedCount > 0 && (
+            <a
+              href={`/api/promo/${campaignId}/designs`}
+              download
+              title="Barcha tayyor dizaynlarni (A4 + Instagram) bitta ZIP qilib yuklash"
+              className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-border bg-card px-3 text-xs font-medium transition-colors hover:bg-secondary"
+            >
+              <Download className="h-3.5 w-3.5" /> Dizaynlar ({preparedCount})
+            </a>
+          )}
+          {canEdit && (
+            <>
+              <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => setGroupOpen(true)}>
+                <FolderPlus className="h-3.5 w-3.5" /> Guruh qo&apos;shish
+              </Button>
+              <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => setAddOpen(true)}>
+                <Plus className="h-3.5 w-3.5" /> SKU qo&apos;shish
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="overflow-x-auto rounded-lg border border-border/60">
@@ -701,17 +714,24 @@ function AddGroupDialog({
   const submit = () => {
     const n = name.trim();
     if (!n) { toast.error("Guruh nomini kiriting."); return; }
-    if (picked.length === 0) { toast.error("Kamida bitta SKU tanlang."); return; }
+    const hasItems = picked.length > 0;
     const pr = Number(promo);
     const l = limit.trim() === "" ? null : Number(limit);
-    if (!(pr > 0)) { toast.error("Aksiya narxini kiriting."); return; }
+    if (hasItems && !(pr > 0)) { toast.error("Aksiya narxini kiriting."); return; }
     if (l != null && !(l > 0)) { toast.error("Limit musbat bo'lishi kerak."); return; }
     start(async () => {
       const res = await createGroupAction({
-        campaignId, name: n, productIds: picked.map((p) => p.id), promoPrice: pr, promoLimit: l,
+        campaignId, name: n,
+        productIds: picked.map((p) => p.id),
+        promoPrice: hasItems ? pr : null,
+        promoLimit: l,
       });
       if (res.ok) {
-        toast.success(`Guruh qo'shildi: ${res.added} ta SKU${res.skipped > 0 ? ` (${res.skipped} ta allaqachon bor edi)` : ""}.`);
+        toast.success(
+          res.added > 0
+            ? `Guruh qo'shildi: ${res.added} ta SKU${res.skipped > 0 ? ` (${res.skipped} ta allaqachon bor edi)` : ""}.`
+            : "Bo'sh guruh yaratildi — SKU'larni sudrab qo'shing."
+        );
         onAdded();
       } else toast.error(res.error);
     });
@@ -725,7 +745,7 @@ function AddGroupDialog({
         <DialogHeader>
           <DialogTitle>SKU guruhi qo&apos;shish</DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground">
-            Bir mahsulotning har xil ta&apos;m/turlarini jamlang. Hammasiga bitta aksiya narxi qo&apos;yiladi (keyin alohida tahrirlanadi), sotilish narxi MEGA filialdan avto.
+            Bir mahsulotning har xil ta&apos;m/turlarini jamlang. SKU tanlash shart emas — bo&apos;sh guruh ochib, keyin SKU&apos;larni sudrab (drag-drop) qo&apos;shsangiz ham bo&apos;ladi. SKU bilan yaratsangiz, hammasiga bitta aksiya narxi qo&apos;yiladi (keyin alohida tahrirlanadi), sotilish narxi MEGA filialdan avto.
           </DialogDescription>
         </DialogHeader>
 
@@ -750,9 +770,9 @@ function AddGroupDialog({
             </div>
           )}
 
-          {/* SKU qidirish — ko'p tanlash */}
+          {/* SKU qidirish — ko'p tanlash (ixtiyoriy) */}
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">SKU qo&apos;shish (bir nechta tanlang)</Label>
+            <Label className="text-xs text-muted-foreground">SKU qo&apos;shish (ixtiyoriy — keyin sudrab ham qo&apos;shsa bo&apos;ladi)</Label>
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input value={q} onChange={(e) => onQ(e.target.value)}
@@ -791,23 +811,25 @@ function AddGroupDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Aksiya narxi *</Label>
-              <Input value={promo} disabled={isPending} type="number" inputMode="decimal" className="h-9"
-                placeholder="hammasiga" onChange={(e) => setPromo(e.target.value)} />
+          {picked.length > 0 && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Aksiya narxi *</Label>
+                <Input value={promo} disabled={isPending} type="number" inputMode="decimal" className="h-9"
+                  placeholder="hammasiga" onChange={(e) => setPromo(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Aksiya limiti</Label>
+                <Input value={limit} disabled={isPending} type="number" inputMode="decimal" className="h-9"
+                  placeholder="ixtiyoriy" onChange={(e) => setLimit(e.target.value)} />
+              </div>
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Aksiya limiti</Label>
-              <Input value={limit} disabled={isPending} type="number" inputMode="decimal" className="h-9"
-                placeholder="ixtiyoriy" onChange={(e) => setLimit(e.target.value)} />
-            </div>
-          </div>
+          )}
         </div>
 
         <DialogFooter className="gap-2">
           <Button variant="outline" className="rounded-xl" disabled={isPending} onClick={onClose}>Bekor</Button>
-          <Button className="rounded-xl" disabled={isPending || picked.length === 0} onClick={submit}>
+          <Button className="rounded-xl" disabled={isPending || !name.trim()} onClick={submit}>
             {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : `Qo'shish${picked.length > 0 ? ` (${picked.length})` : ""}`}
           </Button>
         </DialogFooter>

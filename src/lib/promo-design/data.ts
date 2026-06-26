@@ -121,3 +121,70 @@ export async function getDesignData(kind: "item" | "group", id: number): Promise
     type: it.campaign.type, startDate: it.campaign.startDate, endDate: it.campaign.endDate,
   });
 }
+
+/**
+ * Bitta aksiyaning BARCHA dizaynlari (har guruh + har guruhsiz SKU) — birdan yuklash uchun.
+ * `onlyWithImage` → faqat mahsulot rasmi yuklab tayyorlangan dizaynlar (placeholder'larsiz).
+ * Tartib: avval guruhlar (sortOrder), so'ng guruhsiz SKU'lar (id).
+ */
+export async function getCampaignDesigns(
+  campaignId: number,
+  opts: { onlyWithImage?: boolean } = {}
+): Promise<DesignData[]> {
+  const c = await prisma.promoCampaign.findUnique({
+    where: { id: campaignId },
+    select: {
+      type: true, startDate: true, endDate: true,
+      itemGroups: {
+        orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+        select: {
+          id: true, name: true, designTitle: true, designTitleRu: true, imageData: true,
+          items: { select: { regularPrice: true, promoPrice: true, promoLimit: true } },
+        },
+      },
+      items: {
+        where: { groupId: null },
+        orderBy: { id: "asc" },
+        select: {
+          id: true, designTitle: true, designTitleRu: true, imageData: true,
+          regularPrice: true, promoPrice: true, promoLimit: true,
+          product: { select: { name: true } },
+        },
+      },
+    },
+  });
+  if (!c) return [];
+
+  const out: DesignData[] = [];
+  for (const g of c.itemGroups) {
+    if (opts.onlyWithImage && !g.imageData) continue;
+    const items: PriceRow[] = g.items.map((it) => ({
+      regularPrice: Number(it.regularPrice),
+      promoPrice: Number(it.promoPrice),
+      promoLimit: it.promoLimit != null ? Number(it.promoLimit) : null,
+    }));
+    const price = pickPrice(items);
+    out.push(build({
+      kind: "group", id: g.id,
+      titleUz: g.designTitle?.trim() || g.name,
+      titleRu: g.designTitleRu?.trim() || null,
+      imageData: g.imageData,
+      regular: price.regular, promo: price.promo, limit: price.limit,
+      type: c.type, startDate: c.startDate, endDate: c.endDate,
+    }));
+  }
+  for (const it of c.items) {
+    if (opts.onlyWithImage && !it.imageData) continue;
+    out.push(build({
+      kind: "item", id: it.id,
+      titleUz: it.designTitle?.trim() || it.product.name,
+      titleRu: it.designTitleRu?.trim() || null,
+      imageData: it.imageData,
+      regular: Number(it.regularPrice),
+      promo: Number(it.promoPrice),
+      limit: it.promoLimit != null ? Number(it.promoLimit) : null,
+      type: c.type, startDate: c.startDate, endDate: c.endDate,
+    }));
+  }
+  return out;
+}
