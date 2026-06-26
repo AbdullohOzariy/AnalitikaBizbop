@@ -56,13 +56,19 @@ export const authConfig = {
       }
       // MERCHANDISER izolatsiyasi: /promo tashqarisidagi har qanday sahifada
       // /promo/doimiy ga yo'naltiriladi — cheksiz loop oldini oladi.
+      // /api/promo/* (export, dizayn yuklab olish) ham ruxsat etiladi — aks holda
+      // download so'rovi sahifaga redirect bo'lib, fayl o'rniga HTML kelardi.
       if (isLoggedIn) {
         const role = (auth as { user?: { role?: string } })?.user?.role;
-        if (role === "MERCHANDISER" && !pathname.startsWith("/promo")) {
+        if (role === "MERCHANDISER" && !pathname.startsWith("/promo") && !pathname.startsWith("/api/promo")) {
           return Response.redirect(new URL("/promo/doimiy", request.nextUrl));
         }
-        // OPERATOR izolatsiyasi: faqat /chiqim va /sverka — boshqasidan /chiqim ga
-        if (role === "OPERATOR" && !pathname.startsWith("/chiqim") && !pathname.startsWith("/sverka")) {
+        // OPERATOR izolatsiyasi: faqat /chiqim va /sverka (+ ularning /api/* download'lari)
+        if (
+          role === "OPERATOR" &&
+          !pathname.startsWith("/chiqim") && !pathname.startsWith("/sverka") &&
+          !pathname.startsWith("/api/chiqim") && !pathname.startsWith("/api/sverka")
+        ) {
           return Response.redirect(new URL("/chiqim", request.nextUrl));
         }
       }
