@@ -30,20 +30,29 @@ export type OrderData = {
   createdAt: string;
   sentAt: string | null;
   receivedAt: string | null;
-  items: { productId: number; code: number; name: string; sub: string | null; quantity: number; price: number; packCount: number | null; packSize: number | null; lead: number | null; factQty: number | null }[];
+  // Filial ustunlari (tartib = sortOrder). Bo'sh = eski (jami) zakaz — per-filial ko'rsatilmaydi.
+  branches: { id: number; name: string }[];
+  items: {
+    productId: number; code: number; name: string; sub: string | null; quantity: number; price: number;
+    packCount: number | null; packSize: number | null; lead: number | null; factQty: number | null;
+    branches: { branchId: number; quantity: number }[]; // shu qatorning filial taqsimoti
+  }[];
 };
 
-// lead — SKU lead time (kun, Product'ga saqlanadi); pack — pachkadagi dona soni (packSize)
-type Line = { qty: string; price: string; lead: string; pack: string };
+// lead — SKU lead time (kun); pack — pachkadagi dona; bq — filial bo'yicha miqdorlar (pid:bid)
+type Line = { qty: string; price: string; lead: string; pack: string; bq: Record<number, string> };
 
 export function OrderDetail({ order, role, isOwner }: { order: OrderData; role: string; isOwner: boolean }) {
   const router = useRouter();
+  const perBranch = order.branches.length > 0;
+
   const [lines, setLines] = useState<Map<number, Line>>(
     () => new Map(order.items.map((i) => [i.productId, {
       qty: String(i.quantity),
       price: String(i.price),
       lead: i.lead != null ? String(i.lead) : "",
       pack: i.packSize != null ? String(i.packSize) : "",
+      bq: Object.fromEntries(i.branches.map((b) => [b.branchId, String(b.quantity)])),
     }]))
   );
   const [facts, setFacts] = useState<Map<number, string>>(
@@ -80,31 +89,42 @@ export function OrderDetail({ order, role, isOwner }: { order: OrderData; role: 
     });
 
   const setLine = (pid: number, patch: Partial<Line>) =>
-    setLines((prev) => { const n = new Map(prev); const cur = n.get(pid) ?? { qty: "", price: "", lead: "", pack: "" }; n.set(pid, { ...cur, ...patch }); return n; });
+    setLines((prev) => { const n = new Map(prev); const cur = n.get(pid) ?? { qty: "", price: "", lead: "", pack: "", bq: {} }; n.set(pid, { ...cur, ...patch }); return n; });
+  const setBranchQty = (pid: number, bid: number, val: string) =>
+    setLines((prev) => { const n = new Map(prev); const cur = n.get(pid) ?? { qty: "", price: "", lead: "", pack: "", bq: {} }; n.set(pid, { ...cur, bq: { ...cur.bq, [bid]: val } }); return n; });
 
   const items = order.items;
+  const sumBq = (l: Line | undefined) => order.branches.reduce((s, b) => s + (Number(l?.bq[b.id]) || 0), 0);
+  const lineQty = (l: Line | undefined) => (perBranch ? sumBq(l) : Number(l?.qty) || 0);
+
   const total = useMemo(() => {
     let t = 0;
-    for (const i of items) { const l = lines.get(i.productId); t += (Number(l?.qty) || 0) * (Number(l?.price) || 0); }
+    for (const i of items) { const l = lines.get(i.productId); t += lineQty(l) * (Number(l?.price) || 0); }
     return t;
-  }, [items, lines]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, lines, perBranch]);
 
   const saveItems = () => {
     const payload = items
       .map((i) => {
         const l = lines.get(i.productId)!;
-        const qty = Number(l.qty) || 0;
-        const pack = Number(l.pack) > 0 ? Number(l.pack) : null;
+        const price = Number(l.price) || 0;
         const leadN = Number(l.lead);
         const lead = l.lead.trim() !== "" && Number.isInteger(leadN) && leadN >= 0 ? leadN : null;
+        if (perBranch) {
+          const branches = order.branches
+            .map((b) => ({ branchId: b.id, quantity: Number(l.bq[b.id]) || 0 }))
+            .filter((x) => x.quantity > 0);
+          const quantity = branches.reduce((s, b) => s + b.quantity, 0);
+          // packCount/packSize per-filial rejimda tahrirlanmaydi — saqlangan qiymat yo'qolmasin.
+          return { productId: i.productId, quantity, price, packCount: i.packCount, packSize: i.packSize, leadTimeDays: lead, branches };
+        }
+        const qty = Number(l.qty) || 0;
+        const pack = Number(l.pack) > 0 ? Number(l.pack) : null;
         return {
-          productId: i.productId,
-          quantity: qty,
-          price: Number(l.price) || 0,
-          // Blok soni (packCount) faqat miqdor va pachka o'zgarmaganda mos qoladi
+          productId: i.productId, quantity: qty, price,
           packCount: qty === i.quantity && pack === i.packSize ? i.packCount : null,
-          packSize: pack,
-          leadTimeDays: lead, // SKU'ga eslab qolinadi (rememberOrderParams)
+          packSize: pack, leadTimeDays: lead,
         };
       })
       .filter((x) => x.quantity > 0);
@@ -130,6 +150,7 @@ export function OrderDetail({ order, role, isOwner }: { order: OrderData; role: 
   // toLocaleString EMAS — server/brauzer locale/TZ farqi hydration mismatch beradi.
   const fmtDate = (s: string | null) => (s ? formatDateTimeUZ(s) : "—");
 
+  // Ustun soni (colSpan emas, header bilan moslik uchun hisob): base + filial/qty
   return (
     <div className="space-y-4">
       {/* Sarlavha + holat + amallar */}
@@ -148,14 +169,25 @@ export function OrderDetail({ order, role, isOwner }: { order: OrderData; role: 
         {order.sentAt && <span className="text-xs text-muted-foreground">Yuborildi: {fmtDate(order.sentAt)}</span>}
         {order.receivedAt && <span className="text-xs text-muted-foreground">Qabul: {fmtDate(order.receivedAt)}</span>}
 
+        {perBranch && (
+          <a
+            href={`/api/zakaz/${order.id}/pdf?variant=withBranch`}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Filiallar bo'yicha nakladnoy (har filial alohida ustun)"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          >
+            <FileDown className="h-3.5 w-3.5" /> Nakladnoy (filial)
+          </a>
+        )}
         <a
           href={`/api/zakaz/${order.id}/pdf`}
           target="_blank"
           rel="noopener noreferrer"
-          title="Yetkazib beruvchiga yuborish uchun tayyor nakladnoy (BizBop logo bilan)"
+          title="Yetkazib beruvchiga yuborish uchun tayyor nakladnoy (faqat jami)"
           className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
         >
-          <FileDown className="h-3.5 w-3.5" /> Nakladnoy (PDF)
+          <FileDown className="h-3.5 w-3.5" /> {perBranch ? "Nakladnoy (jami)" : "Nakladnoy (PDF)"}
         </a>
 
         <button
@@ -203,8 +235,19 @@ export function OrderDetail({ order, role, isOwner }: { order: OrderData; role: 
                 <TableHead>SKU</TableHead>
                 <TableHead className="w-[140px]">Subkategoriya</TableHead>
                 <TableHead className="w-[70px]" title="Lead time (kun) — zakazdan kelguncha; SKU'ga saqlanadi">Lead</TableHead>
-                <TableHead className="w-[80px]" title="Pachkadagi dona soni — SKU'ga saqlanadi">Pachka</TableHead>
-                <TableHead className="w-[110px]">Miqdor</TableHead>
+                {perBranch ? (
+                  <>
+                    {order.branches.map((b) => (
+                      <TableHead key={b.id} className="w-[90px] text-right" title={`${b.name} — shu filialga miqdor`}>{b.name}</TableHead>
+                    ))}
+                    <TableHead className="w-[90px] text-right border-l border-border/60" title="Jami = filiallar yig'indisi">Jami</TableHead>
+                  </>
+                ) : (
+                  <>
+                    <TableHead className="w-[80px]" title="Pachkadagi dona soni — SKU'ga saqlanadi">Pachka</TableHead>
+                    <TableHead className="w-[110px]">Miqdor</TableHead>
+                  </>
+                )}
                 <TableHead className="w-[120px]">Narx</TableHead>
                 <TableHead className="text-right w-[120px]">Summa</TableHead>
                 {showFact && <TableHead className="w-[100px] border-l border-border/60" title="FAKT yetib kelgan miqdor">Fakt</TableHead>}
@@ -213,8 +256,9 @@ export function OrderDetail({ order, role, isOwner }: { order: OrderData; role: 
             </TableHeader>
             <TableBody>
               {items.map((i) => {
-                const l = lines.get(i.productId) ?? { qty: "", price: "", lead: "", pack: "" };
-                const sum = (Number(l.qty) || 0) * (Number(l.price) || 0);
+                const l = lines.get(i.productId) ?? { qty: "", price: "", lead: "", pack: "", bq: {} };
+                const qty = lineQty(l);
+                const sum = qty * (Number(l.price) || 0);
                 return (
                   <TableRow key={i.productId} className="text-sm">
                     <TableCell className="font-mono text-xs text-muted-foreground">{i.code}</TableCell>
@@ -226,19 +270,36 @@ export function OrderDetail({ order, role, isOwner }: { order: OrderData; role: 
                         onChange={(e) => setLine(i.productId, { lead: e.target.value })}
                         className="h-8 w-16 text-xs tabular-nums" title="Lead time (kun) — SKU'ga saqlanadi" aria-label="Lead time (kun)" />
                     </TableCell>
-                    <TableCell>
-                      <Input type="number" inputMode="decimal" value={l.pack} disabled={!editable || busy}
-                        placeholder={i.packSize != null ? String(i.packSize) : ""}
-                        onChange={(e) => setLine(i.productId, { pack: e.target.value })}
-                        className="h-8 w-16 text-xs tabular-nums" title="Pachkadagi dona soni — SKU'ga saqlanadi" aria-label="Pachkadagi dona soni" />
-                    </TableCell>
-                    <TableCell>
-                      <Input type="number" inputMode="decimal" value={l.qty} disabled={!editable || busy}
-                        onChange={(e) => setLine(i.productId, { qty: e.target.value })} className="h-8 w-24 text-xs" />
-                      {i.packCount != null && i.packSize != null && Number(l.qty) === i.quantity && (
-                        <p className="mt-0.5 text-[10px] text-muted-foreground">{i.packCount} blok × {i.packSize} dona</p>
-                      )}
-                    </TableCell>
+                    {perBranch ? (
+                      <>
+                        {order.branches.map((b) => (
+                          <TableCell key={b.id} className="px-2">
+                            <Input type="number" inputMode="decimal" value={l.bq[b.id] ?? ""} disabled={!editable || busy}
+                              onChange={(e) => setBranchQty(i.productId, b.id, e.target.value)}
+                              className="h-8 w-16 px-1.5 text-right text-xs tabular-nums" aria-label={`${b.name} miqdor`} />
+                          </TableCell>
+                        ))}
+                        <TableCell className="text-right tabular-nums text-xs font-semibold border-l border-border/60">
+                          {qty > 0 ? qty.toLocaleString("uz-UZ") : "—"}
+                        </TableCell>
+                      </>
+                    ) : (
+                      <>
+                        <TableCell>
+                          <Input type="number" inputMode="decimal" value={l.pack} disabled={!editable || busy}
+                            placeholder={i.packSize != null ? String(i.packSize) : ""}
+                            onChange={(e) => setLine(i.productId, { pack: e.target.value })}
+                            className="h-8 w-16 text-xs tabular-nums" title="Pachkadagi dona soni — SKU'ga saqlanadi" aria-label="Pachkadagi dona soni" />
+                        </TableCell>
+                        <TableCell>
+                          <Input type="number" inputMode="decimal" value={l.qty} disabled={!editable || busy}
+                            onChange={(e) => setLine(i.productId, { qty: e.target.value })} className="h-8 w-24 text-xs" />
+                          {i.packCount != null && i.packSize != null && Number(l.qty) === i.quantity && (
+                            <p className="mt-0.5 text-[10px] text-muted-foreground">{i.packCount} blok × {i.packSize} dona</p>
+                          )}
+                        </TableCell>
+                      </>
+                    )}
                     <TableCell>
                       <Input type="number" inputMode="decimal" value={l.price} disabled={!editable || busy}
                         onChange={(e) => setLine(i.productId, { price: e.target.value })} className="h-8 w-28 text-xs" />
@@ -248,7 +309,7 @@ export function OrderDetail({ order, role, isOwner }: { order: OrderData; role: 
                       <TableCell className="border-l border-border/60">
                         {factMode ? (
                           <Input type="number" inputMode="decimal" value={facts.get(i.productId) ?? ""}
-                            placeholder={String(i.quantity)}
+                            placeholder={String(qty)}
                             onChange={(e) => setFacts((p) => { const n = new Map(p); n.set(i.productId, e.target.value); return n; })}
                             disabled={busy}
                             className="h-7 w-20 px-1.5 text-right text-xs tabular-nums" />
@@ -260,7 +321,7 @@ export function OrderDetail({ order, role, isOwner }: { order: OrderData; role: 
                     {showFact && (() => {
                       const raw = (facts.get(i.productId) ?? "").trim();
                       const fv = factMode ? (raw === "" ? null : Number(raw)) : i.factQty;
-                      const diff = fv != null ? fv - i.quantity : null;
+                      const diff = fv != null ? fv - qty : null;
                       return (
                         <TableCell className={`text-right tabular-nums text-xs font-semibold ${
                           diff == null ? "text-muted-foreground/40" : diff === 0 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"

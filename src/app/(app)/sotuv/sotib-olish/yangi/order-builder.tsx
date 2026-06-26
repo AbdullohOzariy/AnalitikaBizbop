@@ -20,18 +20,25 @@ import { Search, X, Loader2, Save, ChevronRight, ChevronsDownUp, ChevronsUpDown,
 import { formatUZS } from "@/lib/format";
 import {
   suppliersForOrderAction, supplierItemsAction, createOrderAction,
-  type SupplierOption, type BuilderItem,
+  type SupplierOption, type BuilderItem, type BuilderBranch, type BranchCell, type OrderItemInput,
 } from "../actions";
 import { hisobMinStock, hisobMaxStock } from "../order-status";
 
-// qty (dona) — saqlanadigan asosiy qiymat; blok×pack kiritilsa qty avtomatik hisoblanadi.
-// lead — zakaz berishda kiritilsa SKU'ga bog'lanadi (eslab qolinadi).
-type Line = { qty: string; price: string; blok: string; pack: string; lead: string };
+// Bitta SKU qatori holati: narx + lead (SKU darajasi) + filial bo'yicha zakaz miqdorlari (bid→qty).
+type Line = { price: string; lead: string; bq: Record<number, string> };
 
 // Iyerarxiya daraxti tugunlari (guruh → kategoriya → subkategoriya → SKU)
 type SubNode = { id: number; name: string; sort: number; items: BuilderItem[] };
 type CatNode = { id: number; name: string; sort: number; subs: SubNode[]; direct: BuilderItem[] };
 type GroupNode = { id: number; name: string; sort: number; cats: CatNode[]; skuCount: number };
+
+// Filial avto-zakaz — server formulasi (lead'ni jonli o'zgartirsa qayta hisoblanadi).
+function branchAvto(cell: BranchCell, orderGap: number, lead: number | null, xyz: string | null): number {
+  const bMin = hisobMinStock(cell.dailyAvg, orderGap, lead, xyz);
+  if (bMin == null) return cell.suggested; // lead yo'q — server fallback (sotuv−qoldiq)
+  const bMax = hisobMaxStock(cell.dailyAvg, orderGap, lead, xyz);
+  return cell.stock < bMin ? Math.max(0, (bMax ?? bMin) - cell.stock) : 0;
+}
 
 export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSupplierId?: number; initialAgentId?: number }) {
   const router = useRouter();
@@ -40,6 +47,7 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
   // Agent tanlovi: "" — tanlanmagan, "none" — agentsiz (umumiy), "<id>" — agent
   const [agentSel, setAgentSel] = useState("");
   const [items, setItems] = useState<BuilderItem[]>([]);
+  const [branches, setBranches] = useState<BuilderBranch[]>([]);
   const [lines, setLines] = useState<Map<number, Line>>(new Map());
   const [orderGap, setOrderGap] = useState(1);
   const [note, setNote] = useState("");
@@ -62,9 +70,10 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
       const res = await supplierItemsAction(sid, aid);
       if (res.ok) {
         setItems(res.items);
+        setBranches(res.branches);
         setOrderGap(res.orderGap);
         // SKU'lar oldindan TANLANMAYDI — faqat menejer miqdor kiritgani zakazga kiradi.
-        // Taklif miqdori, eslab qolingan narx/pachka esa placeholder (xira) sifatida ko'rinadi.
+        // Avto-zakaz va eslab qolingan narx esa placeholder (xira) sifatida ko'rinadi.
         setLines(new Map());
       } else toast.error(res.error);
     });
@@ -108,21 +117,18 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
     // eslint-disable-next-line react-hooks/exhaustive-deps -- faqat mount'da
   }, []);
 
-
-  const setLine = (pid: number, patch: Partial<Line>) =>
+  const setLine = (pid: number, patch: Partial<Omit<Line, "bq">>) =>
     setLines((prev) => {
       const n = new Map(prev);
-      const cur = n.get(pid) ?? { qty: "", price: "", blok: "", pack: "", lead: "" };
-      const next = { ...cur, ...patch };
-      // Blok × Pachka kiritilsa — dona avtomatik (masalan 5 × 12 = 60)
-      if (patch.blok !== undefined || patch.pack !== undefined) {
-        const b = Number(next.blok);
-        const p = Number(next.pack);
-        if (b > 0 && p > 0) next.qty = String(b * p);
-      }
-      // Dona qo'lda kiritilsa — blok hisobi eskiradi, tozalaymiz (pachka qoladi)
-      if (patch.qty !== undefined) next.blok = "";
-      n.set(pid, next);
+      const cur = n.get(pid) ?? { price: "", lead: "", bq: {} };
+      n.set(pid, { ...cur, ...patch });
+      return n;
+    });
+  const setBranchQty = (pid: number, bid: number, val: string) =>
+    setLines((prev) => {
+      const n = new Map(prev);
+      const cur = n.get(pid) ?? { price: "", lead: "", bq: {} };
+      n.set(pid, { ...cur, bq: { ...cur.bq, [bid]: val } });
       return n;
     });
 
@@ -134,7 +140,6 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
   );
 
   // Ko'rinadigan SKU'larni iyerarxiya daraxtiga yig'amiz + tartibga solamiz.
-  // orderedPids — Enter bilan ustun bo'ylab o'tish uchun ko'rinish tartibidagi pid'lar.
   const { tree, orderedPids } = useMemo(() => {
     const gMap = new Map<number, { id: number; name: string; sort: number; cats: Map<number, { id: number; name: string; sort: number; subs: Map<number, SubNode>; direct: BuilderItem[] }> }>();
     for (const it of shown) {
@@ -150,7 +155,6 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
         s.items.push(it);
       } else c.direct.push(it);
     }
-    // Sintetik tugun (id<0 — "Boshqa", guruh/kategoriyasiz) doim oxirida
     const bySort = <T extends { id: number; sort: number; name: string }>(a: T, b: T) =>
       (a.id < 0 ? 1 : 0) - (b.id < 0 ? 1 : 0) || a.sort - b.sort || a.name.localeCompare(b.name, "uz");
     const orderedPids: number[] = [];
@@ -181,7 +185,7 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
     else setClosedG(new Set(tree.map((g) => g.id)));
   };
 
-  // Enter — o'sha ustun bo'ylab keyingi (ko'rinadigan) qatorga
+  // Enter — o'sha ustun (field) bo'ylab keyingi ko'rinadigan qatorga
   const inputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
   const regRef = (pid: number, field: string) => (el: HTMLInputElement | null) => {
     const k = `${pid}:${field}`;
@@ -197,36 +201,34 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
     }
   };
 
-
   const itemByPid = useMemo(() => new Map(items.map((i) => [i.productId, i])), [items]);
   const chosen = useMemo(() => {
-    const out: { productId: number; quantity: number; price: number; packCount: number | null; packSize: number | null; leadTimeDays: number | null }[] = [];
+    const out: OrderItemInput[] = [];
     for (const [pid, l] of lines) {
-      const qty = Number(l.qty);
-      // Narx kiritilmagan bo'lsa — eslab qolingan narx (placeholder'da ko'rinadi)
-      const price = Number(l.price) || itemByPid.get(pid)?.purchasePrice || 0;
-      const blok = Number(l.blok); const pack = Number(l.pack);
-      if (qty > 0) {
-        const lead = Number(l.lead);
-        out.push({
-          productId: pid, quantity: qty, price,
-          packCount: blok > 0 ? blok : null,
-          // Pachka kiritilmagan bo'lsa — eslab qolingan packSize (placeholder'da ko'rinadi)
-          packSize: pack > 0 ? pack : (itemByPid.get(pid)?.packSize ?? null),
-          // Kiritilgan lead SKU'ga bog'lanadi (eslab qolinadi)
-          leadTimeDays: l.lead.trim() !== "" && Number.isInteger(lead) && lead >= 0 ? lead : null,
-        });
-      }
+      const it = itemByPid.get(pid);
+      if (!it) continue;
+      const branchRows = branches
+        .map((b) => ({ branchId: b.id, quantity: Number(l.bq[b.id]) || 0 }))
+        .filter((x) => x.quantity > 0);
+      if (branchRows.length === 0) continue;
+      const quantity = branchRows.reduce((s, b) => s + b.quantity, 0);
+      const price = Number(l.price) || it.purchasePrice || 0;
+      const lead = Number(l.lead);
+      out.push({
+        productId: pid, quantity, price,
+        packCount: null,
+        packSize: it.packSize ?? null,
+        leadTimeDays: l.lead.trim() !== "" && Number.isInteger(lead) && lead >= 0 ? lead : null,
+        branches: branchRows,
+      });
     }
     return out;
-  }, [lines, itemByPid]);
+  }, [lines, itemByPid, branches]);
   const total = useMemo(() => chosen.reduce((s, c) => s + c.quantity * c.price, 0), [chosen]);
 
-  // Tanlangan yetkazib beruvchining zakaz kunlari hinti (profilda belgilanadi).
-  // Joriy vaqt faqat mount'da o'qiladi (render purity); hisob arzon — memo shart emas.
+  // Zakaz kunlari hinti
   const [hintNow] = useState(() => new Date());
   const selectedSupplier = useMemo(() => suppliers.find((s) => String(s.id) === supplierId), [suppliers, supplierId]);
-  // base-ui Select (agent): trigger'da NOM ko'rinishi uchun items (qiymat→label) kerak
   const agentLabels = useMemo(() => {
     const o: Record<string, React.ReactNode> = { none: "Agentsiz (umumiy)" };
     for (const a of selectedSupplier?.agents ?? []) o[String(a.id)] = a.name;
@@ -235,7 +237,6 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
   const orderDayHint = (() => {
     const sup = selectedSupplier;
     if (!sup) return null;
-    // Agent tanlangan bo'lsa — agentning kunlari, aks holda supplier kunlari
     const ag = agentSel && agentSel !== "none" ? sup.agents.find((a) => String(a.id) === agentSel) : null;
     const nextOrderDate = ag ? ag.nextOrderDate : sup.nextOrderDate;
     if (!nextOrderDate) return null;
@@ -255,7 +256,7 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
   const save = () => {
     if (!supplierId) { toast.error("Yetkazib beruvchi tanlang."); return; }
     if (selectedSupplier && selectedSupplier.agents.length > 0 && agentSel === "") { toast.error("Agent (brend) tanlang."); return; }
-    if (chosen.length === 0) { toast.error("Kamida bitta SKU uchun miqdor kiriting."); return; }
+    if (chosen.length === 0) { toast.error("Kamida bitta SKU uchun filialga miqdor kiriting."); return; }
     const agentId = agentSel && agentSel !== "none" ? Number(agentSel) : null;
     startSave(async () => {
       const res = await createOrderAction({ supplierId: Number(supplierId), agentId, items: chosen, note });
@@ -264,88 +265,60 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
     });
   };
 
-  // Avto to'ldirish — min stock (kunlik sotuv × (zakaz oralig'i + lead) × XYZ buferi) va
-  // pachka/korobka asosida miqdorlarni hisoblaydi. AI EMAS — sof formula (0 token, bir zumda).
-  // Faqat BO'SH qatorlarni to'ldiradi (qo'lda kiritilganlarni saqlaydi); kerak bo'lmagan
-  // (suggested ≤ 0) SKU'larga tegmaydi — ularni menejer keyin o'zi qo'shadi/chiqaradi.
+  // Avto to'ldirish — har filialning avto-zakaz taklifini bo'sh kataklarga qo'yadi.
   const autoFill = () => {
     const m = new Map(lines);
     let filled = 0;
     for (const it of items) {
-      const cur = m.get(it.productId);
-      if (cur && Number(cur.qty) > 0) continue; // qo'lda kiritilgan — tegmaymiz
-      const base = it.suggested;
-      if (base <= 0) continue; // zaxira yetarli — zakaz shart emas
-      if (it.packSize && it.packSize > 0) {
-        // Pachka/korobkaga yaxlitlash: kerakli miqdordan kam bo'lmagan eng yaqin pachka soni
-        const boxes = Math.ceil(base / it.packSize);
-        m.set(it.productId, { qty: String(boxes * it.packSize), price: cur?.price ?? "", blok: String(boxes), pack: String(it.packSize), lead: cur?.lead ?? "" });
-      } else {
-        m.set(it.productId, { qty: String(Math.ceil(base)), price: cur?.price ?? "", blok: "", pack: "", lead: cur?.lead ?? "" });
+      const cur = m.get(it.productId) ?? { price: "", lead: "", bq: {} };
+      const effLead = cur.lead.trim() !== "" && Number(cur.lead) >= 0 ? Number(cur.lead) : it.lead;
+      const bq = { ...cur.bq };
+      let touched = false;
+      for (const cell of it.branches) {
+        if (Number(bq[cell.branchId]) > 0) continue; // qo'lda kiritilgan — tegmaymiz
+        const avto = branchAvto(cell, orderGap, effLead, it.xyz);
+        if (avto > 0) { bq[cell.branchId] = String(avto); touched = true; }
       }
-      filled++;
+      if (touched) { m.set(it.productId, { ...cur, bq }); filled++; }
     }
     setLines(m);
-    if (filled > 0) toast.success(`${filled} ta SKU avto to'ldirildi (min stock + pachka).`);
+    if (filled > 0) toast.success(`${filled} ta SKU avto to'ldirildi (filial avto-zakaz).`);
     else toast.info("Avto to'ldirish uchun mos SKU yo'q — zaxira yetarli yoki lead kiritilmagan.");
   };
 
   const clearAll = () => setLines(new Map());
 
-  // Bitta SKU qatori (daraxtning bir necha joyida ishlatiladi — direct/sub ostida)
+  const colCount = 3 + branches.length * 4 + 3;
+
+  // Bitta SKU qatori
   const renderSku = (it: BuilderItem) => {
-    const l = lines.get(it.productId) ?? { qty: "", price: "", blok: "", pack: "", lead: "" };
-    const sum = (Number(l.qty) || 0) * (Number(l.price) || it.purchasePrice || 0);
-    const picked = Number(l.qty) > 0;
-    // Lead kiritilsa — min stock JONLI qayta hisoblanadi (formula serverniki bilan bir xil)
+    const l = lines.get(it.productId) ?? { price: "", lead: "", bq: {} };
     const effLead = l.lead.trim() !== "" && Number(l.lead) >= 0 ? Number(l.lead) : it.lead;
-    const liveMin = hisobMinStock(it.dailyAvg, orderGap, effLead, it.xyz);
-    const liveMax = hisobMaxStock(it.dailyAvg, orderGap, effLead, it.xyz);
+    const cellByB = new Map(it.branches.map((c) => [c.branchId, c]));
+    const jamiQty = branches.reduce((s, b) => s + (Number(l.bq[b.id]) || 0), 0);
+    const price = Number(l.price) || it.purchasePrice || 0;
+    const sum = jamiQty * price;
+    const picked = jamiQty > 0;
     return (
-      // Fon: tanlangan — yashil (zakazga kiradi); aks holda ABC×XYZ matritsa rangi
       <TableRow key={it.productId}
         className={cn("text-sm", picked ? "bg-emerald-500/10 hover:bg-emerald-500/15" : skuRowBg(it.abc, it.xyz))}>
         <TableCell className="font-mono text-xs text-muted-foreground">
           <span className="flex items-center gap-1.5 pl-6">
             {it.code}
-            <span
-              title={skuBadgeTitle(it.abc, it.xyz)}
-              className={cn("rounded border px-1 py-px text-[9px] font-bold leading-none", skuBadgeCls(it.abc, it.xyz))}
-            >
+            <span title={skuBadgeTitle(it.abc, it.xyz)}
+              className={cn("rounded border px-1 py-px text-[9px] font-bold leading-none", skuBadgeCls(it.abc, it.xyz))}>
               {skuBadgeLabel(it.abc, it.xyz)}
             </span>
           </span>
         </TableCell>
-        <TableCell className="max-w-[260px]" title={it.name}>
+        <TableCell className="max-w-[240px]" title={it.name}>
           <span className="flex items-center gap-1.5">
             <span className="truncate">{it.name}</span>
             {it.arxiv && (
               <span className="shrink-0 rounded border border-border bg-muted px-1.5 py-px text-[9px] font-semibold uppercase text-muted-foreground"
-                title="Arxivlangan (no-aktiv) — yana sotila boshlasa avtomatik aktivga qaytadi">
-                no aktiv
-              </span>
+                title="Arxivlangan (no-aktiv) — yana sotila boshlasa avtomatik aktivga qaytadi">no aktiv</span>
             )}
           </span>
-        </TableCell>
-        <TableCell className="text-right tabular-nums text-xs text-muted-foreground">{it.stock.toLocaleString("uz-UZ")}</TableCell>
-        <TableCell className="text-right tabular-nums text-xs text-muted-foreground">
-          {it.dailyAvg > 0 ? it.dailyAvg.toLocaleString("uz-UZ", { maximumFractionDigits: 1 }) : <span className="text-muted-foreground/40">—</span>}
-        </TableCell>
-        <TableCell className="text-right tabular-nums text-xs">
-          {liveMin == null ? (
-            <span className="text-muted-foreground/40" title="Lead kiritilmagan — yonidagi katakka kiriting (SKU'ga saqlanadi)">—</span>
-          ) : (
-            <span className="inline-flex items-center justify-end gap-1" title="Min / Max stock — qoldiq min'dan past bo'lsa max'gacha to'ldiriladi">
-              {it.stock < liveMin ? (
-                <span className="font-bold text-destructive" title="Qoldiq min stock'dan past — buyurtma shart!">⚠ {liveMin.toLocaleString("uz-UZ")}</span>
-              ) : liveMax != null && it.stock > liveMax ? (
-                <span className="font-semibold text-amber-600 dark:text-amber-400" title="Qoldiq max stock'dan ko'p — ortiqcha zaxira">⬆ {liveMin.toLocaleString("uz-UZ")}</span>
-              ) : (
-                <span className="text-muted-foreground">{liveMin.toLocaleString("uz-UZ")}</span>
-              )}
-              {liveMax != null && <span className="text-muted-foreground/40">/ {liveMax.toLocaleString("uz-UZ")}</span>}
-            </span>
-          )}
         </TableCell>
         <TableCell className="px-2">
           <Input ref={regRef(it.productId, "lead")} type="number" inputMode="numeric" value={l.lead}
@@ -353,41 +326,40 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
             onChange={(e) => setLine(it.productId, { lead: e.target.value })}
             onKeyDown={onEnterNext(it.productId, "lead")}
             className="h-7 w-14 px-1.5 text-right text-xs tabular-nums"
-            title="Lead time (kun) — kiritilsa SKU'ga saqlanadi, min stock qayta hisoblanadi"
-            aria-label="Lead time (kun)" />
+            title="Lead time (kun) — kiritilsa SKU'ga saqlanadi, avto-zakaz qayta hisoblanadi" aria-label="Lead time (kun)" />
         </TableCell>
-        <TableCell className="border-l border-border/60 bg-primary/[0.03] px-2">
-          <span className="flex items-center gap-1">
-            <Input ref={regRef(it.productId, "blok")} type="number" inputMode="decimal" value={l.blok}
-              placeholder={it.packSize && it.suggested > 0 ? String(Math.ceil(it.suggested / it.packSize)) : ""}
-              onChange={(e) => setLine(it.productId, { blok: e.target.value })}
-              onKeyDown={onEnterNext(it.productId, "blok")}
-              className="h-7 w-14 px-1.5 text-right text-xs tabular-nums" title="Blok/yashik soni" aria-label="Blok soni" />
-            <span className="text-[10px] text-muted-foreground/60">×</span>
-            <Input ref={regRef(it.productId, "pack")} type="number" inputMode="decimal" value={l.pack}
-              placeholder={it.packSize != null ? String(it.packSize) : ""}
-              onChange={(e) => setLine(it.productId, { pack: e.target.value })}
-              onKeyDown={onEnterNext(it.productId, "pack")}
-              className="h-7 w-14 px-1.5 text-right text-xs tabular-nums" title="Pachkadagi dona soni (SKU'da eslab qolinadi)" aria-label="Pachka hajmi" />
-          </span>
+        {branches.map((b) => {
+          const cell = cellByB.get(b.id);
+          const avto = cell ? branchAvto(cell, orderGap, effLead, it.xyz) : 0;
+          const stock = cell?.stock ?? 0;
+          const daily = cell?.dailyAvg ?? 0;
+          return (
+            <Fragment key={b.id}>
+              <TableCell className="border-l border-border/60 text-right tabular-nums text-[11px] text-muted-foreground">
+                {stock > 0 ? stock.toLocaleString("uz-UZ") : <span className="text-muted-foreground/40">—</span>}
+              </TableCell>
+              <TableCell className="text-right tabular-nums text-[11px] text-muted-foreground">
+                {daily > 0 ? daily.toLocaleString("uz-UZ", { maximumFractionDigits: 1 }) : <span className="text-muted-foreground/40">—</span>}
+              </TableCell>
+              <TableCell className="text-right tabular-nums text-[11px]">
+                {avto > 0
+                  ? <span className={cn(stock < (cell?.minStock ?? 0) ? "font-bold text-destructive" : "text-muted-foreground")}>{avto.toLocaleString("uz-UZ")}</span>
+                  : <span className="text-muted-foreground/40">—</span>}
+              </TableCell>
+              <TableCell className="bg-primary/[0.03] px-1.5">
+                <Input ref={regRef(it.productId, `z${b.id}`)} type="number" inputMode="decimal" value={l.bq[b.id] ?? ""}
+                  placeholder={avto > 0 ? String(avto) : ""}
+                  onChange={(e) => setBranchQty(it.productId, b.id, e.target.value)}
+                  onKeyDown={onEnterNext(it.productId, `z${b.id}`)}
+                  className="h-7 w-16 px-1.5 text-right text-xs tabular-nums" aria-label={`${b.name} zakaz miqdori`} />
+              </TableCell>
+            </Fragment>
+          );
+        })}
+        <TableCell className="border-l border-border/60 text-right tabular-nums text-xs font-semibold">
+          {jamiQty > 0 ? jamiQty.toLocaleString("uz-UZ") : <span className="text-muted-foreground/40">—</span>}
         </TableCell>
-        <TableCell className="bg-primary/[0.03] px-2">
-          <span className="flex items-center gap-1">
-            <Input ref={regRef(it.productId, "qty")} type="number" inputMode="decimal" value={l.qty}
-              placeholder={it.suggested > 0 ? String(it.suggested) : ""}
-              onChange={(e) => setLine(it.productId, { qty: e.target.value })}
-              onKeyDown={onEnterNext(it.productId, "qty")}
-              className="h-7 w-20 px-1.5 text-right text-xs tabular-nums" aria-label="Miqdor (dona)" />
-            {picked && (
-              <button type="button" onClick={() => setLine(it.productId, { qty: "" })}
-                title="Zakazdan chiqarish (0)" aria-label="Zakazdan chiqarish"
-                className="shrink-0 text-muted-foreground/40 transition-colors hover:text-destructive">
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </span>
-        </TableCell>
-        <TableCell className="bg-primary/[0.03] px-2">
+        <TableCell className="bg-primary/[0.03] px-1.5">
           <Input ref={regRef(it.productId, "price")} type="number" inputMode="decimal" value={l.price}
             placeholder={it.purchasePrice != null ? String(it.purchasePrice) : ""}
             onChange={(e) => setLine(it.productId, { price: e.target.value })}
@@ -438,7 +410,7 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
         {items.length > 0 && (
           <>
             <Button type="button" size="sm" onClick={autoFill} disabled={saving} className="h-9 gap-1.5"
-              title="Min stock, pachka/korobka va sotuv tahliliga ko'ra bo'sh miqdorlarni avtomatik to'ldiradi (AI emas — formula)">
+              title="Har filialning avto-zakaz taklifini bo'sh kataklarga qo'yadi (AI emas — formula)">
               <Wand2 className="h-4 w-4" /> Avto to'ldirish
             </Button>
             <Button type="button" variant="outline" size="sm" onClick={clearAll} disabled={saving} className="h-9 gap-1.5"
@@ -472,10 +444,10 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
 
       {items.length > 0 && (
         <p className="text-[11px] text-muted-foreground">
-          Min = kunlik × (zakaz oralig'i + lead) × XYZ buferi (X 1.1 · Y 1.25 · Z 1.5); Max = kunlik × (2·zakaz oralig'i + lead) × bufer.
-          ⚠ — qoldiq min'dan past (avto-zakaz max'gacha to'ldiradi); ⬆ — qoldiq max'dan ko'p (ortiqcha zaxira). Faqat MIQDOR kiritilgan SKU zakazga (va nakladnoyga) kiradi —
-          bo'sh/0 qoldirilganlar kirmaydi. Xira sonlar — taklif miqdori va eslab qolingan narx/pachka
-          (narxni bo'sh qoldirsangiz o'sha ishlatiladi). Lead'ni kiritsangiz — SKU'ga saqlanadi. Enter — keyingi qatorga.
+          Har filial uchun <b>Qoldiq · Kunlik · Avto-zakaz · Zakaz</b> ustunlari; oxirida <b>Jami</b> (filiallar yig&apos;indisi).
+          Avto-zakaz = kunlik × (zakaz oralig&apos;i + lead) × XYZ buferi asosida; qizil — qoldiq min&apos;dan past. Faqat MIQDOR kiritilgan
+          (filialga) SKU zakazga (va nakladnoyga) kiradi. Xira sonlar — avto-zakaz taklifi va eslab qolingan narx. Lead&apos;ni kiritsangiz
+          — SKU&apos;ga saqlanadi va avto-zakaz qayta hisoblanadi. Enter — shu ustun bo&apos;ylab keyingi qatorga.
         </p>
       )}
 
@@ -494,22 +466,32 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/40 hover:bg-muted/40">
-                    <TableHead className="w-[80px]">Kod</TableHead>
-                    <TableHead>SKU</TableHead>
-                    <TableHead className="text-right w-[80px]">Qoldiq</TableHead>
-                    <TableHead className="text-right w-[80px]" title="Kunlik o'rtacha sotuv (oxirgi ma'lumot oynasi, filiallar yig'indisi)">Kunlik</TableHead>
-                    <TableHead className="text-right w-[110px]" title="Min / Max stock. Min = kunlik × (zakaz oralig'i + lead) × XYZ buferi. Max = kunlik × (2·zakaz oralig'i + lead) × XYZ buferi (to'ldirish darajasi)">Min / Max</TableHead>
-                    <TableHead className="text-right w-[70px]" title="Lead time — zakazdan kelguncha kunlar">Lead</TableHead>
-                    <TableHead className="w-[130px] border-l border-border/60 bg-primary/[0.03]" title="Blok/yashik soni × pachkadagi dona — Miqdor avtomatik hisoblanadi">Blok × Pachka</TableHead>
-                    <TableHead className="w-[90px] bg-primary/[0.03]">Miqdor</TableHead>
-                    <TableHead className="w-[110px] bg-primary/[0.03]">Narx (dona)</TableHead>
-                    <TableHead className="text-right w-[120px]">Summa</TableHead>
+                    <TableHead rowSpan={2} className="w-[80px] align-bottom">Kod</TableHead>
+                    <TableHead rowSpan={2} className="align-bottom">SKU</TableHead>
+                    <TableHead rowSpan={2} className="w-[64px] align-bottom" title="Lead time (kun) — zakazdan kelguncha; SKU'ga saqlanadi">Lead</TableHead>
+                    {branches.map((b) => (
+                      <TableHead key={b.id} colSpan={4} className="border-l border-border/60 text-center font-semibold" title={b.name}>{b.name}</TableHead>
+                    ))}
+                    <TableHead colSpan={3} className="border-l border-border/60 bg-primary/[0.04] text-center font-semibold">Jami</TableHead>
+                  </TableRow>
+                  <TableRow className="bg-muted/30 hover:bg-muted/30">
+                    {branches.map((b) => (
+                      <Fragment key={b.id}>
+                        <TableHead className="w-[56px] border-l border-border/60 text-right text-[10px]" title="Qoldiq (shu filial)">Qold.</TableHead>
+                        <TableHead className="w-[52px] text-right text-[10px]" title="Kunlik o'rtacha sotuv (shu filial)">Kun.</TableHead>
+                        <TableHead className="w-[52px] text-right text-[10px]" title="Avto-zakaz taklifi (shu filial)">Avto</TableHead>
+                        <TableHead className="w-[72px] bg-primary/[0.03] text-[10px]" title="Shu filialga buyurtma miqdori">Zakaz</TableHead>
+                      </Fragment>
+                    ))}
+                    <TableHead className="w-[72px] border-l border-border/60 text-right text-[10px]" title="Jami zakaz (filiallar yig'indisi)">Zakaz</TableHead>
+                    <TableHead className="w-[100px] bg-primary/[0.03] text-[10px]">Narx</TableHead>
+                    <TableHead className="w-[110px] text-right text-[10px]">Summa</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {tree.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={10} className="py-6 text-center text-sm text-muted-foreground">Qidiruv bo&apos;yicha SKU topilmadi.</TableCell>
+                      <TableCell colSpan={colCount} className="py-6 text-center text-sm text-muted-foreground">Qidiruv bo&apos;yicha SKU topilmadi.</TableCell>
                     </TableRow>
                   ) : tree.map((g) => {
                     const gOpen = searching || !closedG.has(g.id);
@@ -517,7 +499,7 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
                     return (
                       <Fragment key={`g${g.id}`}>
                         <TableRow className="cursor-pointer bg-muted/60 hover:bg-muted/70" onClick={() => toggleG(g.id)}>
-                          <TableCell colSpan={10} className="py-1.5">
+                          <TableCell colSpan={colCount} className="py-1.5">
                             <span className="flex items-center gap-2 text-sm font-bold">
                               <ChevronRight className={cn("h-4 w-4 shrink-0 transition-transform", gOpen && "rotate-90")} />
                               <span className={cn("h-2 w-2 shrink-0 rounded-full", col.dot)} />
@@ -533,7 +515,7 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
                           return (
                             <Fragment key={`c${cKey}`}>
                               <TableRow className="cursor-pointer bg-muted/25 hover:bg-muted/40" onClick={() => toggleC(cKey)}>
-                                <TableCell colSpan={10} className="py-1">
+                                <TableCell colSpan={colCount} className="py-1">
                                   <span className="flex items-center gap-2 pl-6 text-sm font-semibold">
                                     <ChevronRight className={cn("h-3.5 w-3.5 shrink-0 transition-transform", cOpen && "rotate-90")} />
                                     {c.name}
@@ -547,7 +529,7 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
                                 return (
                                   <Fragment key={`s${s.id}`}>
                                     <TableRow className="cursor-pointer hover:bg-muted/20" onClick={() => toggleS(s.id)}>
-                                      <TableCell colSpan={10} className="py-1">
+                                      <TableCell colSpan={colCount} className="py-1">
                                         <span className="flex items-center gap-2 pl-12 text-xs font-medium text-muted-foreground">
                                           <ChevronRight className={cn("h-3 w-3 shrink-0 transition-transform", sOpen && "rotate-90")} />
                                           {s.name}

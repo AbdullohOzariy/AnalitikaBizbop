@@ -11,7 +11,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth();
@@ -22,7 +22,8 @@ export async function GET(
   const id = Number((await params).id);
   if (!Number.isInteger(id) || id <= 0) return new NextResponse("Noto'g'ri id", { status: 400 });
 
-  const pdf = await buildZakazPdf(id);
+  const variant = new URL(req.url).searchParams.get("variant") === "withBranch" ? "withBranch" : "total";
+  const pdf = await buildZakazPdf(id, variant);
   if (!pdf) return new NextResponse("Topilmadi", { status: 404 });
   if (role === "CAT_MANAGER" && pdf.createdById !== userId) {
     return new NextResponse("Ruxsat yo'q", { status: 403 });

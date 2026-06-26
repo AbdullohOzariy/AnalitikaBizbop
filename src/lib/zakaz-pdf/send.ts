@@ -14,22 +14,39 @@ export async function sendZakazPdf(orderId: number): Promise<{ ok: true } | { ok
     if (!cfg.token) return { ok: false, error: "Bot token sozlanmagan." };
     if (!cfg.chatId) return { ok: false, error: "Guruh chat ID sozlanmagan." };
 
-    const pdf = await buildZakazPdf(orderId);
-    if (!pdf) return { ok: false, error: "Zakaz topilmadi." };
+    // Filialli variant — agar zakazda filial taqsimoti bo'lsa undagi withBranch=true bo'ladi.
+    const branchPdf = await buildZakazPdf(orderId, "withBranch");
+    if (!branchPdf) return { ok: false, error: "Zakaz topilmadi." };
+    const totalPdf = await buildZakazPdf(orderId, "total");
+    if (!totalPdf) return { ok: false, error: "Zakaz topilmadi." };
 
     const tg = new Telegram(cfg.token);
     const thread = cfg.topicId ? { message_thread_id: cfg.topicId } : {};
-    const supplier = pdf.agentName ? `${pdf.agentName} (${pdf.supplierName})` : pdf.supplierName;
-    const caption =
-      `📦 <b>Zakaz qabul qilindi</b> — № ${pdf.orderId}\n` +
+    const supplier = totalPdf.agentName ? `${totalPdf.agentName} (${totalPdf.supplierName})` : totalPdf.supplierName;
+    const head =
+      `📦 <b>Zakaz qabul qilindi</b> — № ${totalPdf.orderId}\n` +
       `🏢 ${supplier}\n` +
-      `🗓 ${pdf.sana} · <b>${pdf.skuCount}</b> ta SKU · ${NF.format(Math.round(pdf.total))} so'm`;
+      `🗓 ${totalPdf.sana} · <b>${totalPdf.skuCount}</b> ta SKU · ${NF.format(Math.round(totalPdf.total))} so'm`;
 
-    await tg.sendDocument(
-      cfg.chatId,
-      { source: pdf.buffer, filename: pdf.filename },
-      { caption, parse_mode: "HTML", ...thread }
-    );
+    // Filial taqsimoti bo'lsa — IKKI nakladnoy (filial bo'yicha + jami); aks holda faqat jami.
+    if (branchPdf.withBranch) {
+      await tg.sendDocument(
+        cfg.chatId,
+        { source: branchPdf.buffer, filename: branchPdf.filename },
+        { caption: `${head}\n📊 Filiallar bo'yicha`, parse_mode: "HTML", ...thread }
+      );
+      await tg.sendDocument(
+        cfg.chatId,
+        { source: totalPdf.buffer, filename: totalPdf.filename },
+        { caption: `🧾 Jami nakladnoy — № ${totalPdf.orderId}`, parse_mode: "HTML", ...thread }
+      );
+    } else {
+      await tg.sendDocument(
+        cfg.chatId,
+        { source: totalPdf.buffer, filename: totalPdf.filename },
+        { caption: head, parse_mode: "HTML", ...thread }
+      );
+    }
     return { ok: true };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Yuborishda xato.";

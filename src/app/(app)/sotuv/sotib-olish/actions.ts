@@ -15,11 +15,12 @@ import { Prisma } from "@/generated/prisma/client";
 
 export type OrderItemInput = {
   productId: number;
-  quantity: number; // dona
+  quantity: number; // dona (JAMI = filiallar yig'indisi)
   price: number; // dona narxi
   packCount?: number | null; // blok/yashik soni (kiritilgan bo'lsa)
   packSize?: number | null; // pachka hajmi (dona)
   leadTimeDays?: number | null; // zakaz berishda kiritilsa — SKU'da eslab qolinadi
+  branches?: { branchId: number; quantity: number }[]; // filial taqsimoti (bo'sh = faqat jami)
 };
 export type AgentOption = {
   id: number;
@@ -35,23 +36,35 @@ export type SupplierOption = {
   nextOrderDate: string | null; // supplier keyingi zakaz sanasi (YYYY-MM-DD) — hint
   agents: AgentOption[];
 };
+// Filial bo'yicha bitta katak — qoldiq/kunlik/avto-zakaz (builder ustun-guruhi).
+export type BranchCell = {
+  branchId: number;
+  stock: number; // oxirgi snapshot qoldig'i (shu filial)
+  dailyAvg: number; // kunlik o'rtacha sotuv (shu filial)
+  suggested: number; // avto-zakaz (shu filial)
+  minStock: number | null;
+  maxStock: number | null;
+};
+// Zakaz builder ustunlari uchun filial ro'yxati (tartib = sortOrder).
+export type BuilderBranch = { id: number; name: string };
 export type BuilderItem = {
   productId: number;
   code: number;
   name: string;
   sub: string | null;
-  stock: number;
-  sold: number;
-  suggested: number;
+  stock: number; // JAMI qoldiq (Σ filial)
+  sold: number; // JAMI so'nggi davr sotuvi (Σ filial)
+  suggested: number; // JAMI avto-zakaz (Σ filial)
   abc: string | null; // ABC×XYZ matritsa holati — rang uchun
   xyz: string | null;
   lead: number | null; // lead time (kun) — yetkazib beruvchi profilida kiritiladi
   arxiv: boolean; // no-aktiv (arxivlangan) — ro'yxatda belgisi bilan ko'rinadi
-  dailyAvg: number; // kunlik o'rtacha sotuv (oxirgi ma'lumot oynasi, filiallar yig'indisi)
+  dailyAvg: number; // JAMI kunlik o'rtacha sotuv (Σ filial)
   packSize: number | null; // blok/pachkadagi dona soni (Product'da eslab qolinadi)
   purchasePrice: number | null; // oxirgi kelishilgan dona narxi (eslab qolinadi)
-  minStock: number | null; // kunlik × (zakaz oralig'i + lead) × XYZ buferi; lead yo'q — null
-  maxStock: number | null; // kunlik × (2·zakaz oralig'i + lead) × XYZ buferi; to'ldirish darajasi
+  minStock: number | null; // JAMI min (Σ filial); lead yo'q — null
+  maxStock: number | null; // JAMI max (Σ filial)
+  branches: BranchCell[]; // filial bo'yicha taqsimot (tartib = BuilderBranch tartibi)
   // Iyerarxiya: guruh → kategoriya → subkategoriya (SKU shu yerga tegishli) — daraxt ko'rinishi uchun
   groupId: number | null; groupName: string | null; groupSort: number;
   catId: number | null; catName: string | null; catSort: number;
@@ -151,14 +164,14 @@ export async function suppliersForOrderAction(): Promise<
 export async function supplierItemsAction(
   supplierId: number,
   agentId?: number | null
-): Promise<{ ok: true; items: BuilderItem[]; orderGap: number } | { ok: false; error: string }> {
+): Promise<{ ok: true; items: BuilderItem[]; orderGap: number; branches: BuilderBranch[] } | { ok: false; error: string }> {
   try {
     const user = await requireOrderCreator();
     const sid = z.coerce.number().int().positive().parse(supplierId);
     // agentId berilsa — faqat shu agent SKU'lari; berilmasa — agentsiz (biriktirilmagan) SKU'lar
     const aid = agentId != null ? z.coerce.number().int().positive().parse(agentId) : null;
     const scope = await scopeParentIds(Number(user.id), user.role);
-    if (scope !== null && scope.length === 0) return { ok: true, items: [], orderGap: 1 };
+    if (scope !== null && scope.length === 0) return { ok: true, items: [], orderGap: 1, branches: [] };
     // Joriy holat Product'ga denormalizatsiya qilingan (har yuklashda yangilanadi) —
     // ProductSales tarixini skanlamaymiz, bir zumda o'qiymiz.
     // Zakaz oralig'i (orderGap) manbai: agent bo'lsa AgentOrderDay, aks holda SupplierOrderDay.
@@ -166,7 +179,7 @@ export async function supplierItemsAction(
     const futureDaysPromise = aid != null
       ? prisma.agentOrderDay.findMany({ where: { agentId: aid, sana: { gte: futureCutoff } }, orderBy: { sana: "asc" }, take: 6, select: { sana: true } })
       : prisma.supplierOrderDay.findMany({ where: { supplierId: sid, sana: { gte: futureCutoff } }, orderBy: { sana: "asc" }, take: 6, select: { sana: true } });
-    const [products, futureOrderDays, range] = await Promise.all([
+    const [products, futureOrderDays, range, branchList] = await Promise.all([
       prisma.product.findMany({
         where: { supplierId: sid, ...(aid != null ? { agentId: aid } : { agentId: null }), ...scopeProductWhere(scope) },
         select: {
@@ -185,40 +198,77 @@ export async function supplierItemsAction(
       }),
       futureDaysPromise,
       getDefaultRange(),
+      prisma.branch.findMany({ orderBy: { sortOrder: "asc" }, select: { id: true, name: true } }),
     ]);
 
-    // Kunlik o'rtacha sotuv — oxirgi ma'lumot oynasida (filiallar yig'indisi),
-    // Stockday "Sotuv/kun" bilan bir xil hisob: jami sotilgan ÷ ma'lumotli kunlar.
     const pids = products.map((p) => p.id);
-    const dailyRows = pids.length
-      ? await prisma.$queryRaw<{ pid: number; sold: number; days: number }[]>(Prisma.sql`
-          SELECT ps."productId" AS pid,
-                 COALESCE(SUM(ps."soldQty"), 0)::float8 AS sold,
-                 COUNT(DISTINCT ps."periodStart")::int AS days
-          FROM "ProductSales" ps
-          WHERE ps."productId" = ANY(${pids}::int[])
-            AND ps."periodStart" >= ${range.start.toISOString().slice(0, 10)}::date
-            AND ps."periodEnd" <= ${range.end.toISOString().slice(0, 10)}::date
-          GROUP BY 1
-        `)
-      : [];
-    const dailyByPid = new Map(dailyRows.map((r) => [r.pid, r.days > 0 ? r.sold / r.days : 0]));
-    // eslint-disable-next-line react-hooks/purity -- server action
+    const startStr = range.start.toISOString().slice(0, 10);
+    const endStr = range.end.toISOString().slice(0, 10);
     const todayD = new Date(new Date(Date.now() + 5 * 3_600_000).toISOString().slice(0, 10) + "T00:00:00.000Z");
     const orderGap = orderGapFromDates(futureOrderDays.map((d) => d.sana), todayD);
 
+    // Filial bo'yicha (1) oxirgi snapshot qoldiq+sotuv (DISTINCT ON productId,branchId) va
+    // (2) davr ichidagi kunlik o'rtacha. Distribution naqshi (lib/distribution.ts).
+    const [snapRows, dailyRows] = pids.length
+      ? await Promise.all([
+          prisma.$queryRaw<{ pid: number; bid: number; stock: number; sold: number }[]>(Prisma.sql`
+            SELECT DISTINCT ON (ps."productId", ps."branchId")
+              ps."productId" AS pid, ps."branchId" AS bid,
+              COALESCE(ps."stockQty", 0)::float8 AS stock, COALESCE(ps."soldQty", 0)::float8 AS sold
+            FROM "ProductSales" ps
+            WHERE ps."productId" = ANY(${pids}::int[])
+            ORDER BY ps."productId", ps."branchId", ps."periodEnd" DESC
+          `),
+          prisma.$queryRaw<{ pid: number; bid: number; sold: number; days: number }[]>(Prisma.sql`
+            SELECT ps."productId" AS pid, ps."branchId" AS bid,
+                   COALESCE(SUM(ps."soldQty"), 0)::float8 AS sold,
+                   COUNT(DISTINCT ps."periodStart")::int AS days
+            FROM "ProductSales" ps
+            WHERE ps."productId" = ANY(${pids}::int[])
+              AND ps."periodStart" >= ${startStr}::date AND ps."periodEnd" <= ${endStr}::date
+            GROUP BY 1, 2
+          `),
+        ])
+      : [[], []];
+    // pid → bid → {stock, sold}
+    const snapByPid = new Map<number, Map<number, { stock: number; sold: number }>>();
+    for (const r of snapRows) {
+      let m = snapByPid.get(r.pid); if (!m) { m = new Map(); snapByPid.set(r.pid, m); }
+      m.set(r.bid, { stock: r.stock, sold: r.sold });
+    }
+    // pid → bid → kunlik
+    const dailyByPid = new Map<number, Map<number, number>>();
+    for (const r of dailyRows) {
+      let m = dailyByPid.get(r.pid); if (!m) { m = new Map(); dailyByPid.set(r.pid, m); }
+      m.set(r.bid, r.days > 0 ? r.sold / r.days : 0);
+    }
+
+    const branches: BuilderBranch[] = branchList.map((b) => ({ id: b.id, name: b.name }));
+
     const items: BuilderItem[] = products.map((p) => {
-      const stock = Math.round(Number(p.currentStock ?? 0)); // so'nggi davr qoldig'i
-      const sold = Math.round(Number(p.currentSold ?? 0)); // so'nggi davr sotuvi
-      const dailyAvg = dailyByPid.get(p.id) ?? 0;
-      // Min stock = kunlik × (zakaz oralig'i + lead) × XYZ buferi —
-      // "bugun zakaz bermasangiz, keyingi imkoniyat + yetib kelish davrini qoplaydigan zaxira"
-      const minStock = hisobMinStock(dailyAvg, orderGap, p.leadTimeDays, p.xyzClass);
-      const maxStock = hisobMaxStock(dailyAvg, orderGap, p.leadTimeDays, p.xyzClass);
-      // Taklif: qoldiq min'dan past bo'lsa — MAX gacha to'ldirish (order-up-to); lead yo'q — eski qo'pol formula
-      const suggested = minStock != null
-        ? (stock < minStock ? Math.max(0, (maxStock ?? minStock) - stock) : 0)
-        : Math.max(0, sold - stock);
+      const snapM = snapByPid.get(p.id);
+      const dailyM = dailyByPid.get(p.id);
+      let totStock = 0, totSold = 0, totDaily = 0, totSug = 0, totMin = 0, totMax = 0;
+      let anyMin = false, anyMax = false;
+      // Har filial uchun qoldiq/kunlik/avto-zakaz — formula serverniki bilan bir xil (order-status.ts).
+      const cells: BranchCell[] = branchList.map((b) => {
+        const snap = snapM?.get(b.id);
+        const bStock = Math.round(snap?.stock ?? 0);
+        const bSold = Math.round(snap?.sold ?? 0);
+        // bDaily'ni BIR MARTA yaxlitlaymiz (1 kasr) — formula va displayda ayni qiymat,
+        // client (branchAvto) qayta hisoblaganda server bilan to'liq mos kelsin.
+        const bDaily = Math.round((dailyM?.get(b.id) ?? 0) * 10) / 10;
+        const bMin = hisobMinStock(bDaily, orderGap, p.leadTimeDays, p.xyzClass);
+        const bMax = hisobMaxStock(bDaily, orderGap, p.leadTimeDays, p.xyzClass);
+        // Taklif: qoldiq min'dan past — MAX gacha to'ldirish; lead yo'q — eski qo'pol formula (sotuv−qoldiq)
+        const bSug = bMin != null
+          ? (bStock < bMin ? Math.max(0, (bMax ?? bMin) - bStock) : 0)
+          : Math.max(0, bSold - bStock);
+        totStock += bStock; totSold += bSold; totDaily += bDaily; totSug += bSug;
+        if (bMin != null) { totMin += bMin; anyMin = true; }
+        if (bMax != null) { totMax += bMax; anyMax = true; }
+        return { branchId: b.id, stock: bStock, dailyAvg: bDaily, suggested: bSug, minStock: bMin, maxStock: bMax };
+      });
       // Iyerarxiya: leaf = product.category. parentId bo'lsa — leaf subkategoriya, otasi kategoriya;
       // aks holda leaf to'g'ridan kategoriya (sub yo'q). Guruh leaf yoki ota orqali.
       const c = p.category;
@@ -226,8 +276,10 @@ export async function supplierItemsAction(
       const g = c ? (c.group ?? c.parent?.group ?? null) : null;
       return {
         productId: p.id, code: p.code, name: p.name, sub: c?.name ?? null,
-        stock, sold, suggested, abc: p.abcClass, xyz: p.xyzClass, lead: p.leadTimeDays,
-        arxiv: p.archivedAt != null, dailyAvg: Math.round(dailyAvg * 10) / 10, minStock, maxStock,
+        stock: totStock, sold: totSold, suggested: totSug, abc: p.abcClass, xyz: p.xyzClass, lead: p.leadTimeDays,
+        arxiv: p.archivedAt != null, dailyAvg: Math.round(totDaily * 10) / 10,
+        minStock: anyMin ? totMin : null, maxStock: anyMax ? totMax : null,
+        branches: cells,
         packSize: p.packSize != null ? Number(p.packSize) : null,
         purchasePrice: p.purchasePrice != null ? Number(p.purchasePrice) : null,
         groupId: g?.id ?? null, groupName: g?.name ?? null, groupSort: g?.sortOrder ?? 0,
@@ -239,7 +291,7 @@ export async function supplierItemsAction(
         subSort: isSub ? c!.sortOrder : 0,
       };
     });
-    return { ok: true, items, orderGap };
+    return { ok: true, items, orderGap, branches };
   } catch (err) {
     return actionError(err, "supplierItems");
   }
@@ -252,7 +304,33 @@ const itemSchema = z.object({
   packCount: z.coerce.number().positive().max(100_000).nullable().optional(),
   packSize: z.coerce.number().positive().max(100_000).nullable().optional(),
   leadTimeDays: z.coerce.number().int().min(0).max(365).nullable().optional(),
+  // Filial taqsimoti — bo'sh/berilmagan = faqat jami (legacy). quantity = filiallar yig'indisi.
+  branches: z.array(z.object({
+    branchId: z.coerce.number().int().positive(),
+    quantity: z.coerce.number().positive().max(1_000_000),
+  })).max(50).optional(),
 });
+
+// Filial qatorlarini normallashtirish: faqat musbat, bir xil branchId yig'iladi.
+function normBranches(branches?: { branchId: number; quantity: number }[]): { branchId: number; quantity: number }[] {
+  if (!branches?.length) return [];
+  const m = new Map<number, number>();
+  for (const b of branches) if (b.quantity > 0) m.set(b.branchId, (m.get(b.branchId) ?? 0) + b.quantity);
+  return [...m.entries()].map(([branchId, quantity]) => ({ branchId, quantity }));
+}
+
+// Item + filial qatorlari uchun Prisma create payload (quantity = filiallar yig'indisi yoki jami).
+function itemCreateData(i: z.infer<typeof itemSchema>) {
+  const branchRows = normBranches(i.branches);
+  const quantity = branchRows.length > 0 ? branchRows.reduce((s, b) => s + b.quantity, 0) : i.quantity;
+  return {
+    productId: i.productId, quantity, price: i.price,
+    packCount: i.packCount ?? null, packSize: i.packSize ?? null,
+    ...(branchRows.length > 0
+      ? { branchQtys: { create: branchRows.map((b) => ({ branchId: b.branchId, quantity: b.quantity })) } }
+      : {}),
+  };
+}
 
 /** Pachka, narx va lead time'ni Product'da eslab qolamiz (keyingi zakazda tayyor). */
 async function rememberOrderParams(
@@ -273,6 +351,14 @@ type ActorUser = { id: string | number; role: string };
 /** CAT_MANAGER faqat o'z zakaziga ta'sir qilsin — egalik (IDOR) tekshiruvi. */
 function ownsOrder(user: ActorUser, createdById: number): boolean {
   return isSystemAdmin(user.role) || createdById === Number(user.id);
+}
+
+/** Yuborilgan filial id'lari haqiqatda mavjudligini tekshiradi (FK xatosi o'rniga aniq xabar). */
+async function invalidBranchError(items: { branches?: { branchId: number }[] }[]): Promise<string | null> {
+  const ids = [...new Set(items.flatMap((i) => i.branches?.map((b) => b.branchId) ?? []))];
+  if (ids.length === 0) return null;
+  const found = await prisma.branch.count({ where: { id: { in: ids } } });
+  return found === ids.length ? null : "Ba'zi filiallar topilmadi.";
 }
 
 /** Mahsulotlar foydalanuvchi qamrovida (kategoriya menejeri scope) ekanini tekshiradi. */
@@ -299,6 +385,8 @@ export async function createOrderAction(input: {
     const items = z.array(itemSchema).min(1, "Kamida bitta mahsulot kerak").parse(input.items);
     const scopeErr = await scopeError(user, items.map((i) => i.productId));
     if (scopeErr) return { ok: false, error: scopeErr };
+    const branchErr = await invalidBranchError(items);
+    if (branchErr) return { ok: false, error: branchErr };
     // Agent supplierga tegishlimi + barcha SKU shu agentniki (zakaz har agentga alohida)
     if (agentId != null) {
       const agent = await prisma.agent.findUnique({ where: { id: agentId }, select: { supplierId: true } });
@@ -313,7 +401,7 @@ export async function createOrderAction(input: {
         createdById: Number(user.id),
         note: input.note?.trim() || null,
         status: "DRAFT",
-        items: { create: items.map((i) => ({ productId: i.productId, quantity: i.quantity, price: i.price, packCount: i.packCount ?? null, packSize: i.packSize ?? null })) },
+        items: { create: items.map(itemCreateData) },
       },
       select: { id: true },
     });
@@ -347,9 +435,13 @@ export async function updateOrderItemsAction(
       ? await scopeError({ id: user.id ?? 0, role: user.role ?? "" }, parsed.map((i) => i.productId))
       : null;
     if (scopeErr) return { ok: false, error: scopeErr };
+    const branchErr = await invalidBranchError(parsed);
+    if (branchErr) return { ok: false, error: branchErr };
+    // createMany nested yozolmaydi (filial qatorlari) — har item alohida create.
+    // deleteMany filial qatorlarini ham (FK Cascade) o'chiradi, so'ng qayta yaratiladi.
     await prisma.$transaction([
       prisma.purchaseOrderItem.deleteMany({ where: { orderId: oid } }),
-      prisma.purchaseOrderItem.createMany({ data: parsed.map((i) => ({ orderId: oid, productId: i.productId, quantity: i.quantity, price: i.price, packCount: i.packCount ?? null, packSize: i.packSize ?? null })) }),
+      ...parsed.map((i) => prisma.purchaseOrderItem.create({ data: { orderId: oid, ...itemCreateData(i) } })),
       prisma.purchaseOrder.update({ where: { id: oid }, data: { note: note?.trim() || null } }),
     ]);
     await rememberOrderParams(parsed);

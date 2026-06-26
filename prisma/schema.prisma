@@ -147,6 +147,7 @@ model Branch {
   transfersTo    BranchTransfer[]     @relation("TransferTo")
   batches        ProductBatch[]
   promoCampaigns PromoCampaign[] // shu filialga oid promo aksiyalar (null = barcha filiallar)
+  orderItemBranches PurchaseOrderItemBranch[] // zakaz qatorlarining shu filialga taqsimoti
 }
 
 model BranchAlias {
@@ -472,9 +473,26 @@ model PurchaseOrderItem {
 
   order   PurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  branchQtys PurchaseOrderItemBranch[] // filial bo'yicha taqsimot (quantity = yig'indisi)
 
   @@unique([orderId, productId])
   @@index([productId])
+}
+
+// Zakaz qatori × filial — har filialga buyurtma miqdori. PurchaseOrderItem.quantity =
+// shu qatorlar yig'indisi (jami). Eski (filialsiz) zakazlarda bu qatorlar bo'lmaydi —
+// detal/nakladnoy avtomatik "faqat jami" ko'rinishga tushadi (backward-compatible).
+model PurchaseOrderItemBranch {
+  id          Int     @id @default(autoincrement())
+  orderItemId Int
+  branchId    Int
+  quantity    Decimal @db.Decimal(20, 3)
+
+  orderItem PurchaseOrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  branch    Branch            @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([orderItemId, branchId])
+  @@index([branchId])
 }
 
 // Master sotuv fakti — SKU × filial × davr. Qayta yuklashda upsert (ustiga yoziladi).
