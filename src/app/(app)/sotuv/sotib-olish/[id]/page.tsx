@@ -25,7 +25,7 @@ export default async function ZakazDetailPage({
       where: { id },
       select: {
         id: true, status: true, note: true, createdAt: true, sentAt: true, receivedAt: true,
-        createdById: true,
+        createdById: true, rating: true, ratingNote: true,
         supplier: { select: { name: true } },
         agent: { select: { name: true, phone: true, contactName: true } },
         createdBy: { select: { name: true } },
@@ -57,6 +57,8 @@ export default async function ZakazDetailPage({
     createdAt: order.createdAt.toISOString(),
     sentAt: order.sentAt?.toISOString() ?? null,
     receivedAt: order.receivedAt?.toISOString() ?? null,
+    rating: order.rating,
+    ratingNote: order.ratingNote,
     branches: hasBranchData ? branchList.map((b) => ({ id: b.id, name: b.name })) : [],
     items: order.items.map((i) => ({
       productId: i.productId,

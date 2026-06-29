@@ -385,9 +385,16 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
             disabled={loadingSup || saving}
             value={supplierId || null}
             onPick={(id) => onSupplier(id)}
-            options={suppliers.map((s) => ({ id: String(s.id), label: s.name, hint: `${s.skuCount} SKU` }))}
+            options={suppliers.map((s) => ({ id: String(s.id), label: s.name, hint: `${s.avgRating != null ? `★ ${s.avgRating} · ` : ""}${s.skuCount} SKU` }))}
             triggerClassName="h-9 w-72"
           />
+          {selectedSupplier && (
+            <p className="text-[11px] text-muted-foreground">
+              {selectedSupplier.avgRating != null
+                ? <span className="text-amber-600 dark:text-amber-400">★ {selectedSupplier.avgRating} o&apos;rtacha baho ({selectedSupplier.ratingCount} ta zakaz)</span>
+                : "Hali baholanmagan"}
+            </p>
+          )}
         </div>
         {selectedSupplier && selectedSupplier.agents.length > 0 && (
           <div className="space-y-1">
@@ -398,7 +405,7 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
               </SelectTrigger>
               <SelectContent>
                 {selectedSupplier.agents.map((a) => (
-                  <SelectItem key={a.id} value={String(a.id)}>{a.name} · {a.skuCount} SKU</SelectItem>
+                  <SelectItem key={a.id} value={String(a.id)}>{a.name}{a.avgRating != null ? ` · ★ ${a.avgRating}` : ""} · {a.skuCount} SKU</SelectItem>
                 ))}
                 {selectedSupplier.agentlessSkuCount > 0 && (
                   <SelectItem value="none">Agentsiz (umumiy) · {selectedSupplier.agentlessSkuCount} SKU</SelectItem>

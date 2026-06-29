@@ -27,6 +27,8 @@ export type AgentOption = {
   name: string;
   skuCount: number;
   nextOrderDate: string | null;
+  avgRating: number | null; // yetib kelgan zakazlar o'rtacha bahosi (1..5)
+  ratingCount: number;
 };
 export type SupplierOption = {
   id: number;
@@ -34,6 +36,8 @@ export type SupplierOption = {
   skuCount: number; // jami SKU (agentli + agentsiz)
   agentlessSkuCount: number; // agentga biriktirilmagan SKU soni ("Agentsiz" zakaz uchun)
   nextOrderDate: string | null; // supplier keyingi zakaz sanasi (YYYY-MM-DD) — hint
+  avgRating: number | null; // yetib kelgan zakazlar o'rtacha bahosi (1..5)
+  ratingCount: number;
   agents: AgentOption[];
 };
 // Filial bo'yicha bitta katak — qoldiq/kunlik/avto-zakaz (builder ustun-guruhi).
@@ -105,7 +109,7 @@ export async function suppliersForOrderAction(): Promise<
     if (ids.length === 0) return { ok: true, suppliers: [] };
     const agentIds = [...new Set(grouped.map((g) => g.agentId).filter((x): x is number => x != null))];
     const todayD = new Date(new Date(Date.now() + 5 * 3_600_000).toISOString().slice(0, 10) + "T00:00:00.000Z");
-    const [sups, agentsRaw, supNextDays, agentNextDays] = await Promise.all([
+    const [sups, agentsRaw, supNextDays, agentNextDays, supRatingRows, agentRatingRows] = await Promise.all([
       prisma.supplier.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, orderWeekdays: true } }),
       agentIds.length
         ? prisma.agent.findMany({ where: { id: { in: agentIds } }, select: { id: true, name: true, supplierId: true, orderWeekdays: true } })
@@ -118,10 +122,23 @@ export async function suppliersForOrderAction(): Promise<
       agentIds.length
         ? prisma.agentOrderDay.groupBy({ by: ["agentId"], where: { agentId: { in: agentIds }, sana: { gte: todayD } }, _min: { sana: true } })
         : Promise.resolve([] as { agentId: number; _min: { sana: Date | null } }[]),
+      // Yetib kelgan zakazlar o'rtacha bahosi — supplier va agent bo'yicha
+      prisma.purchaseOrder.groupBy({
+        by: ["supplierId"],
+        where: { supplierId: { in: ids }, rating: { not: null } },
+        _avg: { rating: true }, _count: { rating: true },
+      }),
+      agentIds.length
+        ? prisma.purchaseOrder.groupBy({ by: ["agentId"], where: { agentId: { in: agentIds }, rating: { not: null } }, _avg: { rating: true }, _count: { rating: true } })
+        : Promise.resolve([] as { agentId: number | null; _avg: { rating: number | null }; _count: { rating: number } }[]),
     ]);
     const todayStr = todayD.toISOString().slice(0, 10);
     const supNextBy = new Map(supNextDays.map((r) => [r.supplierId, r._min.sana!.toISOString().slice(0, 10)]));
     const agentNextBy = new Map(agentNextDays.map((r) => [r.agentId, r._min.sana!.toISOString().slice(0, 10)]));
+    // bahoni 1 kasrgacha yaxlitlaymiz
+    const r1 = (n: number | null) => (n != null ? Math.round(n * 10) / 10 : null);
+    const supRating = new Map(supRatingRows.map((r) => [r.supplierId, { avg: r1(r._avg.rating), count: r._count.rating }]));
+    const agentRating = new Map(agentRatingRows.map((r) => [r.agentId!, { avg: r1(r._avg.rating), count: r._count.rating }]));
     const supWd = new Map(sups.map((s) => [s.id, s.orderWeekdays]));
     const agentWd = new Map(agentsRaw.map((a) => [a.id, a.orderWeekdays]));
     const supName = new Map(sups.map((s) => [s.id, s.name]));
@@ -141,18 +158,24 @@ export async function suppliersForOrderAction(): Promise<
     const agentsBySup = new Map<number, AgentOption[]>();
     for (const a of agentsRaw) {
       const arr = agentsBySup.get(a.supplierId) ?? [];
-      arr.push({ id: a.id, name: a.name, skuCount: agentCount.get(a.id) ?? 0, nextOrderDate: agentNext(a.id) });
+      const ar = agentRating.get(a.id);
+      arr.push({ id: a.id, name: a.name, skuCount: agentCount.get(a.id) ?? 0, nextOrderDate: agentNext(a.id), avgRating: ar?.avg ?? null, ratingCount: ar?.count ?? 0 });
       agentsBySup.set(a.supplierId, arr);
     }
     const suppliers: SupplierOption[] = ids
-      .map((sid) => ({
-        id: sid,
-        name: supName.get(sid) ?? "—",
-        skuCount: supTotal.get(sid) ?? 0,
-        agentlessSkuCount: supAgentless.get(sid) ?? 0,
-        nextOrderDate: supNext(sid),
-        agents: (agentsBySup.get(sid) ?? []).sort((a, b) => a.name.localeCompare(b.name, "uz")),
-      }))
+      .map((sid) => {
+        const sr = supRating.get(sid);
+        return {
+          id: sid,
+          name: supName.get(sid) ?? "—",
+          skuCount: supTotal.get(sid) ?? 0,
+          agentlessSkuCount: supAgentless.get(sid) ?? 0,
+          nextOrderDate: supNext(sid),
+          avgRating: sr?.avg ?? null,
+          ratingCount: sr?.count ?? 0,
+          agents: (agentsBySup.get(sid) ?? []).sort((a, b) => a.name.localeCompare(b.name, "uz")),
+        };
+      })
       .sort((a, b) => a.name.localeCompare(b.name, "uz"));
     return { ok: true, suppliers };
   } catch (err) {
@@ -582,5 +605,42 @@ export async function saveOrderFactAction(
     return { ok: true };
   } catch (err) {
     return actionError(err, "saveOrderFact");
+  }
+}
+
+// ─── Yetib kelgan zakaz bahosi (1..5) — yetkazib beruvchi o'rtachasiga kiradi ────
+const ratingSchema = z.object({
+  orderId: z.coerce.number().int().positive(),
+  rating: z.coerce.number().int().min(1).max(5),
+  note: z.string().trim().max(500).nullable().optional(),
+});
+
+/**
+ * Zakazga 5 ballik baho qo'yish — faqat ACCEPTED/RECEIVED bosqichida, fakt kiritish
+ * huquqiga ega rollar (SUPPLYCHAIN / HEAD_CAT_MANAGER / ADMIN / SYSTEM_ADMIN).
+ */
+export async function saveOrderRatingAction(
+  input: { orderId: number; rating: number; note?: string | null }
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const session = await auth();
+    const user = session?.user;
+    if (!user) return { ok: false, error: "Ruxsat yo'q." };
+    const p = ratingSchema.parse(input);
+    const order = await prisma.purchaseOrder.findUnique({ where: { id: p.orderId }, select: { status: true, supplierId: true } });
+    if (!order) return { ok: false, error: "Zakaz topilmadi." };
+    if (!canEnterFact(user.roles, order.status as OrderStatusT)) {
+      return { ok: false, error: "Baho faqat 'Zakaz qabul qilindi'/'Yetib keldi' bosqichida qo'yiladi (supplychain/menejerlar boshi)." };
+    }
+    await prisma.purchaseOrder.update({
+      where: { id: p.orderId },
+      data: { rating: p.rating, ratingNote: p.note?.trim() || null, ratedAt: new Date() },
+    });
+    revalidatePath(`/sotuv/sotib-olish/${p.orderId}`);
+    revalidatePath("/sotuv/sotib-olish");
+    revalidatePath(`/baza/taminotchilar/${order.supplierId}`); // o'rtacha baho KPI'sini yangilash
+    return { ok: true };
+  } catch (err) {
+    return actionError(err, "saveOrderRating");
   }
 }

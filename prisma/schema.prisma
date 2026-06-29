@@ -450,6 +450,9 @@ model PurchaseOrder {
   updatedAt   DateTime    @updatedAt
   sentAt      DateTime?
   receivedAt  DateTime?
+  rating      Int? // yetib kelgan zakaz bahosi (1..5) — yetkazib beruvchi o'rtachasiga kiradi
+  ratingNote  String? // baho izohi (ixtiyoriy)
+  ratedAt     DateTime? // baho qo'yilgan vaqt
 
   supplier  Supplier            @relation(fields: [supplierId], references: [id], onDelete: Cascade)
   agent     Agent?              @relation(fields: [agentId], references: [id], onDelete: SetNull)

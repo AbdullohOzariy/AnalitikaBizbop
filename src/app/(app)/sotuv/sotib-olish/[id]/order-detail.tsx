@@ -12,13 +12,14 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { Pill } from "@/components/common/page";
-import { Loader2, Save, Send, PackageCheck, RotateCcw, Trash2, Truck, FileDown } from "lucide-react";
+import { Loader2, Save, Send, PackageCheck, RotateCcw, Trash2, Truck, FileDown, Star } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { formatUZS, formatDateTimeUZ } from "@/lib/format";
 import {
   ORDER_STATUS_LABEL, ORDER_STATUS_TONE, TRANSITION_LABEL, NEXT_STATUSES,
   canTransition, canEditItems, canEnterFact, type OrderStatusT,
 } from "../order-status";
-import { updateOrderItemsAction, setOrderStatusAction, deleteOrderAction, saveOrderFactAction, sendZakazPdfAction } from "../actions";
+import { updateOrderItemsAction, setOrderStatusAction, deleteOrderAction, saveOrderFactAction, sendZakazPdfAction, saveOrderRatingAction } from "../actions";
 
 export type OrderData = {
   id: number;
@@ -30,6 +31,8 @@ export type OrderData = {
   createdAt: string;
   sentAt: string | null;
   receivedAt: string | null;
+  rating: number | null; // yetib kelgan zakaz bahosi (1..5)
+  ratingNote: string | null;
   // Filial ustunlari (tartib = sortOrder). Bo'sh = eski (jami) zakaz — per-filial ko'rsatilmaydi.
   branches: { id: number; name: string }[];
   items: {
@@ -63,6 +66,11 @@ export function OrderDetail({ order, roles, isOwner }: { order: OrderData; roles
   const [saving, startSave] = useTransition();
   const [statusing, startStatus] = useTransition();
   const [sending, startSend] = useTransition();
+  // Baho (1..5)
+  const [ratingVal, setRatingVal] = useState(order.rating ?? 0);
+  const [ratingHover, setRatingHover] = useState(0);
+  const [ratingNote, setRatingNote] = useState(order.ratingNote ?? "");
+  const [ratingPending, startRating] = useTransition();
 
   const sendPdf = () =>
     startSend(async () => {
@@ -70,6 +78,14 @@ export function OrderDetail({ order, roles, isOwner }: { order: OrderData; roles
       if (res.ok) toast.success("Nakladnoy Telegram guruhga yuborildi.");
       else toast.error(res.error);
     });
+
+  const saveRating = () => {
+    if (ratingVal < 1) { toast.error("Bahoni tanlang (1-5)."); return; }
+    startRating(async () => {
+      const res = await saveOrderRatingAction({ orderId: order.id, rating: ratingVal, note: ratingNote.trim() || null });
+      if (res.ok) { toast.success("Baho saqlandi."); router.refresh(); } else toast.error(res.error);
+    });
+  };
 
   const status = order.status as OrderStatusT;
   const editable = canEditItems(roles, status, isOwner);
@@ -224,6 +240,35 @@ export function OrderDetail({ order, roles, isOwner }: { order: OrderData; roles
           )}
         </div>
       </div>
+
+      {/* Yetkazib berish bahosi (1..5) — ACCEPTED/RECEIVED bosqichida yoki baholangan bo'lsa */}
+      {(factMode || order.rating != null) && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-border bg-card px-4 py-3">
+          <span className="text-sm font-medium">Yetkazib berish bahosi:</span>
+          <div className="flex items-center gap-0.5">
+            {[1, 2, 3, 4, 5].map((n) => (
+              <button key={n} type="button" disabled={!factMode || ratingPending}
+                onMouseEnter={() => factMode && setRatingHover(n)} onMouseLeave={() => setRatingHover(0)}
+                onClick={() => factMode && setRatingVal(n)}
+                className={cn(factMode ? "cursor-pointer" : "cursor-default")} aria-label={`${n} ball`}>
+                <Star className={cn("h-6 w-6 transition-colors", (ratingHover || ratingVal) >= n ? "fill-amber-400 text-amber-400" : "text-muted-foreground/30")} />
+              </button>
+            ))}
+            {ratingVal > 0 && <span className="ml-1.5 text-sm font-semibold tabular-nums">{ratingVal}/5</span>}
+          </div>
+          {factMode ? (
+            <>
+              <Input value={ratingNote} onChange={(e) => setRatingNote(e.target.value)} disabled={ratingPending}
+                placeholder="Izoh (ixtiyoriy)" className="h-9 max-w-xs flex-1" />
+              <Button size="sm" className="h-9 gap-1.5" disabled={ratingPending || ratingVal < 1} onClick={saveRating}>
+                {ratingPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Star className="h-3.5 w-3.5" />} Bahoni saqlash
+              </Button>
+            </>
+          ) : (
+            order.ratingNote && <span className="text-sm text-muted-foreground">— {order.ratingNote}</span>
+          )}
+        </div>
+      )}
 
       {/* Qatorlar */}
       <div className="overflow-hidden rounded-xl border border-border bg-card">

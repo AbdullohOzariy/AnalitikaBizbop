@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { canSeeSuppliers, canEditSuppliers } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
-import { Truck, ArrowLeft, Layers, Clock, FileText, ShoppingCart, Users } from "lucide-react";
+import { Truck, ArrowLeft, Layers, Clock, FileText, ShoppingCart, Users, Star } from "lucide-react";
 import { PageHeader, StatCard } from "@/components/common/page";
 import type { ContractRow, AgentRow } from "../actions";
 import { ProfilHeader, OrderDaysCalendar, LeadTimeEditor, ContractsSection, AgentsSection, AssignSkusSection, type ProfilSku } from "./profil-client";
@@ -25,7 +25,7 @@ export default async function SupplierProfilePage({
   const supplierId = Number(id);
   if (!Number.isFinite(supplierId)) notFound();
 
-  const [supplier, products, orderCount] = await Promise.all([
+  const [supplier, products, orderCount, ratingAgg] = await Promise.all([
     prisma.supplier.findUnique({
       where: { id: supplierId },
       include: {
@@ -61,8 +61,16 @@ export default async function SupplierProfilePage({
       orderBy: [{ currentSold: { sort: "desc", nulls: "last" } }, { name: "asc" }],
     }),
     prisma.purchaseOrder.count({ where: { supplierId } }),
+    // Yetib kelgan zakazlar bahosi o'rtachasi (1..5)
+    prisma.purchaseOrder.aggregate({
+      where: { supplierId, rating: { not: null } },
+      _avg: { rating: true },
+      _count: { rating: true },
+    }),
   ]);
   if (!supplier) notFound();
+  const avgRating = ratingAgg._avg.rating;
+  const ratingCount = ratingAgg._count.rating;
 
   const skus: ProfilSku[] = products.map((p) => ({
     id: p.id,
@@ -126,7 +134,10 @@ export default async function SupplierProfilePage({
       </PageHeader>
 
       {/* KPI */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <StatCard label="O'rtacha baho" value={avgRating != null ? `${avgRating.toFixed(1)} ★` : "—"} icon={Star}
+          tone={avgRating != null ? (avgRating >= 4 ? "default" : "orange") : "default"}
+          hint={ratingCount > 0 ? `${ratingCount} ta zakaz baholangan` : "hali baholanmagan"} />
         <StatCard label="SKU soni" value={skus.length.toLocaleString("uz-UZ")} icon={Layers}
           hint="shu yetkazib beruvchiga biriktirilgan" />
         <StatCard label="Agentlar (brend)" value={agents.length.toLocaleString("uz-UZ")} icon={Users}
