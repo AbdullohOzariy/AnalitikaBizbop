@@ -24,8 +24,14 @@ import {
 } from "../actions";
 import { hisobMinStock, hisobMaxStock } from "../order-status";
 
-// Bitta SKU qatori holati: narx + lead (SKU darajasi) + filial bo'yicha zakaz miqdorlari (bid→qty).
-type Line = { price: string; lead: string; bq: Record<number, string> };
+// Bitta SKU qatori holati: narx + lead + pachka (SKU darajasi) + filial bo'yicha BLOK soni (bid→blok).
+// Filial miqdori = blok × pachka (pachka bo'sh bo'lsa — blok qiymati dona sifatida olinadi).
+type Line = { price: string; lead: string; pack: string; bq: Record<number, string> };
+
+// Effektiv pachka (dona/blok): kiritilgan yoki SKU'da eslab qolingan.
+const packOf = (l: Pick<Line, "pack">, it: BuilderItem) => (Number(l.pack) > 0 ? Number(l.pack) : (it.packSize ?? 0));
+// Filial miqdori (dona) = blok × pachka; pachka yo'q bo'lsa blok qiymati dona.
+const branchQ = (blok: number, pack: number) => (pack > 0 ? blok * pack : blok);
 
 // Iyerarxiya daraxti tugunlari (guruh → kategoriya → subkategoriya → SKU)
 type SubNode = { id: number; name: string; sort: number; items: BuilderItem[] };
@@ -120,14 +126,14 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
   const setLine = (pid: number, patch: Partial<Omit<Line, "bq">>) =>
     setLines((prev) => {
       const n = new Map(prev);
-      const cur = n.get(pid) ?? { price: "", lead: "", bq: {} };
+      const cur = n.get(pid) ?? { price: "", lead: "", pack: "", bq: {} };
       n.set(pid, { ...cur, ...patch });
       return n;
     });
   const setBranchQty = (pid: number, bid: number, val: string) =>
     setLines((prev) => {
       const n = new Map(prev);
-      const cur = n.get(pid) ?? { price: "", lead: "", bq: {} };
+      const cur = n.get(pid) ?? { price: "", lead: "", pack: "", bq: {} };
       n.set(pid, { ...cur, bq: { ...cur.bq, [bid]: val } });
       return n;
     });
@@ -207,17 +213,21 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
     for (const [pid, l] of lines) {
       const it = itemByPid.get(pid);
       if (!it) continue;
-      const branchRows = branches
-        .map((b) => ({ branchId: b.id, quantity: Number(l.bq[b.id]) || 0 }))
-        .filter((x) => x.quantity > 0);
+      const pack = packOf(l, it);
+      const branchAll = branches.map((b) => {
+        const blok = Number(l.bq[b.id]) || 0;
+        return { branchId: b.id, blok, quantity: branchQ(blok, pack) };
+      });
+      const branchRows = branchAll.filter((x) => x.quantity > 0).map(({ branchId, quantity }) => ({ branchId, quantity }));
       if (branchRows.length === 0) continue;
+      const totalBlok = branchAll.reduce((s, x) => s + x.blok, 0);
       const quantity = branchRows.reduce((s, b) => s + b.quantity, 0);
       const price = Number(l.price) || it.purchasePrice || 0;
       const lead = Number(l.lead);
       out.push({
         productId: pid, quantity, price,
-        packCount: null,
-        packSize: it.packSize ?? null,
+        packCount: pack > 0 ? totalBlok : null, // jami blok soni
+        packSize: pack > 0 ? pack : (it.packSize ?? null),
         leadTimeDays: l.lead.trim() !== "" && Number.isInteger(lead) && lead >= 0 ? lead : null,
         branches: branchRows,
       });
@@ -270,14 +280,16 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
     const m = new Map(lines);
     let filled = 0;
     for (const it of items) {
-      const cur = m.get(it.productId) ?? { price: "", lead: "", bq: {} };
+      const cur = m.get(it.productId) ?? { price: "", lead: "", pack: "", bq: {} };
       const effLead = cur.lead.trim() !== "" && Number(cur.lead) >= 0 ? Number(cur.lead) : it.lead;
+      const pack = packOf(cur, it);
       const bq = { ...cur.bq };
       let touched = false;
       for (const cell of it.branches) {
         if (Number(bq[cell.branchId]) > 0) continue; // qo'lda kiritilgan — tegmaymiz
         const avto = branchAvto(cell, orderGap, effLead, it.xyz);
-        if (avto > 0) { bq[cell.branchId] = String(avto); touched = true; }
+        // Pachka bo'lsa BLOK soniga yaxlitlanadi (kerakli miqdordan kam emas), aks holda dona.
+        if (avto > 0) { bq[cell.branchId] = String(pack > 0 ? Math.ceil(avto / pack) : avto); touched = true; }
       }
       if (touched) { m.set(it.productId, { ...cur, bq }); filled++; }
     }
@@ -288,14 +300,15 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
 
   const clearAll = () => setLines(new Map());
 
-  const colCount = 3 + branches.length * 4 + 3;
+  const colCount = 4 + branches.length * 4 + 3; // Kod·SKU·Lead·Pachka + (4×filial) + Jami(3)
 
   // Bitta SKU qatori
   const renderSku = (it: BuilderItem) => {
-    const l = lines.get(it.productId) ?? { price: "", lead: "", bq: {} };
+    const l = lines.get(it.productId) ?? { price: "", lead: "", pack: "", bq: {} };
     const effLead = l.lead.trim() !== "" && Number(l.lead) >= 0 ? Number(l.lead) : it.lead;
+    const pack = packOf(l, it);
     const cellByB = new Map(it.branches.map((c) => [c.branchId, c]));
-    const jamiQty = branches.reduce((s, b) => s + (Number(l.bq[b.id]) || 0), 0);
+    const jamiQty = branches.reduce((s, b) => s + branchQ(Number(l.bq[b.id]) || 0, pack), 0);
     const price = Number(l.price) || it.purchasePrice || 0;
     const sum = jamiQty * price;
     const picked = jamiQty > 0;
@@ -328,11 +341,22 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
             className="h-7 w-14 px-1.5 text-right text-xs tabular-nums"
             title="Lead time (kun) — kiritilsa SKU'ga saqlanadi, avto-zakaz qayta hisoblanadi" aria-label="Lead time (kun)" />
         </TableCell>
+        <TableCell className="px-2">
+          <Input ref={regRef(it.productId, "pack")} type="number" inputMode="decimal" value={l.pack}
+            placeholder={it.packSize != null ? String(it.packSize) : ""}
+            onChange={(e) => setLine(it.productId, { pack: e.target.value })}
+            onKeyDown={onEnterNext(it.productId, "pack")}
+            className="h-7 w-14 px-1.5 text-right text-xs tabular-nums"
+            title="Pachka — bir blokdagi dona soni (SKU'ga saqlanadi). Filial miqdori = blok × pachka" aria-label="Pachka (dona/blok)" />
+        </TableCell>
         {branches.map((b) => {
           const cell = cellByB.get(b.id);
           const avto = cell ? branchAvto(cell, orderGap, effLead, it.xyz) : 0;
           const stock = cell?.stock ?? 0;
           const daily = cell?.dailyAvg ?? 0;
+          const blok = Number(l.bq[b.id]) || 0;
+          const bQty = branchQ(blok, pack); // dona
+          const avtoInput = pack > 0 ? Math.ceil(avto / pack) : avto; // blok (pachka bo'lsa) yoki dona
           return (
             <Fragment key={b.id}>
               <TableCell className="border-l border-border/60 text-right tabular-nums text-[11px] text-muted-foreground">
@@ -348,10 +372,15 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
               </TableCell>
               <TableCell className="bg-primary/[0.03] px-1.5">
                 <Input ref={regRef(it.productId, `z${b.id}`)} type="number" inputMode="decimal" value={l.bq[b.id] ?? ""}
-                  placeholder={avto > 0 ? String(avto) : ""}
+                  placeholder={avtoInput > 0 ? String(avtoInput) : ""}
                   onChange={(e) => setBranchQty(it.productId, b.id, e.target.value)}
                   onKeyDown={onEnterNext(it.productId, `z${b.id}`)}
-                  className="h-7 w-16 px-1.5 text-right text-xs tabular-nums" aria-label={`${b.name} zakaz miqdori`} />
+                  className="h-7 w-14 px-1.5 text-right text-xs tabular-nums"
+                  title={pack > 0 ? "Blok soni — miqdor = blok × pachka" : "Miqdor (dona)"}
+                  aria-label={`${b.name} ${pack > 0 ? "blok soni" : "miqdor"}`} />
+                {pack > 0 && blok > 0 && (
+                  <div className="text-right text-[9px] text-muted-foreground/70 tabular-nums">= {bQty.toLocaleString("uz-UZ")}</div>
+                )}
               </TableCell>
             </Fragment>
           );
@@ -451,10 +480,10 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
 
       {items.length > 0 && (
         <p className="text-[11px] text-muted-foreground">
-          Har filial uchun <b>Qoldiq · Kunlik · Avto-zakaz · Zakaz</b> ustunlari; oxirida <b>Jami</b> (filiallar yig&apos;indisi).
-          Avto-zakaz = kunlik × (zakaz oralig&apos;i + lead) × XYZ buferi asosida; qizil — qoldiq min&apos;dan past. Faqat MIQDOR kiritilgan
-          (filialga) SKU zakazga (va nakladnoyga) kiradi. Xira sonlar — avto-zakaz taklifi va eslab qolingan narx. Lead&apos;ni kiritsangiz
-          — SKU&apos;ga saqlanadi va avto-zakaz qayta hisoblanadi. Enter — shu ustun bo&apos;ylab keyingi qatorga.
+          Har filial uchun <b>Qoldiq · Kunlik · Avto-zakaz · Blok</b> ustunlari; oxirida <b>Jami</b> (filiallar yig&apos;indisi).
+          <b>Pachka</b> kiritilsa filial katagiga <b>blok</b> soni kiritiladi va miqdor = blok × pachka (katak ostida <i>= dona</i> ko&apos;rinadi);
+          pachka bo&apos;sh bo&apos;lsa katak to&apos;g&apos;ridan-to&apos;g&apos;ri dona. Avto-zakaz = kunlik × (zakaz oralig&apos;i + lead) × XYZ buferi (dona); qizil — qoldiq min&apos;dan past.
+          &quot;Avto to&apos;ldirish&quot; bo&apos;sh kataklarni pachkaga yaxlitlab to&apos;ldiradi. Faqat to&apos;ldirilgan (filialga) SKU zakazga kiradi. Lead/Pachka — SKU&apos;ga saqlanadi. Enter — keyingi qatorga.
         </p>
       )}
 
@@ -476,6 +505,7 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
                     <TableHead rowSpan={2} className="w-[80px] align-bottom">Kod</TableHead>
                     <TableHead rowSpan={2} className="align-bottom">SKU</TableHead>
                     <TableHead rowSpan={2} className="w-[64px] align-bottom" title="Lead time (kun) — zakazdan kelguncha; SKU'ga saqlanadi">Lead</TableHead>
+                    <TableHead rowSpan={2} className="w-[60px] align-bottom" title="Pachka — bir blokdagi dona soni. Filial miqdori = blok × pachka">Pachka</TableHead>
                     {branches.map((b) => (
                       <TableHead key={b.id} colSpan={4} className="border-l border-border/60 text-center font-semibold" title={b.name}>{b.name}</TableHead>
                     ))}
@@ -486,8 +516,8 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
                       <Fragment key={b.id}>
                         <TableHead className="w-[56px] border-l border-border/60 text-right text-[10px]" title="Qoldiq (shu filial)">Qold.</TableHead>
                         <TableHead className="w-[52px] text-right text-[10px]" title="Kunlik o'rtacha sotuv (shu filial)">Kun.</TableHead>
-                        <TableHead className="w-[52px] text-right text-[10px]" title="Avto-zakaz taklifi (shu filial)">Avto</TableHead>
-                        <TableHead className="w-[72px] bg-primary/[0.03] text-[10px]" title="Shu filialga buyurtma miqdori">Zakaz</TableHead>
+                        <TableHead className="w-[52px] text-right text-[10px]" title="Avto-zakaz taklifi (shu filial, dona)">Avto</TableHead>
+                        <TableHead className="w-[60px] bg-primary/[0.03] text-[10px]" title="Shu filialga blok soni (pachka kiritilsa) yoki dona">Blok</TableHead>
                       </Fragment>
                     ))}
                     <TableHead className="w-[72px] border-l border-border/60 text-right text-[10px]" title="Jami zakaz (filiallar yig'indisi)">Zakaz</TableHead>
