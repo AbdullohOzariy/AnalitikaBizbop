@@ -24,14 +24,12 @@ import {
 } from "../actions";
 import { hisobMinStock, hisobMaxStock } from "../order-status";
 
-// Bitta SKU qatori holati: narx + lead + pachka (SKU darajasi) + filial bo'yicha BLOK soni (bid→blok).
-// Filial miqdori = blok × pachka (pachka bo'sh bo'lsa — blok qiymati dona sifatida olinadi).
+// Bitta SKU qatori holati: narx + lead + pachka (SKU darajasi) + filial bo'yicha DONA (bid→dona).
+// Filialga FAQAT dona kiritiladi; Jami'da blok (= jami dona ÷ pachka) ham, dona ham ko'rinadi.
 type Line = { price: string; lead: string; pack: string; bq: Record<number, string> };
 
-// Effektiv pachka (dona/blok): kiritilgan yoki SKU'da eslab qolingan.
+// Effektiv pachka (bir blokdagi dona): kiritilgan yoki SKU'da eslab qolingan.
 const packOf = (l: Pick<Line, "pack">, it: BuilderItem) => (Number(l.pack) > 0 ? Number(l.pack) : (it.packSize ?? 0));
-// Filial miqdori (dona) = blok × pachka; pachka yo'q bo'lsa blok qiymati dona.
-const branchQ = (blok: number, pack: number) => (pack > 0 ? blok * pack : blok);
 
 // Iyerarxiya daraxti tugunlari (guruh → kategoriya → subkategoriya → SKU)
 type SubNode = { id: number; name: string; sort: number; items: BuilderItem[] };
@@ -214,19 +212,17 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
       const it = itemByPid.get(pid);
       if (!it) continue;
       const pack = packOf(l, it);
-      const branchAll = branches.map((b) => {
-        const blok = Number(l.bq[b.id]) || 0;
-        return { branchId: b.id, blok, quantity: branchQ(blok, pack) };
-      });
-      const branchRows = branchAll.filter((x) => x.quantity > 0).map(({ branchId, quantity }) => ({ branchId, quantity }));
+      // Filialga DONA kiritiladi (bq = dona).
+      const branchRows = branches
+        .map((b) => ({ branchId: b.id, quantity: Number(l.bq[b.id]) || 0 }))
+        .filter((x) => x.quantity > 0);
       if (branchRows.length === 0) continue;
-      const totalBlok = branchAll.reduce((s, x) => s + x.blok, 0);
       const quantity = branchRows.reduce((s, b) => s + b.quantity, 0);
       const price = Number(l.price) || it.purchasePrice || 0;
       const lead = Number(l.lead);
       out.push({
         productId: pid, quantity, price,
-        packCount: pack > 0 ? totalBlok : null, // jami blok soni
+        packCount: pack > 0 ? Math.round((quantity / pack) * 1000) / 1000 : null, // jami blok = dona ÷ pachka
         packSize: pack > 0 ? pack : (it.packSize ?? null),
         leadTimeDays: l.lead.trim() !== "" && Number.isInteger(lead) && lead >= 0 ? lead : null,
         branches: branchRows,
@@ -282,14 +278,12 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
     for (const it of items) {
       const cur = m.get(it.productId) ?? { price: "", lead: "", pack: "", bq: {} };
       const effLead = cur.lead.trim() !== "" && Number(cur.lead) >= 0 ? Number(cur.lead) : it.lead;
-      const pack = packOf(cur, it);
       const bq = { ...cur.bq };
       let touched = false;
       for (const cell of it.branches) {
         if (Number(bq[cell.branchId]) > 0) continue; // qo'lda kiritilgan — tegmaymiz
-        const avto = branchAvto(cell, orderGap, effLead, it.xyz);
-        // Pachka bo'lsa BLOK soniga yaxlitlanadi (kerakli miqdordan kam emas), aks holda dona.
-        if (avto > 0) { bq[cell.branchId] = String(pack > 0 ? Math.ceil(avto / pack) : avto); touched = true; }
+        const avto = branchAvto(cell, orderGap, effLead, it.xyz); // dona
+        if (avto > 0) { bq[cell.branchId] = String(avto); touched = true; }
       }
       if (touched) { m.set(it.productId, { ...cur, bq }); filled++; }
     }
@@ -300,7 +294,7 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
 
   const clearAll = () => setLines(new Map());
 
-  const colCount = 4 + branches.length * 4 + 3; // Kod·SKU·Lead·Pachka + (4×filial) + Jami(3)
+  const colCount = 4 + branches.length * 4 + 4; // Kod·SKU·Lead·Pachka + (4×filial) + Jami(Blok·Dona·Narx·Summa)
 
   // Bitta SKU qatori
   const renderSku = (it: BuilderItem) => {
@@ -308,7 +302,8 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
     const effLead = l.lead.trim() !== "" && Number(l.lead) >= 0 ? Number(l.lead) : it.lead;
     const pack = packOf(l, it);
     const cellByB = new Map(it.branches.map((c) => [c.branchId, c]));
-    const jamiQty = branches.reduce((s, b) => s + branchQ(Number(l.bq[b.id]) || 0, pack), 0);
+    const jamiQty = branches.reduce((s, b) => s + (Number(l.bq[b.id]) || 0), 0); // jami dona
+    const jamiBlok = pack > 0 ? jamiQty / pack : null; // jami blok = jami dona ÷ pachka
     const price = Number(l.price) || it.purchasePrice || 0;
     const sum = jamiQty * price;
     const picked = jamiQty > 0;
@@ -347,16 +342,13 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
             onChange={(e) => setLine(it.productId, { pack: e.target.value })}
             onKeyDown={onEnterNext(it.productId, "pack")}
             className="h-7 w-14 px-1.5 text-right text-xs tabular-nums"
-            title="Pachka — bir blokdagi dona soni (SKU'ga saqlanadi). Filial miqdori = blok × pachka" aria-label="Pachka (dona/blok)" />
+            title="Pachka — bir blokdagi dona soni (SKU'ga saqlanadi). Jami blok = jami dona ÷ pachka" aria-label="Pachka (dona/blok)" />
         </TableCell>
         {branches.map((b) => {
           const cell = cellByB.get(b.id);
           const avto = cell ? branchAvto(cell, orderGap, effLead, it.xyz) : 0;
           const stock = cell?.stock ?? 0;
           const daily = cell?.dailyAvg ?? 0;
-          const blok = Number(l.bq[b.id]) || 0;
-          const bQty = branchQ(blok, pack); // dona
-          const avtoInput = pack > 0 ? Math.ceil(avto / pack) : avto; // blok (pachka bo'lsa) yoki dona
           return (
             <Fragment key={b.id}>
               <TableCell className="border-l border-border/60 text-right tabular-nums text-[11px] text-muted-foreground">
@@ -372,20 +364,21 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
               </TableCell>
               <TableCell className="bg-primary/[0.03] px-1.5">
                 <Input ref={regRef(it.productId, `z${b.id}`)} type="number" inputMode="decimal" value={l.bq[b.id] ?? ""}
-                  placeholder={avtoInput > 0 ? String(avtoInput) : ""}
+                  placeholder={avto > 0 ? String(avto) : ""}
                   onChange={(e) => setBranchQty(it.productId, b.id, e.target.value)}
                   onKeyDown={onEnterNext(it.productId, `z${b.id}`)}
-                  className="h-7 w-14 px-1.5 text-right text-xs tabular-nums"
-                  title={pack > 0 ? "Blok soni — miqdor = blok × pachka" : "Miqdor (dona)"}
-                  aria-label={`${b.name} ${pack > 0 ? "blok soni" : "miqdor"}`} />
-                {pack > 0 && blok > 0 && (
-                  <div className="text-right text-[9px] text-muted-foreground/70 tabular-nums">= {bQty.toLocaleString("uz-UZ")}</div>
-                )}
+                  className="h-7 w-16 px-1.5 text-right text-xs tabular-nums"
+                  title="Shu filialga buyurtma miqdori (dona)" aria-label={`${b.name} miqdor (dona)`} />
               </TableCell>
             </Fragment>
           );
         })}
-        <TableCell className="border-l border-border/60 text-right tabular-nums text-xs font-semibold">
+        <TableCell className="border-l border-border/60 text-right tabular-nums text-xs font-semibold" title="Jami blok = jami dona ÷ pachka">
+          {jamiBlok != null && jamiQty > 0
+            ? (Math.round(jamiBlok * 100) / 100).toLocaleString("uz-UZ", { maximumFractionDigits: 2 })
+            : <span className="text-muted-foreground/40">—</span>}
+        </TableCell>
+        <TableCell className="text-right tabular-nums text-xs font-semibold" title="Jami dona (filiallar yig'indisi)">
           {jamiQty > 0 ? jamiQty.toLocaleString("uz-UZ") : <span className="text-muted-foreground/40">—</span>}
         </TableCell>
         <TableCell className="bg-primary/[0.03] px-1.5">
@@ -480,10 +473,10 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
 
       {items.length > 0 && (
         <p className="text-[11px] text-muted-foreground">
-          Har filial uchun <b>Qoldiq · Kunlik · Avto-zakaz · Blok</b> ustunlari; oxirida <b>Jami</b> (filiallar yig&apos;indisi).
-          <b>Pachka</b> kiritilsa filial katagiga <b>blok</b> soni kiritiladi va miqdor = blok × pachka (katak ostida <i>= dona</i> ko&apos;rinadi);
-          pachka bo&apos;sh bo&apos;lsa katak to&apos;g&apos;ridan-to&apos;g&apos;ri dona. Avto-zakaz = kunlik × (zakaz oralig&apos;i + lead) × XYZ buferi (dona); qizil — qoldiq min&apos;dan past.
-          &quot;Avto to&apos;ldirish&quot; bo&apos;sh kataklarni pachkaga yaxlitlab to&apos;ldiradi. Faqat to&apos;ldirilgan (filialga) SKU zakazga kiradi. Lead/Pachka — SKU&apos;ga saqlanadi. Enter — keyingi qatorga.
+          Har filial uchun <b>Qoldiq · Kunlik · Avto-zakaz · Zakaz</b> ustunlari; filialga FAQAT <b>dona</b> kiritiladi. Oxirida <b>Jami</b>:
+          <b>Blok</b> (= jami dona ÷ pachka) va <b>Dona</b> (filiallar yig&apos;indisi) — ikkalasi ham ko&apos;rinadi. <b>Pachka</b> SKU&apos;dan avto chiqadi (tahrirlasa bo&apos;ladi).
+          Masalan pachka 12, filiallar yig&apos;indisi 60 dona → Jami: 5 blok · 60 dona. Avto-zakaz = kunlik × (zakaz oralig&apos;i + lead) × XYZ buferi (dona); qizil — qoldiq min&apos;dan past.
+          &quot;Avto to&apos;ldirish&quot; bo&apos;sh kataklarni avto-zakaz (dona) bilan to&apos;ldiradi. Faqat to&apos;ldirilgan (filialga) SKU zakazga kiradi. Lead/Pachka — SKU&apos;ga saqlanadi. Enter — keyingi qatorga.
         </p>
       )}
 
@@ -509,7 +502,7 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
                     {branches.map((b) => (
                       <TableHead key={b.id} colSpan={4} className="border-l border-border/60 text-center font-semibold" title={b.name}>{b.name}</TableHead>
                     ))}
-                    <TableHead colSpan={3} className="border-l border-border/60 bg-primary/[0.04] text-center font-semibold">Jami</TableHead>
+                    <TableHead colSpan={4} className="border-l border-border/60 bg-primary/[0.04] text-center font-semibold">Jami</TableHead>
                   </TableRow>
                   <TableRow className="bg-muted/30 hover:bg-muted/30">
                     {branches.map((b) => (
@@ -517,10 +510,11 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
                         <TableHead className="w-[56px] border-l border-border/60 text-right text-[10px]" title="Qoldiq (shu filial)">Qold.</TableHead>
                         <TableHead className="w-[52px] text-right text-[10px]" title="Kunlik o'rtacha sotuv (shu filial)">Kun.</TableHead>
                         <TableHead className="w-[52px] text-right text-[10px]" title="Avto-zakaz taklifi (shu filial, dona)">Avto</TableHead>
-                        <TableHead className="w-[60px] bg-primary/[0.03] text-[10px]" title="Shu filialga blok soni (pachka kiritilsa) yoki dona">Blok</TableHead>
+                        <TableHead className="w-[64px] bg-primary/[0.03] text-[10px]" title="Shu filialga buyurtma miqdori (dona)">Zakaz</TableHead>
                       </Fragment>
                     ))}
-                    <TableHead className="w-[72px] border-l border-border/60 text-right text-[10px]" title="Jami zakaz (filiallar yig'indisi)">Zakaz</TableHead>
+                    <TableHead className="w-[56px] border-l border-border/60 text-right text-[10px]" title="Jami blok = jami dona ÷ pachka">Blok</TableHead>
+                    <TableHead className="w-[64px] text-right text-[10px]" title="Jami dona (filiallar yig'indisi)">Dona</TableHead>
                     <TableHead className="w-[100px] bg-primary/[0.03] text-[10px]">Narx</TableHead>
                     <TableHead className="w-[110px] text-right text-[10px]">Summa</TableHead>
                   </TableRow>
