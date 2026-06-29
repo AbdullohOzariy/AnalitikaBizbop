@@ -59,8 +59,8 @@ export default async function ChiqimStatistikaPage({
 }) {
   const session = await auth();
   if (!session) redirect("/login");
-  const role = session.user.role;
-  if (!canSeeChiqim(role)) redirect("/dashboard-v2");
+  const roles = session.user.roles;
+  if (!canSeeChiqim(roles)) redirect("/dashboard-v2");
 
   if (!botConfigured()) {
     return (

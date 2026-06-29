@@ -22,11 +22,11 @@ export default async function SverkaPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const session = await auth();
-  const role = session?.user?.role;
-  if (!session?.user || !canSeeSverka(role)) {
+  const roles = session?.user?.roles;
+  if (!session?.user || !canSeeSverka(roles)) {
     redirect("/dashboard-v2");
   }
-  const canDelete = isSystemAdmin(role) || isSupplyChain(role);
+  const canDelete = isSystemAdmin(roles) || isSupplyChain(roles);
 
   const sp = await searchParams;
   // Standart davr: joriy oy (server komponent — purity qoidasi client uchun)

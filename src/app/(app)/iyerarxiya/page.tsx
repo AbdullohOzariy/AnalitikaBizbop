@@ -34,8 +34,8 @@ const getHierarchy = unstable_cache(
 
 export default async function IyerarxiyaPage() {
   const session = await auth();
-  if (!session?.user || !isAdminTier(session.user.role)) redirect("/dashboard-v2");
-  const isAdmin = isSystemAdmin(session.user.role);
+  if (!session?.user || !isAdminTier(session.user.roles)) redirect("/dashboard-v2");
+  const isAdmin = isSystemAdmin(session.user.roles);
   const [groups, suppliers] = await Promise.all([
     getHierarchy(),
     prisma.supplier.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),

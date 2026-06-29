@@ -6,6 +6,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { buildZakazPdf } from "@/lib/zakaz-pdf/pdf";
+import { ordersScopedToOwn } from "@/lib/roles";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,7 +17,7 @@ export async function GET(
 ) {
   const session = await auth();
   if (!session?.user) return new NextResponse("Ruxsat yo'q", { status: 401 });
-  const role = session.user.role;
+  const roles = session.user.roles;
   const userId = Number(session.user.id);
 
   const id = Number((await params).id);
@@ -25,7 +26,7 @@ export async function GET(
   const variant = new URL(req.url).searchParams.get("variant") === "withBranch" ? "withBranch" : "total";
   const pdf = await buildZakazPdf(id, variant);
   if (!pdf) return new NextResponse("Topilmadi", { status: 404 });
-  if (role === "CAT_MANAGER" && pdf.createdById !== userId) {
+  if (ordersScopedToOwn(roles) && pdf.createdById !== userId) {
     return new NextResponse("Ruxsat yo'q", { status: 403 });
   }
 

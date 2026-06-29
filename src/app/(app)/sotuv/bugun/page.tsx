@@ -11,6 +11,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getDefaultRange } from "@/lib/analytics";
 import { scopeParentIds, scopeSubIds, scopeProductWhere } from "@/lib/scope";
+import { hasRole, ordersScopedToOwn } from "@/lib/roles";
 import { oosKpi, stockdayKpi, type SnapshotFilters } from "@/lib/snapshot-reports";
 import {
   CalendarCheck, CheckCircle2, Clock, PackageX, TimerOff, Truck, Plus, ArrowRight, Layers,
@@ -25,15 +26,15 @@ const WD_UZ = ["Yakshanba", "Dushanba", "Seshanba", "Chorshanba", "Payshanba", "
 
 export default async function BugunPage() {
   const session = await auth();
-  const role = session?.user?.role;
+  const roles = session?.user?.roles;
   if (
     !session?.user ||
-    (role !== "SYSTEM_ADMIN" && role !== "ADMIN" && role !== "CAT_MANAGER" && role !== "SUPPLYCHAIN" && role !== "HEAD_CAT_MANAGER")
+    !hasRole(roles, "SYSTEM_ADMIN", "ADMIN", "CAT_MANAGER", "SUPPLYCHAIN", "HEAD_CAT_MANAGER")
   ) {
     redirect("/dashboard-v2");
   }
   const userId = Number(session.user.id);
-  const canCreateOrder = role === "SYSTEM_ADMIN" || role === "CAT_MANAGER" || role === "HEAD_CAT_MANAGER";
+  const canCreateOrder = hasRole(roles, "SYSTEM_ADMIN", "CAT_MANAGER", "HEAD_CAT_MANAGER");
 
   // Toshkent (UTC+5) bo'yicha "bugun" — zakaz kunlari kalendari ham shu asosda.
   // Server komponent: har so'rovda bir marta hisoblanadi (purity qoidasi client uchun).
@@ -46,8 +47,8 @@ export default async function BugunPage() {
   const todayStartUtc = new Date(new Date(todayStr + "T00:00:00.000Z").getTime() - 5 * 3_600_000);
 
   const [scopeParents, scope] = await Promise.all([
-    scopeParentIds(userId, role!),
-    scopeSubIds(userId, role!),
+    scopeParentIds(userId, roles!),
+    scopeSubIds(userId, roles!),
   ]);
 
   // Qamrovda kategoriya biriktirilmagan menejer
@@ -141,7 +142,7 @@ export default async function BugunPage() {
         where: {
           supplierId: { in: targetSupIds },
           createdAt: { gte: todayStartUtc },
-          ...(role === "CAT_MANAGER" ? { createdById: userId } : {}),
+          ...(ordersScopedToOwn(roles) ? { createdById: userId } : {}),
         },
         select: { id: true, supplierId: true, agentId: true, status: true },
         orderBy: { id: "desc" },
@@ -186,7 +187,7 @@ export default async function BugunPage() {
       <PageHeader
         icon={CalendarCheck}
         title="Bugun"
-        description={`${WD_UZ[dow]}, ${todayStr} — kunlik ish navbati${role === "CAT_MANAGER" ? " (sizning kategoriyalaringiz)" : ""}`}
+        description={`${WD_UZ[dow]}, ${todayStr} — kunlik ish navbati${ordersScopedToOwn(roles) ? " (sizning kategoriyalaringiz)" : ""}`}
       />
 
       {/* KPI */}

@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { isAdminTier } from "@/lib/roles";
+import { isAdminTier, hasRole } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { dailySalesSeries } from "@/lib/analytics";
@@ -55,8 +55,8 @@ export default async function SotuvDashboardPage({
 }) {
   const session = await auth();
   if (!session) redirect("/login");
-  const role = session.user.role;
-  if (!isAdminTier(role) && role !== "CEO" && role !== "SUPPLYCHAIN") redirect("/dashboard-v2");
+  const roles = session.user.roles;
+  if (!isAdminTier(roles) && !hasRole(roles, "CEO", "SUPPLYCHAIN")) redirect("/dashboard-v2");
 
   const sp = await searchParams;
   const now = new Date();

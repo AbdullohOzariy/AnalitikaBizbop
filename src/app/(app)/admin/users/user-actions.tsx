@@ -40,11 +40,14 @@ const ROLE_LABEL: Record<string, string> = Object.fromEntries(ROLE_OPTS.map((o) 
 
 type CatOption = { id: number; name: string; group: string | null };
 
+type RoleV = (typeof ROLE_OPTS)[number]["v"];
+
 export function UserActions({
   id,
   name,
   email,
   role,
+  extraRoles,
   isSelf,
   categories,
   managedCategoryIds,
@@ -53,6 +56,7 @@ export function UserActions({
   name: string;
   email: string;
   role: string;
+  extraRoles: string[];
   isSelf: boolean;
   categories: CatOption[];
   managedCategoryIds: number[];
@@ -70,11 +74,16 @@ export function UserActions({
   const [eName, setEName] = useState(name);
   const [eEmail, setEEmail] = useState(email);
   const [eRole, setERole] = useState(role);
-  const openEdit = () => { setEName(name); setEEmail(email); setERole(role); setEditOpen(true); };
+  const [eExtra, setEExtra] = useState<Set<string>>(new Set(extraRoles));
+  const openEdit = () => { setEName(name); setEEmail(email); setERole(role); setEExtra(new Set(extraRoles)); setEditOpen(true); };
+  // Asosiy rol o'zgarsa — uni qo'shimchalardan chiqaramiz (takror bo'lmasin)
+  const changeRole = (v: string) => { setERole(v); setEExtra((prev) => { const n = new Set(prev); n.delete(v); return n; }); };
+  const toggleExtra = (v: string) => setEExtra((prev) => { const n = new Set(prev); if (n.has(v)) n.delete(v); else n.add(v); return n; });
   const onSaveEdit = () => {
     if (!eName.trim() || !eEmail.trim()) { toast.error("Nom va login bo'sh bo'lmasin."); return; }
+    const extra = [...eExtra].filter((r) => r !== eRole) as RoleV[];
     start(async () => {
-      const res = await updateUserAction({ id, name: eName.trim(), email: eEmail.trim(), role: eRole as "SYSTEM_ADMIN" | "ADMIN" | "CAT_MANAGER" | "CEO" | "SUPPLYCHAIN" | "HEAD_CAT_MANAGER" | "MERCHANDISER" | "OPERATOR" });
+      const res = await updateUserAction({ id, name: eName.trim(), email: eEmail.trim(), role: eRole as RoleV, extraRoles: extra });
       if (res.ok) { toast.success("Saqlandi."); setEditOpen(false); }
       else toast.error(res.error);
     });
@@ -157,7 +166,7 @@ export function UserActions({
             Parolni o'zgartirish
           </DropdownMenuItem>
 
-          {role === "CAT_MANAGER" && categories.length > 0 && (
+          {(role === "CAT_MANAGER" || extraRoles.includes("CAT_MANAGER")) && categories.length > 0 && (
             <DropdownMenuItem
               onClick={() => { setSelected(new Set(managedCategoryIds)); setCatOpen(true); }}
               className="gap-2"
@@ -203,8 +212,8 @@ export function UserActions({
               <Input value={eEmail} onChange={(e) => setEEmail(e.target.value)} disabled={isPending} className="h-10 rounded-xl" autoComplete="off" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Rol</Label>
-              <Select items={ROLE_LABEL} value={eRole} onValueChange={(v) => v && setERole(v)} disabled={isPending}>
+              <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Asosiy rol</Label>
+              <Select items={ROLE_LABEL} value={eRole} onValueChange={(v) => v && changeRole(v)} disabled={isPending}>
                 <SelectTrigger className="h-10 w-full rounded-xl"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {ROLE_OPTS.map((o) => (
@@ -217,15 +226,36 @@ export function UserActions({
                   ))}
                 </SelectContent>
               </Select>
-              {isSelf && eRole !== "SYSTEM_ADMIN" && (
-                <p className="text-xs text-destructive">O&apos;z rolingizni System Admin&apos;dan o&apos;zgartira olmaysiz.</p>
+              <p className="text-[11px] text-muted-foreground">Asosiy rol — kirgandagi default sahifa.</p>
+              {isSelf && eRole !== "SYSTEM_ADMIN" && !eExtra.has("SYSTEM_ADMIN") && (
+                <p className="text-xs text-destructive">O&apos;z System Admin huquqingizni olib tashlay olmaysiz.</p>
               )}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Qo&apos;shimcha rollar (ixtiyoriy)</Label>
+              <p className="text-[11px] text-muted-foreground">Belgilangan rollar huquqlari asosiy rolga qo&apos;shiladi (birlashma).</p>
+              <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+                {ROLE_OPTS.filter((o) => o.v !== eRole).map((o) => {
+                  const on = eExtra.has(o.v);
+                  return (
+                    <button key={o.v} type="button" onClick={() => toggleExtra(o.v)} disabled={isPending}
+                      title={o.d}
+                      className={`flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left text-xs transition-colors ${on ? "border-primary/40 bg-primary/10 text-primary" : "border-border hover:bg-muted/50"}`}>
+                      <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${on ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/40"}`}>
+                        {on && <Check className="h-3 w-3" />}
+                      </span>
+                      <span className="truncate">{o.l}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setEditOpen(false)} disabled={isPending} className="rounded-xl">Bekor</Button>
-            <Button onClick={onSaveEdit} disabled={isPending || (isSelf && eRole !== "SYSTEM_ADMIN")} className="rounded-xl">
+            <Button onClick={onSaveEdit} disabled={isPending || (isSelf && eRole !== "SYSTEM_ADMIN" && !eExtra.has("SYSTEM_ADMIN"))} className="rounded-xl">
               {isPending ? <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" />Saqlanmoqda...</> : "Saqlash"}
             </Button>
           </DialogFooter>

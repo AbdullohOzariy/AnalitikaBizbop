@@ -18,8 +18,8 @@ export default async function SupplierProfilePage({
   params: Promise<{ id: string }>;
 }) {
   const session = await auth();
-  if (!session?.user || !canSeeSuppliers(session.user.role)) redirect("/dashboard-v2");
-  const canEdit = canEditSuppliers(session.user.role);
+  if (!session?.user || !canSeeSuppliers(session.user.roles)) redirect("/dashboard-v2");
+  const canEdit = canEditSuppliers(session.user.roles);
 
   const { id } = await params;
   const supplierId = Number(id);

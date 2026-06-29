@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { ShoppingCart } from "lucide-react";
 import { PageHeader } from "@/components/common/page";
 import { OrderDetail, type OrderData } from "./order-detail";
+import { ordersScopedToOwn } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 
@@ -13,8 +14,8 @@ export default async function ZakazDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const session = await auth();
-  const role = session?.user?.role;
   if (!session?.user) redirect("/login"); // barcha rollar kuzatadi (CAT_MANAGER — faqat o'ziniki)
+  const roles = session.user.roles;
   const userId = Number(session.user.id);
   const id = Number((await params).id);
   if (!Number.isInteger(id)) notFound();
@@ -41,7 +42,7 @@ export default async function ZakazDetailPage({
     prisma.branch.findMany({ orderBy: { sortOrder: "asc" }, select: { id: true, name: true } }),
   ]);
   if (!order) notFound();
-  if (role === "CAT_MANAGER" && order.createdById !== userId) redirect("/sotuv/sotib-olish");
+  if (ordersScopedToOwn(roles) && order.createdById !== userId) redirect("/sotuv/sotib-olish");
 
   // Zakazda filial taqsimoti bormi — bo'lsa per-filial ko'rinish, aks holda eski (jami) ko'rinish.
   const hasBranchData = order.items.some((i) => i.branchQtys.length > 0);
@@ -75,7 +76,7 @@ export default async function ZakazDetailPage({
   return (
     <div className="space-y-5">
       <PageHeader icon={ShoppingCart} title={`Zakaz #${order.id}`} description={order.agent ? `${order.supplier.name} · ${order.agent.name}` : order.supplier.name} />
-      <OrderDetail order={data} role={role ?? ""} isOwner={order.createdById === userId} />
+      <OrderDetail order={data} roles={roles} isOwner={order.createdById === userId} />
     </div>
   );
 }

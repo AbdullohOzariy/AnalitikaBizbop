@@ -184,11 +184,13 @@ const NAV_GROUPS: NavGroup[] = [
 
 function SidebarNav({
   role,
+  roles,
   collapsed,
   onToggle,
   onNavigate,
 }: {
-  role: Role;
+  role: Role; // asosiy rol — pastdagi yorliq uchun
+  roles: Role[]; // barcha rollar (union) — ko'rinish/ruxsat uchun
   collapsed?: boolean;
   onToggle?: () => void;
   onNavigate?: () => void;
@@ -204,14 +206,14 @@ function SidebarNav({
   };
 
   const visibleGroups = NAV_GROUPS.filter((g) => {
-    // Guruh darajasidagi guard (predikat funksiya) — guruhni butunlay yashiradi.
-    if (g.guard && !g.guard(role)) return false;
+    // Guruh darajasidagi guard (predikat funksiya) — rollardan birortasi o'tsa ko'rinadi.
+    if (g.guard && !roles.some((r) => g.guard!(r))) return false;
     return true;
   }).map((g) => ({
     ...g,
     items: g.items.filter((i) => {
-      if (i.adminOnly && role !== "SYSTEM_ADMIN") return false;
-      if (i.roles && !i.roles.includes(role)) return false;
+      if (i.adminOnly && !roles.includes("SYSTEM_ADMIN")) return false;
+      if (i.roles && !i.roles.some((r) => roles.includes(r))) return false;
       return true;
     }),
   })).filter((g) => g.items.length > 0);
@@ -370,7 +372,7 @@ function SidebarNav({
   );
 }
 
-export function Sidebar({ role }: { role: Role }) {
+export function Sidebar({ role, roles }: { role: Role; roles: Role[] }) {
   const collapsed = useSyncExternalStore(subscribePref, getCollapsedSnapshot, () => false);
 
   const toggle = () => {
@@ -385,12 +387,12 @@ export function Sidebar({ role }: { role: Role }) {
         collapsed ? "w-[60px]" : "w-64"
       )}
     >
-      <SidebarNav role={role} collapsed={collapsed} onToggle={toggle} />
+      <SidebarNav role={role} roles={roles} collapsed={collapsed} onToggle={toggle} />
     </aside>
   );
 }
 
-export function MobileSidebarTrigger({ role }: { role: Role }) {
+export function MobileSidebarTrigger({ role, roles }: { role: Role; roles: Role[] }) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -408,7 +410,7 @@ export function MobileSidebarTrigger({ role }: { role: Role }) {
           <SheetHeader className="sr-only">
             <SheetTitle>Menyu</SheetTitle>
           </SheetHeader>
-          <SidebarNav role={role} onNavigate={() => setOpen(false)} />
+          <SidebarNav role={role} roles={roles} onNavigate={() => setOpen(false)} />
         </SheetContent>
       </Sheet>
     </>

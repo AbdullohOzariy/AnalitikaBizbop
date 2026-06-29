@@ -11,12 +11,12 @@ export type ReceiptMetricCell = { receiptCount: number; itemsPerReceipt: number 
 
 async function requireViewer() {
   const session = await auth();
-  if (!session?.user || !isAdminTier(session.user.role)) throw new Error("Ruxsat yo'q");
+  if (!session?.user || !isAdminTier(session.user.roles)) throw new Error("Ruxsat yo'q");
   return session.user;
 }
 async function requireEditor() {
   const session = await auth();
-  if (!session?.user || !isSystemAdmin(session.user.role)) throw new Error("Ruxsat yo'q");
+  if (!session?.user || !isSystemAdmin(session.user.roles)) throw new Error("Ruxsat yo'q");
   return session.user;
 }
 

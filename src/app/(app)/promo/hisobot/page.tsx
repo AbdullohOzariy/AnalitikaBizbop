@@ -9,7 +9,7 @@ export const metadata = { title: "Promo hisobot" };
 
 export default async function PromoHisobotPage() {
   const session = await auth();
-  if (!session?.user || !canSeePromo(session.user.role)) redirect("/dashboard");
+  if (!session?.user || !canSeePromo(session.user.roles)) redirect("/dashboard");
 
   return (
     <div className="flex flex-col gap-6">

@@ -28,7 +28,7 @@ export default async function MoslanmaganPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const session = await auth();
-  if (!session?.user || !isAdminTier(session.user.role)) redirect("/dashboard-v2");
+  if (!session?.user || !isAdminTier(session.user.roles)) redirect("/dashboard-v2");
 
   const sp = await searchParams;
   const page = Math.max(1, parseInt(sp.page ?? "1") || 1);

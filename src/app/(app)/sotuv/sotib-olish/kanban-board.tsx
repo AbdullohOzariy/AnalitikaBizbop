@@ -42,7 +42,7 @@ const COLUMN_ACCENT: Record<string, string> = {
   RETURNED: "border-t-red-500",
 };
 
-export function KanbanBoard({ cards, role }: { cards: KanbanCard[]; role: string }) {
+export function KanbanBoard({ cards, roles }: { cards: KanbanCard[]; roles: readonly string[] }) {
   const router = useRouter();
   const [isPending, start] = useTransition();
 
@@ -74,7 +74,7 @@ export function KanbanBoard({ cards, role }: { cards: KanbanCard[]; role: string
                   <p className="py-4 text-center text-[11px] italic text-muted-foreground/60">—</p>
                 )}
                 {colCards.map((c) => {
-                  const nexts = (NEXT_STATUSES[c.status] ?? []).filter((to) => canTransition(role, c.status, to, c.mine));
+                  const nexts = (NEXT_STATUSES[c.status] ?? []).filter((to) => canTransition(roles, c.status, to, c.mine));
                   return (
                     <div key={c.id}
                       className={cn(

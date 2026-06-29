@@ -11,7 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { ShoppingCart, Plus } from "lucide-react";
 import { PageHeader } from "@/components/common/page";
 import { formatDateUZ } from "@/lib/format";
-import { canManageOrders } from "@/lib/roles";
+import { canManageOrders, ordersScopedToOwn } from "@/lib/roles";
 import { KanbanBoard, type KanbanCard } from "./kanban-board";
 import type { OrderStatusT } from "./order-status";
 import type { Prisma } from "@/generated/prisma/client";
@@ -21,11 +21,11 @@ export const dynamic = "force-dynamic";
 export default async function SotibOlishPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  const role = session.user.role ?? "";
+  const roles = session.user.roles;
   const userId = Number(session.user.id);
 
   const where: Prisma.PurchaseOrderWhereInput = {};
-  if (role === "CAT_MANAGER") where.createdById = userId;
+  if (ordersScopedToOwn(roles)) where.createdById = userId;
 
   const orders = await prisma.purchaseOrder.findMany({
     where,
@@ -59,7 +59,7 @@ export default async function SotibOlishPage() {
         title="Sotib olish"
         description="Zakazlar doskasi — yaratishdan yetib kelgungacha barcha bosqichlar"
       >
-        {canManageOrders(role) && (
+        {canManageOrders(roles) && (
           <Link href="/sotuv/sotib-olish/yangi"
             className="inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-3.5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90">
             <Plus className="h-4 w-4" /> Yangi zakaz
@@ -67,7 +67,7 @@ export default async function SotibOlishPage() {
         )}
       </PageHeader>
 
-      <KanbanBoard cards={cards} role={role} />
+      <KanbanBoard cards={cards} roles={roles} />
     </div>
   );
 }

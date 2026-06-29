@@ -31,8 +31,8 @@ export default async function VozvratlarPage({
 }) {
   const session = await auth();
   if (!session) redirect("/login");
-  const role = session.user.role;
-  if (!canSeeChiqim(role)) redirect("/dashboard-v2");
+  const roles = session.user.roles;
+  if (!canSeeChiqim(roles)) redirect("/dashboard-v2");
 
   if (!botConfigured()) {
     return (
@@ -69,7 +69,7 @@ export default async function VozvratlarPage({
             hideTur
             basePath="/chiqim/vozvratlar"
           />
-          {isSystemAdmin(role) && <VozvratImportButton />}
+          {isSystemAdmin(roles) && <VozvratImportButton />}
         </div>
       </PageHeader>
 
@@ -99,7 +99,7 @@ export default async function VozvratlarPage({
       </div>
 
       {/* Kanban yoki Ro'yxat ko'rinishi — faqat admin tahrirlaydi */}
-      <VozvratViews vozvratlar={rows} canEdit={isSystemAdmin(role)} filials={filials} />
+      <VozvratViews vozvratlar={rows} canEdit={isSystemAdmin(roles)} filials={filials} />
     </div>
   );
 }

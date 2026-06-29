@@ -41,7 +41,7 @@ export default async function SozlamalarPage({
 }) {
   const session = await auth();
   if (!session) redirect("/login");
-  if (session.user.role !== "SYSTEM_ADMIN") redirect("/dashboard");
+  if (!session.user.roles.includes("SYSTEM_ADMIN")) redirect("/dashboard");
 
   const sp = await searchParams;
   const tab: Tab = sp.tab === "sverka" ? "sverka" : sp.tab === "inventarizatsiya" ? "inventarizatsiya" : sp.tab === "marja" ? "marja" : sp.tab === "yetkazish" ? "yetkazish" : sp.tab === "zakaz" ? "zakaz" : sp.tab === "spdaily" ? "spdaily" : "spisaniya";

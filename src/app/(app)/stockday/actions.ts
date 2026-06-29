@@ -24,9 +24,9 @@ export async function stockdayLeavesAction(
 ): Promise<{ ok: true; rows: StockdayRow[]; truncated: boolean } | { ok: false; error: string }> {
   try {
     const session = await auth();
-    if (!session?.user || !canSeeAnalytics(session.user.role)) throw new Error("Ruxsat yo'q");
+    if (!session?.user || !canSeeAnalytics(session.user.roles)) throw new Error("Ruxsat yo'q");
     const p = schema.parse(input);
-    const scope = await scopeSubIds(Number(session.user.id), session.user.role!);
+    const scope = await scopeSubIds(Number(session.user.id), session.user.roles);
     if (scope && p.subId !== -1 && !scope.includes(p.subId)) {
       return { ok: false, error: "Qamrovingizdan tashqari kategoriya." };
     }

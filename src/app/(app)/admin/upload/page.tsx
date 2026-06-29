@@ -26,7 +26,7 @@ const TYPE_LABEL: Record<string, string> = {
 
 export default async function UploadPage() {
   const session = await auth();
-  if (session?.user.role !== "SYSTEM_ADMIN") redirect("/dashboard");
+  if (!session?.user.roles.includes("SYSTEM_ADMIN")) redirect("/dashboard");
 
   const files = await prisma.uploadedFile.findMany({
     orderBy: { createdAt: "desc" },

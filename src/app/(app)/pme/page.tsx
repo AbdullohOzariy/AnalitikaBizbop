@@ -22,9 +22,9 @@ export default async function PmePage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const session = await auth();
-  const role = session?.user?.role;
-  if (!session?.user || !canSeePme(role)) redirect("/dashboard-v2");
-  const canEdit = canEditPme(role);
+  const roles = session?.user?.roles;
+  if (!session?.user || !canSeePme(roles)) redirect("/dashboard-v2");
+  const canEdit = canEditPme(roles);
   const sp = await searchParams;
   const tab: Tab = sp.tab === "analyze" ? "analyze" : "biriktirish";
 

@@ -14,7 +14,7 @@ type Result<T> = { ok: true; data: T } | { ok: false; error: string };
 
 async function requireAnalytics() {
   const session = await auth();
-  if (!session?.user || !canSeeAnalytics(session.user.role)) throw new Error("Ruxsat yo'q");
+  if (!session?.user || !canSeeAnalytics(session.user.roles)) throw new Error("Ruxsat yo'q");
 }
 
 const ctxSchema = z.object({

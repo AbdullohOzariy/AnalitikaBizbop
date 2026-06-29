@@ -17,8 +17,8 @@ export async function GET(
   { params }: { params: Promise<{ fileId: string }> }
 ) {
   const session = await auth();
-  const role = session?.user?.role;
-  if (!session || (!canSeeChiqim(role) && !canSeeSverka(role))) {
+  const roles = session?.user?.roles;
+  if (!session || (!canSeeChiqim(roles) && !canSeeSverka(roles))) {
     return new NextResponse("Ruxsat yo'q", { status: 403 });
   }
 

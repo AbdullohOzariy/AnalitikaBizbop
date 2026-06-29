@@ -19,7 +19,7 @@ const getSuppliers = unstable_cache(
 
 export default async function TaminotchilarPage() {
   const session = await auth();
-  if (!session?.user || !canSeeSuppliers(session.user.role)) redirect("/dashboard-v2");
+  if (!session?.user || !canSeeSuppliers(session.user.roles)) redirect("/dashboard-v2");
 
   const suppliers = await getSuppliers();
   const data: SupplierRow[] = suppliers.map((s) => ({
@@ -35,7 +35,7 @@ export default async function TaminotchilarPage() {
         title="Yetkazib beruvchilar"
         description="Yetkazib beruvchi → subkategoriya → SKU (mahsulot)"
       />
-      <TaminotchilarClient suppliers={data} canEdit={canEditSuppliers(session.user.role)} />
+      <TaminotchilarClient suppliers={data} canEdit={canEditSuppliers(session.user.roles)} />
     </div>
   );
 }

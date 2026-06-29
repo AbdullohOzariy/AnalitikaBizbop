@@ -96,7 +96,8 @@ model User {
   email        String   @unique
   passwordHash String
   name         String
-  role         Role     @default(CAT_MANAGER)
+  role         Role     @default(CAT_MANAGER) // asosiy rol — default kirish sahifasi, JWT
+  extraRoles   Role[]   @default([]) // qo'shimcha rollar; ruxsat = role + extraRoles birlashmasi (union)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

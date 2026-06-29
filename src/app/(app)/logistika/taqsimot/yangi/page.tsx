@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 export default async function YangiTaqsimotPage() {
   const session = await auth();
-  if (!session?.user || !canManageWarehouse(session.user.role)) redirect("/logistika");
+  if (!session?.user || !canManageWarehouse(session.user.roles)) redirect("/logistika");
   const branches = await prisma.branch.findMany({ orderBy: { sortOrder: "asc" }, select: { id: true, name: true } });
 
   return (

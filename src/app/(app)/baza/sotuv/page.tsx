@@ -123,8 +123,8 @@ export default async function BazaSotuvPage({
 }) {
   const session = await auth();
   if (!session) redirect("/login");
-  const role = session.user.role;
-  if (!isAdminTier(role)) redirect("/dashboard-v2");
+  const roles = session.user.roles;
+  if (!isAdminTier(roles)) redirect("/dashboard-v2");
 
   const sp = await searchParams;
   const page = Math.max(1, parseInt(sp.page ?? "1") || 1);

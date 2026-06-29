@@ -57,44 +57,49 @@ export const NEXT_STATUSES: Record<OrderStatusT, OrderStatusT[]> = {
   RETURNED: ["SENT"],
 };
 
+import { hasRole } from "@/lib/roles";
+
+// Ko'p-rol: funksiyalar bitta rol yoki rollar massivini qabul qiladi — har bir rol
+// bergan huquq OR (union) qilinadi (eng keng ruxsat).
 type R = string | null | undefined;
+type Roles = R | readonly R[];
 
 /** Rol shu tranzitsiyani bajara oladimi (isOwner — zakaz yaratuvchisimi). */
-export function canTransition(role: R, from: OrderStatusT, to: OrderStatusT, isOwner: boolean): boolean {
+export function canTransition(r: Roles, from: OrderStatusT, to: OrderStatusT, isOwner: boolean): boolean {
   if (!NEXT_STATUSES[from]?.includes(to)) return false;
   // To'liq huquq: SYSTEM_ADMIN, Bo'lim boshlig'i (ADMIN), Kategoriya menejerlari boshi (HEAD_CAT_MANAGER)
-  if (role === "SYSTEM_ADMIN" || role === "ADMIN" || role === "HEAD_CAT_MANAGER") return true;
+  if (hasRole(r, "SYSTEM_ADMIN", "ADMIN", "HEAD_CAT_MANAGER")) return true;
   // Menejer: o'z zakazini tasdiqqa yuboradi / qaytarib oladi
-  if (role === "CAT_MANAGER") {
-    return isOwner && ((from === "DRAFT" && to === "PENDING") || (from === "PENDING" && to === "DRAFT"));
+  if (hasRole(r, "CAT_MANAGER") && isOwner && ((from === "DRAFT" && to === "PENDING") || (from === "PENDING" && to === "DRAFT"))) {
+    return true;
   }
   // Supplychain: o'z zakazini tasdiqqa yuboradi (o'zi yaratgan bo'lsa) +
   // tasdiqlash → yuborish → qabul → yetib keldi / qaytarish
-  if (role === "SUPPLYCHAIN") {
-    return (
-      (from === "DRAFT" && to === "PENDING" && isOwner) ||
-      (from === "PENDING" && (to === "APPROVED" || to === "DRAFT")) ||
-      (from === "APPROVED" && (to === "SENT" || to === "PENDING")) ||
-      (from === "SENT" && (to === "ACCEPTED" || to === "RETURNED")) ||
-      (from === "ACCEPTED" && (to === "RECEIVED" || to === "RETURNED")) ||
-      (from === "RETURNED" && to === "SENT")
-    );
+  if (hasRole(r, "SUPPLYCHAIN") && (
+    (from === "DRAFT" && to === "PENDING" && isOwner) ||
+    (from === "PENDING" && (to === "APPROVED" || to === "DRAFT")) ||
+    (from === "APPROVED" && (to === "SENT" || to === "PENDING")) ||
+    (from === "SENT" && (to === "ACCEPTED" || to === "RETURNED")) ||
+    (from === "ACCEPTED" && (to === "RECEIVED" || to === "RETURNED")) ||
+    (from === "RETURNED" && to === "SENT")
+  )) {
+    return true;
   }
   return false;
 }
 
 /** Qatorlarni (miqdor/narx) tahrirlash mumkinmi. */
-export function canEditItems(role: R, status: OrderStatusT, isOwner: boolean): boolean {
-  if (role === "SYSTEM_ADMIN" || role === "ADMIN" || role === "HEAD_CAT_MANAGER") return status !== "RECEIVED";
-  if (role === "CAT_MANAGER") return isOwner && status === "DRAFT";
-  if (role === "SUPPLYCHAIN") return (status === "DRAFT" && isOwner) || status === "PENDING" || status === "APPROVED";
+export function canEditItems(r: Roles, status: OrderStatusT, isOwner: boolean): boolean {
+  if (hasRole(r, "SYSTEM_ADMIN", "ADMIN", "HEAD_CAT_MANAGER")) return status !== "RECEIVED";
+  if (hasRole(r, "SUPPLYCHAIN") && ((status === "DRAFT" && isOwner) || status === "PENDING" || status === "APPROVED")) return true;
+  if (hasRole(r, "CAT_MANAGER") && isOwner && status === "DRAFT") return true;
   return false;
 }
 
 /** Fakt miqdorlarni kiritish/solishtirish mumkinmi (yetib kelganda). */
-export function canEnterFact(role: R, status: OrderStatusT): boolean {
+export function canEnterFact(r: Roles, status: OrderStatusT): boolean {
   if (status !== "ACCEPTED" && status !== "RECEIVED") return false;
-  return role === "SYSTEM_ADMIN" || role === "ADMIN" || role === "SUPPLYCHAIN" || role === "HEAD_CAT_MANAGER";
+  return hasRole(r, "SYSTEM_ADMIN", "ADMIN", "SUPPLYCHAIN", "HEAD_CAT_MANAGER");
 }
 
 

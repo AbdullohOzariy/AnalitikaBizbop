@@ -19,7 +19,7 @@ export function Header({ user }: { user: Session["user"] }) {
 
   return (
     <header className="sticky top-0 z-30 h-16 border-b border-border bg-card/85 px-4 sm:px-6 flex items-center justify-between gap-2 shadow-sm backdrop-blur-xl">
-      <MobileSidebarTrigger role={user.role} />
+      <MobileSidebarTrigger role={user.role} roles={user.roles} />
 
       <div className="flex items-center gap-2 sm:gap-3 ml-auto">
         <ThemeToggle />

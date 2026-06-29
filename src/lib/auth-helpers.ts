@@ -1,6 +1,6 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canEditPromo, canSeePromo } from "@/lib/roles";
+import { canEditPromo, canSeePromo, isSystemAdmin, canManageOrders } from "@/lib/roles";
 
 export class AuthorizationError extends Error {
   constructor(message = "Ruxsat yo'q") {
@@ -12,7 +12,7 @@ export class AuthorizationError extends Error {
 // "requireAdmin" = to'liq admin (SYSTEM_ADMIN). Read-only ADMIN bu yerdan o'tmaydi.
 export async function requireAdmin() {
   const session = await auth();
-  if (!session?.user || session.user.role !== "SYSTEM_ADMIN") {
+  if (!session?.user || !isSystemAdmin(session.user.roles)) {
     throw new AuthorizationError();
   }
   return session.user;
@@ -48,11 +48,7 @@ export async function requireUser() {
  */
 export async function requireOrderCreator() {
   const session = await auth();
-  const role = session?.user?.role;
-  if (
-    !session?.user ||
-    (role !== "SYSTEM_ADMIN" && role !== "CAT_MANAGER" && role !== "HEAD_CAT_MANAGER" && role !== "SUPPLYCHAIN")
-  ) {
+  if (!session?.user || !canManageOrders(session.user.roles)) {
     throw new AuthorizationError();
   }
   return session.user;
@@ -65,7 +61,7 @@ export async function requireOrderCreator() {
  */
 export async function requirePromoView() {
   const session = await auth();
-  if (!session?.user || !canSeePromo(session.user.role)) {
+  if (!session?.user || !canSeePromo(session.user.roles)) {
     throw new AuthorizationError();
   }
   return session.user;
@@ -81,7 +77,7 @@ export async function requirePromoView() {
  */
 export async function requirePromoEdit() {
   const session = await auth();
-  if (!session?.user || !canEditPromo(session.user.role)) {
+  if (!session?.user || !canEditPromo(session.user.roles)) {
     throw new AuthorizationError();
   }
   return session.user;

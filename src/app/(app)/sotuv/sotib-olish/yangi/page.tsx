@@ -13,8 +13,8 @@ export default async function YangiZakazPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const session = await auth();
-  const role = session?.user?.role;
-  if (!session?.user || !canManageOrders(role)) redirect("/dashboard-v2");
+  const roles = session?.user?.roles;
+  if (!session?.user || !canManageOrders(roles)) redirect("/dashboard-v2");
   const sp = await searchParams;
   const initialSupplierId = sp.supplier ? Number(sp.supplier) || undefined : undefined;
   const initialAgentId = sp.agent ? Number(sp.agent) || undefined : undefined;

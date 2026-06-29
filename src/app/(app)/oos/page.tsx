@@ -44,8 +44,8 @@ export default async function OosPage({
 }) {
   const session = await auth();
   if (!session) redirect("/login");
-  const role = session.user.role;
-  if (!canSeeAnalytics(role)) redirect("/dashboard");
+  const roles = session.user.roles;
+  if (!canSeeAnalytics(roles)) redirect("/dashboard");
 
   const sp = await searchParams;
   const view: View = sp.view === "low" || sp.view === "dead" ? sp.view : "oos";
@@ -60,7 +60,7 @@ export default async function OosPage({
   const q = sp.q?.trim() ?? "";
 
   // Kategoriya menejeri qamrovi: faqat biriktirilgan kategoriyalar ko'rinadi
-  const scope = await scopeSubIds(Number(session.user.id), role);
+  const scope = await scopeSubIds(Number(session.user.id), roles);
   // URL orqali qamrovdan tashqari kategoriya so'ralsa — e'tiborsiz (xavfsizlik)
   if (scope && categoryId != null && !scope.includes(categoryId)) categoryId = undefined;
 

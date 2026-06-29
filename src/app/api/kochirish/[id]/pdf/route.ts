@@ -24,7 +24,7 @@ const STATUS_LABEL: Record<string, string> = { DRAFT: "Qoralama", CONFIRMED: "Ta
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return new NextResponse("Ruxsat yo'q", { status: 401 });
-  if (!canManageWarehouse(session.user.role)) return new NextResponse("Ruxsat yo'q", { status: 403 });
+  if (!canManageWarehouse(session.user.roles)) return new NextResponse("Ruxsat yo'q", { status: 403 });
 
   const id = Number((await params).id);
   if (!Number.isInteger(id) || id <= 0) return new NextResponse("Noto'g'ri id", { status: 400 });

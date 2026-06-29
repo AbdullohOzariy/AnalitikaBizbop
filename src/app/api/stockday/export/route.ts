@@ -29,8 +29,8 @@ function num(n: unknown): number {
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user) return new Response("Unauthorized", { status: 401 });
-  const role = session.user.role;
-  if (!canSeeAnalytics(role)) return new Response("Forbidden", { status: 403 });
+  const roles = session.user.roles;
+  if (!canSeeAnalytics(roles)) return new Response("Forbidden", { status: 403 });
 
   const sp = req.nextUrl.searchParams;
   const def = await getDefaultRange();

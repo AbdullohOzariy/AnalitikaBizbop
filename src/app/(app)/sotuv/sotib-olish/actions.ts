@@ -7,7 +7,7 @@ import { requireOrderCreator } from "@/lib/auth-helpers";
 import { auth } from "@/auth";
 import { ORDER_STATUSES, canTransition, canEditItems, canEnterFact, hisobMinStock, hisobMaxStock, type OrderStatusT } from "./order-status";
 import { nextOrderDate } from "@/lib/order-days";
-import { isSystemAdmin } from "@/lib/roles";
+import { isSystemAdmin, ordersScopedToOwn } from "@/lib/roles";
 import { actionError } from "@/lib/action-error";
 import { scopeParentIds, scopeProductWhere } from "@/lib/scope";
 import { getDefaultRange } from "@/lib/analytics";
@@ -93,7 +93,7 @@ export async function suppliersForOrderAction(): Promise<
 > {
   try {
     const user = await requireOrderCreator();
-    const scope = await scopeParentIds(Number(user.id), user.role);
+    const scope = await scopeParentIds(Number(user.id), user.roles);
     if (scope !== null && scope.length === 0) return { ok: true, suppliers: [] };
     // Supplier × agent bo'yicha SKU sonini bir so'rovda olamiz (agentsiz = agentId null)
     const grouped = await prisma.product.groupBy({
@@ -170,7 +170,7 @@ export async function supplierItemsAction(
     const sid = z.coerce.number().int().positive().parse(supplierId);
     // agentId berilsa — faqat shu agent SKU'lari; berilmasa — agentsiz (biriktirilmagan) SKU'lar
     const aid = agentId != null ? z.coerce.number().int().positive().parse(agentId) : null;
-    const scope = await scopeParentIds(Number(user.id), user.role);
+    const scope = await scopeParentIds(Number(user.id), user.roles);
     if (scope !== null && scope.length === 0) return { ok: true, items: [], orderGap: 1, branches: [] };
     // Joriy holat Product'ga denormalizatsiya qilingan (har yuklashda yangilanadi) —
     // ProductSales tarixini skanlamaymiz, bir zumda o'qiymiz.
@@ -346,11 +346,11 @@ async function rememberOrderParams(
   }
 }
 
-type ActorUser = { id: string | number; role: string };
+type ActorUser = { id: string | number; roles: readonly string[] };
 
 /** CAT_MANAGER faqat o'z zakaziga ta'sir qilsin — egalik (IDOR) tekshiruvi. */
 function ownsOrder(user: ActorUser, createdById: number): boolean {
-  return isSystemAdmin(user.role) || createdById === Number(user.id);
+  return isSystemAdmin(user.roles) || createdById === Number(user.id);
 }
 
 /** Yuborilgan filial id'lari haqiqatda mavjudligini tekshiradi (FK xatosi o'rniga aniq xabar). */
@@ -363,7 +363,7 @@ async function invalidBranchError(items: { branches?: { branchId: number }[] }[]
 
 /** Mahsulotlar foydalanuvchi qamrovida (kategoriya menejeri scope) ekanini tekshiradi. */
 async function scopeError(user: ActorUser, productIds: number[]): Promise<string | null> {
-  const scope = await scopeParentIds(Number(user.id), user.role);
+  const scope = await scopeParentIds(Number(user.id), user.roles);
   if (scope === null) return null; // admin — barchasi
   const uniq = [...new Set(productIds)];
   if (uniq.length === 0) return null;
@@ -428,12 +428,11 @@ export async function updateOrderItemsAction(
     const order = await prisma.purchaseOrder.findUnique({ where: { id: oid }, select: { status: true, createdById: true } });
     if (!order) return { ok: false, error: "Zakaz topilmadi." };
     const isOwner = order.createdById === Number(user.id);
-    if (!canEditItems(user.role, order.status as OrderStatusT, isOwner)) {
+    if (!canEditItems(user.roles, order.status as OrderStatusT, isOwner)) {
       return { ok: false, error: "Bu bosqichda qatorlarni tahrirlash sizga ruxsat etilmagan." };
     }
-    const scopeErr = user.role === "CAT_MANAGER"
-      ? await scopeError({ id: user.id ?? 0, role: user.role ?? "" }, parsed.map((i) => i.productId))
-      : null;
+    // scopeError o'zi cheklovsiz rollarda (scopeParentIds=null) hech narsa qaytarmaydi.
+    const scopeErr = await scopeError(user, parsed.map((i) => i.productId));
     if (scopeErr) return { ok: false, error: scopeErr };
     const branchErr = await invalidBranchError(parsed);
     if (branchErr) return { ok: false, error: branchErr };
@@ -470,7 +469,7 @@ export async function setOrderStatusAction(
     });
     if (!order) return { ok: false, error: "Zakaz topilmadi." };
     const isOwner = order.createdById === Number(user.id);
-    if (!canTransition(user.role, order.status as OrderStatusT, st, isOwner)) {
+    if (!canTransition(user.roles, order.status as OrderStatusT, st, isOwner)) {
       return { ok: false, error: "Bu o'tish sizning rolingizga ruxsat etilmagan." };
     }
     await prisma.purchaseOrder.update({
@@ -515,7 +514,7 @@ export async function sendZakazPdfAction(orderId: number): Promise<{ ok: true } 
     const oid = z.coerce.number().int().positive().parse(orderId);
     const order = await prisma.purchaseOrder.findUnique({ where: { id: oid }, select: { createdById: true } });
     if (!order) return { ok: false, error: "Zakaz topilmadi." };
-    if (user.role === "CAT_MANAGER" && order.createdById !== Number(user.id)) {
+    if (ordersScopedToOwn(user.roles) && order.createdById !== Number(user.id)) {
       return { ok: false, error: "Ruxsat yo'q." };
     }
     const { sendZakazPdf } = await import("@/lib/zakaz-pdf/send");
@@ -567,7 +566,7 @@ export async function saveOrderFactAction(
     const parsed = factSchema.parse(facts);
     const order = await prisma.purchaseOrder.findUnique({ where: { id: oid }, select: { status: true } });
     if (!order) return { ok: false, error: "Zakaz topilmadi." };
-    if (!canEnterFact(user.role, order.status as OrderStatusT)) {
+    if (!canEnterFact(user.roles, order.status as OrderStatusT)) {
       return { ok: false, error: "Fakt kiritish faqat 'Zakaz qabul qilindi'/'Yetib keldi' bosqichida (supplychain/menejerlar boshi)." };
     }
     await prisma.$transaction(

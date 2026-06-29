@@ -22,7 +22,7 @@ const LOGO = path.join(process.cwd(), "public/logo.png");
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) return new NextResponse("Ruxsat yo'q", { status: 401 });
-  if (!canSeePromo(session.user.role)) return new NextResponse("Ruxsat yo'q", { status: 403 });
+  if (!canSeePromo(session.user.roles)) return new NextResponse("Ruxsat yo'q", { status: 403 });
 
   const url = new URL(req.url);
   const kindParam = url.searchParams.get("kind");

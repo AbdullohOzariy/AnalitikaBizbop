@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) return new NextResponse("Ruxsat yo'q", { status: 401 });
-  if (!canSeePromo(session.user.role)) return new NextResponse("Ruxsat yo'q", { status: 403 });
+  if (!canSeePromo(session.user.roles)) return new NextResponse("Ruxsat yo'q", { status: 403 });
 
   const id = Number((await params).id);
   if (!Number.isInteger(id) || id <= 0) return new NextResponse("Noto'g'ri id", { status: 400 });

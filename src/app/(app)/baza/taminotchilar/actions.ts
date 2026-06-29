@@ -13,12 +13,12 @@ import { canSeeSuppliers, canEditSuppliers } from "@/lib/roles";
 // tahrir — SYSTEM_ADMIN + SUPPLYCHAIN (read-only ADMIN tahrir qila olmaydi).
 async function requireSupplierViewer() {
   const session = await auth();
-  if (!session?.user || !canSeeSuppliers(session.user.role)) throw new Error("Ruxsat yo'q");
+  if (!session?.user || !canSeeSuppliers(session.user.roles)) throw new Error("Ruxsat yo'q");
   return session.user;
 }
 async function requireSupplierEditor() {
   const session = await auth();
-  if (!session?.user || !canEditSuppliers(session.user.role)) throw new Error("Ruxsat yo'q");
+  if (!session?.user || !canEditSuppliers(session.user.roles)) throw new Error("Ruxsat yo'q");
   return session.user;
 }
 import { actionError } from "@/lib/action-error";

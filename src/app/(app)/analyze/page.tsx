@@ -25,8 +25,8 @@ export default async function AnalyzePage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const session = await auth();
-  const role = session?.user?.role;
-  if (!session?.user || !canSeeAnalyze(role)) redirect("/dashboard");
+  const roles = session?.user?.roles;
+  if (!session?.user || !canSeeAnalyze(roles)) redirect("/dashboard");
 
   const sp = await searchParams;
   const tab: Tab = sp.tab === "sotuv" ? "sotuv" : sp.tab === "tannarx" ? "tannarx" : "filiallar";

@@ -68,7 +68,7 @@ export default async function AbcXyzPage({
 }) {
   const session = await auth();
   if (!session) redirect("/login");
-  if (!canSeeAnalytics(session.user.role)) redirect("/dashboard");
+  if (!canSeeAnalytics(session.user.roles)) redirect("/dashboard");
 
   const sp = await searchParams;
   const tab: Tab = sp.tab === "xyz" || sp.tab === "matritsa" ? sp.tab : "abc";

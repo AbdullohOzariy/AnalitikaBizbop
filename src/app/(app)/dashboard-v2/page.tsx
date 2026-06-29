@@ -236,7 +236,7 @@ export default async function DashboardV2Page({
   const [branches, defaultRange, scope] = await Promise.all([
     prisma.branch.findMany({ orderBy: { sortOrder: "asc" } }),
     getDefaultRange(),
-    scopeSubIds(Number(session.user.id), session.user.role),
+    scopeSubIds(Number(session.user.id), session.user.roles),
   ]);
   const branchId =
     sp.branchId === "all" || !sp.branchId ? undefined : Number(sp.branchId) || undefined;

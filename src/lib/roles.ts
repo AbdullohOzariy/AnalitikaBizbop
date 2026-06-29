@@ -11,57 +11,75 @@
 //                kengaytirilgan huquq: hamma zakazni ko'rish + TO'LIQ zakaz workflow
 //                (tasdiqlash/yuborish/qabul/fakt, ADMIN darajasida) + yetkazib beruvchilarni TAHRIRLASH.
 
+// Ko'p rol: predikatlar bitta rol (string) YOKI rollar massivini (union) qabul qiladi.
+// Massiv berilsa — rollardan BIRORTASI mos kelsa true (eng keng ruxsat). Eski chaqiruvlar
+// (bitta `session.user.role` uzatadiganlar) ham ishlayveradi; ko'p-rol ruxsati uchun
+// `session.user.roles` (massiv) uzatiladi.
 type R = string | null | undefined;
+type Roles = R | readonly R[];
+
+/** Berilgan rol(lar) ichida ruxsat etilganlardan birortasi bormi. */
+export function hasRole(r: Roles, ...allowed: string[]): boolean {
+  const set = Array.isArray(r) ? r : [r];
+  const allow = new Set(allowed);
+  for (const x of set) if (x && allow.has(x)) return true;
+  return false;
+}
 
 /** To'liq admin — barcha tahrir amallari va Tizim bo'limi. */
-export const isSystemAdmin = (r: R): boolean => r === "SYSTEM_ADMIN";
+export const isSystemAdmin = (r: Roles): boolean => hasRole(r, "SYSTEM_ADMIN");
 
 /** Admin darajasidagi ma'lumotni ko'radi (Baza, Hisobot, Iyerarxiya) — read-only ADMIN ham. */
-export const isAdminTier = (r: R): boolean => r === "SYSTEM_ADMIN" || r === "ADMIN";
+export const isAdminTier = (r: Roles): boolean => hasRole(r, "SYSTEM_ADMIN", "ADMIN");
 
 /** Analitikani ko'ruvchilar (dashboardlar, OOS, Stockday, chiqim, rejalar, sotuv). */
-export const canSeeAnalytics = (r: R): boolean =>
-  r === "SYSTEM_ADMIN" || r === "ADMIN" || r === "CAT_MANAGER" || r === "CEO" ||
-  r === "SUPPLYCHAIN" || r === "HEAD_CAT_MANAGER";
+export const canSeeAnalytics = (r: Roles): boolean =>
+  hasRole(r, "SYSTEM_ADMIN", "ADMIN", "CAT_MANAGER", "CEO", "SUPPLYCHAIN", "HEAD_CAT_MANAGER");
 
 /** Kategoriya menejerlari boshi. */
-export const isHeadCatManager = (r: R): boolean => r === "HEAD_CAT_MANAGER";
+export const isHeadCatManager = (r: Roles): boolean => hasRole(r, "HEAD_CAT_MANAGER");
 
 /** Zakaz yaratish/yuritish: menejer, boshi, supplychain yoki SYSTEM_ADMIN. */
-export const canManageOrders = (r: R): boolean =>
-  r === "SYSTEM_ADMIN" || r === "CAT_MANAGER" || r === "HEAD_CAT_MANAGER" || r === "SUPPLYCHAIN";
+export const canManageOrders = (r: Roles): boolean =>
+  hasRole(r, "SYSTEM_ADMIN", "CAT_MANAGER", "HEAD_CAT_MANAGER", "SUPPLYCHAIN");
+
+/** Zakazlar faqat O'ZINIKIga cheklanganmi — CAT_MANAGER, lekin kengroq ko'ruvchi rol YO'Q.
+ *  (CAT_MANAGER + HEAD/SUPPLYCHAIN/admin → hammasini ko'radi, cheklov yo'q.) */
+export const ordersScopedToOwn = (r: Roles): boolean =>
+  hasRole(r, "CAT_MANAGER") &&
+  !hasRole(r, "SYSTEM_ADMIN", "ADMIN", "CEO", "SUPPLYCHAIN", "HEAD_CAT_MANAGER");
 
 /** Anketalarni ko'rib tasdiqlash — Bo'lim boshlig'i (ADMIN), Supplychain, SYSTEM_ADMIN. */
-export const canReviewAnketa = (r: R): boolean =>
-  r === "SYSTEM_ADMIN" || r === "ADMIN" || r === "SUPPLYCHAIN";
+export const canReviewAnketa = (r: Roles): boolean =>
+  hasRole(r, "SYSTEM_ADMIN", "ADMIN", "SUPPLYCHAIN");
 
 /** Ta'minot zanjiri roli. */
-export const isSupplyChain = (r: R): boolean => r === "SUPPLYCHAIN";
+export const isSupplyChain = (r: Roles): boolean => hasRole(r, "SUPPLYCHAIN");
 
 /** Yetkazib beruvchilar bo'limini KO'RA oladiganlar (CAT_MANAGER — read-only, tahrir yo'q). */
-export const canSeeSuppliers = (r: R): boolean =>
-  isAdminTier(r) || isSupplyChain(r) || isHeadCatManager(r) || r === "CAT_MANAGER";
+export const canSeeSuppliers = (r: Roles): boolean =>
+  hasRole(r, "SYSTEM_ADMIN", "ADMIN", "SUPPLYCHAIN", "HEAD_CAT_MANAGER", "CAT_MANAGER");
 
 /** Yetkazib beruvchilarni TAHRIRLAY oladiganlar (profil, shartnoma, lead time, agent, SKU biriktirish, qo'shish/o'chirish).
  *  CAT_MANAGER va HEAD_CAT_MANAGER ham tahrirlaydi. Eslatma: ombor qoldig'i tahriri bundan MUSTAQIL — u `canManageWarehouse`. */
-export const canEditSuppliers = (r: R): boolean =>
-  isSystemAdmin(r) || isSupplyChain(r) || r === "CAT_MANAGER" || isHeadCatManager(r);
+export const canEditSuppliers = (r: Roles): boolean =>
+  hasRole(r, "SYSTEM_ADMIN", "SUPPLYCHAIN", "CAT_MANAGER", "HEAD_CAT_MANAGER");
 
 /** PME analyze (P/M/E segment) bo'limini KO'RA oladiganlar — read-only ADMIN ham. */
-export const canSeePme = (r: R): boolean =>
-  isAdminTier(r) || isSupplyChain(r) || r === "CAT_MANAGER" || isHeadCatManager(r);
+export const canSeePme = (r: Roles): boolean =>
+  hasRole(r, "SYSTEM_ADMIN", "ADMIN", "SUPPLYCHAIN", "CAT_MANAGER", "HEAD_CAT_MANAGER");
 
 /** PME segmentni biriktira (tahrirlay) oladiganlar — read-only ADMIN bundan mustasno. */
-export const canEditPme = (r: R): boolean =>
-  isSystemAdmin(r) || isSupplyChain(r) || r === "CAT_MANAGER" || isHeadCatManager(r);
+export const canEditPme = (r: Roles): boolean =>
+  hasRole(r, "SYSTEM_ADMIN", "SUPPLYCHAIN", "CAT_MANAGER", "HEAD_CAT_MANAGER");
 
 /** Ombor + taqsimot (logistika operatsiyalari) — qoldiq import, ombor→filial taqsimot. */
-export const canManageWarehouse = (r: R): boolean => isSystemAdmin(r) || isSupplyChain(r);
+export const canManageWarehouse = (r: Roles): boolean => hasRole(r, "SYSTEM_ADMIN", "SUPPLYCHAIN");
 
 /** Analyze (narx sifati: filiallar narx farqi, summa÷soni ≠ narx) bo'limini KO'RA oladiganlar.
  *  Narx anomaliyalarini ko'rsatuvchi tahliliy bo'lim — analitika ko'ruvchilar uchun (read-only ADMIN ham). */
-export const canSeeAnalyze = (r: R): boolean =>
-  isAdminTier(r) || isSupplyChain(r) || r === "CAT_MANAGER" || isHeadCatManager(r);
+export const canSeeAnalyze = (r: Roles): boolean =>
+  hasRole(r, "SYSTEM_ADMIN", "ADMIN", "SUPPLYCHAIN", "CAT_MANAGER", "HEAD_CAT_MANAGER");
 
 // ─── Promo (Aksiyalar) ────────────────────────────────────────────────────
 // MERCHANDISER — IZOLATSIYALANGAN rol: FAQAT Promo bo'limini ko'radi/tahrirlaydi.
@@ -69,17 +87,15 @@ export const canSeeAnalyze = (r: R): boolean =>
 // "MERCHANDISER" yo'q — shuning uchun u boshqa hech bir bo'limga kira olmaydi.
 
 /** Merchandiser roli (yordamchi — redirect/izolatsiya tekshiruvlari uchun). */
-export const isMerchandiser = (r: R): boolean => r === "MERCHANDISER";
+export const isMerchandiser = (r: Roles): boolean => hasRole(r, "MERCHANDISER");
 
 /** Promo (Aksiyalar) bo'limini KO'RA oladiganlar — read-only ADMIN ham ko'radi. */
-export const canSeePromo = (r: R): boolean =>
-  r === "SYSTEM_ADMIN" || r === "ADMIN" || r === "CAT_MANAGER" || r === "CEO" ||
-  r === "HEAD_CAT_MANAGER" || r === "MERCHANDISER";
+export const canSeePromo = (r: Roles): boolean =>
+  hasRole(r, "SYSTEM_ADMIN", "ADMIN", "CAT_MANAGER", "CEO", "HEAD_CAT_MANAGER", "MERCHANDISER");
 
 /** Promo (Aksiyalar)ni TAHRIRLAY oladiganlar — read-only ADMIN bundan MUSTASNO. */
-export const canEditPromo = (r: R): boolean =>
-  r === "SYSTEM_ADMIN" || r === "CAT_MANAGER" || r === "CEO" ||
-  r === "HEAD_CAT_MANAGER" || r === "MERCHANDISER";
+export const canEditPromo = (r: Roles): boolean =>
+  hasRole(r, "SYSTEM_ADMIN", "CAT_MANAGER", "CEO", "HEAD_CAT_MANAGER", "MERCHANDISER");
 
 // ─── Operator (Hisobdan chiqarish + Sverka kuzatuvchisi) ──────────────────────
 // OPERATOR — IZOLATSIYALANGAN rol: FAQAT Hisobdan chiqarish (chiqim) va Sverkani
@@ -88,11 +104,14 @@ export const canEditPromo = (r: R): boolean =>
 // olmaydi (o'zgartirish actionlari uni o'tkazmaydi).
 
 /** Operator roli (redirect/izolatsiya tekshiruvlari uchun). */
-export const isOperator = (r: R): boolean => r === "OPERATOR";
+export const isOperator = (r: Roles): boolean => hasRole(r, "OPERATOR");
+
+/** Izolatsiyalangan rollar — yakka bo'lsa faqat o'z bo'limini ko'radi (middleware). */
+export const ISOLATED_ROLES = ["MERCHANDISER", "OPERATOR"] as const;
 
 /** Hisobdan chiqarish (chiqim) bo'limini KO'RA oladiganlar — analitika ko'ruvchilar + operator. */
-export const canSeeChiqim = (r: R): boolean => canSeeAnalytics(r) || isOperator(r);
+export const canSeeChiqim = (r: Roles): boolean => canSeeAnalytics(r) || isOperator(r);
 
 /** Sverka bo'limini KO'RA oladiganlar — SYSTEM_ADMIN, ADMIN, SUPPLYCHAIN, CEO + operator. */
-export const canSeeSverka = (r: R): boolean =>
-  isAdminTier(r) || isSupplyChain(r) || r === "CEO" || isOperator(r);
+export const canSeeSverka = (r: Roles): boolean =>
+  hasRole(r, "SYSTEM_ADMIN", "ADMIN", "SUPPLYCHAIN", "CEO", "OPERATOR");

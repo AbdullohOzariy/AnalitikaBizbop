@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 export default async function TaqsimotDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  if (!session?.user || !canManageWarehouse(session.user.role)) redirect("/logistika");
+  if (!session?.user || !canManageWarehouse(session.user.roles)) redirect("/logistika");
   const id = Number((await params).id);
   if (!Number.isInteger(id)) notFound();
 

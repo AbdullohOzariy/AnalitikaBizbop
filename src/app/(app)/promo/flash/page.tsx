@@ -10,13 +10,13 @@ export const metadata = { title: "Flash aksiyalar" };
 
 export default async function FlashAksiyalarPage() {
   const session = await auth();
-  if (!session?.user || !canSeePromo(session.user.role)) redirect("/dashboard");
+  if (!session?.user || !canSeePromo(session.user.roles)) redirect("/dashboard");
 
   const branches = await prisma.branch.findMany({
     orderBy: { sortOrder: "asc" },
     select: { id: true, name: true },
   });
-  const canEdit = canEditPromo(session.user.role);
+  const canEdit = canEditPromo(session.user.roles);
 
   return (
     <div className="flex flex-col gap-6">

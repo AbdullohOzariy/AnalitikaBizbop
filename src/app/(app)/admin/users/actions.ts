@@ -10,12 +10,28 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { actionError } from "@/lib/action-error";
 
+const ROLE_VALUES = ["SYSTEM_ADMIN", "ADMIN", "CAT_MANAGER", "CEO", "SUPPLYCHAIN", "HEAD_CAT_MANAGER", "MERCHANDISER", "OPERATOR"] as const;
+const roleEnum = z.enum(ROLE_VALUES);
+
 const createSchema = z.object({
   name: z.string().trim().min(1).max(100),
   email: z.string().trim().min(1).max(100), // login — email bo'lishi shart emas
   password: z.string().min(6, "Parol kamida 6 belgi"),
-  role: z.enum(["SYSTEM_ADMIN", "ADMIN", "CAT_MANAGER", "CEO", "SUPPLYCHAIN", "HEAD_CAT_MANAGER", "MERCHANDISER", "OPERATOR"]),
+  role: roleEnum, // asosiy rol
+  extraRoles: z.array(roleEnum).max(7).optional().default([]), // qo'shimcha rollar (union)
 });
+
+// Qo'shimcha rollarni normallashtirish: dublikatsiz va asosiy roldan tashqari.
+function normExtraRoles(role: string, extraRoles: readonly string[]): Role[] {
+  return [...new Set(extraRoles)].filter((r) => r !== role) as Role[];
+}
+// Foydalanuvchi (role + extraRoles) ichida berilgan rol bormi.
+const includesRole = (role: string, extraRoles: readonly string[], target: string) =>
+  role === target || extraRoles.includes(target);
+
+// Oxirgi System Admin himoyasi tranzaksiya ichida ishlaydi — sentinel xato.
+class LastAdminError extends Error {}
+const SA_WHERE = { OR: [{ role: "SYSTEM_ADMIN" as Role }, { extraRoles: { has: "SYSTEM_ADMIN" as Role } }] };
 
 /** Foydalanuvchiga (kategoriya menejeri) javobgar kategoriyalarni biriktiradi. */
 export async function setUserCategoriesAction(
@@ -59,6 +75,7 @@ export async function createUserAction(
         email: parsed.email,
         passwordHash,
         role: parsed.role as Role,
+        extraRoles: normExtraRoles(parsed.role, parsed.extraRoles),
       },
     });
 
@@ -73,7 +90,8 @@ const updateSchema = z.object({
   id: z.number().int().positive(),
   name: z.string().trim().min(1).max(100),
   email: z.string().trim().min(1).max(100),
-  role: z.enum(["SYSTEM_ADMIN", "ADMIN", "CAT_MANAGER", "CEO", "SUPPLYCHAIN", "HEAD_CAT_MANAGER", "MERCHANDISER", "OPERATOR"]),
+  role: roleEnum,
+  extraRoles: z.array(roleEnum).max(7).optional().default([]),
 });
 
 /** Foydalanuvchi ma'lumotlarini (nom, login, rol) tahrirlash — faqat System Admin. */
@@ -83,30 +101,38 @@ export async function updateUserAction(
   try {
     const me = await requireAdmin();
     const p = updateSchema.parse(input);
-    // O'zini System Admin'dan tushirib, tizimni qulflab qo'ymasin
-    if (Number(me.id) === p.id && p.role !== "SYSTEM_ADMIN") {
-      return { ok: false, error: "O'z rolingizni System Admin'dan o'zgartira olmaysiz." };
+    const extra = normExtraRoles(p.role, p.extraRoles);
+    const willBeSA = p.role === "SYSTEM_ADMIN" || extra.includes("SYSTEM_ADMIN");
+    // O'zini System Admin huquqidan ayirib, tizimni qulflab qo'ymasin
+    if (Number(me.id) === p.id && !willBeSA) {
+      return { ok: false, error: "O'z System Admin huquqingizni olib tashlay olmaysiz." };
     }
     // Login boshqa foydalanuvchida band emasligini tekshiramiz
     const taken = await prisma.user.findFirst({ where: { email: p.email, id: { not: p.id } } });
     if (taken) return { ok: false, error: "Bu login band." };
 
-    const cur = await prisma.user.findUnique({ where: { id: p.id }, select: { role: true } });
-    // Oxirgi System Admin'ni pasaytirib tizimni adminsiz qoldirmaslik
-    if (cur?.role === "SYSTEM_ADMIN" && p.role !== "SYSTEM_ADMIN") {
-      const saCount = await prisma.user.count({ where: { role: "SYSTEM_ADMIN" } });
-      if (saCount <= 1) return { ok: false, error: "Oxirgi System Admin'ni pasaytirib bo'lmaydi." };
+    const cur = await prisma.user.findUnique({ where: { id: p.id }, select: { role: true, extraRoles: true } });
+    const wasSA = cur ? includesRole(cur.role, cur.extraRoles, "SYSTEM_ADMIN") : false;
+    const wasCatMgr = cur ? includesRole(cur.role, cur.extraRoles, "CAT_MANAGER") : false;
+    const willBeCatMgr = p.role === "CAT_MANAGER" || extra.includes("CAT_MANAGER");
+    // Oxirgi SA tekshiruvi + mutatsiya bitta Serializable tranzaksiyada (TOCTOU poygasini oldini oladi).
+    try {
+      await prisma.$transaction(async (tx) => {
+        if (wasSA && !willBeSA) {
+          const saCount = await tx.user.count({ where: SA_WHERE });
+          if (saCount <= 1) throw new LastAdminError("Oxirgi System Admin huquqini olib tashlab bo'lmaydi.");
+        }
+        await tx.user.update({
+          where: { id: p.id },
+          data: { name: p.name, email: p.email, role: p.role as Role, extraRoles: extra },
+        });
+        // CAT_MANAGER butunlay olib tashlansa — kategoriya biriktirishlari ortiqcha
+        if (wasCatMgr && !willBeCatMgr) await tx.categoryManager.deleteMany({ where: { userId: p.id } });
+      }, { isolationLevel: "Serializable" });
+    } catch (e) {
+      if (e instanceof LastAdminError) return { ok: false, error: e.message };
+      throw e;
     }
-    await prisma.$transaction([
-      prisma.user.update({
-        where: { id: p.id },
-        data: { name: p.name, email: p.email, role: p.role as Role },
-      }),
-      // Rol CAT_MANAGER'dan boshqaga o'zgarsa — kategoriya biriktirishlari ortiqcha
-      ...(cur?.role === "CAT_MANAGER" && p.role !== "CAT_MANAGER"
-        ? [prisma.categoryManager.deleteMany({ where: { userId: p.id } })]
-        : []),
-    ]);
     revalidatePath("/admin/users");
     // Rol o'zgardi — auth() dagi 60s rol keshi darhol yangilansin
     revalidateTag(USER_ROLES_TAG, "max");
@@ -122,21 +148,23 @@ export async function deleteUserAction(
   try {
     const me = await requireAdmin();
     if (Number(me.id) === id) return { ok: false, error: "O'zingizni o'chira olmaysiz." };
-    // Oxirgi System Admin'ni o'chirib tizimni adminsiz qoldirmaslik
-    const target = await prisma.user.findUnique({ where: { id }, select: { role: true } });
-    if (target?.role === "SYSTEM_ADMIN") {
-      const saCount = await prisma.user.count({ where: { role: "SYSTEM_ADMIN" } });
-      if (saCount <= 1) return { ok: false, error: "Oxirgi System Admin'ni o'chirib bo'lmaydi." };
+    const target = await prisma.user.findUnique({ where: { id }, select: { role: true, extraRoles: true } });
+    const wasSA = target ? includesRole(target.role, target.extraRoles, "SYSTEM_ADMIN") : false;
+    // Oxirgi SA tekshiruvi + o'chirish bitta Serializable tranzaksiyada (TOCTOU poygasini oldini oladi).
+    // Foydalanuvchi yuklagan fayllar (UploadedFile.uploadedById FK) joriy adminga qayta biriktiriladi.
+    try {
+      await prisma.$transaction(async (tx) => {
+        if (wasSA) {
+          const saCount = await tx.user.count({ where: SA_WHERE });
+          if (saCount <= 1) throw new LastAdminError("Oxirgi System Admin'ni o'chirib bo'lmaydi.");
+        }
+        await tx.uploadedFile.updateMany({ where: { uploadedById: id }, data: { uploadedById: Number(me.id) } });
+        await tx.user.delete({ where: { id } });
+      }, { isolationLevel: "Serializable" });
+    } catch (e) {
+      if (e instanceof LastAdminError) return { ok: false, error: e.message };
+      throw e;
     }
-    // Foydalanuvchi yuklagan fayllar UploadedFile.uploadedById orqali bog'langan (FK).
-    // O'chirishdan oldin ularni joriy adminga qayta biriktiramiz (ma'lumot saqlanadi).
-    await prisma.$transaction([
-      prisma.uploadedFile.updateMany({
-        where: { uploadedById: id },
-        data: { uploadedById: Number(me.id) },
-      }),
-      prisma.user.delete({ where: { id } }),
-    ]);
     revalidatePath("/admin/users");
     // O'chirilgan foydalanuvchi sessiyasi keyingi tekshiruvda VIEWER bo'lib qolsin
     revalidateTag(USER_ROLES_TAG, "max");

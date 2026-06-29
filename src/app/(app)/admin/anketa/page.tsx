@@ -24,9 +24,9 @@ export default async function AnketaAdminPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const session = await auth();
-  if (!session?.user || !canReviewAnketa(session.user.role)) redirect("/dashboard");
+  if (!session?.user || !canReviewAnketa(session.user.roles)) redirect("/dashboard");
   // Maydon tahriri (forma konfiguratsiyasi) — faqat SYSTEM_ADMIN
-  const fullAccess = isSystemAdmin(session.user.role);
+  const fullAccess = isSystemAdmin(session.user.roles);
 
   const sp = await searchParams;
   const tab: Tab = sp.tab === "maydonlar" && fullAccess ? "maydonlar" : "javoblar";

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { isAdminTier } from "@/lib/roles";
+import { isAdminTier, hasRole } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { formatUZS } from "@/lib/format";
 import { Wallet, Layers, TrendingDown } from "lucide-react";
@@ -32,9 +32,9 @@ export default async function FinansPage({
 }) {
   const session = await auth();
   if (!session) redirect("/login");
-  const role = session.user.role;
-  if (!isAdminTier(role) && role !== "CEO") redirect("/dashboard-v2");
-  const canEdit = isAdminTier(role);
+  const roles = session.user.roles;
+  if (!isAdminTier(roles) && !hasRole(roles, "CEO")) redirect("/dashboard-v2");
+  const canEdit = isAdminTier(roles);
 
   const sp = await searchParams;
   const now = new Date();

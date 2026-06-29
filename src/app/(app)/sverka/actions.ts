@@ -13,7 +13,7 @@ export async function deleteSverkaAction(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     const session = await auth();
-    if (!session?.user || (!isSystemAdmin(session.user.role) && !isSupplyChain(session.user.role))) {
+    if (!session?.user || (!isSystemAdmin(session.user.roles) && !isSupplyChain(session.user.roles))) {
       throw new Error("Ruxsat yo'q");
     }
     const sid = z.coerce.number().int().positive().parse(id);
@@ -28,7 +28,7 @@ export async function deleteSverkaAction(
 
 async function requireSverkaManager() {
   const session = await auth();
-  if (!session?.user || (!isSystemAdmin(session.user.role) && !isSupplyChain(session.user.role))) {
+  if (!session?.user || (!isSystemAdmin(session.user.roles) && !isSupplyChain(session.user.roles))) {
     throw new Error("Ruxsat yo'q");
   }
   return session.user;

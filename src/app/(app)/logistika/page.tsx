@@ -46,7 +46,7 @@ export default async function LogistikaPage({
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!canSeeSuppliers(session.user.role)) redirect("/dashboard-v2");
+  if (!canSeeSuppliers(session.user.roles)) redirect("/dashboard-v2");
 
   // Logistika VAQTINCHALIK o'chirilgan (qayta ishlanmoqda) — Filiallar aro avto-zakaz
   // Sotuv bo'limida tashkil etilmoqda. Qayta yoqish uchun: LOGISTIKA_ENABLED = true.
@@ -64,9 +64,9 @@ export default async function LogistikaPage({
     );
   }
 
-  const canEdit = canManageWarehouse(session.user.role);
+  const canEdit = canManageWarehouse(session.user.roles);
 
-  const canWh = canManageWarehouse(session.user.role);
+  const canWh = canManageWarehouse(session.user.roles);
   const sp = await searchParams;
   const tab: Tab = sp.tab === "kalendar" ? "kalendar"
     : sp.tab === "ombor" ? "ombor"

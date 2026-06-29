@@ -13,7 +13,7 @@ import {
   type KPI,
 } from "@/lib/analytics";
 import { dailyForecastSeries } from "@/lib/forecast";
-import { isAdminTier } from "@/lib/roles";
+import { isAdminTier, hasRole } from "@/lib/roles";
 import { formatUZS, formatNumber, formatPercent } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
 import { ExpandableCard } from "@/components/ui/expandable-card";
@@ -411,7 +411,7 @@ export default async function DashboardPage({
   const session = await auth();
   if (!session) redirect("/login");
   // Dashboard V1 — faqat ADMIN va CEO (Kategoriya menejeri V2 ko'radi).
-  if (!isAdminTier(session.user.role) && session.user.role !== "CEO" && session.user.role !== "SUPPLYCHAIN") redirect("/dashboard-v2");
+  if (!isAdminTier(session.user.roles) && !hasRole(session.user.roles, "CEO", "SUPPLYCHAIN")) redirect("/dashboard-v2");
 
   const sp = await searchParams;
   // Parallel — ketma-ket await DB roundtrip'larini zanjirlab yuborardi (waterfall)

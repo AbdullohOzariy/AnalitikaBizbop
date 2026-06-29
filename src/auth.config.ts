@@ -54,22 +54,24 @@ export const authConfig = {
         }
         return true;
       }
-      // MERCHANDISER izolatsiyasi: /promo tashqarisidagi har qanday sahifada
-      // /promo/doimiy ga yo'naltiriladi — cheksiz loop oldini oladi.
-      // /api/promo/* (export, dizayn yuklab olish) ham ruxsat etiladi — aks holda
-      // download so'rovi sahifaga redirect bo'lib, fayl o'rniga HTML kelardi.
+      // IZOLATSIYA (ko'p-rol): faqat foydalanuvchining BARCHA rollari izolatsiyalangan
+      // bo'lsa cheklov qoladi. Bittasi ham normal rol bo'lsa — to'liq kirish (union).
+      // MERCHANDISER → /promo (+/api/promo); OPERATOR → /chiqim,/sverka (+/api/*).
+      // Ikki izolatsiyalangan rol birga bo'lsa — ruxsat etilgan yo'llar birlashadi.
       if (isLoggedIn) {
-        const role = (auth as { user?: { role?: string } })?.user?.role;
-        if (role === "MERCHANDISER" && !pathname.startsWith("/promo") && !pathname.startsWith("/api/promo")) {
-          return Response.redirect(new URL("/promo/doimiy", request.nextUrl));
-        }
-        // OPERATOR izolatsiyasi: faqat /chiqim va /sverka (+ ularning /api/* download'lari)
-        if (
-          role === "OPERATOR" &&
-          !pathname.startsWith("/chiqim") && !pathname.startsWith("/sverka") &&
-          !pathname.startsWith("/api/chiqim") && !pathname.startsWith("/api/sverka")
-        ) {
-          return Response.redirect(new URL("/chiqim", request.nextUrl));
+        const u = (auth as { user?: { role?: string; roles?: string[] } })?.user;
+        const roles = u?.roles ?? (u?.role ? [u.role] : []);
+        const ISOLATED = new Set(["MERCHANDISER", "OPERATOR"]);
+        const allIsolated = roles.length > 0 && roles.every((r) => ISOLATED.has(r));
+        if (allIsolated) {
+          const allowed: string[] = [];
+          if (roles.includes("MERCHANDISER")) allowed.push("/promo", "/api/promo");
+          if (roles.includes("OPERATOR")) allowed.push("/chiqim", "/sverka", "/api/chiqim", "/api/sverka");
+          const ok = allowed.some((p) => pathname === p || pathname.startsWith(p + "/"));
+          if (!ok) {
+            const dest = roles.includes("MERCHANDISER") ? "/promo/doimiy" : "/chiqim";
+            return Response.redirect(new URL(dest, request.nextUrl));
+          }
         }
       }
 
@@ -80,6 +82,8 @@ export const authConfig = {
       if (user) {
         token.id = (user as { id: string }).id;
         token.role = (user as { role: string }).role;
+        const r = (user as { roles?: string[] }).roles;
+        token.roles = r ?? [(user as { role: string }).role];
       }
       return token;
     },
@@ -87,6 +91,7 @@ export const authConfig = {
       if (token && session.user) {
         session.user.id = token.id as string;
         session.user.role = token.role as Role;
+        session.user.roles = (token.roles as Role[] | undefined) ?? [token.role as Role];
       }
       return session;
     },

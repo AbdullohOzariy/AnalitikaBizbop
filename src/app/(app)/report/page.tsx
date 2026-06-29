@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { isAdminTier } from "@/lib/roles";
+import { isAdminTier, hasRole } from "@/lib/roles";
 import { branchReport, findMissingDays, getDefaultRange, diffDaysInclusive } from "@/lib/analytics";
 import { Table2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -22,7 +22,7 @@ export default async function ReportPage({
 }) {
   const session = await auth();
   if (!session) redirect("/login");
-  if (!isAdminTier(session.user.role) && session.user.role !== "SUPPLYCHAIN") redirect("/dashboard-v2");
+  if (!isAdminTier(session.user.roles) && !hasRole(session.user.roles, "SUPPLYCHAIN")) redirect("/dashboard-v2");
 
   const defaultRange = await getDefaultRange();
   const sp = await searchParams;

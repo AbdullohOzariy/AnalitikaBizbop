@@ -33,8 +33,8 @@ export default async function BazaTashrifPage({
 }) {
   const session = await auth();
   if (!session) redirect("/login");
-  if (!isAdminTier(session.user.role)) redirect("/dashboard-v2");
-  const canEdit = isSystemAdmin(session.user.role);
+  if (!isAdminTier(session.user.roles)) redirect("/dashboard-v2");
+  const canEdit = isSystemAdmin(session.user.roles);
 
   const sp = await searchParams;
   const page = Math.max(1, parseInt(sp.page ?? "1") || 1);

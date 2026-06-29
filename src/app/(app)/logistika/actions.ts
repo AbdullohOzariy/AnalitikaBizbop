@@ -15,12 +15,12 @@ import { parseBatchRows } from "@/lib/expiry";
 
 async function requireView() {
   const s = await auth();
-  if (!s?.user || !canSeeSuppliers(s.user.role)) throw new Error("Ruxsat yo'q");
+  if (!s?.user || !canSeeSuppliers(s.user.roles)) throw new Error("Ruxsat yo'q");
   return s.user;
 }
 async function requireEdit() {
   const s = await auth();
-  if (!s?.user || !canManageWarehouse(s.user.role)) throw new Error("Ruxsat yo'q");
+  if (!s?.user || !canManageWarehouse(s.user.roles)) throw new Error("Ruxsat yo'q");
   return s.user;
 }
 
@@ -112,7 +112,7 @@ export async function importWarehouseStockAction(
 
 async function requireWarehouse() {
   const s = await auth();
-  if (!s?.user || !canManageWarehouse(s.user.role)) throw new Error("Ruxsat yo'q");
+  if (!s?.user || !canManageWarehouse(s.user.roles)) throw new Error("Ruxsat yo'q");
   return s.user;
 }
 

@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Check } from "lucide-react";
 import { toast } from "sonner";
 import { createUserAction } from "./actions";
 
@@ -53,12 +54,18 @@ const ROLE_OPTIONS = [
   { value: "SYSTEM_ADMIN", label: "System Admin",        desc: "To'liq huquq — barcha tahrir + Tizim bo'limi" },
 ] as const;
 
+type RoleV = (typeof ROLE_OPTIONS)[number]["value"];
+
 // ── Forma ─────────────────────────────────────────────────────────────────────
 export function CreateUserForm() {
   const formRef = useRef<HTMLFormElement>(null);
-  const [role, setRole]           = useState<"CAT_MANAGER" | "CEO" | "ADMIN" | "SYSTEM_ADMIN" | "SUPPLYCHAIN" | "HEAD_CAT_MANAGER" | "MERCHANDISER" | "OPERATOR">("CAT_MANAGER");
+  const [role, setRole]           = useState<RoleV>("CAT_MANAGER");
+  const [extra, setExtra]         = useState<Set<string>>(new Set());
   const [showPass, setShowPass]   = useState(false);
   const [isPending, start]        = useTransition();
+
+  const changeRole = (v: RoleV) => { setRole(v); setExtra((prev) => { const n = new Set(prev); n.delete(v); return n; }); };
+  const toggleExtra = (v: string) => setExtra((prev) => { const n = new Set(prev); if (n.has(v)) n.delete(v); else n.add(v); return n; });
 
   const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -69,11 +76,13 @@ export function CreateUserForm() {
         email:    String(fd.get("email")    ?? ""),
         password: String(fd.get("password") ?? ""),
         role,
+        extraRoles: [...extra].filter((r) => r !== role) as RoleV[],
       });
       if (res.ok) {
         toast.success("Foydalanuvchi qo'shildi.");
         formRef.current?.reset();
         setRole("CAT_MANAGER");
+        setExtra(new Set());
         setShowPass(false);
       } else {
         toast.error(res.error);
@@ -133,14 +142,14 @@ export function CreateUserForm() {
         </button>
       </InputField>
 
-      {/* Rol */}
+      {/* Asosiy rol */}
       <div className="space-y-1.5">
         <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          Rol
+          Asosiy rol
         </Label>
         <Select
           value={role}
-          onValueChange={(v) => setRole((v as typeof role) ?? "CAT_MANAGER")}
+          onValueChange={(v) => changeRole((v as RoleV) ?? "CAT_MANAGER")}
           disabled={isPending}
         >
           <SelectTrigger className="h-11 rounded-xl">
@@ -157,6 +166,29 @@ export function CreateUserForm() {
             ))}
           </SelectContent>
         </Select>
+      </div>
+
+      {/* Qo'shimcha rollar */}
+      <div className="space-y-1.5">
+        <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          Qo&apos;shimcha rollar (ixtiyoriy)
+        </Label>
+        <p className="text-[11px] text-muted-foreground">Tanlangan rollar huquqlari asosiy rolga qo&apos;shiladi (birlashma).</p>
+        <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+          {ROLE_OPTIONS.filter((o) => o.value !== role).map((o) => {
+            const on = extra.has(o.value);
+            return (
+              <button key={o.value} type="button" onClick={() => toggleExtra(o.value)} disabled={isPending}
+                title={o.desc}
+                className={`flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left text-xs transition-colors ${on ? "border-primary/40 bg-primary/10 text-primary" : "border-border hover:bg-muted/50"}`}>
+                <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${on ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/40"}`}>
+                  {on && <Check className="h-3 w-3" />}
+                </span>
+                <span className="truncate">{o.label}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Submit */}

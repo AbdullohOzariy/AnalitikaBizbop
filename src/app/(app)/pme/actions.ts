@@ -12,20 +12,20 @@ import type { Segment } from "@/generated/prisma/enums";
 // Ko'rish — admin darajasi + supplychain + menejerlar; tahrir — read-only ADMIN'siz.
 async function requirePmeViewer() {
   const session = await auth();
-  if (!session?.user || !canSeePme(session.user.role)) throw new Error("Ruxsat yo'q");
+  if (!session?.user || !canSeePme(session.user.roles)) throw new Error("Ruxsat yo'q");
   return session.user;
 }
 async function requirePmeEditor() {
   const session = await auth();
-  if (!session?.user || !canEditPme(session.user.role)) throw new Error("Ruxsat yo'q");
+  if (!session?.user || !canEditPme(session.user.roles)) throw new Error("Ruxsat yo'q");
   return session.user;
 }
 
-type ScopeUser = { id: string | number; role: string };
+type ScopeUser = { id: string | number; roles: readonly string[] };
 
 /** Mahsulotlar foydalanuvchi qamrovida ekanini tekshiradi (CAT_MANAGER scope IDOR). */
 async function inScope(user: ScopeUser, productIds: number[]): Promise<boolean> {
-  const scope = await scopeParentIds(Number(user.id), user.role);
+  const scope = await scopeParentIds(Number(user.id), user.roles);
   if (scope === null) return true; // admin/supplychain/boshi — barchasi
   const uniq = [...new Set(productIds)];
   if (uniq.length === 0) return true;
@@ -82,7 +82,7 @@ export async function pmeSuppliersAction(): Promise<
 > {
   try {
     const user = await requirePmeViewer();
-    const scope = await scopeParentIds(Number(user.id), user.role);
+    const scope = await scopeParentIds(Number(user.id), user.roles);
     if (scope !== null && scope.length === 0) return { ok: true, suppliers: [] };
     const baseWhere = { supplierId: { not: null }, ...scopeProductWhere(scope) };
     // Jami SKU va segment biriktirilgan SKU sonini supplier bo'yicha bir vaqtda olamiz
@@ -116,7 +116,7 @@ export async function pmeSupplierSkusAction(
   try {
     const user = await requirePmeViewer();
     const sid = z.coerce.number().int().positive().parse(supplierId);
-    const scope = await scopeParentIds(Number(user.id), user.role);
+    const scope = await scopeParentIds(Number(user.id), user.roles);
     if (scope !== null && scope.length === 0) return { ok: true, items: [] };
     const products = await prisma.product.findMany({
       where: { supplierId: sid, ...scopeProductWhere(scope) },
@@ -136,7 +136,7 @@ export async function pmeAnalyzeAction(): Promise<
 > {
   try {
     const user = await requirePmeViewer();
-    const scope = await scopeParentIds(Number(user.id), user.role);
+    const scope = await scopeParentIds(Number(user.id), user.roles);
     if (scope !== null && scope.length === 0) return { ok: true, items: [] };
     const products = await prisma.product.findMany({
       where: { segment: { not: null }, ...scopeProductWhere(scope) },
@@ -183,7 +183,7 @@ export async function bulkSetSegmentAction(
   try {
     const user = await requirePmeEditor();
     const p = bulkSchema.parse(input);
-    const scope = await scopeParentIds(Number(user.id), user.role);
+    const scope = await scopeParentIds(Number(user.id), user.roles);
     const res = await prisma.product.updateMany({
       where: { supplierId: p.supplierId, categoryId: p.categoryId, ...scopeProductWhere(scope) },
       data: { segment: p.segment },

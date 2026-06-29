@@ -55,7 +55,7 @@ function getInitials(name: string) {
 // ── Sahifa ────────────────────────────────────────────────────────────────────
 export default async function UsersPage() {
   const session = await auth();
-  if (session?.user.role !== "SYSTEM_ADMIN") redirect("/dashboard");
+  if (!session?.user.roles.includes("SYSTEM_ADMIN")) redirect("/dashboard");
 
   const [users, catRows] = await Promise.all([
     prisma.user.findMany({
@@ -168,9 +168,17 @@ export default async function UsersPage() {
                           {u.email}
                         </TableCell>
 
-                        {/* Rol badge */}
+                        {/* Rol badge — asosiy + qo'shimcha rollar */}
                         <TableCell>
-                          <Pill tone={cfg.tone}>{cfg.label}</Pill>
+                          <div className="flex flex-wrap items-center gap-1">
+                            <Pill tone={cfg.tone}>{cfg.label}</Pill>
+                            {u.extraRoles.map((r) => {
+                              const ec = ROLE_CONFIG[r] ?? ROLE_CONFIG.VIEWER;
+                              return (
+                                <Pill key={r} tone="muted" className="text-[10px] py-0 px-1.5">+ {ec.label}</Pill>
+                              );
+                            })}
+                          </div>
                         </TableCell>
 
                         {/* Sana (o'rta ekrandan) */}
@@ -185,6 +193,7 @@ export default async function UsersPage() {
                             name={u.name}
                             email={u.email}
                             role={u.role}
+                            extraRoles={u.extraRoles}
                             isSelf={isSelf}
                             categories={categories}
                             managedCategoryIds={u.managedCategories.map((m) => m.categoryId)}

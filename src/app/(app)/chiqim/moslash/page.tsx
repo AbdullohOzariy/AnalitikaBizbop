@@ -21,9 +21,9 @@ function fmtNum(n: number) {
 export default async function ChiqimMoslashPage() {
   const session = await auth();
   if (!session) redirect("/login");
-  const role = session.user.role;
-  if (!isAdminTier(role)) redirect("/dashboard-v2");
-  const canEdit = isSystemAdmin(role);
+  const roles = session.user.roles;
+  if (!isAdminTier(roles)) redirect("/dashboard-v2");
+  const canEdit = isSystemAdmin(roles);
 
   if (!botConfigured()) {
     return (

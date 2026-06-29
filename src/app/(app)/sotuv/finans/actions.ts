@@ -11,7 +11,7 @@ import { actionError } from "@/lib/action-error";
 // Harajat kiritish/o'chirish — SYSTEM_ADMIN va ADMIN.
 async function requireExpenseEditor() {
   const session = await auth();
-  if (!session?.user || !isAdminTier(session.user.role)) {
+  if (!session?.user || !isAdminTier(session.user.roles)) {
     throw new Error("Ruxsat yo'q");
   }
   return session.user;

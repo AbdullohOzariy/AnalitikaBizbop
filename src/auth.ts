@@ -14,16 +14,19 @@ export const USER_ROLES_TAG = "user-roles";
 // DB so'rovi edi. 60s kesh + USER_ROLES_TAG: admin rolni o'zgartirsa users-action
 // tag'ni darhol invalidatsiya qiladi; DB'ga to'g'ridan-to'g'ri o'zgartirish kiritilsa
 // ham eng ko'pi 60 soniyada kuchga kiradi.
-const getUserRole = (userId: number) =>
+// Asosiy rol + qo'shimcha rollar — union (role + extraRoles, dublikatsiz). Ruxsat shu
+// to'plam bo'yicha tekshiriladi; `role` esa asosiy (default sahifa) sifatida qoladi.
+const getUserRoles = (userId: number) =>
   unstable_cache(
-    async (): Promise<Role | null> => {
+    async (): Promise<{ role: Role; roles: Role[] } | null> => {
       const dbUser = await prisma.user.findUnique({
         where: { id: userId },
-        select: { role: true },
+        select: { role: true, extraRoles: true },
       });
-      return dbUser?.role ?? null;
+      if (!dbUser) return null;
+      return { role: dbUser.role, roles: [...new Set<Role>([dbUser.role, ...dbUser.extraRoles])] };
     },
-    ["userRole", String(userId)],
+    ["userRoles", String(userId)],
     { tags: [USER_ROLES_TAG], revalidate: 60 }
   )();
 
@@ -31,11 +34,13 @@ declare module "next-auth" {
   interface Session {
     user: {
       id: string;
-      role: Role;
+      role: Role; // asosiy rol (default sahifa)
+      roles: Role[]; // barcha rollar (union) — ruxsat tekshiruvi shu bo'yicha
     } & DefaultSession["user"];
   }
   interface User {
     role: Role;
+    roles: Role[];
   }
 }
 
@@ -53,7 +58,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     session: async ({ session, token }) => {
       if (token?.id && session.user) {
         session.user.id = token.id as string;
-        session.user.role = ((await getUserRole(Number(token.id))) ?? "VIEWER") as Role;
+        const r = await getUserRoles(Number(token.id));
+        session.user.role = (r?.role ?? "VIEWER") as Role;
+        session.user.roles = r?.roles ?? (["VIEWER"] as Role[]);
       }
       return session;
     },
@@ -80,6 +87,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           email: user.email,
           name: user.name,
           role: user.role,
+          roles: [...new Set<Role>([user.role, ...user.extraRoles])],
         };
       },
     }),

@@ -49,8 +49,8 @@ export default async function StockdayPage({
 }) {
   const session = await auth();
   if (!session) redirect("/login");
-  const role = session.user.role;
-  if (!canSeeAnalytics(role)) redirect("/dashboard");
+  const roles = session.user.roles;
+  if (!canSeeAnalytics(roles)) redirect("/dashboard");
 
   const sp = await searchParams;
   const view: View =
@@ -66,7 +66,7 @@ export default async function StockdayPage({
   const q = sp.q?.trim() ?? "";
 
   // Kategoriya menejeri qamrovi: faqat biriktirilgan kategoriyalar ko'rinadi
-  const scope = await scopeSubIds(Number(session.user.id), role);
+  const scope = await scopeSubIds(Number(session.user.id), roles);
   if (scope && categoryId != null && !scope.includes(categoryId)) categoryId = undefined;
 
   const filters: SnapshotFilters = { startStr, endStr, branchId, categoryId, q, scopeSubIds: scope };

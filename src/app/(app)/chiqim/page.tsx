@@ -87,8 +87,8 @@ export default async function ChiqimPage({
   // Auth
   const session = await auth();
   if (!session) redirect("/login");
-  const role = session.user.role;
-  if (!canSeeChiqim(role)) redirect("/dashboard-v2");
+  const roles = session.user.roles;
+  if (!canSeeChiqim(roles)) redirect("/dashboard-v2");
 
   // Bot ulanmaganmi?
   if (!botConfigured()) {
@@ -261,7 +261,7 @@ export default async function ChiqimPage({
                       <TableHead className="w-[120px]">Kategoriya</TableHead>
                       <TableHead>Sabab</TableHead>
                       <TableHead className="w-[120px]">Xodim</TableHead>
-                      {isSystemAdmin(role) && (
+                      {isSystemAdmin(roles) && (
                         <TableHead className="w-[80px] text-right">Amallar</TableHead>
                       )}
                     </TableRow>
@@ -322,7 +322,7 @@ export default async function ChiqimPage({
                         </TableCell>
 
                         {/* Amallar — faqat ADMIN */}
-                        {isSystemAdmin(role) && (
+                        {isSystemAdmin(roles) && (
                           <TableCell className="text-right">
                             <ChiqimRowActions
                               record={r}

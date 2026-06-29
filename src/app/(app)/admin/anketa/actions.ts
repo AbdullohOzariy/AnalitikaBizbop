@@ -13,7 +13,7 @@ import { actionError } from "@/lib/action-error";
 // Tasdiqlash — Bo'lim boshlig'i (ADMIN), Supplychain va SYSTEM_ADMIN vazifasi
 async function requireAnketaReviewer() {
   const session = await auth();
-  if (!session?.user || !canReviewAnketa(session.user.role)) throw new Error("Ruxsat yo'q");
+  if (!session?.user || !canReviewAnketa(session.user.roles)) throw new Error("Ruxsat yo'q");
   return session.user;
 }
 

@@ -42,7 +42,7 @@ export type OrderData = {
 // lead — SKU lead time (kun); pack — pachkadagi dona; bq — filial bo'yicha miqdorlar (pid:bid)
 type Line = { qty: string; price: string; lead: string; pack: string; bq: Record<number, string> };
 
-export function OrderDetail({ order, role, isOwner }: { order: OrderData; role: string; isOwner: boolean }) {
+export function OrderDetail({ order, roles, isOwner }: { order: OrderData; roles: readonly string[]; isOwner: boolean }) {
   const router = useRouter();
   const perBranch = order.branches.length > 0;
 
@@ -72,10 +72,10 @@ export function OrderDetail({ order, role, isOwner }: { order: OrderData; role: 
     });
 
   const status = order.status as OrderStatusT;
-  const editable = canEditItems(role, status, isOwner);
-  const factMode = canEnterFact(role, status);
+  const editable = canEditItems(roles, status, isOwner);
+  const factMode = canEnterFact(roles, status);
   const showFact = factMode || order.items.some((i) => i.factQty != null);
-  const allowedNexts = (NEXT_STATUSES[status] ?? []).filter((to) => canTransition(role, status, to, isOwner));
+  const allowedNexts = (NEXT_STATUSES[status] ?? []).filter((to) => canTransition(roles, status, to, isOwner));
   const busy = saving || statusing;
 
   const saveFacts = () =>
@@ -217,7 +217,7 @@ export function OrderDetail({ order, role, isOwner }: { order: OrderData; role: 
               </Button>
             );
           })}
-          {status === "DRAFT" && (role === "SYSTEM_ADMIN" || role === "ADMIN" || isOwner) && (
+          {status === "DRAFT" && (roles.includes("SYSTEM_ADMIN") || roles.includes("ADMIN") || isOwner) && (
             <Button size="sm" variant="outline" className="h-8 gap-1.5 text-destructive" disabled={busy} onClick={() => setDelOpen(true)}>
               <Trash2 className="h-3.5 w-3.5" /> O'chirish
             </Button>

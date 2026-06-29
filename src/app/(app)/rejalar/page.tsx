@@ -19,11 +19,11 @@ export default async function RejalarPage({
 }) {
   const session = await auth();
   if (!session) redirect("/login");
-  const role = session.user.role;
-  if (!canSeeAnalytics(role)) {
+  const roles = session.user.roles;
+  if (!canSeeAnalytics(roles)) {
     redirect("/dashboard-v2");
   }
-  const isAdmin = isSystemAdmin(role);
+  const isAdmin = isSystemAdmin(roles);
 
   const sp = await searchParams;
   const now = new Date();
