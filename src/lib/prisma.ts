@@ -20,9 +20,8 @@ const globalForPrisma = globalThis as unknown as {
 // Pool ham globalThis'da — dev hot-reload'da modul qayta yuklanganda faqat client
 // emas, pool ham qayta ishlatilsin (aks holda har reload yangi ulanishlar ochib,
 // Neon pooler limitini (free ~10) yeb qo'yadi).
-const pool =
-  globalForPrisma.pgPool ??
-  new Pool({
+function makePool() {
+  const p = new Pool({
     connectionString,
     ssl: isLocal ? false : { rejectUnauthorized: true },
     // Neon Launch plan — pooler limiti yuqori (free'dagi ~10 emas); sahifalar
@@ -34,6 +33,17 @@ const pool =
     keepAlive: true,
     connectionTimeoutMillis: 5_000,
   });
+  // KRITIK: Neon idle ulanishni serverda uzsa ("Connection terminated unexpectedly"),
+  // pg idle-client'da 'error' hodisasini chiqaradi. Ishlovchi bo'lmasa — bu Node uchun
+  // uncaughtException bo'lib, JARAYONNI QULATADI (sahifalar "couldn't load"). Shu yerda
+  // yutib, faqat loglaymiz — pg uzilgan ulanishni o'zi tashlaydi, keyingi so'rov yangisini ochadi.
+  p.on("error", (err) => {
+    console.error("[pg pool] idle client xatosi (yutildi):", err instanceof Error ? err.message : err);
+  });
+  return p;
+}
+
+const pool = globalForPrisma.pgPool ?? makePool();
 
 const adapter = new PrismaPg(pool);
 
