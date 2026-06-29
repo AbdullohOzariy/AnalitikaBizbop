@@ -13,6 +13,9 @@ const nextConfig: NextConfig = {
     // rewrite) yuboriladi, shu sababli "Yuborish" bloklanardi. O'sha originlarni ruxsat beramiz.
     serverActions: {
       allowedOrigins: ["supplier.oilagroup.uz", "*.oilagroup.uz"],
+      // Server Action body default 1MB — sotuv/tashrif Excel fayllari (25k+ SKU)
+      // shundan katta bo'lib "Body exceeded 1 MB limit" xatosi berardi. 25MB gacha ruxsat.
+      bodySizeLimit: "25mb",
     },
   },
   async redirects() {
