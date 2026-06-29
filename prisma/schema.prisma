@@ -149,6 +149,7 @@ model Branch {
   batches        ProductBatch[]
   promoCampaigns PromoCampaign[] // shu filialga oid promo aksiyalar (null = barcha filiallar)
   orderItemBranches PurchaseOrderItemBranch[] // zakaz qatorlarining shu filialga taqsimoti
+  supplierProfiles  SupplierBranchProfile[] // yetkazib beruvchilarning shu filial profili
 }
 
 model BranchAlias {
@@ -389,12 +390,61 @@ model Supplier {
   // Haftalik takrorlanuvchi zakaz qabul kunlari: 0=Yakshanba ... 6=Shanba (JS getUTCDay)
   orderWeekdays Int[]   @default([])
 
-  products  Product[]
-  orders    PurchaseOrder[]
-  contracts SupplierContract[]
-  sverkalar SverkaRecord[]
-  orderDays SupplierOrderDay[]
-  agents    Agent[]
+  // ── Shartlar (SUPPLYCHAIN tahrirlaydi) ──
+  paymentType       String? // "PERECHISLENIYE" | "NAQD"
+  ehfMatch          Boolean? // Perechisleniya fakturada (EHF) 1:1 aks etadimi
+  otsrochkaDays     Int? // otsrochka (30/45/60/90)
+  debitorHas        Boolean? // debitorka limiti bormi
+  debitorLimit      Decimal? @db.Decimal(18, 2) // debitorka limiti summasi
+  discountPct       Decimal? @db.Decimal(6, 2) // asosiy chegirma %
+  marketingDiscount Boolean? // marketing skidkasi bormi
+  retrobonusPct     Decimal? @db.Decimal(6, 2) // retrobonus %
+  agentMerchNote    String? // agent/merchandiser ishlash tartibi
+  promoSystem       String? // promo tizimi izohi
+  promoCalendar     Boolean? // promo kalendari tuzilganmi
+  // Kontaktlar (ism + tel)
+  responsibleRole   String? // Supervayzer/Reg.menejer/Diller/Filial rahbari/Direktor
+  responsibleName   String?
+  responsiblePhone  String?
+  sverkaName        String? // sverka bo'limi
+  sverkaPhone       String?
+  accountingName    String? // buxgalteriya (EHF mas'uli)
+  accountingPhone   String?
+  logisticsName     String? // dastavka (logistika)
+  logisticsPhone    String?
+
+  products       Product[]
+  orders         PurchaseOrder[]
+  contracts      SupplierContract[]
+  sverkalar      SverkaRecord[]
+  orderDays      SupplierOrderDay[]
+  agents         Agent[]
+  branchProfiles SupplierBranchProfile[] // filial bo'yicha profil ma'lumotlari
+}
+
+// Yetkazib beruvchi × filial profil ma'lumotlari (✓ per-filial maydonlar)
+model SupplierBranchProfile {
+  id              Int      @id @default(autoincrement())
+  supplierId      Int
+  branchId        Int
+  shelfLengthCm   Int? // dolya polka uzunligi (sm)
+  faceCount       Int? // face soni
+  skuCount        Int? // SKU soni (shu filialda)
+  orderDay        String? // zakaz kuni (hafta kuni — ma'lumot)
+  deliveryDays    Int? // dastavka necha kun
+  deliveryWeekday String? // dastavka qaysi kun
+  deliveryTime    String? // dastavka qaysi soat
+  dpPaymentTerms  String? // qo'shimcha polka (DP) to'lov sharti
+  forecastYearly  Decimal? @db.Decimal(18, 2) // sotuv prognozi (yillik)
+  forecastMonthly Decimal? @db.Decimal(18, 2) // sotuv prognozi (oylik)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  branch   Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([supplierId, branchId])
+  @@index([branchId])
 }
 
 // Agent (BREND) — yetkazib beruvchi ichidagi alohida brend/vakil. Postavshikning

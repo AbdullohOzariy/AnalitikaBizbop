@@ -681,3 +681,125 @@ export async function deleteSupplierAction(
     return actionError(err, "deleteSupplier");
   }
 }
+
+// ─── Profil shartlari (umumiy) + filial bo'yicha profil ──────────────────────
+const optStr = z.string().trim().max(1000).nullable().optional();
+const optInt = z.coerce.number().int().min(0).max(10_000_000).nullable().optional();
+const optNum = z.coerce.number().min(0).max(1e14).nullable().optional();
+const optPct = z.coerce.number().min(0).max(100).nullable().optional();
+const optBool = z.boolean().nullable().optional();
+const supId = z.coerce.number().int().positive();
+const str = (v: string | null | undefined) => (v && v.trim() ? v.trim() : null);
+
+export type SupplierTerms = {
+  paymentType: string | null; ehfMatch: boolean | null; otsrochkaDays: number | null;
+  debitorHas: boolean | null; debitorLimit: number | null; discountPct: number | null;
+  marketingDiscount: boolean | null; retrobonusPct: number | null; agentMerchNote: string | null;
+  promoSystem: string | null; promoCalendar: boolean | null;
+  responsibleRole: string | null; responsibleName: string | null; responsiblePhone: string | null;
+  sverkaName: string | null; sverkaPhone: string | null;
+  accountingName: string | null; accountingPhone: string | null;
+  logisticsName: string | null; logisticsPhone: string | null;
+};
+export type BranchProfileRow = {
+  branchId: number; branchName: string;
+  shelfLengthCm: number | null; faceCount: number | null; skuCount: number | null;
+  orderDay: string | null; deliveryDays: number | null; deliveryWeekday: string | null;
+  deliveryTime: string | null; dpPaymentTerms: string | null;
+  forecastYearly: number | null; forecastMonthly: number | null;
+};
+
+const termsSchema = z.object({
+  supplierId: supId,
+  paymentType: optStr, // "PERECHISLENIYE" | "NAQD" (boshqasi → null)
+  ehfMatch: optBool, otsrochkaDays: optInt, debitorHas: optBool, debitorLimit: optNum,
+  discountPct: optPct, marketingDiscount: optBool, retrobonusPct: optPct,
+  agentMerchNote: optStr, promoSystem: optStr, promoCalendar: optBool,
+  responsibleRole: optStr, responsibleName: optStr, responsiblePhone: optStr,
+  sverkaName: optStr, sverkaPhone: optStr, accountingName: optStr, accountingPhone: optStr,
+  logisticsName: optStr, logisticsPhone: optStr,
+});
+
+/** Yetkazib beruvchi umumiy shartlari (to'lov/otsrochka/skidka/kontaktlar) — SUPPLYCHAIN. */
+export async function updateSupplierTermsAction(input: z.input<typeof termsSchema>): Promise<Result> {
+  try {
+    await requireSupplierEditor();
+    const p = termsSchema.parse(input);
+    const sup = await prisma.supplier.findUnique({ where: { id: p.supplierId }, select: { id: true } });
+    if (!sup) return { ok: false, error: "Yetkazib beruvchi topilmadi." };
+    await prisma.supplier.update({
+      where: { id: p.supplierId },
+      data: {
+        paymentType: p.paymentType === "PERECHISLENIYE" || p.paymentType === "NAQD" ? p.paymentType : null,
+        ehfMatch: p.ehfMatch ?? null,
+        otsrochkaDays: p.otsrochkaDays ?? null,
+        debitorHas: p.debitorHas ?? null,
+        // Debitorka yo'q bo'lsa limit ham saqlanmaydi (eskirgan qiymat qolmasin)
+        debitorLimit: p.debitorHas === false ? null : (p.debitorLimit ?? null),
+        discountPct: p.discountPct ?? null,
+        marketingDiscount: p.marketingDiscount ?? null,
+        retrobonusPct: p.retrobonusPct ?? null,
+        agentMerchNote: str(p.agentMerchNote),
+        promoSystem: str(p.promoSystem),
+        promoCalendar: p.promoCalendar ?? null,
+        responsibleRole: str(p.responsibleRole),
+        responsibleName: str(p.responsibleName),
+        responsiblePhone: str(p.responsiblePhone),
+        sverkaName: str(p.sverkaName),
+        sverkaPhone: str(p.sverkaPhone),
+        accountingName: str(p.accountingName),
+        accountingPhone: str(p.accountingPhone),
+        logisticsName: str(p.logisticsName),
+        logisticsPhone: str(p.logisticsPhone),
+      },
+    });
+    revalidateTag(SUPPLIERS_TAG, "max");
+    revalidatePath(`/baza/taminotchilar/${p.supplierId}`);
+    return { ok: true };
+  } catch (err) {
+    return actionError(err, "supplierTerms");
+  }
+}
+
+const branchProfileSchema = z.object({
+  supplierId: supId,
+  branchId: supId,
+  shelfLengthCm: optInt, faceCount: optInt, skuCount: optInt,
+  orderDay: optStr, deliveryDays: optInt, deliveryWeekday: optStr, deliveryTime: optStr,
+  dpPaymentTerms: optStr, forecastYearly: optNum, forecastMonthly: optNum,
+});
+
+/** Yetkazib beruvchi × filial profili (polka/SKU/dastavka/prognoz) — upsert, SUPPLYCHAIN. */
+export async function updateSupplierBranchProfileAction(input: z.input<typeof branchProfileSchema>): Promise<Result> {
+  try {
+    await requireSupplierEditor();
+    const p = branchProfileSchema.parse(input);
+    const [sup, branch] = await Promise.all([
+      prisma.supplier.findUnique({ where: { id: p.supplierId }, select: { id: true } }),
+      prisma.branch.findUnique({ where: { id: p.branchId }, select: { id: true } }),
+    ]);
+    if (!sup) return { ok: false, error: "Yetkazib beruvchi topilmadi." };
+    if (!branch) return { ok: false, error: "Filial topilmadi." };
+    const data = {
+      shelfLengthCm: p.shelfLengthCm ?? null,
+      faceCount: p.faceCount ?? null,
+      skuCount: p.skuCount ?? null,
+      orderDay: str(p.orderDay),
+      deliveryDays: p.deliveryDays ?? null,
+      deliveryWeekday: str(p.deliveryWeekday),
+      deliveryTime: str(p.deliveryTime),
+      dpPaymentTerms: str(p.dpPaymentTerms),
+      forecastYearly: p.forecastYearly ?? null,
+      forecastMonthly: p.forecastMonthly ?? null,
+    };
+    await prisma.supplierBranchProfile.upsert({
+      where: { supplierId_branchId: { supplierId: p.supplierId, branchId: p.branchId } },
+      create: { supplierId: p.supplierId, branchId: p.branchId, ...data },
+      update: data,
+    });
+    revalidatePath(`/baza/taminotchilar/${p.supplierId}`);
+    return { ok: true };
+  } catch (err) {
+    return actionError(err, "supplierBranchProfile");
+  }
+}

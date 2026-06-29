@@ -5,8 +5,9 @@ import { canSeeSuppliers, canEditSuppliers } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { Truck, ArrowLeft, Layers, Clock, FileText, ShoppingCart, Users, Star } from "lucide-react";
 import { PageHeader, StatCard } from "@/components/common/page";
-import type { ContractRow, AgentRow } from "../actions";
+import type { ContractRow, AgentRow, SupplierTerms, BranchProfileRow } from "../actions";
 import { ProfilHeader, OrderDaysCalendar, LeadTimeEditor, ContractsSection, AgentsSection, AssignSkusSection, type ProfilSku } from "./profil-client";
+import { SupplierTermsSection, BranchProfilesSection } from "./terms-client";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +26,7 @@ export default async function SupplierProfilePage({
   const supplierId = Number(id);
   if (!Number.isFinite(supplierId)) notFound();
 
-  const [supplier, products, orderCount, ratingAgg] = await Promise.all([
+  const [supplier, products, orderCount, ratingAgg, branchList] = await Promise.all([
     prisma.supplier.findUnique({
       where: { id: supplierId },
       include: {
@@ -48,6 +49,7 @@ export default async function SupplierProfilePage({
             },
           },
         },
+        branchProfiles: true,
       },
     }),
     prisma.product.findMany({
@@ -67,6 +69,7 @@ export default async function SupplierProfilePage({
       _avg: { rating: true },
       _count: { rating: true },
     }),
+    prisma.branch.findMany({ orderBy: { sortOrder: "asc" }, select: { id: true, name: true } }),
   ]);
   if (!supplier) notFound();
   const avgRating = ratingAgg._avg.rating;
@@ -112,6 +115,30 @@ export default async function SupplierProfilePage({
     url: c.url,
     note: c.note,
   }));
+
+  // ── Shartlar (umumiy) + filial bo'yicha profil ──
+  const dn = (d: { toString(): string } | null | undefined) => (d != null ? Number(d) : null);
+  const terms: SupplierTerms = {
+    paymentType: supplier.paymentType, ehfMatch: supplier.ehfMatch, otsrochkaDays: supplier.otsrochkaDays,
+    debitorHas: supplier.debitorHas, debitorLimit: dn(supplier.debitorLimit), discountPct: dn(supplier.discountPct),
+    marketingDiscount: supplier.marketingDiscount, retrobonusPct: dn(supplier.retrobonusPct), agentMerchNote: supplier.agentMerchNote,
+    promoSystem: supplier.promoSystem, promoCalendar: supplier.promoCalendar,
+    responsibleRole: supplier.responsibleRole, responsibleName: supplier.responsibleName, responsiblePhone: supplier.responsiblePhone,
+    sverkaName: supplier.sverkaName, sverkaPhone: supplier.sverkaPhone,
+    accountingName: supplier.accountingName, accountingPhone: supplier.accountingPhone,
+    logisticsName: supplier.logisticsName, logisticsPhone: supplier.logisticsPhone,
+  };
+  const profByBranch = new Map(supplier.branchProfiles.map((bp) => [bp.branchId, bp]));
+  const branchProfiles: BranchProfileRow[] = branchList.map((b) => {
+    const bp = profByBranch.get(b.id);
+    return {
+      branchId: b.id, branchName: b.name,
+      shelfLengthCm: bp?.shelfLengthCm ?? null, faceCount: bp?.faceCount ?? null, skuCount: bp?.skuCount ?? null,
+      orderDay: bp?.orderDay ?? null, deliveryDays: bp?.deliveryDays ?? null, deliveryWeekday: bp?.deliveryWeekday ?? null,
+      deliveryTime: bp?.deliveryTime ?? null, dpPaymentTerms: bp?.dpPaymentTerms ?? null,
+      forecastYearly: dn(bp?.forecastYearly), forecastMonthly: dn(bp?.forecastMonthly),
+    };
+  });
 
   const withLead = skus.filter((s) => s.leadTimeDays != null);
   const avgLead = withLead.length
@@ -161,6 +188,9 @@ export default async function SupplierProfilePage({
         phone={supplier.phone}
         contactName={supplier.contactName}
       />
+
+      <SupplierTermsSection supplierId={supplier.id} terms={terms} canEdit={canEdit} />
+      <BranchProfilesSection supplierId={supplier.id} profiles={branchProfiles} canEdit={canEdit} />
 
       <div className="grid gap-5 lg:grid-cols-[minmax(340px,420px)_1fr]">
         {/* Chap: agentlar + zakaz kunlari + shartnomalar */}
