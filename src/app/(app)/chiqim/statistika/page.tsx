@@ -21,7 +21,6 @@ import {
   WifiOff,
   ChartPie,
   Layers,
-  Tag,
 } from "lucide-react";
 import { ChiqimExportButton } from "../chiqim-export-button";
 import {
@@ -31,6 +30,7 @@ import {
   EmptyState,
 } from "@/components/common/page";
 import { ChiqimFilter } from "../chiqim-filter";
+import { KategoriyaBreakdown } from "./kategoriya-breakdown";
 import type { LucideIcon } from "lucide-react";
 
 function parseDate(s: string | undefined): Date | undefined {
@@ -232,39 +232,16 @@ export default async function ChiqimStatistikaPage({
       {katSorted.length > 0 && (
         <SectionCard
           title="Kategoriya bo'yicha"
-          description="Tanlangan davr bo'yicha kategoriya tahlili"
+          description="Kategoriyani bosib ichidagi tovarlarni ko'ring"
           actions={
             <span className="text-xs text-muted-foreground">{katSorted.length} ta kategoriya</span>
           }
         >
-          <div className="space-y-2.5">
-            {katSorted.map((row) => {
-              const pct = katTotal > 0 ? (row.summa / katTotal) * 100 : 0;
-              return (
-                <div key={row.kategoriya} className="flex items-center gap-3">
-                  <Tag className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                  <span className="w-44 shrink-0 truncate text-xs font-medium" title={row.kategoriya}>
-                    {row.kategoriya}
-                  </span>
-                  <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                    <div
-                      className="absolute inset-y-0 left-0 rounded-full bg-primary/60"
-                      style={{ width: `${Math.min(pct, 100)}%` }}
-                    />
-                  </div>
-                  <span className="w-28 shrink-0 text-right tabular-nums text-xs">
-                    {formatUZS(row.summa, { compact: true })}
-                  </span>
-                  <span className="w-10 shrink-0 text-right tabular-nums text-xs text-muted-foreground">
-                    {pct.toFixed(1)}%
-                  </span>
-                  <span className="w-14 shrink-0 text-right tabular-nums text-xs text-muted-foreground">
-                    {row.count.toLocaleString("uz-UZ")} ta
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+          <KategoriyaBreakdown
+            rows={katSorted}
+            katTotal={katTotal}
+            params={{ start: fmtDate(startDate), end: fmtDate(endDate), filial: filialFilter }}
+          />
         </SectionCard>
       )}
 

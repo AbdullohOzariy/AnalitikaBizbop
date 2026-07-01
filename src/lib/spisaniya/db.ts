@@ -1077,6 +1077,41 @@ export async function chiqimByKategoriya(
   }
 }
 
+/** Kategoriya ICHIDAGI tovarlar (drill-down) — tanlangan kategoriya bo'yicha mahsulotlar. */
+export async function chiqimByKategoriyaTovar(
+  range: ChiqimRange,
+  filial: string | undefined,
+  kategoriya: string
+): Promise<{ tovar: string; count: number; summa: number; miqdor: number }[]> {
+  const p = getPool();
+  if (!p) return [];
+  try {
+    const params: unknown[] = [...dayParams(range)];
+    const cond = ["vaqt::date >= $1::date", "vaqt::date <= $2::date"];
+    if (filial) { params.push(filial); cond.push(`filial = $${params.length}`); }
+    // '—' = kategoriyasiz yozuvlar (chiqimByKategoriya'dagi COALESCE bilan mos)
+    if (kategoriya === "—") {
+      cond.push(`(kategoriya IS NULL OR kategoriya = '')`);
+    } else {
+      params.push(kategoriya); cond.push(`kategoriya = $${params.length}`);
+    }
+    const { rows } = await p.query(
+      `SELECT COALESCE(NULLIF(tovar, ''), '—') AS tovar,
+              count(*)::int AS count,
+              COALESCE(sum(summa), 0)::float8 AS summa,
+              COALESCE(sum(miqdor), 0)::float8 AS miqdor
+       FROM yozuvlar
+       WHERE ${cond.join(" AND ")}
+       GROUP BY 1 ORDER BY summa DESC`,
+      params
+    );
+    return rows as { tovar: string; count: number; summa: number; miqdor: number }[];
+  } catch (err) {
+    logDbXato(err);
+    return [];
+  }
+}
+
 /**
  * Excel eksport uchun yozuvlar (sahifalashsiz, LIMIT 50000).
  * tur va filial optional filtrlar.
