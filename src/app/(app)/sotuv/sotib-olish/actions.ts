@@ -11,6 +11,7 @@ import { isSystemAdmin, ordersScopedToOwn } from "@/lib/roles";
 import { actionError } from "@/lib/action-error";
 import { scopeParentIds, scopeProductWhere } from "@/lib/scope";
 import { getDefaultRange } from "@/lib/analytics";
+import { todayTashkentISO } from "@/lib/date";
 import { Prisma } from "@/generated/prisma/client";
 
 export type OrderItemInput = {
@@ -108,7 +109,7 @@ export async function suppliersForOrderAction(): Promise<
     const ids = [...new Set(grouped.map((g) => g.supplierId).filter((x): x is number => x != null))];
     if (ids.length === 0) return { ok: true, suppliers: [] };
     const agentIds = [...new Set(grouped.map((g) => g.agentId).filter((x): x is number => x != null))];
-    const todayD = new Date(new Date(Date.now() + 5 * 3_600_000).toISOString().slice(0, 10) + "T00:00:00.000Z");
+    const todayD = new Date(todayTashkentISO() + "T00:00:00.000Z");
     const [sups, agentsRaw, supNextDays, agentNextDays, supRatingRows, agentRatingRows] = await Promise.all([
       prisma.supplier.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, orderWeekdays: true } }),
       agentIds.length
@@ -198,7 +199,7 @@ export async function supplierItemsAction(
     // Joriy holat Product'ga denormalizatsiya qilingan (har yuklashda yangilanadi) —
     // ProductSales tarixini skanlamaymiz, bir zumda o'qiymiz.
     // Zakaz oralig'i (orderGap) manbai: agent bo'lsa AgentOrderDay, aks holda SupplierOrderDay.
-    const futureCutoff = new Date(new Date(Date.now() + 5 * 3_600_000).toISOString().slice(0, 10) + "T00:00:00.000Z");
+    const futureCutoff = new Date(todayTashkentISO() + "T00:00:00.000Z");
     const futureDaysPromise = aid != null
       ? prisma.agentOrderDay.findMany({ where: { agentId: aid, sana: { gte: futureCutoff } }, orderBy: { sana: "asc" }, take: 6, select: { sana: true } })
       : prisma.supplierOrderDay.findMany({ where: { supplierId: sid, sana: { gte: futureCutoff } }, orderBy: { sana: "asc" }, take: 6, select: { sana: true } });
@@ -227,7 +228,7 @@ export async function supplierItemsAction(
     const pids = products.map((p) => p.id);
     const startStr = range.start.toISOString().slice(0, 10);
     const endStr = range.end.toISOString().slice(0, 10);
-    const todayD = new Date(new Date(Date.now() + 5 * 3_600_000).toISOString().slice(0, 10) + "T00:00:00.000Z");
+    const todayD = new Date(todayTashkentISO() + "T00:00:00.000Z");
     const orderGap = orderGapFromDates(futureOrderDays.map((d) => d.sana), todayD);
 
     // Filial bo'yicha (1) oxirgi snapshot qoldiq+sotuv (DISTINCT ON productId,branchId) va

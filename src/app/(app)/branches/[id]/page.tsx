@@ -11,6 +11,7 @@ import {
   getDefaultRange,
 } from "@/lib/analytics";
 import { formatUZS, formatNumber, formatPercent } from "@/lib/format";
+import { parseDateParam } from "@/lib/date";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -27,13 +28,6 @@ import {
   DailyDynamicsChart,
   TopCategoriesChart,
 } from "@/components/charts";
-
-function parseDate(s: string | undefined, fallback: Date): Date {
-  if (!s) return fallback;
-  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!m) return fallback;
-  return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
-}
 
 export default async function BranchDetailPage({
   params,
@@ -58,8 +52,8 @@ export default async function BranchDetailPage({
   ]);
   if (!branch) notFound();
 
-  const start = parseDate(sp.start, def.start);
-  const end = parseDate(sp.end, def.end);
+  const start = parseDateParam(sp.start, def.start)!;
+  const end = parseDateParam(sp.end, def.end)!;
   const range = { start, end };
   const [kpi, dailySales, dailyReceipts, dailyVisits, top] = await Promise.all([
     computeKPI(range, branchId),

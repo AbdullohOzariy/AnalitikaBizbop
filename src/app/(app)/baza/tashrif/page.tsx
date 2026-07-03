@@ -14,17 +14,9 @@ import { BazaFilter } from "../baza-filter";
 import { BazaPagination } from "../baza-pagination";
 import { ReceiptMetricsEditor } from "./metrika-editor";
 import { getMonthlySalesByBranch, type ReceiptMetricCell } from "./metrika-actions";
+import { isoDay, parseDateParam } from "@/lib/date";
 
 const PAGE_SIZE = 50;
-
-function parseDate(s: string | undefined): Date | undefined {
-  if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return undefined;
-  const d = new Date(s + "T00:00:00.000Z");
-  return isNaN(d.getTime()) ? undefined : d;
-}
-function fmtDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
 
 export default async function BazaTashrifPage({
   searchParams,
@@ -42,8 +34,8 @@ export default async function BazaTashrifPage({
   const activeTab = sp.tab === "metrika" ? "metrika" : "tashrif";
 
   const def = await getDefaultRange();
-  const startDate = parseDate(sp.start) ?? def.start;
-  const endDate = parseDate(sp.end) ?? def.end;
+  const startDate = parseDateParam(sp.start) ?? def.start;
+  const endDate = parseDateParam(sp.end) ?? def.end;
   const branchId = sp.branchId ? parseInt(sp.branchId) : undefined;
   const where = { date: { gte: startDate, lte: endDate }, ...(branchId && { branchId }) };
 
@@ -75,7 +67,7 @@ export default async function BazaTashrifPage({
 
   const initialMetrics: Record<string, ReceiptMetricCell> = {};
   for (const r of metricRows) {
-    initialMetrics[`${r.branchId}_${fmtDate(r.date)}`] = {
+    initialMetrics[`${r.branchId}_${isoDay(r.date)}`] = {
       receiptCount: r.receiptCount,
       itemsPerReceipt: Number(r.itemsPerReceipt),
     };
@@ -84,8 +76,8 @@ export default async function BazaTashrifPage({
   const filterProps = {
     basePath: "/baza/tashrif",
     branches,
-    defaultStart: sp.start ?? fmtDate(def.start),
-    defaultEnd: sp.end ?? fmtDate(def.end),
+    defaultStart: sp.start ?? isoDay(def.start),
+    defaultEnd: sp.end ?? isoDay(def.end),
     defaultBranchId: sp.branchId,
   };
 
@@ -135,7 +127,7 @@ export default async function BazaTashrifPage({
                       <TableBody>
                         {rows.map((r) => (
                           <TableRow key={r.id} className="text-sm">
-                            <TableCell className="font-mono text-xs text-muted-foreground whitespace-nowrap">{fmtDate(r.date)}</TableCell>
+                            <TableCell className="font-mono text-xs text-muted-foreground whitespace-nowrap">{isoDay(r.date)}</TableCell>
                             <TableCell className="text-sm">{r.branch.name}</TableCell>
                             <TableCell className="text-right tabular-nums font-semibold text-primary">{r.visitCount.toLocaleString("uz-UZ")}</TableCell>
                           </TableRow>

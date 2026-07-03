@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { Prisma, type PromoType, type PromoStatus } from "@/generated/prisma/client";
 import { requirePromoView, requirePromoEdit } from "@/lib/auth-helpers";
 import { PROMO_CACHE_TAG } from "@/lib/promo";
+import { isoDay } from "@/lib/date";
 
 // ─── Umumiy ────────────────────────────────────────────────────────────────────
 type Ok = { ok: true };
@@ -33,7 +34,6 @@ function xato(err: unknown): Err {
 
 // @db.Date — UTC yarim tunga normallashtiramiz (sana komponenti muhim, vaqt emas)
 const toDate = (s: string) => new Date(s + "T00:00:00.000Z");
-const ymd = (d: Date) => d.toISOString().slice(0, 10);
 
 // ─── Tiplar (Frontend ishlatadi) ───────────────────────────────────────────────
 export type PromoCampaignRow = {
@@ -100,8 +100,8 @@ export async function listCampaignsAction(
       ok: true,
       rows: rows.map((c): PromoCampaignRow => ({
         id: c.id, type: c.type, title: c.title, status: c.status,
-        startDate: ymd(c.startDate),
-        endDate: c.endDate ? ymd(c.endDate) : null,
+        startDate: isoDay(c.startDate),
+        endDate: c.endDate ? isoDay(c.endDate) : null,
         branchId: c.branchId, branchName: c.branch?.name ?? null,
         note: c.note,
         itemsCount: c._count.items,

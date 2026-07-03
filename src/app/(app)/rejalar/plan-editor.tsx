@@ -29,6 +29,7 @@ import {
   clearForecastAction,
 } from "./actions";
 import type { ForecastMonthStatus, ForecastDayCell } from "@/lib/forecast";
+import { nowTashkent } from "@/lib/date";
 
 // ─── Tiplar ──────────────────────────────────────────────────────────────────
 type CellSt = "idle" | "saving" | "saved" | "error";
@@ -62,7 +63,7 @@ const MONTHS = [
 ];
 const WD_SHORT = ["Yak", "Du", "Se", "Ch", "Pa", "Ju", "Sha"];
 // Toshkent (UTC+5) yili — lokal getFullYear() server/brauzer TZ farqida hydration xavfi.
-const CUR_YEAR = new Date(Date.now() + 5 * 3_600_000).getUTCFullYear();
+const CUR_YEAR = nowTashkent().getUTCFullYear();
 const YEARS = [CUR_YEAR - 1, CUR_YEAR, CUR_YEAR + 1];
 
 // ─── Yordamchi ───────────────────────────────────────────────────────────────

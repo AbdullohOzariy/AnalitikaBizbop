@@ -6,6 +6,7 @@ import { isAdminTier } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { getDefaultRange } from "@/lib/analytics";
+import { parseDateParam } from "@/lib/date";
 import type { FilterGroup } from "../category-tree-filter";
 import { Database, ShoppingBag, Layers, TrendingUp, Boxes, Download, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { PageHeader, StatCard, EmptyState } from "@/components/common/page";
@@ -94,12 +95,6 @@ function SortHead({ col, label, sp, sort, dir, align }: {
   );
 }
 
-function parseDate(s: string | undefined): Date | undefined {
-  if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return undefined;
-  const d = new Date(s + "T00:00:00.000Z");
-  return isNaN(d.getTime()) ? undefined : d;
-}
-
 function fmtAmount(n: unknown): string {
   const num = typeof n === "object" && n !== null && "toNumber" in n
     ? (n as { toNumber(): number }).toNumber()
@@ -131,8 +126,8 @@ export default async function BazaSotuvPage({
   const skip = (page - 1) * PAGE_SIZE;
 
   const def = await getDefaultRange();
-  const startDate = parseDate(sp.start) ?? def.start;
-  const endDate = parseDate(sp.end) ?? def.end;
+  const startDate = parseDateParam(sp.start) ?? def.start;
+  const endDate = parseDateParam(sp.end) ?? def.end;
   const branchId = sp.branchId ? parseInt(sp.branchId) : undefined;
   const catIds = sp.cats ? sp.cats.split(",").map(Number).filter((n) => Number.isInteger(n) && n > 0) : [];
   const q = sp.q?.trim() ?? "";

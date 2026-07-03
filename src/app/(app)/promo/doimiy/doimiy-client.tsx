@@ -14,6 +14,7 @@ import {
 import { Pill } from "@/components/common/page";
 import { Plus, Pencil, Trash2, Loader2, ChevronDown, ChevronRight, Tag, CalendarDays, Building2, Boxes } from "lucide-react";
 import { formatDateUZ } from "@/lib/format";
+import { isoDay } from "@/lib/date";
 import { toast } from "sonner";
 import { DOIMIY_PROMO_TYPES, PROMO_TYPE_META, type DoimiyPromoType } from "@/lib/promo";
 import {
@@ -38,7 +39,7 @@ const STATUS_META: Record<PromoStatus, { label: string; tone: "muted" | "green" 
 function addDays(ymd: string, days: number): string {
   const d = new Date(ymd + "T00:00:00.000Z");
   d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
+  return isoDay(d);
 }
 
 export function DoimiyClient({ branches, canEdit }: { branches: Branch[]; canEdit: boolean }) {

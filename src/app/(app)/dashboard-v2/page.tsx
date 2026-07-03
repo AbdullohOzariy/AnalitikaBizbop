@@ -17,6 +17,7 @@ import { dailyForecastSeries } from "@/lib/forecast";
 import { Sparkles, Target, TrendingUp, Users, ReceiptText } from "lucide-react";
 import { PageHeader, StatCard } from "@/components/common/page";
 import { formatNumber } from "@/lib/format";
+import { isoDay, parseDateParam } from "@/lib/date";
 import { FiltersBar } from "./filters";
 import {
   CountDynamicsWidget,
@@ -26,12 +27,6 @@ import {
   SalesShareWidget,
   GroupSalesDynamicsWidget,
 } from "./widgets";
-
-function parseISO(s: string | undefined, fallback: Date): Date {
-  if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return fallback;
-  const d = new Date(s + "T00:00:00.000Z");
-  return isNaN(d.getTime()) ? fallback : d;
-}
 
 type BranchSeries = Awaited<ReturnType<typeof dailyReceiptsByBranch>>;
 
@@ -240,8 +235,8 @@ export default async function DashboardV2Page({
   ]);
   const branchId =
     sp.branchId === "all" || !sp.branchId ? undefined : Number(sp.branchId) || undefined;
-  const startStr = parseISO(sp.start, defaultRange.start).toISOString().slice(0, 10);
-  const endStr = parseISO(sp.end, defaultRange.end).toISOString().slice(0, 10);
+  const startStr = isoDay(parseDateParam(sp.start, defaultRange.start)!);
+  const endStr = isoDay(parseDateParam(sp.end, defaultRange.end)!);
 
   return (
     <div className="space-y-5">

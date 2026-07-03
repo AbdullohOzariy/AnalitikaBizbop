@@ -12,6 +12,7 @@ import { Gauge, Truck, CheckCircle2, PackageCheck, Clock, Plus, Send, ArrowLeftR
 import { PageHeader, StatCard, EmptyState, Pill } from "@/components/common/page";
 import { cn } from "@/lib/utils";
 import { formatDateUZ } from "@/lib/format";
+import { isoDay } from "@/lib/date";
 import { supplierLogistics } from "@/lib/logistics";
 import { expectedDeliveries } from "@/lib/delivery";
 import { expiryRisk } from "@/lib/expiry";
@@ -29,7 +30,6 @@ const DIST_STATUS: Record<string, { label: string; tone: "muted" | "green" | "re
   CANCELLED: { label: "Bekor", tone: "red" },
 };
 
-function ymd(d: Date): string { return d.toISOString().slice(0, 10); }
 function pctCls(v: number | null): string {
   if (v == null) return "text-muted-foreground/40";
   if (v >= 90) return "text-emerald-600 dark:text-emerald-400 font-semibold";
@@ -76,8 +76,8 @@ export default async function LogistikaPage({
     : "scorecard";
   const isDate = (s: string | undefined): s is string => !!s && /^\d{4}-\d{2}-\d{2}$/.test(s);
   const today = new Date(); today.setUTCHours(0, 0, 0, 0);
-  const startStr = isDate(sp.start) ? sp.start : ymd(new Date(today.getTime() - 89 * 86_400_000));
-  const endStr = isDate(sp.end) ? sp.end : ymd(today);
+  const startStr = isDate(sp.start) ? sp.start : isoDay(new Date(today.getTime() - 89 * 86_400_000));
+  const endStr = isDate(sp.end) ? sp.end : isoDay(today);
 
   const TABS: { v: Tab; l: string }[] = [
     { v: "scorecard", l: "Ta'minotchi" },

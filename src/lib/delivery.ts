@@ -6,15 +6,14 @@
  */
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
-
-const TASH = 5 * 3_600_000; // Toshkent UTC+5 (DST yo'q)
+import { TASHKENT_OFFSET_MS, isoDay } from "@/lib/date";
 
 function tashDateStr(d: Date | number): string {
-  return new Date((typeof d === "number" ? d : d.getTime()) + TASH).toISOString().slice(0, 10);
+  return isoDay(new Date((typeof d === "number" ? d : d.getTime()) + TASHKENT_OFFSET_MS));
 }
 function dateFromStr(s: string): Date { return new Date(s + "T00:00:00.000Z"); }
 function addDays(s: string, n: number): string {
-  return new Date(dateFromStr(s).getTime() + n * 86_400_000).toISOString().slice(0, 10);
+  return isoDay(new Date(dateFromStr(s).getTime() + n * 86_400_000));
 }
 /** a − b kunlarda (musbat = a kechroq). */
 function daysBetween(a: string, b: string): number {

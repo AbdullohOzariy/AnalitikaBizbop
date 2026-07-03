@@ -2,12 +2,10 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { unstable_cache } from "next/cache";
 import { ANALYTICS_CACHE_TAG, type DateRange } from "@/lib/analytics";
+import { isoDay } from "@/lib/date";
 
 const dayMs = 86_400_000;
 
-function isoDay(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
 function makeKey(range: DateRange, branchId?: number, extra?: string): string[] {
   return [
     isoDay(range.start),

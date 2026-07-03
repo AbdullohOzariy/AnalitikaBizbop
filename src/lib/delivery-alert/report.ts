@@ -5,6 +5,7 @@
  */
 import { Telegram } from "telegraf";
 import { lateDeliveries, type ExpectedDelivery } from "@/lib/delivery";
+import { todayTashkentISO } from "@/lib/date";
 import { getDeliveryAlertConfig } from "./sozlama";
 
 const MAX_LINES = 40; // xabar juda uzun bo'lmasin
@@ -39,7 +40,7 @@ export async function sendDeliveryAlert(
     const late = await lateDeliveries();
     const tg = new Telegram(cfg.token);
     const thread = cfg.topicId ? { message_thread_id: cfg.topicId } : {};
-    const dateStr = new Date(Date.now() + 5 * 3_600_000).toISOString().slice(0, 10);
+    const dateStr = todayTashkentISO();
 
     if (late.length === 0) {
       if (opts?.skipIfEmpty) return { ok: true, count: 0, skipped: true };

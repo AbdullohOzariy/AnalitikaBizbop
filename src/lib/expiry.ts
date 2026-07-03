@@ -8,14 +8,13 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { getDefaultRange } from "@/lib/analytics";
+import { TASHKENT_OFFSET_MS, isoDay } from "@/lib/date";
 
 export const EXPIRY_WARN_DAYS = 14; // shu kun ichida — ogohlantirish
 export const EXPIRY_CRITICAL_DAYS = 3; // shu kun ichida — kritik
 
-const TASH = 5 * 3_600_000; // Toshkent UTC+5
-
 function tashDateStr(d: Date | number): string {
-  return new Date((typeof d === "number" ? d : d.getTime()) + TASH).toISOString().slice(0, 10);
+  return isoDay(new Date((typeof d === "number" ? d : d.getTime()) + TASHKENT_OFFSET_MS));
 }
 function dateFromStr(s: string): Date { return new Date(s + "T00:00:00.000Z"); }
 function daysBetween(a: string, b: string): number {

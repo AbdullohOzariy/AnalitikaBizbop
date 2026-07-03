@@ -11,6 +11,7 @@ import { FileCheck2, Wallet, ListChecks, CalendarDays } from "lucide-react";
 import { PageHeader, StatCard, EmptyState } from "@/components/common/page";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatUZS, formatDateTimeUZ } from "@/lib/format";
+import { nowTashkent } from "@/lib/date";
 import { BazaFilter } from "../baza/baza-filter";
 import { SverkaJadval, SverkaXodimlar, type SverkaRow, type XodimRow } from "./sverka-client";
 
@@ -29,9 +30,8 @@ export default async function SverkaPage({
   const canDelete = isSystemAdmin(roles) || isSupplyChain(roles);
 
   const sp = await searchParams;
-  // Standart davr: joriy oy (server komponent — purity qoidasi client uchun)
-  // eslint-disable-next-line react-hooks/purity
-  const now = new Date(Date.now() + 5 * 3_600_000);
+  // Standart davr: joriy oy (server komponent)
+  const now = nowTashkent();
   const defStart = `${now.toISOString().slice(0, 7)}-01`;
   const defEnd = now.toISOString().slice(0, 10);
   const startStr = /^\d{4}-\d{2}-\d{2}$/.test(sp.start ?? "") ? sp.start! : defStart;

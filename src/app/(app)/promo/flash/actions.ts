@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { requirePromoView, requirePromoEdit } from "@/lib/auth-helpers";
 import { PROMO_CACHE_TAG } from "@/lib/promo";
+import { isoDay } from "@/lib/date";
 import type { PromoCampaignRow } from "../doimiy/actions";
 
 // Flash aksiyalar = PromoCampaign type=FLASH. SKU qatorlari (PromoItem) CRUD va
@@ -30,7 +31,6 @@ function xato(err: unknown): Err {
 }
 
 const toDate = (s: string) => new Date(s + "T00:00:00.000Z");
-const ymd = (d: Date) => d.toISOString().slice(0, 10);
 
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Sana YYYY-MM-DD ko'rinishida bo'lishi kerak");
 const idSchema = z.coerce.number().int().positive();
@@ -54,8 +54,8 @@ export async function listFlashAction(): Promise<{ ok: true; rows: PromoCampaign
       ok: true,
       rows: rows.map((c): PromoCampaignRow => ({
         id: c.id, type: c.type, title: c.title, status: c.status,
-        startDate: ymd(c.startDate),
-        endDate: c.endDate ? ymd(c.endDate) : null,
+        startDate: isoDay(c.startDate),
+        endDate: c.endDate ? isoDay(c.endDate) : null,
         branchId: c.branchId, branchName: c.branch?.name ?? null,
         note: c.note,
         itemsCount: c._count.items,

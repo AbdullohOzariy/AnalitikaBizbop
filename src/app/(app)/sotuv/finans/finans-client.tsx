@@ -8,13 +8,9 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { createExpenseAction, deleteExpenseAction } from "./actions";
+import { todayTashkentISO } from "@/lib/date";
 
 const NF = new Intl.NumberFormat("uz-UZ");
-// Toshkent (UTC+5) bo'yicha bugun — toISOString o'zi UTC qaytaradi: 00:00–05:00
-// oralig'ida foydalanuvchiga "kecha" ko'rinardi; +5 siljitish server/brauzerda bir xil.
-function todayISO() {
-  return new Date(Date.now() + 5 * 3_600_000).toISOString().slice(0, 10);
-}
 
 // ─── Harajat qo'shish formasi ──────────────────────────────────────────────────
 export function ExpenseForm() {
@@ -22,14 +18,14 @@ export function ExpenseForm() {
   const [name, setName] = useState("");
   const [qty, setQty] = useState("");
   const [price, setPrice] = useState("");
-  const [spentAt, setSpentAt] = useState(todayISO());
+  const [spentAt, setSpentAt] = useState(todayTashkentISO());
   const [isPending, start] = useTransition();
 
   const qtyN = parseFloat(qty) || 0;
   const priceN = parseFloat(price) || 0;
   const sum = qtyN * priceN;
 
-  const reset = () => { setName(""); setQty(""); setPrice(""); setSpentAt(todayISO()); };
+  const reset = () => { setName(""); setQty(""); setPrice(""); setSpentAt(todayTashkentISO()); };
 
   const onAdd = () => {
     if (!name.trim()) { toast.error("Nom kiriting."); return; }

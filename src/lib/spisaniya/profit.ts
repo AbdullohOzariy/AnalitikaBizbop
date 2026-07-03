@@ -12,8 +12,7 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { ANALYTICS_CACHE_TAG } from "@/lib/analytics";
 import { chiqimByKategoriya, type ChiqimRange } from "./db";
-
-const isoDay = (d: Date) => d.toISOString().slice(0, 10);
+import { isoDay } from "@/lib/date";
 
 export type ProfitNode = {
   id: number;

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { unstable_cache } from "next/cache";
+import { isoDay } from "@/lib/date";
 
 export const ANALYTICS_CACHE_TAG = "analytics";
 
@@ -25,10 +26,6 @@ export type KPI = {
   conversion: number; // %
   marja: number | null;
 };
-
-function isoDay(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
 
 function makeKey(range: DateRange, branchId?: number, extra?: string): string[] {
   return [

@@ -8,12 +8,7 @@ import { PageHeader } from "@/components/common/page";
 import { PeriodFilter } from "./period-filter";
 import { ReportTable } from "./report-table";
 import { MissingDaysAlert } from "./missing-days-alert";
-
-function parseDate(s: string | undefined, fallback: Date): Date {
-  if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return fallback;
-  const d = new Date(s + "T00:00:00.000Z");
-  return isNaN(d.getTime()) ? fallback : d;
-}
+import { isoDay, parseDateParam } from "@/lib/date";
 
 export default async function ReportPage({
   searchParams,
@@ -27,12 +22,12 @@ export default async function ReportPage({
   const defaultRange = await getDefaultRange();
   const sp = await searchParams;
   const range = {
-    start: parseDate(sp.start, defaultRange.start),
-    end:   parseDate(sp.end,   defaultRange.end),
+    start: parseDateParam(sp.start, defaultRange.start)!,
+    end:   parseDateParam(sp.end,   defaultRange.end)!,
   };
 
-  const startStr = range.start.toISOString().slice(0, 10);
-  const endStr   = range.end.toISOString().slice(0, 10);
+  const startStr = isoDay(range.start);
+  const endStr   = isoDay(range.end);
 
   const [rows, missing] = await Promise.all([
     branchReport(range),

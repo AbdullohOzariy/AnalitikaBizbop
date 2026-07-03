@@ -13,14 +13,12 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { unstable_cache } from "next/cache";
 import { ANALYTICS_CACHE_TAG, type DateRange } from "@/lib/analytics";
+import { isoDay } from "@/lib/date";
 
 const FORECAST_MODEL = process.env.FORECAST_MODEL ?? "claude-sonnet-4-6";
 const LOOKBACK_DAYS = 90;
 const WEEKDAYS_UZ = ["Yakshanba", "Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba"];
 
-function isoDay(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
 function daysInMonth(year: number, month: number): number {
   return new Date(Date.UTC(year, month, 0)).getUTCDate();
 }

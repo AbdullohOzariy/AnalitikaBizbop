@@ -1,3 +1,5 @@
+import { TASHKENT_OFFSET_MS } from "@/lib/date";
+
 /**
  * UZS formatlash: katta sonni qisqartirilgan ko'rinishda (8.27 mlrd) yoki to'liq.
  */
@@ -39,7 +41,7 @@ export function formatDateUZ(d: Date | string): string {
 export function formatDateTimeUZ(d: Date | string): string {
   const date = typeof d === "string" ? new Date(d) : d;
   if (isNaN(date.getTime())) return "—";
-  const t = new Date(date.getTime() + 5 * 3_600_000);
+  const t = new Date(date.getTime() + TASHKENT_OFFSET_MS);
   const p = (n: number) => String(n).padStart(2, "0");
   return `${p(t.getUTCDate())}.${p(t.getUTCMonth() + 1)}.${t.getUTCFullYear()} ${p(t.getUTCHours())}:${p(t.getUTCMinutes())}`;
 }

@@ -5,6 +5,7 @@ import { canSeeAnalytics } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { getDefaultRange } from "@/lib/analytics";
+import { isoDay, parseDateParam } from "@/lib/date";
 
 const MAX_ROWS = 10_000;
 const CRITICAL = 3, LOW = 7, NORMAL = 30;
@@ -16,11 +17,6 @@ type Row = {
   stockQty: string | null; avgDaily: string | null; stockDays: string | null; stockValue: string | null;
 };
 
-function parseDate(s: string | null): Date | undefined {
-  if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return undefined;
-  const d = new Date(s + "T00:00:00.000Z");
-  return isNaN(d.getTime()) ? undefined : d;
-}
 function num(n: unknown): number {
   const v = typeof n === "object" && n !== null && "toNumber" in n ? (n as { toNumber(): number }).toNumber() : Number(n);
   return isNaN(v) ? 0 : v;
@@ -34,10 +30,10 @@ export async function GET(req: NextRequest) {
 
   const sp = req.nextUrl.searchParams;
   const def = await getDefaultRange();
-  const startDate = parseDate(sp.get("start")) ?? def.start;
-  const endDate = parseDate(sp.get("end")) ?? def.end;
-  const startStr = startDate.toISOString().slice(0, 10);
-  const endStr = endDate.toISOString().slice(0, 10);
+  const startDate = parseDateParam(sp.get("start")) ?? def.start;
+  const endDate = parseDateParam(sp.get("end")) ?? def.end;
+  const startStr = isoDay(startDate);
+  const endStr = isoDay(endDate);
   const branchId = sp.get("branchId") ? parseInt(sp.get("branchId")!) : undefined;
   const categoryId = sp.get("categoryId") ? parseInt(sp.get("categoryId")!) : undefined;
   const q = sp.get("q")?.trim() ?? "";

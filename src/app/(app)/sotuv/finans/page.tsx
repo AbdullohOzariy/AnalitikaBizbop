@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { isAdminTier, hasRole } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { formatUZS } from "@/lib/format";
+import { isoDay, parseDateParam } from "@/lib/date";
 import { Wallet, Layers, TrendingDown } from "lucide-react";
 import { PageHeader, StatCard, EmptyState } from "@/components/common/page";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,12 +18,6 @@ function fmtNum(n: unknown, decimals = 0): string {
     : Number(n);
   if (isNaN(num)) return "—";
   return new Intl.NumberFormat("uz-UZ", { maximumFractionDigits: decimals }).format(num);
-}
-function ymd(d: Date) { return d.toISOString().slice(0, 10); }
-function parseDate(s: string | undefined): Date | undefined {
-  if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return undefined;
-  const d = new Date(s + "T00:00:00.000Z");
-  return isNaN(d.getTime()) ? undefined : d;
 }
 
 export default async function FinansPage({
@@ -40,8 +35,8 @@ export default async function FinansPage({
   const now = new Date();
   const defStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const defEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0));
-  const start = parseDate(sp.start) ?? defStart;
-  const end = parseDate(sp.end) ?? defEnd;
+  const start = parseDateParam(sp.start) ?? defStart;
+  const end = parseDateParam(sp.end) ?? defEnd;
 
   const [rows, agg] = await Promise.all([
     prisma.expense.findMany({
@@ -65,7 +60,7 @@ export default async function FinansPage({
         title="Finans — Harajatlar"
         description="Sotuv bo'limi harajatlari ro'yxati"
       >
-        <ExpenseFilter start={ymd(start)} end={ymd(end)} />
+        <ExpenseFilter start={isoDay(start)} end={isoDay(end)} />
       </PageHeader>
 
       {/* Statistika */}
@@ -107,7 +102,7 @@ export default async function FinansPage({
                       <TableCell className="text-right tabular-nums">{fmtNum(r.quantity, 3)}</TableCell>
                       <TableCell className="text-right tabular-nums text-muted-foreground">{fmtNum(r.unitPrice)}</TableCell>
                       <TableCell className="text-right tabular-nums font-semibold">{fmtNum(r.amount)}</TableCell>
-                      <TableCell className="font-mono text-xs text-muted-foreground">{ymd(r.spentAt)}</TableCell>
+                      <TableCell className="font-mono text-xs text-muted-foreground">{isoDay(r.spentAt)}</TableCell>
                       <TableCell className="text-xs text-muted-foreground truncate">{r.createdBy.name}</TableCell>
                       {canEdit && (
                         <TableCell className="pr-3 text-right"><DeleteExpenseButton id={r.id} /></TableCell>

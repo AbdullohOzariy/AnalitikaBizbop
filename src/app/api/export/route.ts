@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import * as XLSX from "xlsx";
 import { auth } from "@/auth";
 import { isAdminTier } from "@/lib/roles";
+import { parseDateParam } from "@/lib/date";
 import {
   computeKPI,
   branchPerformance,
@@ -12,13 +13,6 @@ import {
   getDefaultRange,
 } from "@/lib/analytics";
 
-function parseDate(s: string | null, fallback: Date): Date {
-  if (!s) return fallback;
-  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!m) return fallback;
-  return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
-}
-
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user) return new Response("Unauthorized", { status: 401 });
@@ -26,8 +20,8 @@ export async function GET(req: NextRequest) {
 
   const sp = req.nextUrl.searchParams;
   const def = await getDefaultRange();
-  const start = parseDate(sp.get("start"), def.start);
-  const end = parseDate(sp.get("end"), def.end);
+  const start = parseDateParam(sp.get("start"), def.start)!;
+  const end = parseDateParam(sp.get("end"), def.end)!;
   const branchId = sp.get("branchId") ? Number(sp.get("branchId")) : undefined;
   const range = { start, end };
 

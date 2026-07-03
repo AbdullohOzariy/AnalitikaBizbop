@@ -11,6 +11,7 @@ import {
   TUR_LABEL,
 } from "@/lib/spisaniya/db";
 import { formatUZS } from "@/lib/format";
+import { isoDay, parseDateParam } from "@/lib/date";
 import {
   PackageMinus,
   RotateCcw,
@@ -32,16 +33,6 @@ import {
 import { ChiqimFilter } from "../chiqim-filter";
 import { KategoriyaBreakdown } from "./kategoriya-breakdown";
 import type { LucideIcon } from "lucide-react";
-
-function parseDate(s: string | undefined): Date | undefined {
-  if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return undefined;
-  const d = new Date(s + "T00:00:00.000Z");
-  return isNaN(d.getTime()) ? undefined : d;
-}
-
-function fmtDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
 
 type TurMeta = { icon: LucideIcon; tone: "red" | "orange" | "blue" | "green" | "violet" | "default" };
 const TUR_META: Record<string, TurMeta> = {
@@ -81,8 +72,8 @@ export default async function ChiqimStatistikaPage({
 
   const sp = await searchParams;
   const def = chiqimDefaultRange();
-  const startDate = parseDate(sp.start) ?? def.start;
-  const endDate   = parseDate(sp.end)   ?? def.end;
+  const startDate = parseDateParam(sp.start) ?? def.start;
+  const endDate   = parseDateParam(sp.end)   ?? def.end;
   const range = { start: startDate, end: endDate };
   const filialFilter = sp.filial || undefined;
 
@@ -113,13 +104,13 @@ export default async function ChiqimStatistikaPage({
       >
         <ChiqimFilter
           filials={filials}
-          defaultStart={sp.start ?? fmtDate(def.start)}
-          defaultEnd={sp.end ?? fmtDate(def.end)}
+          defaultStart={sp.start ?? isoDay(def.start)}
+          defaultEnd={sp.end ?? isoDay(def.end)}
           defaultFilial={sp.filial}
           hideTur
           basePath="/chiqim/statistika"
         />
-        <ChiqimExportButton params={{ start: sp.start ?? fmtDate(def.start), end: sp.end ?? fmtDate(def.end), filial: sp.filial }} />
+        <ChiqimExportButton params={{ start: sp.start ?? isoDay(def.start), end: sp.end ?? isoDay(def.end), filial: sp.filial }} />
       </PageHeader>
 
       {/* Jami */}
@@ -240,7 +231,7 @@ export default async function ChiqimStatistikaPage({
           <KategoriyaBreakdown
             rows={katSorted}
             katTotal={katTotal}
-            params={{ start: fmtDate(startDate), end: fmtDate(endDate), filial: filialFilter }}
+            params={{ start: isoDay(startDate), end: isoDay(endDate), filial: filialFilter }}
           />
         </SectionCard>
       )}

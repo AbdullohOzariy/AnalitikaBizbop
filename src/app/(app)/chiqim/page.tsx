@@ -12,6 +12,7 @@ import {
   TUR_LABEL,
 } from "@/lib/spisaniya/db";
 import { formatUZS } from "@/lib/format";
+import { isoDay, parseDateParam } from "@/lib/date";
 import {
   PackageMinus,
   RotateCcw,
@@ -46,16 +47,6 @@ import { ImageThumb } from "@/components/common/image-thumb";
 import type { LucideIcon } from "lucide-react";
 
 const PAGE_SIZE = 50;
-
-function parseDate(s: string | undefined): Date | undefined {
-  if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return undefined;
-  const d = new Date(s + "T00:00:00.000Z");
-  return isNaN(d.getTime()) ? undefined : d;
-}
-
-function fmtDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
 
 // Tur uchun ikonka va rang
 type TurMeta = {
@@ -113,8 +104,8 @@ export default async function ChiqimPage({
   const page = Math.max(1, parseInt(sp.page ?? "1") || 1);
 
   const def = chiqimDefaultRange();
-  const startDate = parseDate(sp.start) ?? def.start;
-  const endDate   = parseDate(sp.end)   ?? def.end;
+  const startDate = parseDateParam(sp.start) ?? def.start;
+  const endDate   = parseDateParam(sp.end)   ?? def.end;
   const turFilter    = sp.tur    || undefined;
   const filialFilter = sp.filial || undefined;
 
@@ -160,8 +151,8 @@ export default async function ChiqimPage({
       >
         <ChiqimFilter
           filials={filials}
-          defaultStart={sp.start ?? fmtDate(def.start)}
-          defaultEnd={sp.end ?? fmtDate(def.end)}
+          defaultStart={sp.start ?? isoDay(def.start)}
+          defaultEnd={sp.end ?? isoDay(def.end)}
           defaultTur={sp.tur}
           defaultFilial={sp.filial}
         />

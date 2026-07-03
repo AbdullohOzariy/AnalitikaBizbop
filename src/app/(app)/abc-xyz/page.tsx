@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { canSeeAnalytics } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { getDefaultRange } from "@/lib/analytics";
+import { parseDateParam } from "@/lib/date";
 import {
   computeAbcXyz, buildAnalizTree, buildMatrix, stripSkus,
   ABC_A_LIMIT, ABC_B_LIMIT, XYZ_X_LIMIT, XYZ_Y_LIMIT,
@@ -29,12 +30,6 @@ const TAB_META: Record<Tab, { label: string; icon: typeof BarChart3 }> = {
   xyz:      { label: "XYZ",      icon: Activity },
   matritsa: { label: "Matritsa", icon: LayoutGrid },
 };
-
-function parseDate(s: string | undefined): Date | undefined {
-  if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return undefined;
-  const d = new Date(s + "T00:00:00.000Z");
-  return isNaN(d.getTime()) ? undefined : d;
-}
 
 function pct(v: number, digits = 1): string {
   return (v * 100).toFixed(digits) + "%";
@@ -78,8 +73,8 @@ export default async function AbcXyzPage({
   // Default davr: ma'lumotli oxirgi oy + undan oldingi 2 oy (XYZ uchun tarix kerak)
   const def = await getDefaultRange();
   const defStart = new Date(Date.UTC(def.end.getUTCFullYear(), def.end.getUTCMonth() - 2, 1));
-  const startDate = parseDate(sp.start) ?? defStart;
-  const endDate = parseDate(sp.end) ?? def.end;
+  const startDate = parseDateParam(sp.start) ?? defStart;
+  const endDate = parseDateParam(sp.end) ?? def.end;
   const startStr = startDate.toISOString().slice(0, 10);
   const endStr = endDate.toISOString().slice(0, 10);
   const branchId = sp.branchId ? parseInt(sp.branchId) : undefined;

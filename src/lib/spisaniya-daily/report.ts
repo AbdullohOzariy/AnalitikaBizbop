@@ -1,16 +1,17 @@
 import { Telegram } from "telegraf";
 import { getSpisaniyaDailyConfig } from "./sozlama";
 import { chiqimByBranch, chiqimByKategoriya, type ChiqimRange } from "@/lib/spisaniya/db";
+import { isoDay, todayTashkentISO } from "@/lib/date";
 
 const NF = new Intl.NumberFormat("uz-UZ");
 const money = (n: number) => NF.format(Math.round(n));
 
 /** Kechagi kun (Toshkent UTC+5) — bir kunlik davr + ko'rinadigan sana yorlig'i. */
 function yesterdayRange(): { range: ChiqimRange; label: string } {
-  const todayStr = new Date(Date.now() + 5 * 3_600_000).toISOString().slice(0, 10);
+  const todayStr = todayTashkentISO();
   const today = new Date(todayStr + "T00:00:00.000Z");
   const y = new Date(today.getTime() - 86_400_000);
-  const [yy, mm, dd] = y.toISOString().slice(0, 10).split("-");
+  const [yy, mm, dd] = isoDay(y).split("-");
   return { range: { start: y, end: y }, label: `${dd}.${mm}.${yy}` };
 }
 

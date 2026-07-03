@@ -13,6 +13,7 @@ import {
   type KPI,
 } from "@/lib/analytics";
 import { dailyForecastSeries } from "@/lib/forecast";
+import { isoDay, parseDateParam } from "@/lib/date";
 import { isAdminTier, hasRole } from "@/lib/roles";
 import { formatUZS, formatNumber, formatPercent } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
@@ -35,13 +36,6 @@ import { StaggerList, StaggerItem } from "@/components/motion";
 
 // ─── Yordamchi funksiyalar ────────────────────────────────────────────────────
 
-function parseDate(s: string | undefined, fallback: Date): Date {
-  if (!s) return fallback;
-  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!m) return fallback;
-  return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
-}
-
 function shiftDays(d: Date, n: number)   { return new Date(d.getTime() + n * 86400000); }
 function shiftMonths(d: Date, n: number) { const r = new Date(d); r.setUTCMonth(r.getUTCMonth() + n); return r; }
 function shiftYears(d: Date, n: number)  { const r = new Date(d); r.setUTCFullYear(r.getUTCFullYear() + n); return r; }
@@ -55,8 +49,8 @@ function getCompareRange(
   if (compare === "mom") return { start: shiftMonths(range.start, -1),  end: shiftMonths(range.end, -1) };
   if (compare === "yoy") return { start: shiftYears(range.start, -1),   end: shiftYears(range.end, -1) };
   if (compare === "custom" && cstart && cend) {
-    const s = parseDate(cstart, range.start);
-    const e = parseDate(cend,   range.end);
+    const s = parseDateParam(cstart, range.start)!;
+    const e = parseDateParam(cend,   range.end)!;
     if (s <= e) return { start: s, end: e };
   }
   return null;
@@ -419,11 +413,11 @@ export default async function DashboardPage({
     getDefaultRange(),
     prisma.branch.findMany({ orderBy: { sortOrder: "asc" } }),
   ]);
-  const start    = parseDate(sp.start, def.start);
-  const end      = parseDate(sp.end,   def.end);
+  const start    = parseDateParam(sp.start, def.start)!;
+  const end      = parseDateParam(sp.end,   def.end)!;
   const branchId = sp.branchId ? Number(sp.branchId) : undefined;
-  const startStr = start.toISOString().slice(0, 10);
-  const endStr   = end.toISOString().slice(0, 10);
+  const startStr = isoDay(start);
+  const endStr   = isoDay(end);
 
   return (
     <div className="space-y-4 sm:space-y-6">

@@ -5,14 +5,13 @@ import { Suspense, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-
-function ymd(d: Date): string { return d.toISOString().slice(0, 10); }
+import { isoDay } from "@/lib/date";
 
 const PRESETS: { key: string; label: string; range: () => { start: string; end: string } }[] = [
-  { key: "last30", label: "30 kun", range: () => { const e = new Date(); e.setUTCHours(0, 0, 0, 0); const s = new Date(e.getTime() - 29 * 86400000); return { start: ymd(s), end: ymd(e) }; } },
-  { key: "last90", label: "90 kun", range: () => { const e = new Date(); e.setUTCHours(0, 0, 0, 0); const s = new Date(e.getTime() - 89 * 86400000); return { start: ymd(s), end: ymd(e) }; } },
-  { key: "thisMonth", label: "Joriy oy", range: () => { const n = new Date(); const s = new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), 1)); const e = new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth() + 1, 0)); return { start: ymd(s), end: ymd(e) }; } },
-  { key: "lastMonth", label: "O'tgan oy", range: () => { const n = new Date(); const s = new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth() - 1, 1)); const e = new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), 0)); return { start: ymd(s), end: ymd(e) }; } },
+  { key: "last30", label: "30 kun", range: () => { const e = new Date(); e.setUTCHours(0, 0, 0, 0); const s = new Date(e.getTime() - 29 * 86400000); return { start: isoDay(s), end: isoDay(e) }; } },
+  { key: "last90", label: "90 kun", range: () => { const e = new Date(); e.setUTCHours(0, 0, 0, 0); const s = new Date(e.getTime() - 89 * 86400000); return { start: isoDay(s), end: isoDay(e) }; } },
+  { key: "thisMonth", label: "Joriy oy", range: () => { const n = new Date(); const s = new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), 1)); const e = new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth() + 1, 0)); return { start: isoDay(s), end: isoDay(e) }; } },
+  { key: "lastMonth", label: "O'tgan oy", range: () => { const n = new Date(); const s = new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth() - 1, 1)); const e = new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), 0)); return { start: isoDay(s), end: isoDay(e) }; } },
 ];
 
 function Inner({ basePath, defaultStart, defaultEnd }: { basePath: string; defaultStart: string; defaultEnd: string }) {

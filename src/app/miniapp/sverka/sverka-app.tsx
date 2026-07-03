@@ -6,6 +6,7 @@
  * Rasm /api/rasm-yukla orqali Telegram'ga yuklanadi (file_id), yozuv /api/sverka/yozuv.
  */
 import { useEffect, useRef, useState } from "react";
+import { todayTashkentISO } from "@/lib/date";
 
 type TgWebApp = {
   initData: string;
@@ -21,10 +22,6 @@ type Firma = { id: number; name: string };
 type Luglar = { sklad: string[]; qabulchilar: string[]; dagavor: string[] };
 
 const STEPS = ["Sana", "Firma", "Sklad", "Qabul qildi", "Dagavor", "Summa va rasm"] as const;
-
-function todayStr(): string {
-  return new Date(Date.now() + 5 * 3_600_000).toISOString().slice(0, 10);
-}
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const initData = window.Telegram?.WebApp?.initData ?? "";
@@ -60,7 +57,7 @@ export function SverkaApp() {
   const [err, setErr] = useState("");
 
   // Maydonlar
-  const [sana, setSana] = useState(todayStr);
+  const [sana, setSana] = useState(todayTashkentISO);
   const [firma, setFirma] = useState<Firma | null>(null);
   const [firmaQ, setFirmaQ] = useState("");
   const [firmaOpts, setFirmaOpts] = useState<Firma[]>([]);
@@ -153,7 +150,7 @@ export function SverkaApp() {
   const resetForNew = () => {
     setStep(0); setFirma(null); setFirmaQ(""); setSklad(""); setQabulQildi("");
     setDagavor(""); setSumma(""); setRasm(null); setErr(""); setPhase("form");
-    setSana(todayStr());
+    setSana(todayTashkentISO());
   };
 
   // ── Ekranlar ──

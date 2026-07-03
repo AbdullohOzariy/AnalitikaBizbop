@@ -6,9 +6,10 @@
  * Shu yordamchilar UI va server (Bugun, buyurtma oynasi) bo'ylab bir xil mantiq beradi.
  */
 
+import { isoDay } from "@/lib/date";
+
 const DAY = 86_400_000;
 const toUTC = (s: string) => new Date(s + "T00:00:00.000Z");
-const ymd = (d: Date) => d.toISOString().slice(0, 10);
 
 export const WEEKDAY_SHORT = ["Ya", "Du", "Se", "Ch", "Pa", "Ju", "Sh"]; // index = getUTCDay
 export const WEEKDAY_FULL = ["Yakshanba", "Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba"];
@@ -38,7 +39,7 @@ export function nextOrderDate(todayStr: string, explicitFutureDates: string[], w
       const delta = (wd - todayDow + 7) % 7; // 0 = bugun
       if (delta < minDelta) minDelta = delta;
     }
-    fromWeekday = ymd(new Date(toUTC(todayStr).getTime() + minDelta * DAY));
+    fromWeekday = isoDay(new Date(toUTC(todayStr).getTime() + minDelta * DAY));
   }
   if (fromExplicit && fromWeekday) return fromExplicit < fromWeekday ? fromExplicit : fromWeekday;
   return fromExplicit ?? fromWeekday;
@@ -50,7 +51,7 @@ export function weekdayDatesInMonth(year: number, month0: number, weekday: numbe
   const days = new Date(Date.UTC(year, month0 + 1, 0)).getUTCDate();
   for (let d = 1; d <= days; d++) {
     const date = new Date(Date.UTC(year, month0, d));
-    if (date.getUTCDay() === weekday) out.push(ymd(date));
+    if (date.getUTCDay() === weekday) out.push(isoDay(date));
   }
   return out;
 }

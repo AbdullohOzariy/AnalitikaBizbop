@@ -10,6 +10,7 @@ import { marjaBreakdown } from "@/lib/analytics-v2";
 import { dailyForecastSeries } from "@/lib/forecast";
 import { computeProfitTree } from "@/lib/spisaniya/profit";
 import { formatUZS } from "@/lib/format";
+import { isoDay, parseDateParam, todayTashkentISO } from "@/lib/date";
 import { PageHeader, StatCard } from "@/components/common/page";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -21,13 +22,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Target, Wallet, TrendingUp, Scale, Percent, Coins, Gauge } from "lucide-react";
 import { SotuvFilter } from "./filter";
 import { ProfitTree } from "./profit-tree";
-
-function parseDate(s: string | undefined, fb: Date): Date {
-  if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return fb;
-  const d = new Date(s + "T00:00:00.000Z");
-  return isNaN(d.getTime()) ? fb : d;
-}
-function ymd(d: Date) { return d.toISOString().slice(0, 10); }
 
 function execTone(pct: number | null): string {
   if (pct == null) return "text-muted-foreground";
@@ -62,15 +56,13 @@ export default async function SotuvDashboardPage({
   const now = new Date();
   const defStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const defEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0));
-  const start = parseDate(sp.start, defStart);
-  const end = parseDate(sp.end, defEnd);
+  const start = parseDateParam(sp.start) ?? defStart;
+  const end = parseDateParam(sp.end) ?? defEnd;
   const branchId = sp.branchId ? parseInt(sp.branchId) : undefined;
   const days = Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1;
-  const oneDay = ymd(start) === ymd(end);
+  const oneDay = isoDay(start) === isoDay(end);
   // Bugun (Toshkent UTC+5) — run-rate prognozi uchun.
-  // Server komponent: har so'rovda bir marta (purity qoidasi client uchun).
-  // eslint-disable-next-line react-hooks/purity
-  const todayStr = new Date(Date.now() + 5 * 3_600_000).toISOString().slice(0, 10);
+  const todayStr = todayTashkentISO();
 
   // Yengil so'rov — shell darhol; og'ir qism Suspense'da oqib keladi
   const branches = await prisma.branch.findMany({ orderBy: { sortOrder: "asc" }, select: { id: true, name: true } });
@@ -80,16 +72,16 @@ export default async function SotuvDashboardPage({
       <PageHeader
         icon={Target}
         title="Sotuv Dashboard"
-        description={oneDay ? `${ymd(start)} — kunlik` : `${ymd(start)} – ${ymd(end)} · ${days} kun`}
+        description={oneDay ? `${isoDay(start)} — kunlik` : `${isoDay(start)} – ${isoDay(end)} · ${days} kun`}
       >
-        <SotuvFilter branches={branches} start={ymd(start)} end={ymd(end)} branchId={branchId} />
+        <SotuvFilter branches={branches} start={isoDay(start)} end={isoDay(end)} branchId={branchId} />
       </PageHeader>
 
       <Suspense
-        key={[ymd(start), ymd(end), branchId ?? "all"].join("|")}
+        key={[isoDay(start), isoDay(end), branchId ?? "all"].join("|")}
         fallback={<SotuvSkeleton />}
       >
-        <SotuvData startStr={ymd(start)} endStr={ymd(end)} branchId={branchId} days={days} todayStr={todayStr} />
+        <SotuvData startStr={isoDay(start)} endStr={isoDay(end)} branchId={branchId} days={days} todayStr={todayStr} />
       </Suspense>
     </div>
   );

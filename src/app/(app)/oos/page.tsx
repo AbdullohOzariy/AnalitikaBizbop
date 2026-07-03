@@ -9,6 +9,7 @@ import { oosKpi, oosTreeAgg, buildSnapshotTree, type OosView, type SnapshotFilte
 import { SnapshotTree, type SnapCol } from "@/components/common/snapshot-tree";
 import { oosLeavesAction } from "./actions";
 import { scopeSubIds } from "@/lib/scope";
+import { parseDateParam } from "@/lib/date";
 import { PackageX, AlertTriangle, Boxes, Layers, TrendingDown } from "lucide-react";
 import { PageHeader, StatCard, EmptyState } from "@/components/common/page";
 import { Card, CardContent } from "@/components/ui/card";
@@ -18,11 +19,6 @@ import { BazaFilter } from "../baza/baza-filter";
 
 type View = OosView;
 
-function parseDate(s: string | undefined): Date | undefined {
-  if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return undefined;
-  const d = new Date(s + "T00:00:00.000Z");
-  return isNaN(d.getTime()) ? undefined : d;
-}
 function fmtAmount(n: unknown): string {
   const num = Number(n);
   if (isNaN(num) || num === 0) return "—";
@@ -51,8 +47,8 @@ export default async function OosPage({
   const view: View = sp.view === "low" || sp.view === "dead" ? sp.view : "oos";
 
   const def = await getDefaultRange();
-  const startDate = parseDate(sp.start) ?? def.start;
-  const endDate = parseDate(sp.end) ?? def.end;
+  const startDate = parseDateParam(sp.start) ?? def.start;
+  const endDate = parseDateParam(sp.end) ?? def.end;
   const startStr = startDate.toISOString().slice(0, 10);
   const endStr = endDate.toISOString().slice(0, 10);
   const branchId = sp.branchId ? parseInt(sp.branchId) : undefined;

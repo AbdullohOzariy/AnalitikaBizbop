@@ -9,20 +9,12 @@ import {
   chiqimDefaultRange,
 } from "@/lib/spisaniya/db";
 import { formatUZS } from "@/lib/format";
+import { isoDay, parseDateParam } from "@/lib/date";
 import { Recycle, WifiOff, CheckCircle2, Layers, Warehouse } from "lucide-react";
 import { PageHeader, StatCard, EmptyState } from "@/components/common/page";
 import { ChiqimFilter } from "../chiqim-filter";
 import { VozvratViews } from "./vozvrat-views";
 import { VozvratImportButton } from "./vozvrat-import-button";
-
-function parseDate(s: string | undefined): Date | undefined {
-  if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return undefined;
-  const d = new Date(s + "T00:00:00.000Z");
-  return isNaN(d.getTime()) ? undefined : d;
-}
-function fmtDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
 
 export default async function VozvratlarPage({
   searchParams,
@@ -46,8 +38,8 @@ export default async function VozvratlarPage({
 
   const sp = await searchParams;
   const def = chiqimDefaultRange();
-  const startDate = parseDate(sp.start) ?? def.start;
-  const endDate = parseDate(sp.end) ?? def.end;
+  const startDate = parseDateParam(sp.start) ?? def.start;
+  const endDate = parseDateParam(sp.end) ?? def.end;
   const range = { start: startDate, end: endDate };
   const filial = sp.filial || undefined;
 
@@ -63,8 +55,8 @@ export default async function VozvratlarPage({
         <div className="flex flex-wrap items-end gap-2">
           <ChiqimFilter
             filials={filials}
-            defaultStart={sp.start ?? fmtDate(def.start)}
-            defaultEnd={sp.end ?? fmtDate(def.end)}
+            defaultStart={sp.start ?? isoDay(def.start)}
+            defaultEnd={sp.end ?? isoDay(def.end)}
             defaultFilial={sp.filial}
             hideTur
             basePath="/chiqim/vozvratlar"

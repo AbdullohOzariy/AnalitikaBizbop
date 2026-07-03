@@ -29,8 +29,7 @@ import {
 import { dailyForecastSeries } from "@/lib/forecast";
 import { computeAbcXyz } from "@/lib/abc-xyz";
 import { oosKpi, oosTreeAgg, stockdayKpi, stockdayTreeAgg } from "@/lib/snapshot-reports";
-
-const isoDay = (d: Date) => d.toISOString().slice(0, 10);
+import { isoDay } from "@/lib/date";
 
 export async function warmAnalyticsCaches(reason: string): Promise<void> {
   const t0 = Date.now();

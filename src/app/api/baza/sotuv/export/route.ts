@@ -5,6 +5,7 @@ import { isAdminTier } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { getDefaultRange } from "@/lib/analytics";
+import { isoDay, parseDateParam } from "@/lib/date";
 
 const MAX_ROWS = 10_000;
 
@@ -24,11 +25,6 @@ type Row = {
   mj: number | null; // marja — MARJA_SQL'dan (display = sort = filter)
 };
 
-function parseDate(s: string | null): Date | undefined {
-  if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return undefined;
-  const d = new Date(s + "T00:00:00.000Z");
-  return isNaN(d.getTime()) ? undefined : d;
-}
 function num(n: unknown): number {
   const v = typeof n === "object" && n !== null && "toNumber" in n ? (n as { toNumber(): number }).toNumber() : Number(n);
   return isNaN(v) ? 0 : v;
@@ -41,10 +37,10 @@ export async function GET(req: NextRequest) {
 
   const sp = req.nextUrl.searchParams;
   const def = await getDefaultRange();
-  const startDate = parseDate(sp.get("start")) ?? def.start;
-  const endDate = parseDate(sp.get("end")) ?? def.end;
-  const startStr = startDate.toISOString().slice(0, 10);
-  const endStr = endDate.toISOString().slice(0, 10);
+  const startDate = parseDateParam(sp.get("start")) ?? def.start;
+  const endDate = parseDateParam(sp.get("end")) ?? def.end;
+  const startStr = isoDay(startDate);
+  const endStr = isoDay(endDate);
   const branchId = sp.get("branchId") ? parseInt(sp.get("branchId")!) : undefined;
   const catIds = sp.get("cats") ? sp.get("cats")!.split(",").map(Number).filter((n) => Number.isInteger(n) && n > 0) : [];
   const q = sp.get("q")?.trim() ?? "";
@@ -106,7 +102,7 @@ export async function GET(req: NextRequest) {
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([header, ...data]), "Sotuv");
   const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
 
-  const fn = `sotuv-${startDate.toISOString().slice(0, 10)}_${endDate.toISOString().slice(0, 10)}.xlsx`;
+  const fn = `sotuv-${isoDay(startDate)}_${isoDay(endDate)}.xlsx`;
   return new Response(new Uint8Array(buffer), {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

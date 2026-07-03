@@ -16,12 +16,9 @@ import {
 import { CalendarDays, Building2, GitCompareArrows, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { shiftPeriod } from "@/lib/period";
+import { isoDay } from "@/lib/date";
 
 type Branch = { id: number; name: string };
-
-function fmtInput(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
 
 const PRESETS = [
   { key: "today", label: "Bugun" },
@@ -55,7 +52,7 @@ function presetRange(preset: string): { start: string; end: string } | null {
     s = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1));
     e = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 0));
   } else return null;
-  return { start: fmtInput(s), end: fmtInput(e) };
+  return { start: isoDay(s), end: isoDay(e) };
 }
 
 function PeriodFilterInner({

@@ -11,14 +11,14 @@ import {
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { shiftPeriod } from "@/lib/period";
+import { isoDay } from "@/lib/date";
 
-function ymd(d: Date) { return d.toISOString().slice(0, 10); }
 const PRESETS: { key: string; label: string; range: () => { start: string; end: string } }[] = [
-  { key: "today",     label: "Bugun",     range: () => { const t = new Date(); t.setUTCHours(0,0,0,0); return { start: ymd(t), end: ymd(t) }; } },
-  { key: "yesterday", label: "Kecha",     range: () => { const t = new Date(); t.setUTCHours(0,0,0,0); const y = new Date(t.getTime()-86400000); return { start: ymd(y), end: ymd(y) }; } },
-  { key: "last7",     label: "7 kun",     range: () => { const e = new Date(); e.setUTCHours(0,0,0,0); const s = new Date(e.getTime()-6*86400000); return { start: ymd(s), end: ymd(e) }; } },
-  { key: "thisMonth", label: "Joriy oy",  range: () => { const n = new Date(); return { start: ymd(new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), 1))), end: ymd(new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth()+1, 0))) }; } },
-  { key: "lastMonth", label: "O'tgan oy", range: () => { const n = new Date(); return { start: ymd(new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth()-1, 1))), end: ymd(new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), 0))) }; } },
+  { key: "today",     label: "Bugun",     range: () => { const t = new Date(); t.setUTCHours(0,0,0,0); return { start: isoDay(t), end: isoDay(t) }; } },
+  { key: "yesterday", label: "Kecha",     range: () => { const t = new Date(); t.setUTCHours(0,0,0,0); const y = new Date(t.getTime()-86400000); return { start: isoDay(y), end: isoDay(y) }; } },
+  { key: "last7",     label: "7 kun",     range: () => { const e = new Date(); e.setUTCHours(0,0,0,0); const s = new Date(e.getTime()-6*86400000); return { start: isoDay(s), end: isoDay(e) }; } },
+  { key: "thisMonth", label: "Joriy oy",  range: () => { const n = new Date(); return { start: isoDay(new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), 1))), end: isoDay(new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth()+1, 0))) }; } },
+  { key: "lastMonth", label: "O'tgan oy", range: () => { const n = new Date(); return { start: isoDay(new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth()-1, 1))), end: isoDay(new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), 0))) }; } },
 ];
 
 function SotuvFilterInner({

@@ -19,6 +19,7 @@ import {
 import { PageHeader, StatCard, Pill } from "@/components/common/page";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { nowTashkent } from "@/lib/date";
 
 export const dynamic = "force-dynamic";
 
@@ -37,9 +38,7 @@ export default async function BugunPage() {
   const canCreateOrder = hasRole(roles, "SYSTEM_ADMIN", "CAT_MANAGER", "HEAD_CAT_MANAGER");
 
   // Toshkent (UTC+5) bo'yicha "bugun" — zakaz kunlari kalendari ham shu asosda.
-  // Server komponent: har so'rovda bir marta hisoblanadi (purity qoidasi client uchun).
-  // eslint-disable-next-line react-hooks/purity
-  const nowTk = new Date(Date.now() + 5 * 3_600_000);
+  const nowTk = nowTashkent();
   const todayStr = nowTk.toISOString().slice(0, 10);
   const dow = nowTk.getUTCDay();
   const tomorrowDow = (dow + 1) % 7;

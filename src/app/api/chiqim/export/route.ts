@@ -11,13 +11,7 @@ import {
   type ChiqimRange,
 } from "@/lib/spisaniya/db";
 import { TUR_LABEL } from "@/lib/spisaniya/labels";
-
-function parseDate(s: string | null, fallback: Date): Date {
-  if (!s) return fallback;
-  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!m) return fallback;
-  return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
-}
+import { isoDay, parseDateParam } from "@/lib/date";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -32,8 +26,8 @@ export async function GET(req: NextRequest) {
   const def = chiqimDefaultRange();
 
   const range: ChiqimRange = {
-    start: parseDate(sp.get("start"), def.start),
-    end: parseDate(sp.get("end"), def.end),
+    start: parseDateParam(sp.get("start"), def.start)!,
+    end: parseDateParam(sp.get("end"), def.end)!,
   };
   const tur    = sp.get("tur")    ?? undefined;
   const filial = sp.get("filial") ?? undefined;
@@ -101,8 +95,8 @@ export async function GET(req: NextRequest) {
   );
 
   const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
-  const startStr = range.start.toISOString().slice(0, 10);
-  const endStr   = range.end.toISOString().slice(0, 10);
+  const startStr = isoDay(range.start);
+  const endStr   = isoDay(range.end);
   const filename = `chiqim-${startStr}_${endStr}.xlsx`;
 
   return new Response(new Uint8Array(buffer), {

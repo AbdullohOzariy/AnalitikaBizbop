@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { isAdminTier, isSystemAdmin } from "@/lib/roles";
 import { ANALYTICS_CACHE_TAG } from "@/lib/analytics";
 import { actionError } from "@/lib/action-error";
+import { isoDay } from "@/lib/date";
 
 export type ReceiptMetricCell = { receiptCount: number; itemsPerReceipt: number };
 
@@ -20,8 +21,6 @@ async function requireEditor() {
   if (!session?.user || !isSystemAdmin(session.user.roles)) throw new Error("Ruxsat yo'q");
   return session.user;
 }
-
-const isoDay = (d: Date) => d.toISOString().slice(0, 10);
 
 /** Tanlangan oy uchun filial × kun bo'yicha kunlik sotuv (CategorySales, SKU-derive). */
 export async function getMonthlySalesByBranch(

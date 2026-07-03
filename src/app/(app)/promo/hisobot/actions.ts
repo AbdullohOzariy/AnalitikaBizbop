@@ -4,6 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { Prisma, type PromoType, type PromoStatus } from "@/generated/prisma/client";
 import { requirePromoView } from "@/lib/auth-helpers";
+import { isoDay, todayTashkentISO } from "@/lib/date";
 
 // Promo hisobot — aksiya samaradorligini ProductSales (period kesimida sotuv)
 // bilan o'lchaydi. 3 davr: aksiya davri, undan oldingi teng davr (baseline),
@@ -12,8 +13,7 @@ import { requirePromoView } from "@/lib/auth-helpers";
 
 const DAY = 86_400_000;
 const toUTC = (s: string) => new Date(s + "T00:00:00.000Z");
-const ymd = (d: Date) => d.toISOString().slice(0, 10);
-const addDays = (s: string, n: number) => ymd(new Date(toUTC(s).getTime() + n * DAY));
+const addDays = (s: string, n: number) => isoDay(new Date(toUTC(s).getTime() + n * DAY));
 const diffDays = (a: string, b: string) => Math.round((toUTC(b).getTime() - toUTC(a).getTime()) / DAY);
 
 type Err = { ok: false; error: string };
@@ -70,7 +70,7 @@ export async function listReportCampaignsAction(): Promise<{ ok: true; rows: Rep
       ok: true,
       rows: rows.map((c): ReportCampaignOpt => ({
         id: c.id, title: c.title, type: c.type, status: c.status,
-        startDate: ymd(c.startDate), endDate: c.endDate ? ymd(c.endDate) : null,
+        startDate: isoDay(c.startDate), endDate: c.endDate ? isoDay(c.endDate) : null,
       })),
     };
   } catch (err) { return fail(err); }
@@ -93,10 +93,10 @@ export async function promoReportAction(input: { campaignId: number }): Promise<
     });
     if (!c) return { ok: false, error: "Aksiya topilmadi." };
 
-    const start = ymd(c.startDate);
+    const start = isoDay(c.startDate);
     // Effektiv tugash: endDate yoki bugun (doimiy aksiya uchun). Bugun — Toshkent (UTC+5).
-    const todayStr = new Date(Date.now() + 5 * 3_600_000).toISOString().slice(0, 10);
-    const end = c.endDate ? ymd(c.endDate) : todayStr;
+    const todayStr = todayTashkentISO();
+    const end = c.endDate ? isoDay(c.endDate) : todayStr;
 
     const len = Math.max(1, diffDays(start, end) + 1); // davr uzunligi (kun)
     const baseStart = addDays(start, -len);
@@ -170,7 +170,7 @@ export async function promoReportAction(input: { campaignId: number }): Promise<
       report: {
         campaign: {
           id: c.id, title: c.title, type: c.type, status: c.status,
-          startDate: start, endDate: c.endDate ? ymd(c.endDate) : null,
+          startDate: start, endDate: c.endDate ? isoDay(c.endDate) : null,
           branchName: c.branch?.name ?? null,
         },
         periodStart: start, periodEnd: end, baseStart, baseEnd, hasAfter,
