@@ -158,7 +158,19 @@ export async function deleteUserAction(
           const saCount = await tx.user.count({ where: SA_WHERE });
           if (saCount <= 1) throw new LastAdminError("Oxirgi System Admin'ni o'chirib bo'lmaydi.");
         }
-        await tx.uploadedFile.updateMany({ where: { uploadedById: id }, data: { uploadedById: Number(me.id) } });
+        // O'chirilayotgan xodim yaratgan hujjatlar joriy adminga qayta biriktiriladi.
+        // createdBy FK'lari Restrict (avval PurchaseOrder/Distribution/BranchTransfer/
+        // ProductBatch Cascade edi — o'chirishda zakaz/taqsimot/ko'chirish tarixi jimgina
+        // yo'qolardi; Expense/PromoCampaign esa Restrict bo'lib o'chirishni bloklardi).
+        // Endi hammasi bir xil: hujjatlar saqlanadi, faqat "yaratuvchi" adminga o'tadi.
+        const meId = Number(me.id);
+        await tx.uploadedFile.updateMany({ where: { uploadedById: id }, data: { uploadedById: meId } });
+        await tx.purchaseOrder.updateMany({ where: { createdById: id }, data: { createdById: meId } });
+        await tx.distribution.updateMany({ where: { createdById: id }, data: { createdById: meId } });
+        await tx.branchTransfer.updateMany({ where: { createdById: id }, data: { createdById: meId } });
+        await tx.productBatch.updateMany({ where: { createdById: id }, data: { createdById: meId } });
+        await tx.expense.updateMany({ where: { createdById: id }, data: { createdById: meId } });
+        await tx.promoCampaign.updateMany({ where: { createdById: id }, data: { createdById: meId } });
         await tx.user.delete({ where: { id } });
       }, { isolationLevel: "Serializable" });
     } catch (e) {

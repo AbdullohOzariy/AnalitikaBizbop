@@ -8,6 +8,7 @@
 import { z } from "zod";
 import { auth } from "@/auth";
 import { canSeeAnalytics } from "@/lib/roles";
+import { actionError } from "@/lib/action-error";
 import { computeAbcXyz, type SkuAnaliz } from "@/lib/abc-xyz";
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string };
@@ -50,7 +51,7 @@ export async function loadSubSkusAction(
     );
     return { ok: true, data };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Noma'lum xato" };
+    return actionError(e, "abc-xyz");
   }
 }
 
@@ -77,6 +78,6 @@ export async function searchSkusAbcAction(
       data: { hits: all.slice(0, SEARCH_LIMIT), truncated: all.length > SEARCH_LIMIT },
     };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Noma'lum xato" };
+    return actionError(e, "abc-xyz");
   }
 }

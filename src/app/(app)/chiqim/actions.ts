@@ -16,7 +16,9 @@ function xato(err: unknown): Result {
     return { ok: false, error: "Bunday yozuv allaqachon mavjud." };
   if (msg.includes("foreign key") || msg.includes("23503"))
     return { ok: false, error: "Bu yozuvga bog'liq ma'lumotlar bor — o'chirib bo'lmaydi." };
-  return { ok: false, error: msg };
+  // Kutilmagan xato: server log'iga to'liq, UI'ga umumiy (DB detali oshkor bo'lmasin).
+  console.error("[chiqim]", err);
+  return { ok: false, error: "Amal bajarilmadi. Birozdan so'ng qayta urinib ko'ring." };
 }
 
 // revalidate qilinadigan yo'llar

@@ -217,9 +217,15 @@ async function _marjaHierarchy(range: DateRange, branchId?: number, scope?: numb
   }));
 }
 
-// Keshsiz — savdo ulushi donut (SalesShareWidget) har doim fresh.
+// Keshlangan (ProductSales 4-JOIN overlap-skani — og'ir). Invalidatsiya: ANALYTICS_CACHE_TAG
+// har yozuv action'ida (upload/rejalar/iyerarxiya/chiqim) o'chiriladi, shuning uchun stale
+// bo'lmaydi; stale-Fakt sababi (::text sana) alohida tuzatilgan.
 export const marjaHierarchy = (range: DateRange, branchId?: number, scope?: number[] | null) =>
-  _marjaHierarchy(range, branchId, scope);
+  unstable_cache(
+    () => _marjaHierarchy(range, branchId, scope),
+    ["v3_marjaHierarchy", ...makeKey(range, branchId, scope ? `s${[...scope].sort((a, b) => a - b).join(",")}` : undefined)],
+    { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
+  )();
 
 // ============ KPI by branch (conversion + avg items per receipt) ============
 
@@ -342,9 +348,14 @@ async function _dailySalesByGroup(
   return { days, groups };
 }
 
-// Keshsiz — to'g'ridan-to'g'ri DB (unstable_cache stale Fakt'ni qotirib qo'yardi).
+// Keshlangan (generate_series × CategoryGroup × CategorySales kunma-kun join — og'ir).
+// ANALYTICS_CACHE_TAG invalidatsiyasi Fakt yangilanishida keshni tozalaydi.
 export const dailySalesByGroup = (range: DateRange, branchId?: number, scope?: number[] | null) =>
-  _dailySalesByGroup(range, branchId, scope);
+  unstable_cache(
+    () => _dailySalesByGroup(range, branchId, scope),
+    ["v3_dailySalesByGroup", ...makeKey(range, branchId, scope ? `s${[...scope].sort((a, b) => a - b).join(",")}` : undefined)],
+    { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
+  )();
 
 // ============ Guruh bo'yicha kunlik REJA (Reja vs Fakt dinamikasi uchun) ============
 //
@@ -487,6 +498,11 @@ async function _dailyPlanByGroup(
   return { days, groups };
 }
 
-// Keshsiz — guruh widgeti har doim fresh ma'lumot (Fakt bilan izchil).
+// Keshlangan (SalesPlan rollup + ForecastDay × guruh — og'ir). Reja/forecast yozuvlari
+// ANALYTICS_CACHE_TAG'ni invalidatsiya qiladi, shuning uchun Fakt bilan izchil qoladi.
 export const dailyPlanByGroup = (range: DateRange, branchId?: number, scope?: number[] | null) =>
-  _dailyPlanByGroup(range, branchId, scope);
+  unstable_cache(
+    () => _dailyPlanByGroup(range, branchId, scope),
+    ["v3_dailyPlanByGroup", ...makeKey(range, branchId, scope ? `s${[...scope].sort((a, b) => a - b).join(",")}` : undefined)],
+    { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
+  )();

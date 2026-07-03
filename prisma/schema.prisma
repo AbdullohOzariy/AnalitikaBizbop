@@ -230,6 +230,8 @@ model CategorySales {
   @@index([periodStart, periodEnd])
   @@index([branchId, periodStart, periodEnd])
   @@index([categoryId, periodStart, periodEnd])
+  // Davr-overlap so'rovlari uchun periodEnd yetakchi range (ProductSales bilan bir xil sabab).
+  @@index([periodEnd, periodStart])
   @@index([uploadedFileId])
 }
 
@@ -506,7 +508,7 @@ model PurchaseOrder {
 
   supplier  Supplier            @relation(fields: [supplierId], references: [id], onDelete: Cascade)
   agent     Agent?              @relation(fields: [agentId], references: [id], onDelete: SetNull)
-  createdBy User                @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  createdBy User                @relation(fields: [createdById], references: [id], onDelete: Restrict)
   items     PurchaseOrderItem[]
 
   @@index([supplierId])
@@ -573,6 +575,9 @@ model ProductSales {
   @@index([branchId, periodStart, periodEnd])
   @@index([productId, periodStart, periodEnd])
   @@index([productId, branchId, periodEnd(sort: Desc)]) // OOS/Stockday "latest snapshot" DISTINCT ON tartibi
+  // Davr-overlap (periodStart <= end AND periodEnd >= start): periodEnd yetakchi range —
+  // yaqin davr so'rovlarida eski qatorlarni chetlab o'tadi (analytics/marja skanlari).
+  @@index([periodEnd, periodStart])
   @@index([uploadedFileId])
 }
 
@@ -815,7 +820,7 @@ model Distribution {
   confirmedAt DateTime?
 
   branch    Branch             @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  createdBy User               @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  createdBy User               @relation(fields: [createdById], references: [id], onDelete: Restrict)
   items     DistributionItem[]
 
   @@index([branchId])
@@ -852,7 +857,7 @@ model BranchTransfer {
 
   fromBranch Branch               @relation("TransferFrom", fields: [fromBranchId], references: [id], onDelete: Cascade)
   toBranch   Branch               @relation("TransferTo", fields: [toBranchId], references: [id], onDelete: Cascade)
-  createdBy  User                 @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  createdBy  User                 @relation(fields: [createdById], references: [id], onDelete: Restrict)
   items      BranchTransferItem[]
 
   @@index([fromBranchId])
@@ -890,7 +895,7 @@ model ProductBatch {
 
   product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
   branch    Branch? @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  createdBy User    @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  createdBy User    @relation(fields: [createdById], references: [id], onDelete: Restrict)
 
   @@index([productId])
   @@index([branchId])

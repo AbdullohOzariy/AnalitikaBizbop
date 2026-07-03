@@ -495,14 +495,20 @@ export async function setOrderStatusAction(
     if (!canTransition(user.roles, order.status as OrderStatusT, st, isOwner)) {
       return { ok: false, error: "Bu o'tish sizning rolingizga ruxsat etilmagan." };
     }
-    await prisma.purchaseOrder.update({
-      where: { id: oid },
+    // TOCTOU himoyasi: statusni FAQAT hali biz o'qigan holatda bo'lsa o'zgartiramiz.
+    // Ikki parallel so'rov (yoki eskirgan sahifa) matritsani chetlab o'tmasin — ikkinchisi
+    // count=0 oladi va Telegram PDF ham ikki marta ketmaydi.
+    const flip = await prisma.purchaseOrder.updateMany({
+      where: { id: oid, status: order.status },
       data: {
         status: st,
         sentAt: st === "SENT" ? new Date() : undefined,
         receivedAt: st === "RECEIVED" ? new Date() : undefined,
       },
     });
+    if (flip.count === 0) {
+      return { ok: false, error: "Zakaz holati o'zgargan. Sahifani yangilang." };
+    }
     revalidatePath(`/sotuv/sotib-olish/${oid}`);
     revalidatePath("/sotuv/sotib-olish");
     // "Zakaz qabul qilindi" (ACCEPTED) ga o'tganda nakladnoyni Telegram guruhga

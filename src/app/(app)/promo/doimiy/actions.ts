@@ -27,7 +27,8 @@ function xato(err: unknown): Err {
   }
   const msg = err instanceof Error ? err.message : "Xato.";
   if (msg.includes("Ruxsat")) return { ok: false, error: "Ruxsat yo'q." };
-  return { ok: false, error: msg };
+  console.error("[promo]", err);
+  return { ok: false, error: "Amal bajarilmadi. Birozdan so'ng qayta urinib ko'ring." };
 }
 
 // @db.Date — UTC yarim tunga normallashtiramiz (sana komponenti muhim, vaqt emas)

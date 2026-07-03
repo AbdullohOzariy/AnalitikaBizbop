@@ -1,5 +1,11 @@
 # BotBizBopSPS → AnalitikaBizBop integratsiya rejasi
 
+> ⚠️ **ESKIRGAN (2026-07):** bu rejadagi "read-only ko'prik / bot alohida Railway
+> servisda qoladi" yondashuvi QO'LLANMAGAN. Amalda bot to'liq shu Next ilova ichiga
+> ko'chirilgan (`src/lib/spisaniya/`, `src/app/api/tg` webhook; `instrumentation.ts`
+> webhook o'rnatadi). Hozirgi arxitektura uchun **`bot/README.md`** ga qarang.
+> Quyidagi matn tarixiy hujjat sifatida saqlanmoqda.
+
 > Maqsad: prod'da faol ishlayotgan **BotBizBopSPS** (spisaniya-bot) ma'lumotlarini
 > **AnalitikaBizBop** platformasiga **ehtiyotkorlik bilan**, prod xizmatga uzilishsiz qo'shish.
 >

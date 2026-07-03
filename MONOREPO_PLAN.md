@@ -1,5 +1,10 @@
 # Monorepo birlashtirish rejasi — AnalitikaBizBop + BotBizBopSPS
 
+> ⚠️ **BEKOR QILINGAN (2026-07):** monorepo (apps/web + apps/bot, pnpm-workspace,
+> turbo, 2 Railway servis) QURILMAGAN. O'rniga bot to'g'ridan-to'g'ri shu Next ilova
+> ichiga birlashtirildi (`bot/README.md` ga qarang). Bu fayl faqat tarixiy qaror
+> yozuvi sifatida qoladi.
+
 > Maqsad: ikki loyihani **bitta monorepo**ga birlashtirish. Bot (Telegram) **prod'da faol** —
 > uzilishsiz ishlashi shart. **Hech qanday ma'lumot yo'qolmasligi kerak.**
 

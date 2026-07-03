@@ -22,7 +22,8 @@ type Result = { ok: true } | { ok: false; error: string };
 function xato(err: unknown): Result {
   const msg = err instanceof Error ? err.message : "Xato.";
   if (msg.includes("Ruxsat")) return { ok: false, error: "Ruxsat yo'q." };
-  return { ok: false, error: msg };
+  console.error("[vozvrat]", err);
+  return { ok: false, error: "Amal bajarilmadi. Birozdan so'ng qayta urinib ko'ring." };
 }
 
 const holatSchema = z.object({

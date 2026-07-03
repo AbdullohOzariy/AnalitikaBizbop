@@ -5,6 +5,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { ANALYTICS_CACHE_TAG } from "@/lib/analytics";
+import { actionError } from "@/lib/action-error";
 import {
   generateForecast,
   applyForecastDayEdit,
@@ -78,7 +79,7 @@ export async function generateForecastAllAction(input: {
     revalidateTag(ANALYTICS_CACHE_TAG, "max");
     return { ok: true, branchCount: branches.length, groups: all.flat(), days };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Noma'lum xato" };
+    return actionError(e, "rejalar");
   }
 }
 
@@ -101,7 +102,7 @@ export async function setForecastDayAction(input: z.input<typeof fcDaySchema>): 
     revalidateTag(ANALYTICS_CACHE_TAG, "max");
     return { ok: true, days };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Noma'lum xato" };
+    return actionError(e, "rejalar");
   }
 }
 
@@ -118,7 +119,7 @@ export async function clearSalesPlansAction(input: {
     revalidateTag(ANALYTICS_CACHE_TAG, "max");
     return { ok: true, count: res.count };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Noma'lum xato" };
+    return actionError(e, "rejalar");
   }
 }
 
@@ -130,7 +131,7 @@ export async function clearMarginPlansAction(): Promise<ClearResult> {
     revalidateTag(ANALYTICS_CACHE_TAG, "max");
     return { ok: true, count: res.count };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Noma'lum xato" };
+    return actionError(e, "rejalar");
   }
 }
 
@@ -149,6 +150,6 @@ export async function clearForecastAction(input: {
     revalidateTag(ANALYTICS_CACHE_TAG, "max");
     return { ok: true, count: days.count };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Noma'lum xato" };
+    return actionError(e, "rejalar");
   }
 }

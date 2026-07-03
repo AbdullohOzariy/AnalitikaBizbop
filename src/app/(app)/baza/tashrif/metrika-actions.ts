@@ -6,6 +6,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { isAdminTier, isSystemAdmin } from "@/lib/roles";
 import { ANALYTICS_CACHE_TAG } from "@/lib/analytics";
+import { actionError } from "@/lib/action-error";
 
 export type ReceiptMetricCell = { receiptCount: number; itemsPerReceipt: number };
 
@@ -70,7 +71,7 @@ export async function getReceiptMetricsAction(
     }
     return { ok: true, data, sales };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Noma'lum xato" };
+    return actionError(e, "metrika");
   }
 }
 
@@ -110,6 +111,6 @@ export async function upsertReceiptMetricAction(
     revalidateTag(ANALYTICS_CACHE_TAG, "max");
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Noma'lum xato" };
+    return actionError(e, "metrika");
   }
 }

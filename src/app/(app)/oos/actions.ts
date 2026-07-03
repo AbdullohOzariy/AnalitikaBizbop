@@ -6,6 +6,7 @@ import { auth } from "@/auth";
 import { canSeeAnalytics } from "@/lib/roles";
 import { scopeSubIds } from "@/lib/scope";
 import { oosRows, type OosRow, type OosView } from "@/lib/snapshot-reports";
+import { actionError } from "@/lib/action-error";
 
 const schema = z.object({
   startStr: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -48,6 +49,6 @@ export async function oosLeavesAction(
     const filtered = p.subId === -1 ? rows.filter((r) => r.cname == null) : rows;
     return { ok: true, rows: filtered, truncated: rows.length >= LEAF_LIMIT };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Noma'lum xato" };
+    return actionError(e, "oos");
   }
 }

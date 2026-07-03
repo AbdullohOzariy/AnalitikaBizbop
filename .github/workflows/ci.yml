@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# CI jonli DB'ga ulanmaydi: sahifalar dinamik (build'da prerender qilinmaydi),
+# tsc/eslint/test esa DB'siz ishlaydi. Bu qiymatlar faqat prisma generate /
+# Pool konstruksiyasi / NextAuth build bosqichi bo'sh env'da yiqilmasligi uchun.
+env:
+  DATABASE_URL: "postgresql://user:pass@localhost:5432/analitika?schema=public"
+  DIRECT_URL: "postgresql://user:pass@localhost:5432/analitika?schema=public"
+  AUTH_SECRET: "ci-placeholder-secret-at-least-32-characters-long"
+  AUTH_TRUST_HOST: "true"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # postinstall `prisma generate` ni ham ishga tushiradi (tsc uchun client kerak).
+      - name: Install
+        run: npm ci
+
+      - name: Prisma generate
+        run: npx prisma generate
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npx eslint .
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build

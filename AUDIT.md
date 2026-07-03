@@ -98,7 +98,7 @@ Tekshiruv qamrovi: xavfsizlik (auth, server actions, API, Telegram), backend man
 1. ✅ Pool'lar `globalThis`da — prisma.ts (`pgPool`) + spisaniya/db.ts (`botPool`) — O6.
 2. ✅ `generateForecastAllAction` — filiallar 2 tadan chunk boʻlib ishlanadi (Claude rate-limit + Neon pool himoyasi) — O7.
 3. ✅ Parser tolerantligi 0.1% → 0.001% (min 1000 soʻm) — O8; db.ts'dagi 22 ta jim catch endi `logDbXato` bilan loglanadi — O9; forecast AI-parse xatosi `console.warn` bilan — P5; visits parser kesirli/manfiy qiymatda xato tashlaydi (Excel float artefakti epsilon bilan kechiriladi) — P6.
-4. ✅ `Expense` `@@index([spentAt, deletedAt])` + migratsiya `20260610090000_expense_spentat_deletedat_index` yaratildi — O10. ⚠️ Jonli DB'ga hali QOʻLLANMAGAN: `railway run npx prisma migrate deploy` kerak.
+4. ✅ `Expense` `@@index([spentAt, deletedAt])` + migratsiya `20260610090000_expense_spentat_deletedat_index` yaratildi — O10. ✅ Jonli DB'ga qo'llangan (deploy'da `migrate deploy` avtomatik ishlaydi — pastdagi 115-qatorga qarang).
 5. ✅ JWT `maxAge` 12 soat (deploy'dan keyin hamma qayta login qiladi) — P4; rejalar/actions.ts markaziy `requireAdmin`ga oʻtdi — P3.
 
 ### Har bosqichdan keyin

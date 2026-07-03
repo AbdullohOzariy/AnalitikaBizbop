@@ -10,6 +10,7 @@ import { requireAdminUser } from "@/lib/auth-helpers";
 import { ANALYTICS_CACHE_TAG } from "@/lib/analytics";
 import { warmAnalyticsCaches } from "@/lib/warm";
 import { updateProductMatrixClasses } from "@/lib/abc-xyz";
+import { actionError } from "@/lib/action-error";
 import { sha256 } from "@/lib/parsers/utils";
 import { parseSalesWorkbook } from "@/lib/parsers/sales";
 import { parseVisitsWorkbook } from "@/lib/parsers/visits";
@@ -304,7 +305,7 @@ export async function uploadSalesAction(formData: FormData): Promise<UploadResul
       summary: `Saqlandi: ${legacyResult.rows.length} qator (${branchCount} filial), period ${legacyResult.periodStart.toISOString().slice(0, 10)} → ${legacyResult.periodEnd.toISOString().slice(0, 10)}.`,
     };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "Noma'lum xato." };
+    return actionError(err, "upload");
   }
 }
 
@@ -559,7 +560,20 @@ async function uploadV3(
       data: { status: UploadStatus.SUCCESS },
     });
   } catch (err) {
-    await prisma.uploadedFile.delete({ where: { id: fileRecord.id } }).catch(() => null);
+    // MUHIM: bu yerda delete QILMAYMIZ. ProductSales/CategorySales'da uploadedFile
+    // onDelete:Cascade — 5-bosqichdagi upsert ON CONFLICT bu davrning MAVJUD (avvalgi
+    // muvaffaqiyatli yuklovga tegishli) qatorlarini ham yangi fileRecord'ga ko'chirgan
+    // bo'ladi. delete kaskadi ularni ham o'chirib, butun davr faktini yo'qotardi.
+    // FAILED belgilaymiz: hash bloklanmaydi (ensureNotDuplicate FAILED'ni o'tkazadi),
+    // qatorlar joyida qoladi, xato sababi audit uchun saqlanadi.
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[upload:v3] import xatosi:", msg);
+    await prisma.uploadedFile
+      .update({
+        where: { id: fileRecord.id },
+        data: { status: UploadStatus.FAILED, errorMessage: msg.slice(0, 500) },
+      })
+      .catch(() => null);
     throw err;
   }
 
@@ -744,6 +758,6 @@ export async function uploadVisitsAction(formData: FormData): Promise<UploadResu
       summary: `Saqlandi: ${result.rows.length} qator (${uniqueAliases.length} filial × kunlar).`,
     };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "Noma'lum xato." };
+    return actionError(err, "upload");
   }
 }

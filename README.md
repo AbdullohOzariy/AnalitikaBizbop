@@ -13,9 +13,16 @@ Supermarket savdo analitikasi platformasi. 1C dan eksport qilingan Excel fayllar
 - **Filial batafsil sahifasi**: har filial uchun mini-dashboard
 - **Normal Reja**: oylik filial × kategoriya rejasini admin kiritadi
 - **Excel export**: tanlangan davr bo'yicha 4 varaqli xlsx
-- **2 rolli foydalanuvchi**: Admin (yuklash, sozlash) va Ko'ruvchi (faqat ko'rish)
+- **Ko'p rolli RBAC**: SYSTEM_ADMIN (to'liq), ADMIN (asosan ko'rish + ba'zi tasdiqlash), CAT_MANAGER / HEAD_CAT_MANAGER / CEO / SUPPLYCHAIN, izolatsiyalangan MERCHANDISER (promo) va OPERATOR (chiqim). Har foydalanuvchi: asosiy rol + qo'shimcha rollar (union)
 - **Dublikat oldini olish**: SHA-256 hash + (filial+sana+tip)
 - **Dark mode** + **mobil moslashuv**
+
+> **Eslatma:** README asosiy MVP oqimini tavsiflaydi. Ilova o'sgan — qo'shimcha modullar:
+> **chiqim** (hisobdan chiqarish), **logistika** (ombor / taqsimot / ko'chirish), **promo**
+> (aksiyalar), **sotuv/zakaz** (xarid buyurtmalari), **sverka**, **iyerarxiya**, **abc-xyz**,
+> **oos/stockday**, **AI prognoz**. Shuningdek **Telegram bot + Mini App** (`src/app/api/tg`
+> webhook, `bot/miniapp`) va **kunlik cron hisobotlar** (`src/instrumentation.ts` — 09:00–15:00
+> orasida 5 ta ish). Arxitektura tafsilotlari: `bot/README.md`, `AGENTS.md`.
 
 ## Texnologiyalar
 
@@ -54,8 +61,12 @@ createdb analitika
 npx prisma migrate deploy
 npx prisma generate
 
-# 5. Boshlang'ich ma'lumotlar (4 filial, 18 kategoriya, admin user)
+# 5a. Filiallar + admin user
 npx tsx prisma/seed.ts
+
+# 5b. Iyerarxiya + SKU (guruh/kategoriya/subkat + 25k+ SKU) — MAJBURIY.
+#     Busiz baza / iyerarxiya / analitika / abc-xyz modullari BO'SH ochiladi.
+ALLOW_DESTRUCTIVE_SEED=1 npx tsx prisma/seed-sku.ts
 
 # 6. Ishga tushirish
 npm run dev
@@ -71,18 +82,23 @@ Brauzerda http://localhost:3000 ga kiring.
 src/
 ├── app/
 │   ├── (app)/                  # Autentifikatsiya talab qiluvchi sahifalar
-│   │   ├── dashboard/          # Asosiy dashboard
+│   │   ├── dashboard/, dashboard-v2/, sotuv-dashboard/  # Dashboardlar
 │   │   ├── branches/           # Filiallar va batafsil sahifa
-│   │   ├── categories/         # Kategoriyalar ro'yxati
+│   │   ├── iyerarxiya/         # Guruh → kategoriya → subkategoriya tahriri
+│   │   ├── chiqim/, logistika/, promo/, sotuv/, sverka/ # Domen modullari
+│   │   ├── abc-xyz/, oos/, stockday/, rejalar/, report/ # Analitika
 │   │   └── admin/              # Faqat admin uchun
 │   │       ├── upload/         # Excel yuklash (3 ta forma)
 │   │       ├── files/          # Yuklangan fayllar audit
-│   │       ├── plans/          # Normal reja kiritish
+│   │       ├── sozlamalar/     # Tizim sozlamalari (hisobot cron'lari va h.k.)
 │   │       └── users/          # Foydalanuvchilar boshqaruvi
 │   ├── api/
 │   │   ├── auth/[...nextauth]/ # Auth.js
+│   │   ├── tg/                 # Telegram webhook (bot)
 │   │   └── export/             # Excel eksport
+│   ├── miniapp/                # Telegram Mini App sahifalari
 │   └── login/                  # Login sahifasi
+├── instrumentation.ts          # Server start: cron ishlar + Telegram webhook o'rnatish
 ├── components/
 │   ├── ui/                     # shadcn/ui komponentlari
 │   └── layout/                 # Sidebar, header, theme toggle
@@ -96,9 +112,9 @@ src/
 
 ## DB Schema (asosiy)
 
-- **User** — id, email, passwordHash, name, role (ADMIN/VIEWER)
+- **User** — id, email, passwordHash, name, role + extraRoles[] (RBAC union; ~9 rol enum)
 - **Branch** + **BranchAlias** — filial va Excel ichidagi turli nomlari xaritasi
-- **Category** — 18 ta bo'lim
+- **CategoryGroup / Category** — guruh → kategoriya → subkategoriya iyerarxiyasi (sku.xlsx'dan)
 - **CategorySales** — period × filial × kategoriya → summa
 - **DailyMetrics** — kunlik chek soni, summa, o'rtacha va h.k. (sr.xlsx dan)
 - **DailyVisits** — kunlik tashriflar (filial×sana)
@@ -114,7 +130,8 @@ Railway uchun `package.json` scriptlari tayyor:
 - `npm run build` — Prisma client generatsiya qiladi va Next.js production build yaratadi
 - `npm run migrate-deploy` — production migrations ishlatadi
 - `npm run start` — `next start` bilan serverni ko'taradi
-- `npm run db:seed` — 4 filial, 18 kategoriya va birinchi admin userni yaratadi
+- `npm run db:seed` — 4 filial va birinchi admin userni yaratadi
+- `npm run db:seed-sku` — iyerarxiya + SKU master (destruktiv: `ALLOW_DESTRUCTIVE_SEED=1` talab qiladi)
 
 Railway env vars:
 
@@ -128,6 +145,11 @@ SEED_ADMIN_EMAIL="admin@example.com"
 SEED_ADMIN_PASSWORD="strong-password"
 SEED_ADMIN_NAME="Admin"
 ```
+
+> To'liq ro'yxat (Telegram bot, AI kalitlari, hisobot cron yo'nalishlari, retention) —
+> **`.env.example`** ga qarang. Ayniqsa `ANTHROPIC_API_KEY` (AI prognoz/kategoriyalash) va
+> hisobot-bot uchligi (`INVENTORY_/MARGIN_/DELIVERY_/SPDAILY_/ZAKAZ_*`) unutilmasin —
+> aks holda AI va Telegram hisobotlar jimgina o'chadi.
 
 Railway service sozlamalari:
 
@@ -147,8 +169,9 @@ openssl rand -base64 32
 # 3. Migrations
 npm run migrate-deploy
 
-# 4. Boshlang'ich ma'lumotlar
+# 4. Boshlang'ich ma'lumotlar (filiallar + admin, so'ng iyerarxiya + SKU master)
 npm run db:seed
+ALLOW_DESTRUCTIVE_SEED=1 npm run db:seed-sku
 
 # 5. Production server
 npm run start

@@ -194,11 +194,40 @@ export async function confirmDistributionAction(id: number): Promise<{ ok: true 
     if (!d) return { ok: false, error: "Taqsimot topilmadi." };
     if (d.status !== "DRAFT") return { ok: false, error: "Faqat qoralamani tasdiqlash mumkin." };
     if (d.items.length === 0) return { ok: false, error: "Bo'sh taqsimot." };
-    const ops: Prisma.PrismaPromise<unknown>[] = d.items.map((it) =>
-      prisma.$executeRaw`UPDATE "WarehouseStock" SET "qty" = GREATEST("qty" - ${new Prisma.Decimal(it.qty)}::numeric, 0), "updatedAt" = now() WHERE "productId" = ${it.productId}`
-    );
-    ops.push(prisma.distribution.update({ where: { id: did }, data: { status: "CONFIRMED", confirmedAt: new Date() } }));
-    await prisma.$transaction(ops);
+
+    // Bir productId bir necha marta bo'lsa — jamlaymiz (bitta bulk UPDATE bilan bir marta ayiramiz).
+    const perProduct = new Map<number, Prisma.Decimal>();
+    for (const it of d.items) {
+      perProduct.set(it.productId, (perProduct.get(it.productId) ?? new Prisma.Decimal(0)).plus(it.qty));
+    }
+
+    const CONFLICT = "ALREADY_CONFIRMED";
+    try {
+      await prisma.$transaction(async (tx) => {
+        // TOCTOU himoyasi: statusni ATOMIK ravishda faqat hali DRAFT bo'lsa CONFIRMED qilamiz.
+        // Ikki-bosish/parallel so'rovda ikkinchisi count=0 oladi va qoldiq QAYTA ayirilmaydi.
+        const flip = await tx.distribution.updateMany({
+          where: { id: did, status: "DRAFT" },
+          data: { status: "CONFIRMED", confirmedAt: new Date() },
+        });
+        if (flip.count === 0) throw new Error(CONFLICT);
+        // Qoldiqni bitta bulk UPDATE bilan ayiramiz (0 dan past tushmaydi).
+        // ${pid}::int MAJBURIY: FROM (VALUES ...) da tipsiz parametr text bo'lib qoladi.
+        const vals = [...perProduct.entries()].map(
+          ([pid, q]) => Prisma.sql`(${pid}::int, ${q}::numeric)`
+        );
+        await tx.$executeRaw`
+          UPDATE "WarehouseStock" ws SET
+            "qty" = GREATEST(ws."qty" - v.q, 0), "updatedAt" = now()
+          FROM (VALUES ${Prisma.join(vals)}) AS v(pid, q)
+          WHERE ws."productId" = v.pid`;
+      });
+    } catch (e) {
+      if (e instanceof Error && e.message === CONFLICT) {
+        return { ok: false, error: "Taqsimot allaqachon tasdiqlangan. Sahifani yangilang." };
+      }
+      throw e;
+    }
     revalidatePath(`/logistika/taqsimot/${did}`);
     revalidatePath("/logistika");
     return { ok: true };
@@ -304,7 +333,12 @@ export async function confirmTransferAction(id: number): Promise<{ ok: true } | 
     if (!t) return { ok: false, error: "Ko'chirish topilmadi." };
     if (t.status !== "DRAFT") return { ok: false, error: "Faqat qoralamani tasdiqlash mumkin." };
     if (t._count.items === 0) return { ok: false, error: "Bo'sh ko'chirish." };
-    await prisma.branchTransfer.update({ where: { id: tid }, data: { status: "CONFIRMED", confirmedAt: new Date() } });
+    // TOCTOU himoyasi: faqat hali DRAFT bo'lsa CONFIRMED qilamiz (parallel/ikki-bosish).
+    const flip = await prisma.branchTransfer.updateMany({
+      where: { id: tid, status: "DRAFT" },
+      data: { status: "CONFIRMED", confirmedAt: new Date() },
+    });
+    if (flip.count === 0) return { ok: false, error: "Ko'chirish holati o'zgargan. Sahifani yangilang." };
     revalidatePath(`/logistika/kochirish/${tid}`);
     revalidatePath("/logistika");
     return { ok: true };

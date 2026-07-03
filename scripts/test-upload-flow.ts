@@ -7,7 +7,21 @@ import { sha256 } from "../src/lib/parsers/utils";
 import { parseSalesWorkbook } from "../src/lib/parsers/sales";
 import { parseVisitsWorkbook } from "../src/lib/parsers/visits";
 
-const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
+const DB_URL = process.env.DATABASE_URL ?? "";
+
+// XAVFSIZLIK: bu skript deleteMany() bilan jadvallarni TOZALAYDI. Faqat lokal DB'da
+// yoki ataylab ruxsat berilganda ishlashi kerak — `railway run tsx ...` orqali PROD'da
+// tasodifan ishga tushsa butun sotuv-metrika ma'lumotini o'chiradi (backup'siz qaytmaydi).
+const isLocalDb = DB_URL.includes("localhost") || DB_URL.includes("127.0.0.1");
+if (!isLocalDb && process.env.ALLOW_DESTRUCTIVE_SEED !== "1") {
+  console.error(
+    "❌ Bu skript destruktiv (deleteMany). DATABASE_URL lokal emas.\n" +
+      "   Lokalda ishlating yoki ataylab: ALLOW_DESTRUCTIVE_SEED=1 tsx scripts/test-upload-flow.ts"
+  );
+  process.exit(1);
+}
+
+const adapter = new PrismaPg({ connectionString: DB_URL });
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
