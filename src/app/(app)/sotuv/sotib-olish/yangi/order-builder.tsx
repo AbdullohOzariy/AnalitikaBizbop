@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { Fragment, memo, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -43,6 +43,122 @@ function branchAvto(cell: BranchCell, orderGap: number, lead: number | null, xyz
   const bMax = hisobMaxStock(cell.dailyAvg, orderGap, lead, xyz);
   return cell.stock < bMin ? Math.max(0, (bMax ?? bMin) - cell.stock) : 0;
 }
+
+// SKU qatori — memo'langan. Faqat o'z `line` propi o'zgargandagina qayta render bo'ladi
+// (ilgari har klaviatura bosishida BARCHA ochiq qatorlar qayta render bo'lardi). Handlerlar
+// (h) stabil identifikatorli — quyida stable-ref pattern bilan beriladi.
+type RowHandlers = {
+  setLine: (pid: number, patch: Partial<Omit<Line, "bq">>) => void;
+  setBranchQty: (pid: number, bid: number, val: string) => void;
+  regRef: (pid: number, field: string) => (el: HTMLInputElement | null) => void;
+  onEnterNext: (pid: number, field: string) => (e: React.KeyboardEvent<HTMLInputElement>) => void;
+};
+
+const SkuRow = memo(function SkuRow({
+  it, line, branches, orderGap, h,
+}: {
+  it: BuilderItem;
+  line: Line | undefined;
+  branches: BuilderBranch[];
+  orderGap: number;
+  h: RowHandlers;
+}) {
+  const l = line ?? { price: "", lead: "", pack: "", bq: {} };
+  const effLead = l.lead.trim() !== "" && Number(l.lead) >= 0 ? Number(l.lead) : it.lead;
+  const pack = packOf(l, it);
+  const cellByB = new Map(it.branches.map((c) => [c.branchId, c]));
+  const jamiQty = branches.reduce((s, b) => s + (Number(l.bq[b.id]) || 0), 0); // jami dona
+  const jamiBlok = pack > 0 ? jamiQty / pack : null; // jami blok = jami dona ÷ pachka
+  const price = Number(l.price) || it.purchasePrice || 0;
+  const sum = jamiQty * price;
+  const picked = jamiQty > 0;
+  return (
+    <TableRow key={it.productId}
+      className={cn("text-sm", picked ? "bg-emerald-500/10 hover:bg-emerald-500/15" : skuRowBg(it.abc, it.xyz))}>
+      <TableCell className="font-mono text-xs text-muted-foreground">
+        <span className="flex items-center gap-1.5 pl-6">
+          {it.code}
+          <span title={skuBadgeTitle(it.abc, it.xyz)}
+            className={cn("rounded border px-1 py-px text-[9px] font-bold leading-none", skuBadgeCls(it.abc, it.xyz))}>
+            {skuBadgeLabel(it.abc, it.xyz)}
+          </span>
+        </span>
+      </TableCell>
+      <TableCell className="max-w-[240px]" title={it.name}>
+        <span className="flex items-center gap-1.5">
+          <span className="truncate">{it.name}</span>
+          {it.arxiv && (
+            <span className="shrink-0 rounded border border-border bg-muted px-1.5 py-px text-[9px] font-semibold uppercase text-muted-foreground"
+              title="Arxivlangan (no-aktiv) — yana sotila boshlasa avtomatik aktivga qaytadi">no aktiv</span>
+          )}
+        </span>
+      </TableCell>
+      <TableCell className="px-2">
+        <Input ref={h.regRef(it.productId, "lead")} type="number" inputMode="numeric" value={l.lead}
+          placeholder={it.lead != null ? String(it.lead) : ""}
+          onChange={(e) => h.setLine(it.productId, { lead: e.target.value })}
+          onKeyDown={h.onEnterNext(it.productId, "lead")}
+          className="h-7 w-14 px-1.5 text-right text-xs tabular-nums"
+          title="Lead time (kun) — kiritilsa SKU'ga saqlanadi, avto-zakaz qayta hisoblanadi" aria-label="Lead time (kun)" />
+      </TableCell>
+      <TableCell className="px-2">
+        <Input ref={h.regRef(it.productId, "pack")} type="number" inputMode="decimal" value={l.pack}
+          placeholder={it.packSize != null ? String(it.packSize) : ""}
+          onChange={(e) => h.setLine(it.productId, { pack: e.target.value })}
+          onKeyDown={h.onEnterNext(it.productId, "pack")}
+          className="h-7 w-14 px-1.5 text-right text-xs tabular-nums"
+          title="Pachka — bir blokdagi dona soni (SKU'ga saqlanadi). Jami blok = jami dona ÷ pachka" aria-label="Pachka (dona/blok)" />
+      </TableCell>
+      {branches.map((b) => {
+        const cell = cellByB.get(b.id);
+        const avto = cell ? branchAvto(cell, orderGap, effLead, it.xyz) : 0;
+        const stock = cell?.stock ?? 0;
+        const daily = cell?.dailyAvg ?? 0;
+        return (
+          <Fragment key={b.id}>
+            <TableCell className="border-l border-border/60 text-right tabular-nums text-[11px] text-muted-foreground">
+              {stock > 0 ? stock.toLocaleString("uz-UZ") : <span className="text-muted-foreground/40">—</span>}
+            </TableCell>
+            <TableCell className="text-right tabular-nums text-[11px] text-muted-foreground">
+              {daily > 0 ? daily.toLocaleString("uz-UZ", { maximumFractionDigits: 1 }) : <span className="text-muted-foreground/40">—</span>}
+            </TableCell>
+            <TableCell className="text-right tabular-nums text-[11px]">
+              {avto > 0
+                ? <span className={cn(stock < (cell?.minStock ?? 0) ? "font-bold text-destructive" : "text-muted-foreground")}>{avto.toLocaleString("uz-UZ")}</span>
+                : <span className="text-muted-foreground/40">—</span>}
+            </TableCell>
+            <TableCell className="bg-primary/[0.03] px-1.5">
+              <Input ref={h.regRef(it.productId, `z${b.id}`)} type="number" inputMode="decimal" value={l.bq[b.id] ?? ""}
+                placeholder={avto > 0 ? String(avto) : ""}
+                onChange={(e) => h.setBranchQty(it.productId, b.id, e.target.value)}
+                onKeyDown={h.onEnterNext(it.productId, `z${b.id}`)}
+                className="h-7 w-16 px-1.5 text-right text-xs tabular-nums"
+                title="Shu filialga buyurtma miqdori (dona)" aria-label={`${b.name} miqdor (dona)`} />
+            </TableCell>
+          </Fragment>
+        );
+      })}
+      <TableCell className="border-l border-border/60 text-right tabular-nums text-xs font-semibold" title="Jami blok = jami dona ÷ pachka">
+        {jamiBlok != null && jamiQty > 0
+          ? (Math.round(jamiBlok * 100) / 100).toLocaleString("uz-UZ", { maximumFractionDigits: 2 })
+          : <span className="text-muted-foreground/40">—</span>}
+      </TableCell>
+      <TableCell className="text-right tabular-nums text-xs font-semibold" title="Jami dona (filiallar yig'indisi)">
+        {jamiQty > 0 ? jamiQty.toLocaleString("uz-UZ") : <span className="text-muted-foreground/40">—</span>}
+      </TableCell>
+      <TableCell className="bg-primary/[0.03] px-1.5">
+        <Input ref={h.regRef(it.productId, "price")} type="number" inputMode="decimal" value={l.price}
+          placeholder={it.purchasePrice != null ? String(it.purchasePrice) : ""}
+          onChange={(e) => h.setLine(it.productId, { price: e.target.value })}
+          onKeyDown={h.onEnterNext(it.productId, "price")}
+          className="h-7 w-24 px-1.5 text-right text-xs tabular-nums" aria-label="Dona narxi" />
+      </TableCell>
+      <TableCell className={cn("text-right tabular-nums text-xs", sum > 0 ? "font-semibold text-emerald-700 dark:text-emerald-400" : "text-muted-foreground/40")}>
+        {sum > 0 ? formatUZS(sum) : "—"}
+      </TableCell>
+    </TableRow>
+  );
+});
 
 export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSupplierId?: number; initialAgentId?: number }) {
   const router = useRouter();
@@ -297,103 +413,16 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
   const colCount = 4 + branches.length * 4 + 4; // Kod·SKU·Lead·Pachka + (4×filial) + Jami(Blok·Dona·Narx·Summa)
 
   // Bitta SKU qatori
-  const renderSku = (it: BuilderItem) => {
-    const l = lines.get(it.productId) ?? { price: "", lead: "", pack: "", bq: {} };
-    const effLead = l.lead.trim() !== "" && Number(l.lead) >= 0 ? Number(l.lead) : it.lead;
-    const pack = packOf(l, it);
-    const cellByB = new Map(it.branches.map((c) => [c.branchId, c]));
-    const jamiQty = branches.reduce((s, b) => s + (Number(l.bq[b.id]) || 0), 0); // jami dona
-    const jamiBlok = pack > 0 ? jamiQty / pack : null; // jami blok = jami dona ÷ pachka
-    const price = Number(l.price) || it.purchasePrice || 0;
-    const sum = jamiQty * price;
-    const picked = jamiQty > 0;
-    return (
-      <TableRow key={it.productId}
-        className={cn("text-sm", picked ? "bg-emerald-500/10 hover:bg-emerald-500/15" : skuRowBg(it.abc, it.xyz))}>
-        <TableCell className="font-mono text-xs text-muted-foreground">
-          <span className="flex items-center gap-1.5 pl-6">
-            {it.code}
-            <span title={skuBadgeTitle(it.abc, it.xyz)}
-              className={cn("rounded border px-1 py-px text-[9px] font-bold leading-none", skuBadgeCls(it.abc, it.xyz))}>
-              {skuBadgeLabel(it.abc, it.xyz)}
-            </span>
-          </span>
-        </TableCell>
-        <TableCell className="max-w-[240px]" title={it.name}>
-          <span className="flex items-center gap-1.5">
-            <span className="truncate">{it.name}</span>
-            {it.arxiv && (
-              <span className="shrink-0 rounded border border-border bg-muted px-1.5 py-px text-[9px] font-semibold uppercase text-muted-foreground"
-                title="Arxivlangan (no-aktiv) — yana sotila boshlasa avtomatik aktivga qaytadi">no aktiv</span>
-            )}
-          </span>
-        </TableCell>
-        <TableCell className="px-2">
-          <Input ref={regRef(it.productId, "lead")} type="number" inputMode="numeric" value={l.lead}
-            placeholder={it.lead != null ? String(it.lead) : ""}
-            onChange={(e) => setLine(it.productId, { lead: e.target.value })}
-            onKeyDown={onEnterNext(it.productId, "lead")}
-            className="h-7 w-14 px-1.5 text-right text-xs tabular-nums"
-            title="Lead time (kun) — kiritilsa SKU'ga saqlanadi, avto-zakaz qayta hisoblanadi" aria-label="Lead time (kun)" />
-        </TableCell>
-        <TableCell className="px-2">
-          <Input ref={regRef(it.productId, "pack")} type="number" inputMode="decimal" value={l.pack}
-            placeholder={it.packSize != null ? String(it.packSize) : ""}
-            onChange={(e) => setLine(it.productId, { pack: e.target.value })}
-            onKeyDown={onEnterNext(it.productId, "pack")}
-            className="h-7 w-14 px-1.5 text-right text-xs tabular-nums"
-            title="Pachka — bir blokdagi dona soni (SKU'ga saqlanadi). Jami blok = jami dona ÷ pachka" aria-label="Pachka (dona/blok)" />
-        </TableCell>
-        {branches.map((b) => {
-          const cell = cellByB.get(b.id);
-          const avto = cell ? branchAvto(cell, orderGap, effLead, it.xyz) : 0;
-          const stock = cell?.stock ?? 0;
-          const daily = cell?.dailyAvg ?? 0;
-          return (
-            <Fragment key={b.id}>
-              <TableCell className="border-l border-border/60 text-right tabular-nums text-[11px] text-muted-foreground">
-                {stock > 0 ? stock.toLocaleString("uz-UZ") : <span className="text-muted-foreground/40">—</span>}
-              </TableCell>
-              <TableCell className="text-right tabular-nums text-[11px] text-muted-foreground">
-                {daily > 0 ? daily.toLocaleString("uz-UZ", { maximumFractionDigits: 1 }) : <span className="text-muted-foreground/40">—</span>}
-              </TableCell>
-              <TableCell className="text-right tabular-nums text-[11px]">
-                {avto > 0
-                  ? <span className={cn(stock < (cell?.minStock ?? 0) ? "font-bold text-destructive" : "text-muted-foreground")}>{avto.toLocaleString("uz-UZ")}</span>
-                  : <span className="text-muted-foreground/40">—</span>}
-              </TableCell>
-              <TableCell className="bg-primary/[0.03] px-1.5">
-                <Input ref={regRef(it.productId, `z${b.id}`)} type="number" inputMode="decimal" value={l.bq[b.id] ?? ""}
-                  placeholder={avto > 0 ? String(avto) : ""}
-                  onChange={(e) => setBranchQty(it.productId, b.id, e.target.value)}
-                  onKeyDown={onEnterNext(it.productId, `z${b.id}`)}
-                  className="h-7 w-16 px-1.5 text-right text-xs tabular-nums"
-                  title="Shu filialga buyurtma miqdori (dona)" aria-label={`${b.name} miqdor (dona)`} />
-              </TableCell>
-            </Fragment>
-          );
-        })}
-        <TableCell className="border-l border-border/60 text-right tabular-nums text-xs font-semibold" title="Jami blok = jami dona ÷ pachka">
-          {jamiBlok != null && jamiQty > 0
-            ? (Math.round(jamiBlok * 100) / 100).toLocaleString("uz-UZ", { maximumFractionDigits: 2 })
-            : <span className="text-muted-foreground/40">—</span>}
-        </TableCell>
-        <TableCell className="text-right tabular-nums text-xs font-semibold" title="Jami dona (filiallar yig'indisi)">
-          {jamiQty > 0 ? jamiQty.toLocaleString("uz-UZ") : <span className="text-muted-foreground/40">—</span>}
-        </TableCell>
-        <TableCell className="bg-primary/[0.03] px-1.5">
-          <Input ref={regRef(it.productId, "price")} type="number" inputMode="decimal" value={l.price}
-            placeholder={it.purchasePrice != null ? String(it.purchasePrice) : ""}
-            onChange={(e) => setLine(it.productId, { price: e.target.value })}
-            onKeyDown={onEnterNext(it.productId, "price")}
-            className="h-7 w-24 px-1.5 text-right text-xs tabular-nums" aria-label="Dona narxi" />
-        </TableCell>
-        <TableCell className={cn("text-right tabular-nums text-xs", sum > 0 ? "font-semibold text-emerald-700 dark:text-emerald-400" : "text-muted-foreground/40")}>
-          {sum > 0 ? formatUZS(sum) : "—"}
-        </TableCell>
-      </TableRow>
-    );
-  };
+  // SkuRow (memo) ga beriladigan stabil handlerlar: identifikator o'zgarmaydi, lekin
+  // doim eng so'nggi closure'ga (orderedPids, lines...) yo'naltiradi (stale closure yo'q).
+  const rowHRef = useRef<RowHandlers>({ setLine, setBranchQty, regRef, onEnterNext });
+  useEffect(() => { rowHRef.current = { setLine, setBranchQty, regRef, onEnterNext }; });
+  const rowH = useMemo<RowHandlers>(() => ({
+    setLine: (pid, patch) => rowHRef.current.setLine(pid, patch),
+    setBranchQty: (pid, bid, val) => rowHRef.current.setBranchQty(pid, bid, val),
+    regRef: (pid, field) => rowHRef.current.regRef(pid, field),
+    onEnterNext: (pid, field) => rowHRef.current.onEnterNext(pid, field),
+  }), []);
 
   return (
     <div className="space-y-4">
@@ -554,7 +583,7 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
                                   </span>
                                 </TableCell>
                               </TableRow>
-                              {cOpen && c.direct.map((it) => renderSku(it))}
+                              {cOpen && c.direct.map((it) => <SkuRow key={it.productId} it={it} line={lines.get(it.productId)} branches={branches} orderGap={orderGap} h={rowH} />)}
                               {cOpen && c.subs.map((s) => {
                                 const sOpen = searching || !closedS.has(s.id);
                                 return (
@@ -568,7 +597,7 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
                                         </span>
                                       </TableCell>
                                     </TableRow>
-                                    {sOpen && s.items.map((it) => renderSku(it))}
+                                    {sOpen && s.items.map((it) => <SkuRow key={it.productId} it={it} line={lines.get(it.productId)} branches={branches} orderGap={orderGap} h={rowH} />)}
                                   </Fragment>
                                 );
                               })}

@@ -993,3 +993,16 @@ model PromoItem {
   @@index([campaignId])
   @@index([groupId])
 }
+
+// Cron ishlarining kunlik bajarilishi — dedup (replika/deploy'da ikki marta yubormaslik)
+// + catch-up (server o'chib qolib o'tkazib yuborilgan ishni startda bir marta bajarish).
+model CronRun {
+  id     Int      @id @default(autoincrement())
+  job    String // ish nomi (masalan "inv-report")
+  dayKey String // "YYYY-MM-DD" (Toshkent)
+  status String   @default("ok") // ok | error
+  ranAt  DateTime @default(now())
+  note   String?
+
+  @@unique([job, dayKey])
+}

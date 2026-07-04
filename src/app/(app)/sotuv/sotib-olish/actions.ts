@@ -343,13 +343,21 @@ function normBranches(branches?: { branchId: number; quantity: number }[]): { br
   return [...m.entries()].map(([branchId, quantity]) => ({ branchId, quantity }));
 }
 
-// Item + filial qatorlari uchun Prisma create payload (quantity = filiallar yig'indisi yoki jami).
-function itemCreateData(i: z.infer<typeof itemSchema>) {
+// Item scalar maydonlari (filial qatorlarisiz) — createMany uchun.
+function itemScalarData(i: z.infer<typeof itemSchema>) {
   const branchRows = normBranches(i.branches);
   const quantity = branchRows.length > 0 ? branchRows.reduce((s, b) => s + b.quantity, 0) : i.quantity;
   return {
     productId: i.productId, quantity, price: i.price,
     packCount: i.packCount ?? null, packSize: i.packSize ?? null,
+  };
+}
+
+// Item + filial qatorlari uchun Prisma nested-create payload (bitta purchaseOrder.create ichida).
+function itemCreateData(i: z.infer<typeof itemSchema>) {
+  const branchRows = normBranches(i.branches);
+  return {
+    ...itemScalarData(i),
     ...(branchRows.length > 0
       ? { branchQtys: { create: branchRows.map((b) => ({ branchId: b.branchId, quantity: b.quantity })) } }
       : {}),
@@ -360,14 +368,28 @@ function itemCreateData(i: z.infer<typeof itemSchema>) {
 async function rememberOrderParams(
   items: { productId: number; packSize?: number | null; price: number; leadTimeDays?: number | null }[]
 ) {
-  for (const i of items) {
-    const data: { packSize?: number; purchasePrice?: number; leadTimeDays?: number } = {};
-    if (i.packSize != null) data.packSize = i.packSize;
-    if (i.price > 0) data.purchasePrice = i.price;
-    if (i.leadTimeDays != null) data.leadTimeDays = i.leadTimeDays;
-    if (Object.keys(data).length === 0) continue;
-    await prisma.product.update({ where: { id: i.productId }, data }).catch(() => null);
-  }
+  // Har SKU uchun berilgan maydon yoziladi, berilmagani (null) COALESCE bilan saqlanadi.
+  // Bitta bulk UPDATE (ilgari har SKU'ga alohida so'rov — N+1 edi). Best-effort: xato yutiladi.
+  const vals = items
+    .map((i) => ({
+      pid: i.productId,
+      pack: i.packSize != null ? i.packSize : null,
+      price: i.price > 0 ? i.price : null,
+      lead: i.leadTimeDays != null ? i.leadTimeDays : null,
+    }))
+    .filter((v) => v.pack != null || v.price != null || v.lead != null);
+  if (vals.length === 0) return;
+  const rows = vals.map(
+    (v) => Prisma.sql`(${v.pid}::int, ${v.pack}::numeric, ${v.price}::numeric, ${v.lead}::int)`
+  );
+  await prisma.$executeRaw`
+    UPDATE "Product" p SET
+      "packSize"      = COALESCE(v.pack, p."packSize"),
+      "purchasePrice" = COALESCE(v.price, p."purchasePrice"),
+      "leadTimeDays"  = COALESCE(v.lead, p."leadTimeDays")
+    FROM (VALUES ${Prisma.join(rows)}) AS v(pid, pack, price, lead)
+    WHERE p.id = v.pid
+  `.catch(() => null);
 }
 
 type ActorUser = { id: string | number; roles: readonly string[] };
@@ -406,7 +428,7 @@ export async function createOrderAction(input: {
     const user = await requireOrderCreator();
     const supplierId = z.coerce.number().int().positive().parse(input.supplierId);
     const agentId = input.agentId != null ? z.coerce.number().int().positive().parse(input.agentId) : null;
-    const items = z.array(itemSchema).min(1, "Kamida bitta mahsulot kerak").parse(input.items);
+    const items = z.array(itemSchema).min(1, "Kamida bitta mahsulot kerak").max(2000, "Juda ko'p qator").parse(input.items);
     const scopeErr = await scopeError(user, items.map((i) => i.productId));
     if (scopeErr) return { ok: false, error: scopeErr };
     const branchErr = await invalidBranchError(items);
@@ -448,7 +470,7 @@ export async function updateOrderItemsAction(
     const user = session?.user;
     if (!user) return { ok: false, error: "Ruxsat yo'q." };
     const oid = z.coerce.number().int().positive().parse(orderId);
-    const parsed = z.array(itemSchema).min(1, "Kamida bitta mahsulot kerak").parse(items);
+    const parsed = z.array(itemSchema).min(1, "Kamida bitta mahsulot kerak").max(2000, "Juda ko'p qator").parse(items);
     const order = await prisma.purchaseOrder.findUnique({ where: { id: oid }, select: { status: true, createdById: true } });
     if (!order) return { ok: false, error: "Zakaz topilmadi." };
     const isOwner = order.createdById === Number(user.id);
@@ -460,13 +482,26 @@ export async function updateOrderItemsAction(
     if (scopeErr) return { ok: false, error: scopeErr };
     const branchErr = await invalidBranchError(parsed);
     if (branchErr) return { ok: false, error: branchErr };
-    // createMany nested yozolmaydi (filial qatorlari) — har item alohida create.
     // deleteMany filial qatorlarini ham (FK Cascade) o'chiradi, so'ng qayta yaratiladi.
-    await prisma.$transaction([
-      prisma.purchaseOrderItem.deleteMany({ where: { orderId: oid } }),
-      ...parsed.map((i) => prisma.purchaseOrderItem.create({ data: { orderId: oid, ...itemCreateData(i) } })),
-      prisma.purchaseOrder.update({ where: { id: oid }, data: { note: note?.trim() || null } }),
-    ]);
+    // N+1 o'rniga: itemlarni bitta createMany bilan, filial qatorlarini id round-trip'dan
+    // keyin yana bitta createMany bilan yozamiz (300 SKU'da ~600 so'rov -> ~4 so'rovga tushadi).
+    await prisma.$transaction(async (tx) => {
+      await tx.purchaseOrderItem.deleteMany({ where: { orderId: oid } });
+      await tx.purchaseOrderItem.createMany({ data: parsed.map((i) => ({ orderId: oid, ...itemScalarData(i) })) });
+      const branchInputs = parsed.filter((i) => normBranches(i.branches).length > 0);
+      if (branchInputs.length > 0) {
+        const created = await tx.purchaseOrderItem.findMany({
+          where: { orderId: oid, productId: { in: branchInputs.map((i) => i.productId) } },
+          select: { id: true, productId: true },
+        });
+        const idByProduct = new Map(created.map((c) => [c.productId, c.id]));
+        const branchRows = branchInputs.flatMap((i) =>
+          normBranches(i.branches).map((b) => ({ orderItemId: idByProduct.get(i.productId)!, branchId: b.branchId, quantity: b.quantity }))
+        );
+        if (branchRows.length > 0) await tx.purchaseOrderItemBranch.createMany({ data: branchRows });
+      }
+      await tx.purchaseOrder.update({ where: { id: oid }, data: { note: note?.trim() || null } });
+    });
     await rememberOrderParams(parsed);
     revalidatePath(`/sotuv/sotib-olish/${oid}`);
     revalidatePath("/sotuv/sotib-olish");

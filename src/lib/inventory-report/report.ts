@@ -7,7 +7,7 @@ import * as XLSX from "xlsx";
 import { Telegram } from "telegraf";
 import { prisma } from "@/lib/prisma";
 import { inventoryProblemRows } from "@/lib/snapshot-reports";
-import { TASHKENT_OFFSET_MS, isoDay } from "@/lib/date";
+import { isoDay } from "@/lib/date";
 import { getInventoryReportConfig } from "./sozlama";
 
 function num(n: unknown): number {
@@ -17,18 +17,17 @@ function num(n: unknown): number {
 
 /** Muammoli tovarlar Excel buferi (so'nggi mavjud kun ma'lumotlari bo'yicha). */
 export async function buildInventoryReport(): Promise<{ buffer: Buffer; count: number; dateStr: string }> {
-  // Bir kun oldingi (kecha) holatiga ko'ra — Toshkent (UTC+5, DST yo'q).
-  // 14:00/14-sanada → 13-sana ma'lumoti. endStr = kecha; oyna kechagacha 40 kun
-  // (dam olish/bayram tufayli kun o'tkazib yuborilsa ham eng so'nggi snapshot topiladi).
-  const yEnd = Date.now() + TASHKENT_OFFSET_MS - 24 * 3_600_000;
-  const endStr = isoDay(new Date(yEnd));
-  const startStr = isoDay(new Date(yEnd - 40 * 24 * 3_600_000));
-  const rows = await inventoryProblemRows({ startStr, endStr, q: "", scopeSubIds: null });
-  // Yorliq uchun haqiqiy ishlatilgan ma'lumot kuni (kechagacha bo'lgan eng so'nggi periodEnd)
-  const lastPs = await prisma.productSales
-    .aggregate({ _max: { periodEnd: true }, where: { periodEnd: { lte: new Date(endStr + "T00:00:00.000Z") } } })
-    .catch(() => null);
-  const dateStr = lastPs?._max.periodEnd ? isoDay(lastPs._max.periodEnd) : endStr;
+  // FAQAT so'nggi mavjud kun (max periodEnd) snapshot'iga tayanamiz. Ilgari "kecha"gacha
+  // 40 kunlik oyna olinar va `latest` CTE har mahsulotning O'Z so'nggi snapshot'ini tanlardi —
+  // natijada eskiroq kunda muammoli, lekin so'nggi kunda yechilgan/faylда yo'q tovarlar ham
+  // ro'yxatga tushardi (aralash sanalar). Kunlik snapshot: periodStart == periodEnd, shuning
+  // uchun startStr=endStr=so'nggi kun aynan o'sha kun qatorlarini beradi.
+  const last = await prisma.productSales.aggregate({ _max: { periodEnd: true } }).catch(() => null);
+  const day = last?._max.periodEnd;
+  const dateStr = day ? isoDay(day) : isoDay(new Date());
+  const rows = day
+    ? await inventoryProblemRows({ startStr: dateStr, endStr: dateStr, q: "", scopeSubIds: null })
+    : [];
 
   const header = ["Kod", "Mahsulot", "Kategoriya", "Filial", "Qoldiq", "Sotuv"];
   const data = rows.map((r) => [

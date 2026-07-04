@@ -317,7 +317,7 @@ export async function insertYozuv(d: YozuvKirim): Promise<number> {
 export async function setGuruhMessageId(yozuvId: number, messageId: number): Promise<void> {
   const p = getPool();
   if (!p) return;
-  await p.query(`UPDATE yozuvlar SET guruh_message_id=$1 WHERE id=$2`, [messageId, yozuvId]).catch(() => {});
+  await p.query(`UPDATE yozuvlar SET guruh_message_id=$1 WHERE id=$2`, [messageId, yozuvId]).catch((e) => logDbXato(e));
 }
 
 /** Miniapp uchun aktiv filial nomlari. */
@@ -569,10 +569,60 @@ export async function vozvratYarat(d: VozvratKirim): Promise<number> {
   return rows[0].id as number;
 }
 
+/**
+ * Ko'p vozvratni bitta tranzaksiyada, 500 talik chunk'li multi-VALUES INSERT bilan yozadi
+ * (Excel import — har qatorga alohida so'rov N+1 edi). Guruhga xabar YUBORMAYDI.
+ * Yarim import qolmasin: xato bo'lsa butun tranzaksiya ROLLBACK bo'ladi. Yaratilgan sonni qaytaradi.
+ */
+export async function vozvratlarBatchYarat(items: VozvratKirim[]): Promise<number> {
+  if (items.length === 0) return 0;
+  const p = requirePool();
+  await ensureSozlamalarSchema();
+  const client = await p.connect();
+  const COLS = 14;
+  const CHUNK = 500;
+  try {
+    await client.query("BEGIN");
+    let total = 0;
+    for (let i = 0; i < items.length; i += CHUNK) {
+      const chunk = items.slice(i, i + CHUNK);
+      const params: unknown[] = [];
+      const tuples: string[] = [];
+      for (const d of chunk) {
+        const status = VOZVRAT_HOLATLAR.includes(d.status as VozvratHolat) ? d.status : "saqlash_xonasida";
+        const yonalish = d.yonalish === "taminotchi" ? "taminotchi" : "asosiy_filial";
+        const base = params.length;
+        tuples.push(`(${Array.from({ length: COLS }, (_, k) => `$${base + k + 1}`).join(",")})`);
+        params.push(
+          d.tovar, d.miqdor, d.birlik || "dona", d.summa, d.sabab || null, d.filial,
+          yonalish, yonalish === "taminotchi" ? d.taminotchi || null : null,
+          d.rasm_file_id || null, d.xodim_ism, d.xodim_username || null, d.xodim_id,
+          status, status === "qaytarilmadi" ? d.qaytarilmadi_sabab || null : null,
+        );
+      }
+      const res = await client.query(
+        `INSERT INTO vozvratlar
+           (tovar, miqdor, birlik, summa, sabab, filial, yonalish, taminotchi,
+            rasm_file_id, xodim_ism, xodim_username, xodim_id, status, qaytarilmadi_sabab)
+         VALUES ${tuples.join(",")}`,
+        params
+      );
+      total += res.rowCount ?? chunk.length;
+    }
+    await client.query("COMMIT");
+    return total;
+  } catch (e) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
 export async function vozvratSetGuruhMessageId(id: number, messageId: number): Promise<void> {
   const p = getPool();
   if (!p) return;
-  await p.query(`UPDATE vozvratlar SET guruh_message_id=$1 WHERE id=$2`, [messageId, id]).catch(() => {});
+  await p.query(`UPDATE vozvratlar SET guruh_message_id=$1 WHERE id=$2`, [messageId, id]).catch((e) => logDbXato(e));
 }
 
 export async function vozvratById(id: number): Promise<VozvratYozuv | null> {

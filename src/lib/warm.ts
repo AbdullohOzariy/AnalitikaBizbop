@@ -31,6 +31,27 @@ import { computeAbcXyz } from "@/lib/abc-xyz";
 import { oosKpi, oosTreeAgg, stockdayKpi, stockdayTreeAgg } from "@/lib/snapshot-reports";
 import { isoDay } from "@/lib/date";
 
+/** Thunk'larni ko'pi bilan `limit` ta bir vaqtda ishlatadi (Promise.allSettled semantikasi). */
+async function runLimited(
+  thunks: (() => Promise<unknown>)[],
+  limit: number
+): Promise<PromiseSettledResult<unknown>[]> {
+  const results: PromiseSettledResult<unknown>[] = new Array(thunks.length);
+  let idx = 0;
+  const worker = async () => {
+    while (idx < thunks.length) {
+      const i = idx++;
+      try {
+        results[i] = { status: "fulfilled", value: await thunks[i]() };
+      } catch (reason) {
+        results[i] = { status: "rejected", reason };
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, thunks.length) }, worker));
+  return results;
+}
+
 export async function warmAnalyticsCaches(reason: string): Promise<void> {
   const t0 = Date.now();
   try {
@@ -42,33 +63,35 @@ export async function warmAnalyticsCaches(reason: string): Promise<void> {
     const snap = { startStr, endStr, q: "" };
     const todayStr = isoDay(new Date());
 
-    const results = await Promise.allSettled([
+    // Cheklangan parallelizm (4): isitish fon ishi — pool (max 10) ni to'yintirib,
+    // shu paytdagi foydalanuvchi so'rovlarini 'timeout'ga uchratmaslik uchun.
+    const results = await runLimited([
       // Dashboard v1
-      computeKPI(def),
-      dailySalesSeries(def),
-      dailyReceiptsSeries(def),
-      dailyVisitsSeries(def),
-      branchShare(def),
-      topCategories(def),
-      branchPerformance(def),
-      findMissingDays(def),
+      () => computeKPI(def),
+      () => dailySalesSeries(def),
+      () => dailyReceiptsSeries(def),
+      () => dailyVisitsSeries(def),
+      () => branchShare(def),
+      () => topCategories(def),
+      () => branchPerformance(def),
+      () => findMissingDays(def),
       // Dashboard v2
-      dailyVisitsByBranch(def),
-      dailyReceiptsByBranch(def),
-      marjaBreakdown(def),
-      marjaHierarchy(def),
-      kpiByBranch(def),
-      dailySalesByGroup(def),
-      dailyPlanByGroup(def),
-      dailyForecastSeries(def),
+      () => dailyVisitsByBranch(def),
+      () => dailyReceiptsByBranch(def),
+      () => marjaBreakdown(def),
+      () => marjaHierarchy(def),
+      () => kpiByBranch(def),
+      () => dailySalesByGroup(def),
+      () => dailyPlanByGroup(def),
+      () => dailyForecastSeries(def),
       // ABC/XYZ (default 3 oy)
-      computeAbcXyz(abcStart, endStr),
+      () => computeAbcXyz(abcStart, endStr),
       // OOS / Stockday — KPI + daraxt agregati (default tab)
-      oosKpi(snap),
-      oosTreeAgg(snap, "oos"),
-      stockdayKpi(snap, todayStr),
-      stockdayTreeAgg(snap, "kritik", todayStr),
-    ]);
+      () => oosKpi(snap),
+      () => oosTreeAgg(snap, "oos"),
+      () => stockdayKpi(snap, todayStr),
+      () => stockdayTreeAgg(snap, "kritik", todayStr),
+    ], 4);
 
     const failed = results.filter((r) => r.status === "rejected").length;
     console.log(

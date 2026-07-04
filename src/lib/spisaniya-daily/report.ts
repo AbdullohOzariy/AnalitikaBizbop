@@ -3,6 +3,9 @@ import { getSpisaniyaDailyConfig } from "./sozlama";
 import { chiqimByBranch, chiqimByKategoriya, type ChiqimRange } from "@/lib/spisaniya/db";
 import { isoDay, todayTashkentISO } from "@/lib/date";
 
+/** HTML parse_mode uchun maxsus belgilarni eskeyplash (kategoriya/filial nomlari xom keladi). */
+const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
 const NF = new Intl.NumberFormat("uz-UZ");
 const money = (n: number) => NF.format(Math.round(n));
 
@@ -44,14 +47,14 @@ export async function buildSpisaniyaDailyText(): Promise<{ text: string; total: 
   if (topKat) {
     lines.push(
       "🔴 <b>Eng xavfli subkategoriya</b>",
-      `   ${topKat.kategoriya} — <b>${money(topKat.summa)}</b> so'm · ${topKat.count} ta (jami ${pct(topKat.summa)}%)`,
+      `   ${esc(topKat.kategoriya)} — <b>${money(topKat.summa)}</b> so'm · ${topKat.count} ta (jami ${pct(topKat.summa)}%)`,
       ""
     );
   }
   if (topBranch) {
     lines.push(
       "🏢 <b>Eng xavfli filial</b>",
-      `   ${topBranch.filial} — <b>${money(topBranch.summa)}</b> so'm · ${topBranch.count} ta (jami ${pct(topBranch.summa)}%)`
+      `   ${esc(topBranch.filial)} — <b>${money(topBranch.summa)}</b> so'm · ${topBranch.count} ta (jami ${pct(topBranch.summa)}%)`
     );
   }
   return { text: lines.join("\n"), total, label };

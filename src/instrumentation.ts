@@ -1,13 +1,75 @@
 /**
- * Next ishga tushganda bir marta ishlaydi (server start). Telegram webhook'ni
- * {WEBHOOK_URL}/api/tg/{BOT_TOKEN} ga o'rnatadi. BOT_TOKEN yoki WEBHOOK_URL yo'q
- * bo'lsa — jim o'tkazib yuboradi. Faqat Node.js runtime'da.
+ * Next ishga tushganda bir marta ishlaydi (server start). Kunlik cron hisobotlar,
+ * kesh isitish va Telegram webhook'ni o'rnatadi. Faqat Node.js runtime'da.
  */
+import { nowTashkent } from "@/lib/date";
+
+/** Kunlik cron ishlari — nomi, jadvali (Toshkent soat:daqiqa) va bajaruvchisi. */
+type CronJob = { name: string; cron: string; hour: number; minute: number; run: () => Promise<void> };
+
+const JOBS: CronJob[] = [
+  // 14:00 — inventarizatsiya: so'nggi kun bo'yicha muammoli (qoldiq 0/minus, sotuvi bor) tovarlar.
+  {
+    name: "inv-report", cron: "0 14 * * *", hour: 14, minute: 0,
+    run: async () => {
+      const { sendInventoryReport } = await import("@/lib/inventory-report/report");
+      const r = await sendInventoryReport();
+      if (!r.ok) throw new Error(r.error || "yuborilmadi");
+      console.log(`[inv-report] yuborildi: ${r.count} ta muammoli SKU`);
+    },
+  },
+  // 15:00 — marja minus (tannarx > sotuv) kataklari. Faqat sozlamada YOQILGAN bo'lsa.
+  {
+    name: "margin-report", cron: "0 15 * * *", hour: 15, minute: 0,
+    run: async () => {
+      const { getMarginReportConfig } = await import("@/lib/margin-report/sozlama");
+      if (!(await getMarginReportConfig()).autoEnabled) return;
+      const { sendMarginReport } = await import("@/lib/margin-report/report");
+      const r = await sendMarginReport();
+      if (!r.ok) throw new Error(r.error || "yuborilmadi");
+      console.log(`[margin-report] yuborildi: ${r.count} ta filial×subkat`);
+    },
+  },
+  // 10:00 — yetkazib berish kechikishi (kutilgan sanadan o'tgan zakazlar). Sozlama + bo'sh bo'lsa jim.
+  {
+    name: "delivery-alert", cron: "0 10 * * *", hour: 10, minute: 0,
+    run: async () => {
+      const { getDeliveryAlertConfig } = await import("@/lib/delivery-alert/sozlama");
+      if (!(await getDeliveryAlertConfig()).autoEnabled) return;
+      const { sendDeliveryAlert } = await import("@/lib/delivery-alert/report");
+      const r = await sendDeliveryAlert({ skipIfEmpty: true });
+      if (!r.ok) throw new Error(r.error || "yuborilmadi");
+      if (r.skipped) console.log("[delivery-alert] kechikkan zakaz yo'q — o'tkazib yuborildi");
+      else console.log(`[delivery-alert] yuborildi: ${r.count} ta kechikkan zakaz`);
+    },
+  },
+  // 09:00 — muddati o'tgan FAOL aksiyalarni ENDED qilish (Telegram'siz).
+  {
+    name: "promo-end", cron: "0 9 * * *", hour: 9, minute: 0,
+    run: async () => {
+      const { endExpiredPromos } = await import("@/lib/promo-jobs");
+      const n = await endExpiredPromos();
+      if (n > 0) console.log(`[promo-end] ${n} ta muddati o'tgan aksiya ENDED qilindi`);
+    },
+  },
+  // 09:30 — spisaniya kunlik indikatori (kechagi kun bo'yicha). Faqat YOQILGAN bo'lsa.
+  {
+    name: "spisaniya-daily", cron: "30 9 * * *", hour: 9, minute: 30,
+    run: async () => {
+      const { getSpisaniyaDailyConfig } = await import("@/lib/spisaniya-daily/sozlama");
+      if (!(await getSpisaniyaDailyConfig()).autoEnabled) return;
+      const { sendSpisaniyaDailyReport } = await import("@/lib/spisaniya-daily/report");
+      const r = await sendSpisaniyaDailyReport();
+      if (!r.ok) throw new Error(r.error || "yuborilmadi");
+      console.log(`[spisaniya-daily] yuborildi: jami ${r.total}`);
+    },
+  },
+];
+
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
 
-  // Deploy/restart'dan keyin fonda: (1) SKU matritsa sinflari (backfill ham shu yerda),
-  // (2) kesh isitish — birinchi tashrifchi og'ir hisobni kutmasin. Startup bloklanmaydi.
+  // Deploy/restart'dan keyin fonda: (1) SKU matritsa sinflari (backfill), (2) kesh isitish.
   (async () => {
     const { updateProductMatrixClasses } = await import("@/lib/abc-xyz");
     await updateProductMatrixClasses();
@@ -17,154 +79,46 @@ export async function register() {
     console.warn("[instrumentation] warm/sinf xatosi:", err instanceof Error ? err.message : err)
   );
 
-  // Kunlik inventarizatsiya hisoboti — har kuni 14:00 (Toshkent): qoldig'i 0/minus,
-  // lekin sotuvi bor muammoli tovarlar Excel'i sozlangan guruhga yuboriladi.
-  // node-cron faqat Node runtime'da; dublikat ro'yxatdan o'tishni globalThis bilan oldini olamiz.
-  {
-    const gg = globalThis as typeof globalThis & { __invReportCron?: boolean };
-    if (!gg.__invReportCron) {
-      gg.__invReportCron = true;
-      try {
-        const { schedule } = await import("node-cron");
-        schedule("0 14 * * *", async () => {
-          try {
-            const { sendInventoryReport } = await import("@/lib/inventory-report/report");
-            const r = await sendInventoryReport();
-            if (!r.ok) console.warn("[inv-report] yuborilmadi:", r.error);
-            else console.log(`[inv-report] yuborildi: ${r.count} ta muammoli SKU`);
-          } catch (e) {
-            console.error("[inv-report] xato:", e instanceof Error ? e.message : e);
-          }
-        }, { timezone: "Asia/Tashkent" });
-        console.log("[instrumentation] Inventarizatsiya cron o'rnatildi: har kuni 14:00 (Asia/Tashkent)");
-      } catch (e) {
-        console.warn("[instrumentation] inv-report cron o'rnatilmadi:", e instanceof Error ? e.message : e);
+  // ── Kunlik cron ishlari — dublikat ro'yxatdan o'tishni globalThis bilan oldini olamiz ──
+  const gg = globalThis as typeof globalThis & { __cronRegistered?: boolean };
+  if (!gg.__cronRegistered) {
+    gg.__cronRegistered = true;
+    try {
+      const { schedule } = await import("node-cron");
+      const { runCron } = await import("@/lib/cron");
+      for (const job of JOBS) {
+        schedule(job.cron, () => void runCron(job.name, job.run), { timezone: "Asia/Tashkent" });
       }
+      console.log(`[instrumentation] ${JOBS.length} ta cron o'rnatildi (Asia/Tashkent)`);
+
+      // CATCH-UP: server o'sha vaqtda o'chiq bo'lgan bo'lsa, bugungi vaqti o'tgan ishlarni
+      // bir marta bajaramiz. runCron dedup qiladi — allaqachon bajarilgan bo'lsa jim chiqadi.
+      const now = nowTashkent();
+      const nowMin = now.getUTCHours() * 60 + now.getUTCMinutes();
+      for (const job of JOBS) {
+        if (nowMin >= job.hour * 60 + job.minute) {
+          void runCron(job.name, job.run).catch((e) =>
+            console.error(`[cron:${job.name}] catch-up xato:`, e instanceof Error ? e.message : e)
+          );
+        }
+      }
+    } catch (e) {
+      console.warn("[instrumentation] cron o'rnatilmadi:", e instanceof Error ? e.message : e);
     }
   }
 
-  // Kunlik MARJA hisoboti — har kuni 15:00 (Toshkent): oxirgi davr filial×subkat
-  // marjasi minus (tannarx > sotuv) kataklari Excel'i. Faqat sozlamada YOQILGAN bo'lsa.
-  {
-    const gg = globalThis as typeof globalThis & { __marginReportCron?: boolean };
-    if (!gg.__marginReportCron) {
-      gg.__marginReportCron = true;
-      try {
-        const { schedule } = await import("node-cron");
-        schedule("0 15 * * *", async () => {
-          try {
-            const { getMarginReportConfig } = await import("@/lib/margin-report/sozlama");
-            const cfg = await getMarginReportConfig();
-            if (!cfg.autoEnabled) return; // avto yuborish o'chirilgan
-            const { sendMarginReport } = await import("@/lib/margin-report/report");
-            const r = await sendMarginReport();
-            if (!r.ok) console.warn("[margin-report] yuborilmadi:", r.error);
-            else console.log(`[margin-report] yuborildi: ${r.count} ta filial×subkat`);
-          } catch (e) {
-            console.error("[margin-report] xato:", e instanceof Error ? e.message : e);
-          }
-        }, { timezone: "Asia/Tashkent" });
-        console.log("[instrumentation] Marja cron o'rnatildi: har kuni 15:00 (Asia/Tashkent)");
-      } catch (e) {
-        console.warn("[instrumentation] margin-report cron o'rnatilmadi:", e instanceof Error ? e.message : e);
-      }
-    }
-  }
-
-  // Kunlik YETKAZIB BERISH kechikishi signali — har kuni 10:00 (Toshkent): kutilgan
-  // sanadan o'tib ketgan (hali kelmagan) zakazlar ro'yxati guruhga. Faqat sozlamada
-  // YOQILGAN bo'lsa va kechikkan zakaz bo'lsa (bo'sh bo'lsa — jim).
-  {
-    const gg = globalThis as typeof globalThis & { __deliveryAlertCron?: boolean };
-    if (!gg.__deliveryAlertCron) {
-      gg.__deliveryAlertCron = true;
-      try {
-        const { schedule } = await import("node-cron");
-        schedule("0 10 * * *", async () => {
-          try {
-            const { getDeliveryAlertConfig } = await import("@/lib/delivery-alert/sozlama");
-            const cfg = await getDeliveryAlertConfig();
-            if (!cfg.autoEnabled) return; // avto yuborish o'chirilgan
-            const { sendDeliveryAlert } = await import("@/lib/delivery-alert/report");
-            const r = await sendDeliveryAlert({ skipIfEmpty: true });
-            if (!r.ok) console.warn("[delivery-alert] yuborilmadi:", r.error);
-            else if (r.skipped) console.log("[delivery-alert] kechikkan zakaz yo'q — o'tkazib yuborildi");
-            else console.log(`[delivery-alert] yuborildi: ${r.count} ta kechikkan zakaz`);
-          } catch (e) {
-            console.error("[delivery-alert] xato:", e instanceof Error ? e.message : e);
-          }
-        }, { timezone: "Asia/Tashkent" });
-        console.log("[instrumentation] Yetkazish kechikishi cron o'rnatildi: har kuni 10:00 (Asia/Tashkent)");
-      } catch (e) {
-        console.warn("[instrumentation] delivery-alert cron o'rnatilmadi:", e instanceof Error ? e.message : e);
-      }
-    }
-  }
-
-  // PROMO aksiyalar — har kuni 09:00 (Toshkent): muddati o'tgan FAOL aksiyalarni
-  // avtomatik ENDED qiladi (ACTIVE → ENDED). Telegram'siz, sozlamasiz.
-  {
-    const gg = globalThis as typeof globalThis & { __promoEndCron?: boolean };
-    if (!gg.__promoEndCron) {
-      gg.__promoEndCron = true;
-      try {
-        const { schedule } = await import("node-cron");
-        schedule("0 9 * * *", async () => {
-          try {
-            const { endExpiredPromos } = await import("@/lib/promo-jobs");
-            const n = await endExpiredPromos();
-            if (n > 0) console.log(`[promo-end] ${n} ta muddati o'tgan aksiya ENDED qilindi`);
-          } catch (e) {
-            console.error("[promo-end] xato:", e instanceof Error ? e.message : e);
-          }
-        }, { timezone: "Asia/Tashkent" });
-        console.log("[instrumentation] Promo cron o'rnatildi: har kuni 09:00 (Asia/Tashkent)");
-      } catch (e) {
-        console.warn("[instrumentation] promo cron o'rnatilmadi:", e instanceof Error ? e.message : e);
-      }
-    }
-  }
-
-  // SPISANIYA kunlik indikator hisoboti — har kuni 09:30 (Toshkent): kechagi kun
-  // bo'yicha eng xavfli subkategoriya + filial sozlangan guruhga. Faqat YOQILGAN bo'lsa.
-  {
-    const gg = globalThis as typeof globalThis & { __spDailyCron?: boolean };
-    if (!gg.__spDailyCron) {
-      gg.__spDailyCron = true;
-      try {
-        const { schedule } = await import("node-cron");
-        schedule("30 9 * * *", async () => {
-          try {
-            const { getSpisaniyaDailyConfig } = await import("@/lib/spisaniya-daily/sozlama");
-            if (!(await getSpisaniyaDailyConfig()).autoEnabled) return; // avto yuborish o'chirilgan
-            const { sendSpisaniyaDailyReport } = await import("@/lib/spisaniya-daily/report");
-            const r = await sendSpisaniyaDailyReport();
-            if (!r.ok) console.warn("[spisaniya-daily] yuborilmadi:", r.error);
-            else console.log(`[spisaniya-daily] yuborildi: jami ${r.total}`);
-          } catch (e) {
-            console.error("[spisaniya-daily] xato:", e instanceof Error ? e.message : e);
-          }
-        }, { timezone: "Asia/Tashkent" });
-        console.log("[instrumentation] Spisaniya kunlik cron o'rnatildi: har kuni 09:30 (Asia/Tashkent)");
-      } catch (e) {
-        console.warn("[instrumentation] spisaniya-daily cron o'rnatilmadi:", e instanceof Error ? e.message : e);
-      }
-    }
-  }
-
+  // ── Telegram webhook ──
   const token = process.env.BOT_TOKEN;
   const base = (process.env.WEBHOOK_URL || "").replace(/\/$/, "");
   if (!token || !base) {
     console.warn("[instrumentation] BOT_TOKEN yoki WEBHOOK_URL yo'q — webhook o'rnatilmadi");
     return;
   }
-
   try {
     const { getBot, webhookSecret } = await import("@/lib/spisaniya/bot");
     const bot = getBot();
     const secret = webhookSecret();
     if (!bot || !secret) return;
-    // Token URL'da emas — secret_token header orqali tasdiqlanadi.
     const url = `${base}/api/tg`;
     await bot.telegram.setWebhook(url, { secret_token: secret });
     console.log(`[instrumentation] Webhook o'rnatildi: ${url} (secret_token bilan)`);

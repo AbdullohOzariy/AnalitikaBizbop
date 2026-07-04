@@ -9,9 +9,10 @@ import {
   vozvratChiqimgaOtkaz,
   vozvratYangila,
   vozvratOchir,
-  vozvratYarat,
+  vozvratlarBatchYarat,
   aktivFilialNomlari,
   TUR_LABEL,
+  type VozvratKirim,
 } from "@/lib/spisaniya/db";
 import { parseVozvratRows } from "@/lib/spisaniya/vozvrat-import";
 import { vozvratHolatGuruhXabar } from "@/lib/spisaniya/notify";
@@ -181,20 +182,21 @@ export async function importVozvratlarAction(
     const branchByNorm = new Map(branches.map((b) => [norm(b), b]));
     const ism = user.name?.trim() || user.email || "Admin";
 
-    let created = 0;
     const unmatched = new Set<string>();
+    const toCreate: VozvratKirim[] = [];
     for (const r of parsed) {
       const fb = branchByNorm.get(norm(r.filial));
       if (!fb) { unmatched.add(r.filial); continue; }
-      await vozvratYarat({
+      toCreate.push({
         tovar: r.tovar, miqdor: r.miqdor, summa: r.summa, filial: fb,
         birlik: r.birlik ?? "dona", sabab: r.sabab ?? null,
         yonalish: r.yonalish ?? "asosiy_filial",
         taminotchi: r.yonalish === "taminotchi" ? (r.taminotchi ?? null) : null,
         xodim_ism: ism, xodim_id: 0, status: "saqlash_xonasida",
       });
-      created++;
     }
+    // Bitta tranzaksiyada batch (N+1 emas); yarim import qolmaydi.
+    const created = await vozvratlarBatchYarat(toCreate);
     revalidatePath(RP);
     return { ok: true, created, unmatched: unmatched.size, unmatchedSample: [...unmatched].slice(0, 8), rows: parsed.length };
   } catch (err) {
