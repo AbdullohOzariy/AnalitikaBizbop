@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { importSalesViaToken } from "@/app/(app)/admin/upload/actions";
+import { rateLimit, clientIp } from "@/lib/spisaniya/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,6 +22,22 @@ export const maxDuration = 300;
  * tarkib) hash bo'yicha e'tiborsiz qoldiriladi — 1C xato bermay qayta yuboraverishi mumkin.
  */
 export async function POST(req: NextRequest) {
+  const ip = clientIp(req);
+
+  // Rate-limit: import kuniga bir-ikki marta bo'ladi — flood/abuse'ni to'sadi.
+  if (!rateLimit(`import:${ip}`, 30, 60 * 60_000)) {
+    return NextResponse.json({ ok: false, error: "Juda ko'p so'rov. Keyinroq urinib ko'ring." }, { status: 429 });
+  }
+
+  // IP-allowlist (ixtiyoriy, lekin TAVSIYA etiladi): IMPORT_ALLOWED_IPS o'rnatilgan bo'lsa,
+  // faqat o'sha IP'lardan qabul qilinadi. Token tarqalib ketsa ham, begona manbadan
+  // yuborilgani o'tmaydi (token + IP = ikki omil). Bo'sh bo'lsa — faqat token bilan.
+  const allow = (process.env.IMPORT_ALLOWED_IPS || "").split(",").map((s) => s.trim()).filter(Boolean);
+  if (allow.length > 0 && !allow.includes(ip)) {
+    console.warn(`[api/import/sales] ruxsatsiz IP: ${ip}`);
+    return NextResponse.json({ ok: false, error: "Ruxsat etilmagan manba (IP)." }, { status: 403 });
+  }
+
   const token =
     req.headers.get("x-import-token") || req.nextUrl.searchParams.get("token") || "";
   const ctype = req.headers.get("content-type") || "";
