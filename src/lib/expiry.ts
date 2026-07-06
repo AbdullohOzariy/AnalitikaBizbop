@@ -62,8 +62,8 @@ export async function expiryRisk(): Promise<ExpiryBatch[]> {
 
   const pids = [...new Set(batches.map((b) => b.productId))];
   const range = await getDefaultRange();
-  const startStr = range.start.toISOString().slice(0, 10);
-  const endStr = range.end.toISOString().slice(0, 10);
+  const startStr = isoDay(range.start);
+  const endStr = isoDay(range.end);
 
   const avgRows = await prisma.$queryRaw<{ productId: number; branchId: number; daily: number }[]>(Prisma.sql`
     SELECT ps."productId", ps."branchId",
@@ -85,7 +85,7 @@ export async function expiryRisk(): Promise<ExpiryBatch[]> {
   const today = tashDateStr(Date.now());
 
   return batches.map((b) => {
-    const expiryDate = b.expiryDate.toISOString().slice(0, 10);
+    const expiryDate = isoDay(b.expiryDate);
     const daysUntil = daysBetween(expiryDate, today);
     const qty = Number(b.qty);
     const dailyAvg = b.branchId == null
@@ -120,12 +120,12 @@ function toInt(v: unknown): number | null {
 /** Turli sana formatlaridan YYYY-MM-DD (Date obyekti, Excel serial, yoki matn). */
 export function parseExpiry(v: unknown): string | null {
   if (v == null || v === "") return null;
-  if (v instanceof Date && !isNaN(v.getTime())) return v.toISOString().slice(0, 10);
+  if (v instanceof Date && !isNaN(v.getTime())) return isoDay(v);
   if (typeof v === "number" && Number.isFinite(v)) {
     // Excel serial (1900 epox) — XLSX cellDates ishlamasa
     const ms = Math.round((v - 25569) * 86_400_000);
     const d = new Date(ms);
-    return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+    return isNaN(d.getTime()) ? null : isoDay(d);
   }
   const s = String(v).trim();
   let m = /^(\d{4})[-./](\d{1,2})[-./](\d{1,2})$/.exec(s); // YYYY-MM-DD

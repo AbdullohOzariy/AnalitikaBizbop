@@ -4,11 +4,12 @@
  *
  * Foydalanish (admin sifatida login bo'lib): POST/GET /api/revalidate?tag=iyerarxiya
  */
+import { TAG_ANALYTICS, TAG_BRANCHES, TAG_IYERARXIYA } from "@/lib/cache-tags";
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { auth } from "@/auth";
 
-const ALLOWED = new Set(["iyerarxiya", "analytics", "branches"]);
+const ALLOWED = new Set([TAG_IYERARXIYA, TAG_ANALYTICS, TAG_BRANCHES]);
 
 async function handle(req: NextRequest) {
   const session = await auth();

@@ -11,18 +11,10 @@ import { isoDay } from "@/lib/date";
 const DAY = 86_400_000;
 const toUTC = (s: string) => new Date(s + "T00:00:00.000Z");
 
-export const WEEKDAY_SHORT = ["Ya", "Du", "Se", "Ch", "Pa", "Ju", "Sh"]; // index = getUTCDay
 export const WEEKDAY_FULL = ["Yakshanba", "Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba"];
 
 export function weekdayOf(dateStr: string): number {
   return toUTC(dateStr).getUTCDay();
-}
-
-/** Berilgan sana zakaz qabul kunimi — aniq sana YOKI doimiy hafta kuni. */
-export function isOrderDay(dateStr: string, explicitDates: Set<string> | string[], weekdays: number[]): boolean {
-  const set = explicitDates instanceof Set ? explicitDates : new Set(explicitDates);
-  if (set.has(dateStr)) return true;
-  return weekdays.includes(weekdayOf(dateStr));
 }
 
 /**
@@ -43,15 +35,4 @@ export function nextOrderDate(todayStr: string, explicitFutureDates: string[], w
   }
   if (fromExplicit && fromWeekday) return fromExplicit < fromWeekday ? fromExplicit : fromWeekday;
   return fromExplicit ?? fromWeekday;
-}
-
-/** Berilgan oy (year, month0 0-indeksli) ichidagi shu hafta kuniga to'g'ri keladigan barcha sanalar. */
-export function weekdayDatesInMonth(year: number, month0: number, weekday: number): string[] {
-  const out: string[] = [];
-  const days = new Date(Date.UTC(year, month0 + 1, 0)).getUTCDate();
-  for (let d = 1; d <= days; d++) {
-    const date = new Date(Date.UTC(year, month0, d));
-    if (date.getUTCDay() === weekday) out.push(isoDay(date));
-  }
-  return out;
 }

@@ -50,6 +50,3 @@ export async function setMarginReportConfig(input: {
   cache = null;
 }
 
-export function clearMarginReportCache(): void {
-  cache = null;
-}

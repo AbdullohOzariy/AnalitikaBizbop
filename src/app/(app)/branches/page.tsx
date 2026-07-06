@@ -1,3 +1,4 @@
+import { TAG_BRANCHES } from "@/lib/cache-tags";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
@@ -34,7 +35,7 @@ const getBranches = unstable_cache(
       },
     }),
   ["branches-list"],
-  { tags: ["branches"], revalidate: 300 }
+  { tags: [TAG_BRANCHES], revalidate: 300 }
 );
 
 export default async function BranchesPage() {

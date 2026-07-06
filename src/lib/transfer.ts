@@ -7,6 +7,7 @@
  * Qoldiq/sotuv — ProductSales (oxirgi snapshot + davr o'rtachasi). Manbada qoldiq bor SKU'lar.
  */
 import { prisma } from "@/lib/prisma";
+import { isoDay } from "@/lib/date";
 import { Prisma } from "@/generated/prisma/client";
 import { getDefaultRange } from "@/lib/analytics";
 
@@ -35,8 +36,8 @@ export async function branchTransferSuggest(
 ): Promise<TransferSuggest[]> {
   if (fromBranchId === toBranchId) return [];
   const range = await getDefaultRange();
-  const startStr = range.start.toISOString().slice(0, 10);
-  const endStr = range.end.toISOString().slice(0, 10);
+  const startStr = isoDay(range.start);
+  const endStr = isoDay(range.end);
 
   const rows = await prisma.$queryRaw<RawRow[]>(Prisma.sql`
     WITH src_stock AS (

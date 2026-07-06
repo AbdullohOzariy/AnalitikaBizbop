@@ -11,7 +11,7 @@ import { ordersScopedToOwn } from "@/lib/roles";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(
+async function handleGET(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -37,4 +37,14 @@ export async function GET(
       "Cache-Control": "no-store",
     },
   });
+}
+
+// Kutilmagan xatoda yalang'och 500 o'rniga log + tushunarli javob (L18).
+export async function GET(...args: Parameters<typeof handleGET>) {
+  try {
+    return await handleGET(...args);
+  } catch (err) {
+    console.error("[api/zakaz/pdf]", err instanceof Error ? err.message : err);
+    return new Response("Eksport tayyorlashda xato. Birozdan so'ng qayta urinib ko'ring.", { status: 500 });
+  }
 }

@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { actionError } from "@/lib/action-error";
 import { ANALYTICS_CACHE_TAG } from "@/lib/analytics";
-import { normalizeName } from "@/lib/parsers/utils";
+import { TAG_IYERARXIYA, TAG_SUPPLIERS } from "@/lib/cache-tags";
 
 export type SkuRow = {
   id: number;
@@ -138,11 +138,11 @@ export async function updateProductAction(input: {
     if (Object.keys(data).length === 0) return { ok: false, error: "O'zgarish yo'q." };
     await prisma.product.update({ where: { id: pid }, data });
     revalidatePath("/iyerarxiya");
-    revalidateTag("iyerarxiya", "max");
+    revalidateTag(TAG_IYERARXIYA, "max");
     // Mahsulot nomi/kategoriyasi marja/savdo keshlarida ko'rinadi
     revalidateTag(ANALYTICS_CACHE_TAG, "max");
     // Yetkazib beruvchi o'zgarsa — ta'minotchi profili keshini ham yangilash
-    if (input.supplierId !== undefined) revalidateTag("suppliers", "max");
+    if (input.supplierId !== undefined) revalidateTag(TAG_SUPPLIERS, "max");
     return { ok: true };
   } catch (err) {
     return actionError(err, "updateProduct");
@@ -184,17 +184,12 @@ export async function createSkuAction(
       select: { id: true, code: true },
     });
     revalidatePath("/iyerarxiya");
-    revalidateTag("iyerarxiya", "max");
+    revalidateTag(TAG_IYERARXIYA, "max");
     return { ok: true, id: created.id, code: created.code };
   } catch (err) {
     return actionError(err, "createSku");
   }
 }
-
-const addSchema = z.object({
-  categoryId: z.coerce.number().int().positive(),
-  alias: z.string().trim().min(1).max(120),
-});
 
 export type SubProduct = { code: number; name: string };
 
@@ -278,40 +273,6 @@ export async function searchSkuAction(
     return { ok: true, results, total };
   } catch (err) {
     return actionError(err, "searchSku");
-  }
-}
-
-export async function addCategoryAliasAction(
-  input: { categoryId: number; alias: string }
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  try {
-    await requireAdmin();
-    const parsed = addSchema.parse(input);
-    await prisma.categoryAlias.create({
-      data: {
-        categoryId: parsed.categoryId,
-        alias: normalizeName(parsed.alias),
-      },
-    });
-    revalidatePath("/iyerarxiya");
-    return { ok: true };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Xato.";
-    if (msg.includes("Unique")) return { ok: false, error: "Bu alias allaqachon mavjud." };
-    return { ok: false, error: msg };
-  }
-}
-
-export async function deleteCategoryAliasAction(
-  id: number
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  try {
-    await requireAdmin();
-    await prisma.categoryAlias.delete({ where: { id } });
-    revalidatePath("/iyerarxiya");
-    return { ok: true };
-  } catch (err) {
-    return actionError(err, "iyerarxiya");
   }
 }
 
@@ -505,7 +466,7 @@ export async function archiveInactiveSkusAction(input: {
       data: { archivedAt: new Date() },
     });
     revalidatePath("/iyerarxiya");
-    revalidateTag("iyerarxiya", "max");
+    revalidateTag(TAG_IYERARXIYA, "max");
     // OOS/Stockday va boshqa SKU ro'yxatlari keshlari yangilansin
     revalidateTag(ANALYTICS_CACHE_TAG, "max");
     return { ok: true, count: res.count };
@@ -527,7 +488,7 @@ export async function setSkuArchivedAction(
       data: { archivedAt: archived ? new Date() : null },
     });
     revalidatePath("/iyerarxiya");
-    revalidateTag("iyerarxiya", "max");
+    revalidateTag(TAG_IYERARXIYA, "max");
     revalidateTag(ANALYTICS_CACHE_TAG, "max");
     return { ok: true };
   } catch (err) {

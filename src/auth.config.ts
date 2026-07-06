@@ -23,6 +23,8 @@ export const authConfig = {
       // Aniq segment moslik: faqat o'zi yoki "<prefix>/..." (masalan /api/yozuvlar OCHILMAYDI).
       const PUBLIC_PREFIXES = [
         "/api/auth",
+        "/api/health", // Railway healthcheck — sessiyasiz
+
         "/api/tg",
         "/api/yozuv",
         "/api/vozvrat",

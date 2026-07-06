@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { isoDay } from "@/lib/date";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { canSeeSuppliers, canEditSuppliers } from "@/lib/roles";
@@ -11,7 +12,7 @@ import { SupplierTermsSection, BranchProfilesSection } from "./terms-client";
 
 export const dynamic = "force-dynamic";
 
-const iso = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
+const iso = (d: Date | null) => (d ? isoDay(d) : null);
 
 export default async function SupplierProfilePage({
   params,
@@ -100,7 +101,7 @@ export default async function SupplierProfilePage({
     contactName: a.contactName,
     sortOrder: a.sortOrder,
     skuCount: agentSkuCount.get(a.id) ?? 0,
-    orderDates: a.orderDays.map((d) => d.sana.toISOString().slice(0, 10)),
+    orderDates: a.orderDays.map((d) => isoDay(d.sana)),
     orderWeekdays: a.orderWeekdays,
   }));
   const agentOptions = agents.map((a) => ({ id: a.id, name: a.name }));
@@ -198,7 +199,7 @@ export default async function SupplierProfilePage({
           <AgentsSection supplierId={supplier.id} agents={agents} canEdit={canEdit} />
           <OrderDaysCalendar
             supplierId={supplier.id}
-            orderDates={supplier.orderDays.map((d) => d.sana.toISOString().slice(0, 10))}
+            orderDates={supplier.orderDays.map((d) => isoDay(d.sana))}
             orderWeekdays={supplier.orderWeekdays}
             canEdit={canEdit}
             title={agents.length > 0 ? "Zakaz kunlari — agentsiz SKU" : "Zakaz qabul kunlari"}

@@ -1,7 +1,10 @@
 // Rol predikatlari — markazlashtirilgan ruxsat mantiqi.
 //
 // SYSTEM_ADMIN — to'liq huquq: barcha tahrir + Tizim bo'limi (oldingi "ADMIN").
-// ADMIN        — read-only: Tizimdan boshqa hammasini KO'RADI, o'zgartira olmaydi.
+// ADMIN        — "Bo'lim boshlig'i": asosan KO'RADI, lekin ATAYLAB berilgan istisnolar bor —
+//                harajat kiritish/o'chirish (sotuv/finans), zakaz workflow'ining to'liq
+//                tranzitsiyalari (order-status.ts) va anketa tasdiqlash. Qolgan barcha
+//                canEdit*/canManage* predikatlarida ADMIN YO'Q (tahrir qila olmaydi).
 // CAT_MANAGER  — o'z kategoriyalari (Dashboard v2, OOS, chiqim, sotib-olish).
 // CEO          — yuqori darajadagi ko'ruvchi.
 // SUPPLYCHAIN  — ta'minot zanjiri: analitika/sotuv/spisaniyani KO'RADI,
@@ -35,9 +38,6 @@ export const isAdminTier = (r: Roles): boolean => hasRole(r, "SYSTEM_ADMIN", "AD
 /** Analitikani ko'ruvchilar (dashboardlar, OOS, Stockday, chiqim, rejalar, sotuv). */
 export const canSeeAnalytics = (r: Roles): boolean =>
   hasRole(r, "SYSTEM_ADMIN", "ADMIN", "CAT_MANAGER", "CEO", "SUPPLYCHAIN", "HEAD_CAT_MANAGER");
-
-/** Kategoriya menejerlari boshi. */
-export const isHeadCatManager = (r: Roles): boolean => hasRole(r, "HEAD_CAT_MANAGER");
 
 /** Zakaz yaratish/yuritish: menejer, boshi, supplychain yoki SYSTEM_ADMIN. */
 export const canManageOrders = (r: Roles): boolean =>
@@ -105,9 +105,6 @@ export const canEditPromo = (r: Roles): boolean =>
 
 /** Operator roli (redirect/izolatsiya tekshiruvlari uchun). */
 export const isOperator = (r: Roles): boolean => hasRole(r, "OPERATOR");
-
-/** Izolatsiyalangan rollar — yakka bo'lsa faqat o'z bo'limini ko'radi (middleware). */
-export const ISOLATED_ROLES = ["MERCHANDISER", "OPERATOR"] as const;
 
 /** Hisobdan chiqarish (chiqim) bo'limini KO'RA oladiganlar — analitika ko'ruvchilar + operator. */
 export const canSeeChiqim = (r: Roles): boolean => canSeeAnalytics(r) || isOperator(r);

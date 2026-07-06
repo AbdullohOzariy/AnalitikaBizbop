@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment as FragmentRows, useMemo, useRef, useState, useTransition } from "react";
+import { isoDay } from "@/lib/date";
 import { useRouter } from "next/navigation";
 import {
   Star, Phone, User, Save, Loader2, Check, AlertCircle, Plus, Trash2, Pencil,
@@ -990,8 +991,8 @@ export function ContractsSection({ supplierId, contracts, canEdit = true }: { su
   const [dateRef] = useState(() => {
     const t = Date.now();
     return {
-      today: new Date(t).toISOString().slice(0, 10),
-      soon: new Date(t + 30 * 86400000).toISOString().slice(0, 10),
+      today: isoDay(new Date(t)),
+      soon: isoDay(new Date(t + 30 * 86400000)),
     };
   });
 

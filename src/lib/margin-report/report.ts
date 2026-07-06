@@ -7,6 +7,7 @@
  * Marja = (sotuv − tannarx) / sotuv.
  */
 import * as XLSX from "xlsx";
+import { isoDay } from "@/lib/date";
 import { Telegram } from "telegraf";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
@@ -26,8 +27,8 @@ async function latestPeriod(): Promise<{ start: Date; end: Date; label: string; 
     select: { periodStart: true, periodEnd: true },
   });
   if (!latest) return null;
-  const ps = latest.periodStart.toISOString().slice(0, 10);
-  const pe = latest.periodEnd.toISOString().slice(0, 10);
+  const ps = isoDay(latest.periodStart);
+  const pe = isoDay(latest.periodEnd);
   return { start: latest.periodStart, end: latest.periodEnd, label: ps === pe ? ps : `${ps} — ${pe}`, tag: pe };
 }
 

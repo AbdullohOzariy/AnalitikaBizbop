@@ -11,7 +11,7 @@ import {
   getDefaultRange,
 } from "@/lib/analytics";
 import { formatUZS, formatNumber, formatPercent } from "@/lib/format";
-import { parseDateParam } from "@/lib/date";
+import { parseDateParam, isoDay } from "@/lib/date";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -76,14 +76,14 @@ export default async function BranchDetailPage({
         <div>
           <h1 className="text-2xl font-bold tracking-tight">{branch.name}</h1>
           <p className="text-sm text-muted-foreground">
-            {start.toISOString().slice(0, 10)} – {end.toISOString().slice(0, 10)}
+            {isoDay(start)} – {isoDay(end)}
           </p>
         </div>
       </div>
 
       <PeriodFilter
-        start={start.toISOString().slice(0, 10)}
-        end={end.toISOString().slice(0, 10)}
+        start={isoDay(start)}
+        end={isoDay(end)}
         branchId={branchId}
         branches={branches}
       />

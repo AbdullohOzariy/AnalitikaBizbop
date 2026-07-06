@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx";
+import { isoDay } from "@/lib/date";
 import { parseUzDayMonth } from "./utils";
 
 export type ParsedVisitRow = {
@@ -93,7 +94,7 @@ export function parseVisitsWorkbook(buffer: Buffer, year: number): ParsedVisitsR
       const rounded = Math.round(n);
       if (n < 0 || Math.abs(n - rounded) > 1e-6) {
         throw new Error(
-          `Tashriflar faylida noto'g'ri qiymat: "${alias.trim()}" / ${date.toISOString().slice(0, 10)} = ${n} (butun musbat son kutiladi).`
+          `Tashriflar faylida noto'g'ri qiymat: "${alias.trim()}" / ${isoDay(date)} = ${n} (butun musbat son kutiladi).`
         );
       }
       out.push({

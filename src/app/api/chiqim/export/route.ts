@@ -13,7 +13,7 @@ import {
 import { TUR_LABEL } from "@/lib/spisaniya/labels";
 import { isoDay, parseDateParam } from "@/lib/date";
 
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
   const session = await auth();
   if (!session?.user) return new Response("Unauthorized", { status: 401 });
 
@@ -107,4 +107,14 @@ export async function GET(req: NextRequest) {
       "Cache-Control": "no-store",
     },
   });
+}
+
+// Kutilmagan xatoda yalang'och 500 o'rniga log + tushunarli javob (L18).
+export async function GET(...args: Parameters<typeof handleGET>) {
+  try {
+    return await handleGET(...args);
+  } catch (err) {
+    console.error("[api/chiqim/export]", err instanceof Error ? err.message : err);
+    return new Response("Eksport tayyorlashda xato. Birozdan so'ng qayta urinib ko'ring.", { status: 500 });
+  }
 }

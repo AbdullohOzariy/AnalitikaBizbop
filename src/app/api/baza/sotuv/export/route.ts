@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { decimalToNumber } from "@/lib/format";
 import * as XLSX from "xlsx";
 import { auth } from "@/auth";
 import { isAdminTier } from "@/lib/roles";
@@ -25,12 +26,8 @@ type Row = {
   mj: number | null; // marja — MARJA_SQL'dan (display = sort = filter)
 };
 
-function num(n: unknown): number {
-  const v = typeof n === "object" && n !== null && "toNumber" in n ? (n as { toNumber(): number }).toNumber() : Number(n);
-  return isNaN(v) ? 0 : v;
-}
 
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
   const session = await auth();
   if (!session?.user) return new Response("Unauthorized", { status: 401 });
   if (!isAdminTier(session.user.roles)) return new Response("Forbidden", { status: 403 });
@@ -77,18 +74,18 @@ export async function GET(req: NextRequest) {
 
   const header = ["Kod", "Mahsulot", "Kategoriya", "Filial", "Davr boshlanish", "Davr tugash", "Qoldiq", "Sotilgan", "Savdo", "Bir dona narx", "Tannarx", "Bir dona tannarx", "Marja%"];
   const data = rows.map((r) => {
-    const amt = num(r.amount);
-    const cost = r.costAmount != null ? num(r.costAmount) : null;
-    const sold = r.soldQty != null ? num(r.soldQty) : 0;
+    const amt = decimalToNumber(r.amount);
+    const cost = r.costAmount != null ? decimalToNumber(r.costAmount) : null;
+    const sold = r.soldQty != null ? decimalToNumber(r.soldQty) : 0;
     // Marja — SQL'dan (MARJA_SQL): narxlardan, narx yo'q bo'lsa summaga fallback (sort/filtr bilan izchil).
     const mj = r.mj != null ? Number(r.mj.toFixed(1)) : null;
     // Bir dona narx/tannarx: tayyor salePrice/costPrice bo'lsa o'shandan, aks holda summa÷soni.
-    const unitPrice = r.salePrice != null ? Math.round(num(r.salePrice)) : (sold > 0 ? Math.round(amt / sold) : "");
-    const unitCost = r.costPrice != null ? Math.round(num(r.costPrice)) : (cost !== null && sold > 0 ? Math.round(cost / sold) : "");
+    const unitPrice = r.salePrice != null ? Math.round(decimalToNumber(r.salePrice)) : (sold > 0 ? Math.round(amt / sold) : "");
+    const unitCost = r.costPrice != null ? Math.round(decimalToNumber(r.costPrice)) : (cost !== null && sold > 0 ? Math.round(cost / sold) : "");
     return [
       r.pcode, r.pname, r.cname ?? "", r.bname,
       r.periodStart, r.periodEnd,
-      r.stockQty != null ? num(r.stockQty) : "",
+      r.stockQty != null ? decimalToNumber(r.stockQty) : "",
       sold || "",
       amt,
       unitPrice,
@@ -110,4 +107,14 @@ export async function GET(req: NextRequest) {
       "Cache-Control": "no-store",
     },
   });
+}
+
+// Kutilmagan xatoda yalang'och 500 o'rniga log + tushunarli javob (L18).
+export async function GET(...args: Parameters<typeof handleGET>) {
+  try {
+    return await handleGET(...args);
+  } catch (err) {
+    console.error("[api/baza/sotuv/export]", err instanceof Error ? err.message : err);
+    return new Response("Eksport tayyorlashda xato. Birozdan so'ng qayta urinib ko'ring.", { status: 500 });
+  }
 }

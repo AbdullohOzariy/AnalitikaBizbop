@@ -12,7 +12,7 @@ import path from "path";
 import fs from "fs";
 import PDFDocument from "pdfkit";
 import { prisma } from "@/lib/prisma";
-import { ORDER_STATUS_LABEL } from "@/app/(app)/sotuv/sotib-olish/order-status";
+import { ORDER_STATUS_LABEL } from "@/lib/zakaz/order-status";
 
 const FONT = path.join(process.cwd(), "public/fonts/DejaVuSans.ttf");
 const FONT_BOLD = path.join(process.cwd(), "public/fonts/DejaVuSans-Bold.ttf");

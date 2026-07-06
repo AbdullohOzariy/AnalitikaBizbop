@@ -1,3 +1,4 @@
+import { TAG_IYERARXIYA, TAG_SUPPLIERS } from "@/lib/cache-tags";
 import { redirect } from "next/navigation";
 import { unstable_cache } from "next/cache";
 import { auth } from "@/auth";
@@ -14,7 +15,7 @@ const getSuppliers = unstable_cache(
     select: { id: true, name: true, _count: { select: { products: true } } },
   }),
   ["suppliers-with-counts"],
-  { tags: ["suppliers", "iyerarxiya"], revalidate: 300 }
+  { tags: [TAG_SUPPLIERS, TAG_IYERARXIYA], revalidate: 300 }
 );
 
 export default async function TaminotchilarPage() {

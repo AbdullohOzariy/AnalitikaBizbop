@@ -11,7 +11,7 @@ import { isSystemAdmin, ordersScopedToOwn } from "@/lib/roles";
 import { actionError } from "@/lib/action-error";
 import { scopeParentIds, scopeProductWhere } from "@/lib/scope";
 import { getDefaultRange } from "@/lib/analytics";
-import { todayTashkentISO } from "@/lib/date";
+import { todayTashkentISO, isoDay } from "@/lib/date";
 import { Prisma } from "@/generated/prisma/client";
 
 export type OrderItemInput = {
@@ -133,7 +133,7 @@ export async function suppliersForOrderAction(): Promise<
         ? prisma.purchaseOrder.groupBy({ by: ["agentId"], where: { agentId: { in: agentIds }, rating: { not: null } }, _avg: { rating: true }, _count: { rating: true } })
         : Promise.resolve([] as { agentId: number | null; _avg: { rating: number | null }; _count: { rating: number } }[]),
     ]);
-    const todayStr = todayD.toISOString().slice(0, 10);
+    const todayStr = isoDay(todayD);
     const supNextBy = new Map(supNextDays.map((r) => [r.supplierId, r._min.sana!.toISOString().slice(0, 10)]));
     const agentNextBy = new Map(agentNextDays.map((r) => [r.agentId, r._min.sana!.toISOString().slice(0, 10)]));
     // bahoni 1 kasrgacha yaxlitlaymiz
@@ -226,8 +226,8 @@ export async function supplierItemsAction(
     ]);
 
     const pids = products.map((p) => p.id);
-    const startStr = range.start.toISOString().slice(0, 10);
-    const endStr = range.end.toISOString().slice(0, 10);
+    const startStr = isoDay(range.start);
+    const endStr = isoDay(range.end);
     const todayD = new Date(todayTashkentISO() + "T00:00:00.000Z");
     const orderGap = orderGapFromDates(futureOrderDays.map((d) => d.sana), todayD);
 
@@ -389,7 +389,7 @@ async function rememberOrderParams(
       "leadTimeDays"  = COALESCE(v.lead, p."leadTimeDays")
     FROM (VALUES ${Prisma.join(rows)}) AS v(pid, pack, price, lead)
     WHERE p.id = v.pid
-  `.catch(() => null);
+  `.catch((e) => console.warn("[rememberOrderParams]", e instanceof Error ? e.message : e));
 }
 
 type ActorUser = { id: string | number; roles: readonly string[] };

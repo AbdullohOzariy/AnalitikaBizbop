@@ -11,7 +11,7 @@ import { FileCheck2, Wallet, ListChecks, CalendarDays } from "lucide-react";
 import { PageHeader, StatCard, EmptyState } from "@/components/common/page";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatUZS, formatDateTimeUZ } from "@/lib/format";
-import { nowTashkent } from "@/lib/date";
+import { nowTashkent, isoDay } from "@/lib/date";
 import { BazaFilter } from "../baza/baza-filter";
 import { SverkaJadval, SverkaXodimlar, type SverkaRow, type XodimRow } from "./sverka-client";
 
@@ -33,7 +33,7 @@ export default async function SverkaPage({
   // Standart davr: joriy oy (server komponent)
   const now = nowTashkent();
   const defStart = `${now.toISOString().slice(0, 7)}-01`;
-  const defEnd = now.toISOString().slice(0, 10);
+  const defEnd = isoDay(now);
   const startStr = /^\d{4}-\d{2}-\d{2}$/.test(sp.start ?? "") ? sp.start! : defStart;
   const endStr = /^\d{4}-\d{2}-\d{2}$/.test(sp.end ?? "") ? sp.end! : defEnd;
   const q = (sp.q ?? "").trim().slice(0, 80);
@@ -62,7 +62,7 @@ export default async function SverkaPage({
 
   const rows: SverkaRow[] = records.map((r) => ({
     id: r.id,
-    sana: r.sana.toISOString().slice(0, 10),
+    sana: isoDay(r.sana),
     firmaNomi: r.firmaNomi,
     supplierId: r.supplierId,
     sklad: r.sklad,
@@ -128,7 +128,7 @@ export default async function SverkaPage({
             id: x.id,
             tgUserId: String(x.tgUserId),
             ism: x.ism,
-            createdAt: x.createdAt.toISOString().slice(0, 10),
+            createdAt: isoDay(x.createdAt),
           }))}
         />
       )}

@@ -93,14 +93,17 @@ export async function importWarehouseStockAction(
     }
 
     const BATCH = 500;
+    // Bitta tranzaksiyada: o'rtada uzilsa aralash (yarim eski, yarim yangi) qoldiq qolmasin.
+    const ops = [];
     for (let i = 0; i < matchedRows.length; i += BATCH) {
       const chunk = matchedRows.slice(i, i + BATCH);
       const vals = chunk.map((r) => Prisma.sql`(${r.pid}, ${new Prisma.Decimal(r.qty)}, now())`);
-      await prisma.$executeRaw`
+      ops.push(prisma.$executeRaw`
         INSERT INTO "WarehouseStock" ("productId", "qty", "updatedAt") VALUES ${Prisma.join(vals)}
         ON CONFLICT ("productId") DO UPDATE SET "qty" = EXCLUDED."qty", "updatedAt" = now()
-      `;
+      `);
     }
+    if (ops.length > 0) await prisma.$transaction(ops);
     revalidatePath("/logistika");
     return { ok: true, matched: matchedRows.length, unmatched: unmatched.length, unmatchedSample: unmatched.slice(0, 10), rows: parsed.length };
   } catch (err) {

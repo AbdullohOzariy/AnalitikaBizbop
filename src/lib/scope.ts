@@ -8,6 +8,7 @@
  * null  — cheklov yo'q (admin darajasi);
  * []    — CAT_MANAGER'ga hali kategoriya biriktirilmagan (hech narsa ko'rmaydi).
  */
+import { TAG_IYERARXIYA } from "@/lib/cache-tags";
 import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { hasRole } from "@/lib/roles";
@@ -52,7 +53,7 @@ export function scopeSubIds(userId: number, roles: string | readonly string[]): 
     },
     // "iyerarxiya" ham: kategoriya ko'chirilsa subkat ro'yxati o'zgaradi
     ["scopeSubs", String(userId)],
-    { tags: [CAT_SCOPE_TAG, "iyerarxiya"], revalidate: 300 }
+    { tags: [CAT_SCOPE_TAG, TAG_IYERARXIYA], revalidate: 300 }
   )();
 }
 

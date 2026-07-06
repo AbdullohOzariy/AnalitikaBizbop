@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getDefaultRange, dailySalesSeries } from "@/lib/analytics";
 import { scopeSubIds } from "@/lib/scope";
+import { canSeeAnalytics } from "@/lib/roles";
 import {
   dailyVisitsByBranch,
   dailyReceiptsByBranch,
@@ -223,6 +224,9 @@ export default async function DashboardV2Page({
 }) {
   const session = await auth();
   if (!session) redirect("/login");
+  // Ijobiy rol-guard (defense-in-depth): izolatsiyalangan rollar middleware'dan
+  // tashqari server tomonda ham to'siladi (proxy matcher nuqtali yo'llarni o'tkazadi).
+  if (!canSeeAnalytics(session.user.roles)) redirect("/");
 
   const sp = await searchParams;
   // Parallel — waterfall bo'lmasin. scope: kategoriya menejeri faqat o'z

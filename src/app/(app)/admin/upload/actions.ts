@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath, revalidateTag } from "next/cache";
+import { isoDay } from "@/lib/date";
 import { after } from "next/server";
 import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
@@ -302,7 +303,7 @@ export async function uploadSalesAction(formData: FormData): Promise<UploadResul
       ok: true,
       fileId: fileRecord.id,
       aiCorrections: aiCorrections.length > 0 ? aiCorrections : undefined,
-      summary: `Saqlandi: ${legacyResult.rows.length} qator (${branchCount} filial), period ${legacyResult.periodStart.toISOString().slice(0, 10)} → ${legacyResult.periodEnd.toISOString().slice(0, 10)}.`,
+      summary: `Saqlandi: ${legacyResult.rows.length} qator (${branchCount} filial), period ${isoDay(legacyResult.periodStart)} → ${isoDay(legacyResult.periodEnd)}.`,
     };
   } catch (err) {
     return actionError(err, "upload");
@@ -602,7 +603,7 @@ async function uploadV3(
     ok: true,
     fileId: fileRecord.id,
     aiCorrections: review.length > 0 ? [...aiCorrections, ...review] : (aiCorrections.length > 0 ? aiCorrections : undefined),
-    summary: `Saqlandi (v3): ${uniqueProdCount} mahsulot × ${uniqueAliases.length} filial = ${result.productRows.length} qator, period ${result.periodStart.toISOString().slice(0, 10)} → ${result.periodEnd.toISOString().slice(0, 10)}. Master tegilmadi${newSkuCount ? `, ${newSkuCount} yangi SKU` : ""}${nameDiffCount ? `, ${nameDiffCount} nom farqi` : ""}.`,
+    summary: `Saqlandi (v3): ${uniqueProdCount} mahsulot × ${uniqueAliases.length} filial = ${result.productRows.length} qator, period ${isoDay(result.periodStart)} → ${isoDay(result.periodEnd)}. Master tegilmadi${newSkuCount ? `, ${newSkuCount} yangi SKU` : ""}${nameDiffCount ? `, ${nameDiffCount} nom farqi` : ""}.`,
   };
 }
 

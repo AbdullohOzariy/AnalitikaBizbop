@@ -291,38 +291,6 @@ export async function generateForecast(
   return results;
 }
 
-// ─── Prognoz holati (UI uchun) ─────────────────────────────────────────────────
-export type ForecastStatus = {
-  generated: boolean;
-  lastGeneratedAt: string | null;
-  groups: { groupId: number; groupName: string; model: string; rationale: string; createdAt: string }[];
-};
-
-export async function getForecastStatus(
-  branchId: number,
-  year: number,
-  month: number
-): Promise<ForecastStatus> {
-  const runs = await prisma.forecastRun.findMany({
-    where: { branchId, year, month },
-    include: { group: { select: { name: true, sortOrder: true } } },
-    orderBy: { group: { sortOrder: "asc" } },
-  });
-  return {
-    generated: runs.length > 0,
-    lastGeneratedAt: runs.length
-      ? new Date(Math.max(...runs.map((r) => r.createdAt.getTime()))).toISOString()
-      : null,
-    groups: runs.map((r) => ({
-      groupId: r.groupId,
-      groupName: r.group.name,
-      model: r.model,
-      rationale: r.rationale,
-      createdAt: r.createdAt.toISOString(),
-    })),
-  };
-}
-
 // ─── Kunlik prognoz qatori (dashboard overlay) — ForecastDay'dan ───────────────
 async function _dailyForecastSeries(
   range: DateRange,

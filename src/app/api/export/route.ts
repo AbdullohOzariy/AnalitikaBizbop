@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import * as XLSX from "xlsx";
 import { auth } from "@/auth";
 import { isAdminTier } from "@/lib/roles";
-import { parseDateParam } from "@/lib/date";
+import { parseDateParam, isoDay } from "@/lib/date";
 import {
   computeKPI,
   branchPerformance,
@@ -13,7 +13,7 @@ import {
   getDefaultRange,
 } from "@/lib/analytics";
 
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
   const session = await auth();
   if (!session?.user) return new Response("Unauthorized", { status: 401 });
   if (!isAdminTier(session.user.roles)) return new Response("Forbidden", { status: 403 });
@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
 
   // KPI varaq
   const kpiRows = [
-    ["Davr", `${start.toISOString().slice(0, 10)} – ${end.toISOString().slice(0, 10)}`],
+    ["Davr", `${isoDay(start)} – ${isoDay(end)}`],
     [],
     ["Ko'rsatkich", "Qiymat"],
     ["Umumiy Savdo (UZS)", kpi.totalSales],
@@ -109,7 +109,7 @@ export async function GET(req: NextRequest) {
   );
 
   const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
-  const filename = `analitika-${start.toISOString().slice(0, 10)}_${end.toISOString().slice(0, 10)}.xlsx`;
+  const filename = `analitika-${isoDay(start)}_${isoDay(end)}.xlsx`;
 
   return new Response(new Uint8Array(buffer), {
     headers: {
@@ -119,4 +119,14 @@ export async function GET(req: NextRequest) {
       "Cache-Control": "no-store",
     },
   });
+}
+
+// Kutilmagan xatoda yalang'och 500 o'rniga log + tushunarli javob (L18).
+export async function GET(...args: Parameters<typeof handleGET>) {
+  try {
+    return await handleGET(...args);
+  } catch (err) {
+    console.error("[api/export]", err instanceof Error ? err.message : err);
+    return new Response("Eksport tayyorlashda xato. Birozdan so'ng qayta urinib ko'ring.", { status: 500 });
+  }
 }

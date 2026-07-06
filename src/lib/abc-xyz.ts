@@ -8,6 +8,7 @@
  *      yuklash davri (periodStart bo'yicha DISTINCT).
  */
 import { unstable_cache } from "next/cache";
+import { isoDay } from "@/lib/date";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { ANALYTICS_CACHE_TAG, getDefaultRange } from "@/lib/analytics";
@@ -221,7 +222,7 @@ export async function updateProductMatrixClasses(): Promise<void> {
   const t0 = Date.now();
   try {
     const def = await getDefaultRange();
-    const endStr = def.end.toISOString().slice(0, 10);
+    const endStr = isoDay(def.end);
     const startStr = new Date(Date.UTC(def.end.getUTCFullYear(), def.end.getUTCMonth() - 2, 1))
       .toISOString()
       .slice(0, 10);

@@ -1,3 +1,4 @@
+import { TAG_IYERARXIYA } from "@/lib/cache-tags";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { unstable_cache } from "next/cache";
@@ -6,7 +7,7 @@ import { isAdminTier } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { getDefaultRange } from "@/lib/analytics";
-import { parseDateParam } from "@/lib/date";
+import { parseDateParam, isoDay } from "@/lib/date";
 import type { FilterGroup } from "../category-tree-filter";
 import { Database, ShoppingBag, Layers, TrendingUp, Boxes, Download, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { PageHeader, StatCard, EmptyState } from "@/components/common/page";
@@ -46,7 +47,7 @@ const getCategoryTree = unstable_cache(
     }));
   },
   ["sotuv-category-tree"],
-  { tags: ["iyerarxiya"], revalidate: 300 }
+  { tags: [TAG_IYERARXIYA], revalidate: 300 }
 );
 
 // Saralanadigan ustunlar → SQL ifoda (raw ORDER BY uchun; barchasi fiksirlangan — xavfsiz)
@@ -134,8 +135,8 @@ export default async function BazaSotuvPage({
   const mmin = sp.mmin != null && sp.mmin !== "" && !isNaN(Number(sp.mmin)) ? Number(sp.mmin) : undefined;
   const mmax = sp.mmax != null && sp.mmax !== "" && !isNaN(Number(sp.mmax)) ? Number(sp.mmax) : undefined;
 
-  const startStr = sp.start ?? startDate.toISOString().slice(0, 10);
-  const endStr = sp.end ?? endDate.toISOString().slice(0, 10);
+  const startStr = sp.start ?? isoDay(startDate);
+  const endStr = sp.end ?? isoDay(endDate);
 
   // Saralash
   const sort = sp.sort && SORT_SQL[sp.sort] ? sp.sort : "";

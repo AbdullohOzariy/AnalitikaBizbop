@@ -1,5 +1,6 @@
 "use server";
 
+import { TAG_IYERARXIYA } from "@/lib/cache-tags";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
@@ -20,7 +21,7 @@ export async function assignProductSubcatAction(productId: number, subId: number
     if (!sub || sub.parentId == null) return { ok: false, error: "Faqat subkategoriya tanlanishi mumkin." };
     await prisma.product.update({ where: { id: pid }, data: { categoryId: sid } });
     revalidatePath("/baza/moslanmagan");
-    revalidateTag("iyerarxiya", "max");
+    revalidateTag(TAG_IYERARXIYA, "max");
     // Sof foyda/marja hisoblari Product.categoryId orqali bog'langan — ular ham yangilansin.
     revalidateTag(ANALYTICS_CACHE_TAG, "max");
     return { ok: true };
@@ -55,7 +56,7 @@ export async function applyNameAction(productId: number): Promise<Result> {
       prisma.productNameMismatch.delete({ where: { productId: pid } }),
     ]);
     revalidatePath("/baza/moslanmagan");
-    revalidateTag("iyerarxiya", "max");
+    revalidateTag(TAG_IYERARXIYA, "max");
     return { ok: true };
   } catch (err) {
     return actionError(err, "applyName");

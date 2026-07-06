@@ -91,6 +91,24 @@ enum UploadStatus {
   FAILED
 }
 
+enum PaymentType {
+  PERECHISLENIYE
+  NAQD
+}
+
+enum AnketaFieldType {
+  text
+  textarea
+  number
+  yesno
+  consent
+}
+
+enum SubmissionStatus {
+  NEW
+  REVIEWED
+}
+
 model User {
   id           Int      @id @default(autoincrement())
   email        String   @unique
@@ -393,7 +411,7 @@ model Supplier {
   orderWeekdays Int[]   @default([])
 
   // ── Shartlar (SUPPLYCHAIN tahrirlaydi) ──
-  paymentType       String? // "PERECHISLENIYE" | "NAQD"
+  paymentType       PaymentType? // ko'chirma | naqd
   ehfMatch          Boolean? // Perechisleniya fakturada (EHF) 1:1 aks etadimi
   otsrochkaDays     Int? // otsrochka (30/45/60/90)
   debitorHas        Boolean? // debitorka limiti bormi
@@ -723,7 +741,7 @@ model AnketaField {
   sectionId Int
   section   AnketaSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   label     String
-  type      String        @default("text") // text | textarea | number | yesno | consent
+  type      AnketaFieldType @default(text)
   required  Boolean       @default(false)
   sortOrder Int           @default(0) // bo'lim ichidagi tartib
   active    Boolean       @default(true)
@@ -738,7 +756,7 @@ model AnketaSubmission {
   companyName String // tezkor ro'yxat uchun (Kompaniya nomi javobidan)
   phone       String?
   answers     Json
-  status      String   @default("NEW") // NEW | REVIEWED
+  status      SubmissionStatus @default(NEW)
   createdAt   DateTime @default(now())
 
   @@index([status, createdAt])

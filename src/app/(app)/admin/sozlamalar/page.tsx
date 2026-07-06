@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { isoDay } from "@/lib/date";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
@@ -296,7 +297,7 @@ async function SverkaTab() {
           id: x.id,
           tgUserId: String(x.tgUserId),
           ism: x.ism,
-          createdAt: x.createdAt.toISOString().slice(0, 10),
+          createdAt: isoDay(x.createdAt),
         }))}
       />
     </div>

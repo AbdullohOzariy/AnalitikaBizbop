@@ -1,5 +1,6 @@
 "use server";
 
+import { TAG_SUPPLIERS } from "@/lib/cache-tags";
 import { revalidatePath, revalidateTag } from "next/cache";
 
 import { z } from "zod";
@@ -86,7 +87,7 @@ export async function supplierSkusAction(
 
 // ═══════════════════ Yetkazib beruvchi profili ═══════════════════
 
-const SUPPLIERS_TAG = "suppliers";
+const SUPPLIERS_TAG = TAG_SUPPLIERS;
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -286,28 +287,6 @@ export async function deleteContractAction(id: number): Promise<Result> {
 
 // ── Lead time (SKU darajasida) ──
 
-const leadTimeSchema = z.object({
-  productId: z.coerce.number().int().positive(),
-  days: z.coerce.number().int().min(0).max(365).nullable(),
-});
-
-/** Bitta SKU lead time'i. days=null — tozalash. */
-export async function setLeadTimeAction(
-  input: z.input<typeof leadTimeSchema>
-): Promise<Result> {
-  try {
-    await requireSupplierEditor();
-    const p = leadTimeSchema.parse(input);
-    await prisma.product.update({
-      where: { id: p.productId },
-      data: { leadTimeDays: p.days },
-    });
-    return { ok: true };
-  } catch (err) {
-    return actionError(err, "setLeadTime");
-  }
-}
-
 const bulkLeadSchema = z.object({
   supplierId: z.coerce.number().int().positive(),
   days: z.coerce.number().int().min(0).max(365),
@@ -337,7 +316,6 @@ export async function bulkLeadTimeAction(
   }
 }
 
-
 /** Yangi yetkazib beruvchi qo'shish (SUPPLYCHAIN/SYSTEM_ADMIN). */
 export async function createSupplierAction(
   name: string
@@ -355,7 +333,6 @@ export async function createSupplierAction(
     return actionError(err, "createSupplier");
   }
 }
-
 
 const skuParamSchema = z.object({
   productId: z.coerce.number().int().positive(),
@@ -382,7 +359,6 @@ export async function updateSkuPurchaseAction(
     return actionError(err, "updateSkuPurchase");
   }
 }
-
 
 // ── Agentlar (brend) ──
 // Yetkazib beruvchi ichidagi agentlar. SKU'lar agentlarga taqsimlanadi; har agent

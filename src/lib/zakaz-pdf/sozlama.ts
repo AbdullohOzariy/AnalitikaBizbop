@@ -51,6 +51,3 @@ export async function setZakazPdfConfig(input: {
   cache = null;
 }
 
-export function clearZakazPdfCache(): void {
-  cache = null;
-}

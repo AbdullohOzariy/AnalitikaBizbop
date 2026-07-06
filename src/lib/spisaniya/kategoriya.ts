@@ -7,7 +7,7 @@
  */
 import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/prisma";
-import { yozuvKategoriyaSet, kategoriyasizYozuvlar } from "./db";
+import { yozuvKategoriyaSet } from "./db";
 
 const MODEL = "claude-haiku-4-5";
 
@@ -97,14 +97,3 @@ export async function kategoriyalashtirish(yozuvId: number, tovar: string): Prom
   }
 }
 
-/** Kategoriyasi yo'q eski yozuvlarni ketma-ket to'ldiradi. */
-export async function backfill(limit = 200): Promise<{ ok: boolean; kategoriyalandi?: number; xato?: string }> {
-  if (!getClient()) return { ok: false, xato: "ANTHROPIC_API_KEY yo'q" };
-  const rows = await kategoriyasizYozuvlar(limit);
-  let soni = 0;
-  for (const r of rows) {
-    await kategoriyalashtirish(r.id, r.tovar);
-    soni++;
-  }
-  return { ok: true, kategoriyalandi: soni };
-}

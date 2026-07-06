@@ -1,3 +1,4 @@
+import { TAG_IYERARXIYA } from "@/lib/cache-tags";
 import { redirect } from "next/navigation";
 import { unstable_cache } from "next/cache";
 import { auth } from "@/auth";
@@ -19,7 +20,7 @@ const getSubcats = unstable_cache(
     orderBy: { name: "asc" },
   }),
   ["moslanmagan-subcats"],
-  { tags: ["iyerarxiya"], revalidate: 300 }
+  { tags: [TAG_IYERARXIYA], revalidate: 300 }
 );
 
 export default async function MoslanmaganPage({

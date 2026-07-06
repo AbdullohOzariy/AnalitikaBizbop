@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { decimalToNumber } from "@/lib/format";
 import * as XLSX from "xlsx";
 import { auth } from "@/auth";
 import { canSeeAnalytics } from "@/lib/roles";
@@ -17,12 +18,8 @@ type Row = {
   stockQty: string | null; avgDaily: string | null; stockDays: string | null; stockValue: string | null;
 };
 
-function num(n: unknown): number {
-  const v = typeof n === "object" && n !== null && "toNumber" in n ? (n as { toNumber(): number }).toNumber() : Number(n);
-  return isNaN(v) ? 0 : v;
-}
 
-export async function GET(req: NextRequest) {
+async function handleGET(req: NextRequest) {
   const session = await auth();
   if (!session?.user) return new Response("Unauthorized", { status: 401 });
   const roles = session.user.roles;
@@ -115,10 +112,10 @@ export async function GET(req: NextRequest) {
   const data = rows.map((r) => [
     r.pcode, r.pname, r.cname ?? "", r.bname,
     r.periodEnd.slice(0, 10),
-    r.stockQty != null ? num(r.stockQty) : "",
-    r.avgDaily != null ? Number(num(r.avgDaily).toFixed(2)) : "",
-    r.stockDays != null ? Number(num(r.stockDays).toFixed(1)) : "",
-    r.stockValue != null ? Math.round(num(r.stockValue)) : "",
+    r.stockQty != null ? decimalToNumber(r.stockQty) : "",
+    r.avgDaily != null ? Number(decimalToNumber(r.avgDaily).toFixed(2)) : "",
+    r.stockDays != null ? Number(decimalToNumber(r.stockDays).toFixed(1)) : "",
+    r.stockValue != null ? Math.round(decimalToNumber(r.stockValue)) : "",
   ]);
 
   const wb = XLSX.utils.book_new();
@@ -133,4 +130,14 @@ export async function GET(req: NextRequest) {
       "Cache-Control": "no-store",
     },
   });
+}
+
+// Kutilmagan xatoda yalang'och 500 o'rniga log + tushunarli javob (L18).
+export async function GET(...args: Parameters<typeof handleGET>) {
+  try {
+    return await handleGET(...args);
+  } catch (err) {
+    console.error("[api/stockday/export]", err instanceof Error ? err.message : err);
+    return new Response("Eksport tayyorlashda xato. Birozdan so'ng qayta urinib ko'ring.", { status: 500 });
+  }
 }

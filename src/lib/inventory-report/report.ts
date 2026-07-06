@@ -4,16 +4,13 @@
  * Manba so'rov: snapshot-reports.inventoryProblemRows (so'nggi snapshot).
  */
 import * as XLSX from "xlsx";
+import { decimalToNumber } from "@/lib/format";
 import { Telegram } from "telegraf";
 import { prisma } from "@/lib/prisma";
 import { inventoryProblemRows } from "@/lib/snapshot-reports";
 import { isoDay } from "@/lib/date";
 import { getInventoryReportConfig } from "./sozlama";
 
-function num(n: unknown): number {
-  const v = typeof n === "object" && n !== null && "toNumber" in n ? (n as { toNumber(): number }).toNumber() : Number(n);
-  return isNaN(v) ? 0 : v;
-}
 
 /** Muammoli tovarlar Excel buferi (so'nggi mavjud kun ma'lumotlari bo'yicha). */
 export async function buildInventoryReport(): Promise<{ buffer: Buffer; count: number; dateStr: string }> {
@@ -32,8 +29,8 @@ export async function buildInventoryReport(): Promise<{ buffer: Buffer; count: n
   const header = ["Kod", "Mahsulot", "Kategoriya", "Filial", "Qoldiq", "Sotuv"];
   const data = rows.map((r) => [
     r.code, r.pname, r.cname ?? "", r.bname,
-    r.stockQty != null ? num(r.stockQty) : "",
-    r.soldQty != null ? num(r.soldQty) : "",
+    r.stockQty != null ? decimalToNumber(r.stockQty) : "",
+    r.soldQty != null ? decimalToNumber(r.soldQty) : "",
   ]);
 
   const wb = XLSX.utils.book_new();

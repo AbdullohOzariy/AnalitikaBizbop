@@ -50,6 +50,3 @@ export async function setSpisaniyaDailyConfig(input: {
   cache = null;
 }
 
-export function clearSpisaniyaDailyCache(): void {
-  cache = null;
-}

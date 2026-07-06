@@ -36,12 +36,6 @@ export async function requireAdminUser() {
   return dbUser;
 }
 
-export async function requireUser() {
-  const session = await auth();
-  if (!session?.user) throw new AuthorizationError();
-  return session.user;
-}
-
 /**
  * Zakaz yaratish/yuritish huquqi: menejer, menejerlar boshi, supplychain yoki
  * SYSTEM_ADMIN. Read-only ADMIN bu yerdan o'tmaydi. canManageOrders bilan mos.

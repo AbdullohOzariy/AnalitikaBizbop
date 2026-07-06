@@ -5,7 +5,7 @@ import { auth } from "@/auth";
 import { canSeeAnalytics } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { getDefaultRange } from "@/lib/analytics";
-import { parseDateParam } from "@/lib/date";
+import { parseDateParam, isoDay } from "@/lib/date";
 import {
   computeAbcXyz, buildAnalizTree, buildMatrix, stripSkus,
   ABC_A_LIMIT, ABC_B_LIMIT, XYZ_X_LIMIT, XYZ_Y_LIMIT,
@@ -75,8 +75,8 @@ export default async function AbcXyzPage({
   const defStart = new Date(Date.UTC(def.end.getUTCFullYear(), def.end.getUTCMonth() - 2, 1));
   const startDate = parseDateParam(sp.start) ?? defStart;
   const endDate = parseDateParam(sp.end) ?? def.end;
-  const startStr = startDate.toISOString().slice(0, 10);
-  const endStr = endDate.toISOString().slice(0, 10);
+  const startStr = isoDay(startDate);
+  const endStr = isoDay(endDate);
   const branchId = sp.branchId ? parseInt(sp.branchId) : undefined;
 
   // Yengil so'rov (filtr ro'yxati) — shell darhol; og'ir hisob Suspense'da oqib keladi.

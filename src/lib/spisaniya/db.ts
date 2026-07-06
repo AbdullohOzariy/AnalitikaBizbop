@@ -7,6 +7,7 @@
  * (sahifa "ulanmagan" holatini ko'rsatadi, crash bo'lmaydi).
  */
 import { Pool, type PoolClient } from "pg";
+import { isoDay } from "@/lib/date";
 import {
   TUR_LABEL,
   VOZVRAT_HOLATLAR,
@@ -65,7 +66,7 @@ export function botConfigured(): boolean {
 export type ChiqimRange = { start: Date; end: Date };
 // sana paramlari (YYYY-MM-DD) — vaqt::date oralig'i bo'yicha filtrlash
 function dayParams(range: ChiqimRange): [string, string] {
-  return [range.start.toISOString().slice(0, 10), range.end.toISOString().slice(0, 10)];
+  return [isoDay(range.start), isoDay(range.end)];
 }
 
 /**
@@ -201,19 +202,6 @@ export async function chiqimFilials(): Promise<string[]> {
       `SELECT DISTINCT filial FROM yozuvlar WHERE filial IS NOT NULL ORDER BY filial`
     );
     return rows.map((r) => r.filial as string);
-  } catch (err) {
-    logDbXato(err);
-    return [];
-  }
-}
-
-// ─── Sozlamalar (read-only ko'rinish) ─────────────────────────────────────────
-export async function botFilialar(): Promise<{ id: number; nomi: string; aktiv: boolean }[]> {
-  const p = getPool();
-  if (!p) return [];
-  try {
-    const { rows } = await p.query(`SELECT id, nomi, aktiv FROM filialar ORDER BY nomi`);
-    return rows as { id: number; nomi: string; aktiv: boolean }[];
   } catch (err) {
     logDbXato(err);
     return [];
@@ -372,40 +360,10 @@ export function clearChatIdCache(): void {
   _chatIdCache = null;
 }
 
-/** AI kategoriyalash uchun mavjud kategoriya nomlari. */
-export async function kategoriyaNomlari(): Promise<string[]> {
-  const p = getPool();
-  if (!p) return [];
-  try {
-    const { rows } = await p.query(`SELECT nomi FROM kategoriyalar ORDER BY nomi`);
-    return rows.map((r) => r.nomi as string);
-  } catch (err) {
-    logDbXato(err);
-    return [];
-  }
-}
-
 /** Yozuvga MAVJUD subkat label'ini yozadi (yangi kategoriya YARATMAYDI). */
 export async function yozuvKategoriyaSet(yozuvId: number, kategoriya: string): Promise<void> {
   const p = requirePool();
   await p.query(`UPDATE yozuvlar SET kategoriya=$1 WHERE id=$2`, [kategoriya, yozuvId]);
-}
-
-/** Kategoriyani yozuvga yozadi (mavjud bo'lmasa kategoriyalar jadvaliga qo'shadi) — atomik. */
-export async function yozuvKategoriyaSaqla(yozuvId: number, kategoriya: string): Promise<void> {
-  const p = requirePool();
-  const client: PoolClient = await p.connect();
-  try {
-    await client.query("BEGIN");
-    await client.query(`INSERT INTO kategoriyalar (nomi) VALUES ($1) ON CONFLICT (nomi) DO NOTHING`, [kategoriya]);
-    await client.query(`UPDATE yozuvlar SET kategoriya=$1 WHERE id=$2`, [kategoriya, yozuvId]);
-    await client.query("COMMIT");
-  } catch (err) {
-    await client.query("ROLLBACK").catch(() => {});
-    throw err;
-  } finally {
-    client.release();
-  }
 }
 
 /** Kategoriyasi yo'q yozuvlar (backfill uchun). */
@@ -445,7 +403,6 @@ export async function kategoriyasizYozuvlar(limit: number): Promise<{ id: number
     return [];
   }
 }
-
 
 // ─── SOZLAMALAR boshqaruvi (eski admin panel → Hisobdan chiqarish) ─────────────
 
@@ -623,18 +580,6 @@ export async function vozvratSetGuruhMessageId(id: number, messageId: number): P
   const p = getPool();
   if (!p) return;
   await p.query(`UPDATE vozvratlar SET guruh_message_id=$1 WHERE id=$2`, [messageId, id]).catch((e) => logDbXato(e));
-}
-
-export async function vozvratById(id: number): Promise<VozvratYozuv | null> {
-  const p = getPool();
-  if (!p) return null;
-  try {
-    const { rows } = await p.query(`SELECT ${VOZVRAT_COLS} FROM vozvratlar WHERE id=$1`, [id]);
-    return (rows[0] as VozvratYozuv) ?? null;
-  } catch (err) {
-    logDbXato(err);
-    return null;
-  }
 }
 
 /** Kanban uchun: konvertatsiya qilinmagan (ochiq) vozvratlar — davr + filial filtri. */
@@ -953,80 +898,6 @@ export async function guruhChatIdSaqla(chatId: string): Promise<void> {
     [chatId]
   );
   clearChatIdCache();
-}
-
-export type KategoriyaSoni = { id: number; nomi: string; soni: number };
-
-/** Kategoriyalar + har biriga tegishli yozuvlar soni. */
-export async function kategoriyalarSoni(): Promise<KategoriyaSoni[]> {
-  const p = getPool();
-  if (!p) return [];
-  try {
-    await ensureSozlamalarSchema();
-    const { rows } = await p.query(
-      `SELECT k.id, k.nomi, COUNT(y.id)::int AS soni
-       FROM kategoriyalar k LEFT JOIN yozuvlar y ON y.kategoriya = k.nomi
-       GROUP BY k.id, k.nomi ORDER BY k.nomi`
-    );
-    return rows as KategoriyaSoni[];
-  } catch (err) {
-    logDbXato(err);
-    return [];
-  }
-}
-
-export async function kategoriyaQoshish(nomi: string): Promise<{ id: number; nomi: string }> {
-  const p = requirePool();
-  await ensureSozlamalarSchema();
-  const { rows } = await p.query(
-    `INSERT INTO kategoriyalar (nomi) VALUES ($1) RETURNING id, nomi`,
-    [nomi.slice(0, 100)]
-  );
-  return rows[0] as { id: number; nomi: string };
-}
-
-/** Kategoriya nomini o'zgartiradi + yozuvlardagi eski nomni ham yangilaydi. */
-export async function kategoriyaYangila(id: number, yangiNomi: string): Promise<{ id: number; nomi: string } | null> {
-  const p = requirePool();
-  const client: PoolClient = await p.connect();
-  try {
-    await client.query("BEGIN");
-    const { rows } = await client.query(`SELECT nomi FROM kategoriyalar WHERE id=$1 FOR UPDATE`, [id]);
-    if (!rows.length) { await client.query("ROLLBACK"); return null; }
-    const eski = rows[0].nomi as string;
-    const { rows: yangi } = await client.query(
-      `UPDATE kategoriyalar SET nomi=$1 WHERE id=$2 RETURNING id, nomi`,
-      [yangiNomi.slice(0, 100), id]
-    );
-    await client.query(`UPDATE yozuvlar SET kategoriya=$1 WHERE kategoriya=$2`, [yangi[0].nomi, eski]);
-    await client.query("COMMIT");
-    return yangi[0] as { id: number; nomi: string };
-  } catch (err) {
-    await client.query("ROLLBACK").catch(() => {});
-    throw err;
-  } finally {
-    client.release();
-  }
-}
-
-/** Kategoriyani o'chiradi (yozuvlardagi kategoriyani bo'shatadi, yozuvlar o'chmaydi). */
-export async function kategoriyaOchir(id: number): Promise<void> {
-  const p = requirePool();
-  const client: PoolClient = await p.connect();
-  try {
-    await client.query("BEGIN");
-    const { rows } = await client.query(`SELECT nomi FROM kategoriyalar WHERE id=$1`, [id]);
-    if (rows.length) {
-      await client.query(`UPDATE yozuvlar SET kategoriya=NULL WHERE kategoriya=$1`, [rows[0].nomi]);
-      await client.query(`DELETE FROM kategoriyalar WHERE id=$1`, [id]);
-    }
-    await client.query("COMMIT");
-  } catch (err) {
-    await client.query("ROLLBACK").catch(() => {});
-    throw err;
-  } finally {
-    client.release();
-  }
 }
 
 // ─── Admin: yozuv tahrirlash / o'chirish ─────────────────────────────────────

@@ -1,3 +1,4 @@
+import { TAG_IYERARXIYA } from "@/lib/cache-tags";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { isAdminTier, isSystemAdmin } from "@/lib/roles";
@@ -29,7 +30,7 @@ const getHierarchy = unstable_cache(
       },
     }),
   ["iyerarxiya-list"],
-  { tags: ["iyerarxiya"], revalidate: 300 }
+  { tags: [TAG_IYERARXIYA], revalidate: 300 }
 );
 
 export default async function IyerarxiyaPage() {

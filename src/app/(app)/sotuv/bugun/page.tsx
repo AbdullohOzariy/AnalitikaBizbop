@@ -19,7 +19,7 @@ import {
 import { PageHeader, StatCard, Pill } from "@/components/common/page";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { nowTashkent } from "@/lib/date";
+import { nowTashkent, isoDay } from "@/lib/date";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +39,7 @@ export default async function BugunPage() {
 
   // Toshkent (UTC+5) bo'yicha "bugun" — zakaz kunlari kalendari ham shu asosda.
   const nowTk = nowTashkent();
-  const todayStr = nowTk.toISOString().slice(0, 10);
+  const todayStr = isoDay(nowTk);
   const dow = nowTk.getUTCDay();
   const tomorrowDow = (dow + 1) % 7;
   // Bugungi kun boshlanishi (real UTC instant): Toshkent yarim tuni = UTC 19:00 (kecha)
@@ -82,8 +82,8 @@ export default async function BugunPage() {
 
   const def = await getDefaultRange();
   const filters: SnapshotFilters = {
-    startStr: def.start.toISOString().slice(0, 10),
-    endStr: def.end.toISOString().slice(0, 10),
+    startStr: isoDay(def.start),
+    endStr: isoDay(def.end),
     q: "",
     scopeSubIds: scope,
   };

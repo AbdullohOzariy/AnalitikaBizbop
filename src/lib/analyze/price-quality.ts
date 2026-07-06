@@ -11,6 +11,7 @@
  * qoldirish uchun nisbiy 0.5% YOKI absolyut 1 so'm — qaysi katta bo'lsa.
  */
 import { unstable_cache } from "next/cache";
+import { isoDay } from "@/lib/date";
 import { prisma } from "@/lib/prisma";
 import { ANALYTICS_CACHE_TAG } from "@/lib/analytics";
 
@@ -191,7 +192,7 @@ async function _compute(): Promise<PriceQuality> {
     });
 
   return {
-    periodEnd: periodEnd.toISOString().slice(0, 10),
+    periodEnd: isoDay(periodEnd),
     branchPriceDiffs,
     salePriceMismatch: toMismatch(saleRows),
     costPriceMismatch: toMismatch(costRows),

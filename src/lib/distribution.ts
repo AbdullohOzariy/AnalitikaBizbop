@@ -6,6 +6,7 @@
  * Filial qoldig'i/sotuvi — ProductSales (oxirgi snapshot + davr o'rtachasi).
  */
 import { prisma } from "@/lib/prisma";
+import { isoDay } from "@/lib/date";
 import { Prisma } from "@/generated/prisma/client";
 import { getDefaultRange } from "@/lib/analytics";
 
@@ -30,8 +31,8 @@ type RawRow = {
 /** Filial uchun taqsimot tavsiyasi — tavsiya > 0 bo'lgan SKU'lar (ombor + ehtiyoj bor). */
 export async function branchDistributionSuggest(branchId: number, targetDays: number): Promise<DistSuggest[]> {
   const range = await getDefaultRange();
-  const startStr = range.start.toISOString().slice(0, 10);
-  const endStr = range.end.toISOString().slice(0, 10);
+  const startStr = isoDay(range.start);
+  const endStr = isoDay(range.end);
 
   const rows = await prisma.$queryRaw<RawRow[]>(Prisma.sql`
     WITH wh AS (

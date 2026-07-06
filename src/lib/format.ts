@@ -18,6 +18,14 @@ export function formatNumber(n: number): string {
   return n.toLocaleString("uz-UZ", { maximumFractionDigits: 0 });
 }
 
+/** Prisma Decimal (yoki har qanday qiymat) → number; NaN/parse xatosi → 0. */
+export function decimalToNumber(n: unknown): number {
+  const v = typeof n === "object" && n !== null && "toNumber" in n
+    ? (n as { toNumber(): number }).toNumber()
+    : Number(n);
+  return isNaN(v) ? 0 : v;
+}
+
 export function formatPercent(n: number, decimals = 1): string {
   if (!Number.isFinite(n)) return "—";
   return n.toFixed(decimals) + "%";
@@ -50,10 +58,3 @@ export function formatDateRangeUZ(start: Date | string, end: Date | string): str
   return `${formatDateUZ(start)} – ${formatDateUZ(end)}`;
 }
 
-export function formatMonthName(month: number): string {
-  const names = [
-    "Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun",
-    "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr",
-  ];
-  return names[month - 1] ?? "?";
-}

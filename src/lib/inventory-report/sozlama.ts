@@ -41,6 +41,3 @@ export async function setInventoryReportConfig(input: {
   cache = null;
 }
 
-export function clearInventoryReportCache(): void {
-  cache = null;
-}

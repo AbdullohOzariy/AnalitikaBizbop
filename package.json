@@ -12,7 +12,8 @@
     "postinstall": "prisma generate",
     "lint": "eslint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "build:miniapp": "cd bot/miniapp && npm ci && npm run build && rm -rf ../../public/miniapp && cp -r dist ../../public/miniapp"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.100.1",
@@ -20,8 +21,6 @@
     "@hookform/resolvers": "^5.2.2",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
-    "@types/bcryptjs": "^2.4.6",
-    "@types/pg": "^8.20.0",
     "bcryptjs": "^3.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -50,7 +49,9 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
+    "@types/pg": "^8.20.0",
     "@types/node-cron": "^3.0.11",
     "@types/pdfkit": "^0.17.6",
     "@types/react": "^19",

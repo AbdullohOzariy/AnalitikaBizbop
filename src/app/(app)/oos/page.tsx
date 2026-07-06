@@ -9,7 +9,7 @@ import { oosKpi, oosTreeAgg, buildSnapshotTree, type OosView, type SnapshotFilte
 import { SnapshotTree, type SnapCol } from "@/components/common/snapshot-tree";
 import { oosLeavesAction } from "./actions";
 import { scopeSubIds } from "@/lib/scope";
-import { parseDateParam } from "@/lib/date";
+import { parseDateParam, isoDay } from "@/lib/date";
 import { PackageX, AlertTriangle, Boxes, Layers, TrendingDown } from "lucide-react";
 import { PageHeader, StatCard, EmptyState } from "@/components/common/page";
 import { Card, CardContent } from "@/components/ui/card";
@@ -49,8 +49,8 @@ export default async function OosPage({
   const def = await getDefaultRange();
   const startDate = parseDateParam(sp.start) ?? def.start;
   const endDate = parseDateParam(sp.end) ?? def.end;
-  const startStr = startDate.toISOString().slice(0, 10);
-  const endStr = endDate.toISOString().slice(0, 10);
+  const startStr = isoDay(startDate);
+  const endStr = isoDay(endDate);
   const branchId = sp.branchId ? parseInt(sp.branchId) : undefined;
   let categoryId = sp.categoryId ? parseInt(sp.categoryId) : undefined;
   const q = sp.q?.trim() ?? "";

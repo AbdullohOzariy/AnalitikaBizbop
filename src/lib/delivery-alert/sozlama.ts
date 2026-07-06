@@ -50,6 +50,3 @@ export async function setDeliveryAlertConfig(input: {
   cache = null;
 }
 
-export function clearDeliveryAlertCache(): void {
-  cache = null;
-}
