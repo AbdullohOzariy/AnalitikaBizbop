@@ -31,6 +31,7 @@ export const authConfig = {
         "/api/filialar",
         "/api/rasm-yukla",
         "/api/ruxsat",
+        "/api/import", // 1C avto sotuv importi — IMPORT_TOKEN bilan himoyalangan (sessiyasiz)
         "/api/sverka", // sverka mini app API'lari — o'zi initData HMAC + SverkaXodim bilan himoyalangan
         "/miniapp",
         "/anketa", // yetkazib beruvchi anketasi — public forma

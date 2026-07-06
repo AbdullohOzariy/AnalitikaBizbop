@@ -1,7 +1,8 @@
 "use server";
 
 import { revalidatePath, revalidateTag } from "next/cache";
-import { isoDay } from "@/lib/date";
+import { timingSafeEqual } from "node:crypto";
+import { isoDay, todayTashkentISO } from "@/lib/date";
 import { after } from "next/server";
 import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
@@ -163,9 +164,31 @@ export async function uploadSalesAction(formData: FormData): Promise<UploadResul
     if (!(file instanceof File) || file.size === 0) {
       return { ok: false, error: "Fayl tanlanmagan." };
     }
+    return await salesImportCore(
+      file,
+      String(formData.get("label") ?? ""),
+      (formData.get("period") as string) || undefined,
+      user,
+    );
+  } catch (err) {
+    return actionError(err, "upload");
+  }
+}
+
+/**
+ * Sotuv importi YADROSI (auth'siz). `uploadSalesAction` (admin sessiyasi) va
+ * `importSalesViaToken` (1C token) ikkalasi ham shuni chaqiradi. `user` faqat
+ * uploadedById uchun kerak (Number(user.id)). Xato — throw (chaqiruvchi ushlaydi).
+ */
+async function salesImportCore(
+  file: File,
+  rawLabel: string,
+  rawPeriod: string | undefined,
+  user: { id: string | number },
+): Promise<UploadResult> {
     const parsed = salesInputSchema.parse({
-      label: formData.get("label"),
-      period: formData.get("period") || undefined,
+      label: rawLabel,
+      period: rawPeriod,
     });
     const periodOverride = periodFromInput(parsed.period);
 
@@ -305,8 +328,50 @@ export async function uploadSalesAction(formData: FormData): Promise<UploadResul
       aiCorrections: aiCorrections.length > 0 ? aiCorrections : undefined,
       summary: `Saqlandi: ${legacyResult.rows.length} qator (${branchCount} filial), period ${isoDay(legacyResult.periodStart)} → ${isoDay(legacyResult.periodEnd)}.`,
     };
+}
+
+async function resolveImportUser(): Promise<{ id: number }> {
+  const u = await prisma.user.findFirst({
+    where: { OR: [{ role: "SYSTEM_ADMIN" }, { extraRoles: { has: "SYSTEM_ADMIN" } }] },
+    orderBy: { id: "asc" },
+    select: { id: true },
+  });
+  if (!u) throw new Error("Import uchun tizim foydalanuvchisi (SYSTEM_ADMIN) topilmadi.");
+  return u;
+}
+
+/** Doimiy-vaqt token solishtirish (uzunlik farqi ochilib qolmasin). */
+function timingSafeEq(a: string, b: string): boolean {
+  const ba = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ba.length !== bb.length) return false;
+  return timingSafeEqual(ba, bb);
+}
+
+/**
+ * 1C avto sotuv importi — IMPORT_TOKEN bilan himoyalangan (sessiyasiz). HTTP route
+ * /api/import/sales shu funksiyani chaqiradi. Fayl mavjud sotuv-import quvuridan
+ * o'tadi (parse → uploadV3/v1v2 → ProductSales/CategorySales). Foydalanuvchi — eng
+ * eski SYSTEM_ADMIN (uploadedById uchun). Dublikat fayl hash bo'yicha o'tkazib yuboriladi.
+ */
+export async function importSalesViaToken(input: {
+  token: string;
+  filename: string;
+  label?: string;
+  period?: string;
+  bytes: ArrayBuffer;
+}): Promise<UploadResult> {
+  try {
+    const expected = process.env.IMPORT_TOKEN ?? "";
+    if (expected.length < 16) return { ok: false, error: "IMPORT_TOKEN sozlanmagan (server)." };
+    if (!input.token || !timingSafeEq(input.token, expected)) return { ok: false, error: "Token noto'g'ri." };
+    if (input.bytes.byteLength === 0) return { ok: false, error: "Bo'sh fayl." };
+    const user = await resolveImportUser();
+    const file = new File([input.bytes], input.filename || "1c-sales.xlsx");
+    const label = input.label?.trim() || `1C avto ${todayTashkentISO()}`;
+    return await salesImportCore(file, label, input.period, user);
   } catch (err) {
-    return actionError(err, "upload");
+    return actionError(err, "import-api");
   }
 }
 
