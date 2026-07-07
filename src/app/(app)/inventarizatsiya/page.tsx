@@ -21,26 +21,32 @@ export default async function InventarizatsiyaPage() {
   if (!session?.user || !canSeeInventory(roles)) redirect("/dashboard");
   const canManage = canManageInventoryItems(roles);
 
-  const items = await prisma.inventoryItem.findMany({
-    include: {
-      product: {
-        select: {
-          code: true,
-          name: true,
-          currentStock: true,
-          category: { select: { name: true } },
+  const [items, branches] = await Promise.all([
+    prisma.inventoryItem.findMany({
+      include: {
+        product: {
+          select: {
+            code: true,
+            name: true,
+            currentStock: true,
+            category: { select: { name: true } },
+          },
         },
+        branch: { select: { id: true, name: true } },
+        createdBy: { select: { name: true } },
       },
-      createdBy: { select: { name: true } },
-    },
-    orderBy: { product: { name: "asc" } },
-  });
+      orderBy: [{ branch: { sortOrder: "asc" } }, { product: { name: "asc" } }],
+    }),
+    prisma.branch.findMany({ select: { id: true, name: true }, orderBy: { sortOrder: "asc" } }),
+  ]);
 
   const rows = items.map((it) => ({
     id: it.id,
     code: it.product.code,
     name: it.product.name,
     subName: it.product.category?.name ?? null,
+    branchId: it.branch.id,
+    branchName: it.branch.name,
     currentStock:
       it.product.currentStock == null ? null : decimalToNumber(it.product.currentStock),
     createdByName: it.createdBy.name,
@@ -52,9 +58,9 @@ export default async function InventarizatsiyaPage() {
       <PageHeader
         icon={ClipboardList}
         title="Inventarizatsiya"
-        description="Sanash uchun belgilangan SKU ro'yxati — miniapp'da filial kesimida sanaladi"
+        description="Sanash uchun belgilangan SKU ro'yxati — har filial uchun alohida"
       />
-      <ItemsClient rows={rows} canManage={canManage} />
+      <ItemsClient rows={rows} branches={branches} canManage={canManage} />
     </div>
   );
 }

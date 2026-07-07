@@ -187,6 +187,7 @@ model Branch {
   orderItemBranches PurchaseOrderItemBranch[] // zakaz qatorlarining shu filialga taqsimoti
   supplierProfiles  SupplierBranchProfile[] // yetkazib beruvchilarning shu filial profili
   userBranches      UserBranch[] // shu filialga biriktirilgan foydalanuvchilar (miniapp scope)
+  inventoryItems    InventoryItem[] // shu filial uchun belgilangan inventar SKU'lari
   inventoryCounts   InventoryCount[] // shu filialdagi inventarizatsiya sanashlari
 }
 
@@ -398,7 +399,7 @@ model Product {
   transferItems     BranchTransferItem[]
   batches           ProductBatch[]
   promoItems        PromoItem[] // aksiyalardagi qatnashuvi
-  inventoryItem     InventoryItem? // inventarizatsiya ro'yxatidagi o'rni (belgilangan SKU)
+  inventoryItems    InventoryItem[] // inventarizatsiya ro'yxatidagi o'rinlari (filial kesimida)
   inventoryCounts   InventoryCount[] // inventarizatsiya sanashlari
 
   @@index([categoryId])
@@ -1035,16 +1036,22 @@ model PromoItem {
 }
 
 // ─── Inventarizatsiya ─────────────────────────────────────────────────────────
-// Belgilangan SKU'lar ro'yxati — ERP'ning /inventarizatsiya bo'limida SA/CEO tuzadi.
-// Miniapp (BizbopSotuv) shu ro'yxat bo'yicha filialda haqiqiy qoldiqni sanaydi.
+// Belgilangan SKU'lar ro'yxati — HAR FILIAL uchun alohida (SKU × filial). ERP'ning
+// /inventarizatsiya bo'limida SA/CEO tuzadi; miniapp (BizbopSotuv) xodimning filialida
+// faqat o'sha filialga belgilangan SKU'larni sanashga chiqaradi.
 model InventoryItem {
   id          Int      @id @default(autoincrement())
-  productId   Int      @unique // bitta SKU ro'yxatda bir marta
+  productId   Int
+  branchId    Int
   createdById Int
   createdAt   DateTime @default(now())
 
   product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  branch    Branch  @relation(fields: [branchId], references: [id], onDelete: Cascade)
   createdBy User    @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@unique([productId, branchId])
+  @@index([branchId])
 }
 
 // Inventarizatsiya sanashi — (SKU × filial × kun) bitta yozuv (qayta kiritilsa upsert).

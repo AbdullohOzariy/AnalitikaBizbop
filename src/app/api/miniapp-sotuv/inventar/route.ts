@@ -62,7 +62,9 @@ export async function GET(req: Request) {
 
   const { iso: sanaKuni, date: sanaDate } = bugunSanaKuni();
 
+  // Ro'yxat filial kesimida — faqat shu filial uchun belgilangan SKU'lar.
   const items = await prisma.inventoryItem.findMany({
+    where: { branchId },
     select: { productId: true, product: { select: { code: true, name: true } } },
     orderBy: { product: { name: "asc" } },
   });
@@ -127,9 +129,9 @@ export async function POST(req: Request) {
   for (const it of p.items) byId.set(it.productId, it);
   const items = [...byId.values()];
 
-  // Faqat belgilangan SKU ro'yxatidagilar qabul qilinadi.
+  // Faqat SHU FILIAL uchun belgilangan SKU ro'yxatidagilar qabul qilinadi.
   const allowed = await prisma.inventoryItem.findMany({
-    where: { productId: { in: items.map((i) => i.productId) } },
+    where: { branchId: p.branchId, productId: { in: items.map((i) => i.productId) } },
     select: { productId: true },
   });
   const allowedSet = new Set(allowed.map((a) => a.productId));

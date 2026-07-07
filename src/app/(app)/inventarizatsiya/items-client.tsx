@@ -10,13 +10,14 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Plus, Trash2, Search, Loader2, Check, Zap } from "lucide-react";
+import { Plus, Trash2, Search, Loader2, Zap, FileUp } from "lucide-react";
 import { toast } from "sonner";
 import {
   searchProductsForInventoryAction,
   addInventoryItemAction,
   removeInventoryItemAction,
   autoAddOosItemsAction,
+  importInventoryItemsXlsxAction,
   type InventorySearchRow,
 } from "./actions";
 
@@ -25,27 +26,86 @@ export type InventoryItemRow = {
   code: number;
   name: string;
   subName: string | null;
+  branchId: number;
+  branchName: string;
   currentStock: number | null;
   createdByName: string;
   createdAtText: string;
 };
 
+export type BranchOpt = { id: number; name: string };
+
 const fmtQty = (n: number | null) =>
   n == null ? "—" : n.toLocaleString("uz-UZ", { maximumFractionDigits: 3 });
 
+// Filial tanlash checkbox guruhi — qo'shish/import dialoglarida umumiy.
+function BranchPicker({
+  branches, selected, onChange,
+}: {
+  branches: BranchOpt[];
+  selected: Set<number>;
+  onChange: (next: Set<number>) => void;
+}) {
+  const toggle = (id: number) => {
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    onChange(next);
+  };
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-medium text-muted-foreground">Qaysi filiallar uchun:</p>
+        <button
+          type="button"
+          className="text-[11px] font-medium text-primary hover:underline"
+          onClick={() => onChange(selected.size === branches.length ? new Set() : new Set(branches.map((b) => b.id)))}
+        >
+          {selected.size === branches.length ? "Hech biri" : "Hammasi"}
+        </button>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {branches.map((b) => {
+          const on = selected.has(b.id);
+          return (
+            <button
+              key={b.id}
+              type="button"
+              onClick={() => toggle(b.id)}
+              className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+                on
+                  ? "border-primary/40 bg-primary/10 text-primary"
+                  : "border-border bg-background text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              {b.name}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function ItemsClient({
   rows,
+  branches,
   canManage,
 }: {
   rows: InventoryItemRow[];
+  branches: BranchOpt[];
   canManage: boolean;
 }) {
   const router = useRouter();
   const [addOpen, setAddOpen] = useState(false);
+  const [xlsxOpen, setXlsxOpen] = useState(false);
   const [oosOpen, setOosOpen] = useState(false);
   const [oosRunning, startOos] = useTransition();
   const [del, setDel] = useState<InventoryItemRow | null>(null);
   const [deleting, startDelete] = useTransition();
+  const [branchFilter, setBranchFilter] = useState<number>(0); // 0 = barchasi
+
+  const filtered = branchFilter === 0 ? rows : rows.filter((r) => r.branchId === branchFilter);
 
   const runOosAuto = () => {
     startOos(async () => {
@@ -53,8 +113,8 @@ export function ItemsClient({
       if (res.ok) {
         toast.success(
           res.added > 0
-            ? `${res.added} ta SKU qo'shildi (nomzod: ${res.candidates}, sana: ${res.day}).`
-            : `Yangi SKU yo'q — ${res.candidates} ta nomzodning hammasi allaqachon ro'yxatda.`
+            ? `${res.added} ta (SKU × filial) qo'shildi (nomzod: ${res.candidates}, sana: ${res.day}).`
+            : `Yangi yozuv yo'q — ${res.candidates} ta nomzodning hammasi allaqachon ro'yxatda.`
         );
         setOosOpen(false);
         router.refresh();
@@ -78,12 +138,27 @@ export function ItemsClient({
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <p className="text-sm text-muted-foreground">
-          Ro&apos;yxatda <b className="text-foreground">{rows.length}</b> ta SKU
+          Ro&apos;yxatda <b className="text-foreground">{filtered.length}</b> ta yozuv
+          {branchFilter !== 0 && <> ({branches.find((b) => b.id === branchFilter)?.name})</>}
         </p>
+        <select
+          value={branchFilter}
+          onChange={(e) => setBranchFilter(Number(e.target.value))}
+          className="h-8 rounded-lg border border-border bg-background px-2 text-xs"
+          aria-label="Filial filtri"
+        >
+          <option value={0}>Barcha filiallar</option>
+          {branches.map((b) => (
+            <option key={b.id} value={b.id}>{b.name}</option>
+          ))}
+        </select>
         {canManage && (
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex flex-wrap items-center gap-2">
             <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => setOosOpen(true)}>
               <Zap className="h-3.5 w-3.5 text-amber-500" /> OOS&apos;dan avto to&apos;ldirish
+            </Button>
+            <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => setXlsxOpen(true)}>
+              <FileUp className="h-3.5 w-3.5" /> Excel&apos;dan yuklash
             </Button>
             <Button size="sm" className="h-8 gap-1.5" onClick={() => setAddOpen(true)}>
               <Plus className="h-3.5 w-3.5" /> SKU qo&apos;shish
@@ -99,8 +174,8 @@ export function ItemsClient({
             <DialogTitle>OOS&apos;dan avto to&apos;ldirish</DialogTitle>
             <DialogDescription>
               So&apos;nggi kun ma&apos;lumotida <b>qoldig&apos;i 0 yoki minus, lekin sotuvi bor</b> (eng
-              tekshirish zarur) tovarlardan <b>har bir filial kesimida top-50 tasi</b> ro&apos;yxatga
-              qo&apos;shiladi. Allaqachon ro&apos;yxatda borlari takrorlanmaydi.
+              tekshirish zarur) tovarlardan <b>har bir filial kesimida top-50 tasi</b> o&apos;sha
+              filialning ro&apos;yxatiga qo&apos;shiladi. Allaqachon borlari takrorlanmaydi.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -121,6 +196,7 @@ export function ItemsClient({
             <TableRow>
               <TableHead className="w-24">Kod</TableHead>
               <TableHead>Nomi</TableHead>
+              <TableHead>Filial</TableHead>
               <TableHead>Subkategoriya</TableHead>
               <TableHead className="text-right">Joriy qoldiq (jami)</TableHead>
               <TableHead>Qo&apos;shgan</TableHead>
@@ -128,17 +204,18 @@ export function ItemsClient({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.length === 0 ? (
+            {filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={canManage ? 6 : 5} className="py-8 text-center text-sm text-muted-foreground">
+                <TableCell colSpan={canManage ? 7 : 6} className="py-8 text-center text-sm text-muted-foreground">
                   Ro&apos;yxat bo&apos;sh — hali SKU belgilanmagan.
                 </TableCell>
               </TableRow>
             ) : (
-              rows.map((r) => (
+              filtered.map((r) => (
                 <TableRow key={r.id}>
                   <TableCell className="tabular-nums text-muted-foreground">{r.code}</TableCell>
                   <TableCell className="font-medium">{r.name}</TableCell>
+                  <TableCell className="text-xs">{r.branchName}</TableCell>
                   <TableCell className="text-muted-foreground">{r.subName ?? "—"}</TableCell>
                   <TableCell className="text-right tabular-nums">{fmtQty(r.currentStock)}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">
@@ -165,7 +242,20 @@ export function ItemsClient({
       </div>
 
       {canManage && (
-        <AddSkuDialog open={addOpen} onOpenChange={setAddOpen} onAdded={() => router.refresh()} />
+        <>
+          <AddSkuDialog
+            open={addOpen}
+            onOpenChange={setAddOpen}
+            branches={branches}
+            onAdded={() => router.refresh()}
+          />
+          <XlsxImportDialog
+            open={xlsxOpen}
+            onOpenChange={setXlsxOpen}
+            branches={branches}
+            onImported={() => router.refresh()}
+          />
+        </>
       )}
 
       {/* O'chirish tasdiqlash */}
@@ -174,7 +264,7 @@ export function ItemsClient({
           <DialogHeader>
             <DialogTitle>SKU ro&apos;yxatdan o&apos;chirilsinmi?</DialogTitle>
             <DialogDescription>
-              {del ? `${del.code} — ${del.name}` : ""}. Kiritilgan sanash tarixi saqlanib qoladi.
+              {del ? `${del.code} — ${del.name} (${del.branchName})` : ""}. Kiritilgan sanash tarixi saqlanib qoladi.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -190,14 +280,16 @@ export function ItemsClient({
   );
 }
 
-// ─── SKU qidiruv + qo'shish dialogi ──────────────────────────────────────────
+// ─── SKU qidiruv + qo'shish dialogi (filial tanlash bilan) ───────────────────
 function AddSkuDialog({
   open,
   onOpenChange,
+  branches,
   onAdded,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
+  branches: BranchOpt[];
   onAdded: () => void;
 }) {
   const [q, setQ] = useState("");
@@ -206,6 +298,7 @@ function AddSkuDialog({
   const [searching, startSearch] = useTransition();
   const [addingId, setAddingId] = useState<number | null>(null);
   const [, startAdd] = useTransition();
+  const [sel, setSel] = useState<Set<number>>(new Set(branches.map((b) => b.id)));
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const reqId = useRef(0);
 
@@ -234,14 +327,27 @@ function AddSkuDialog({
   };
 
   const add = (row: InventorySearchRow) => {
+    if (sel.size === 0) {
+      toast.error("Kamida bitta filial tanlang.");
+      return;
+    }
+    const bids = [...sel];
     setAddingId(row.productId);
     startAdd(async () => {
-      const res = await addInventoryItemAction(row.productId);
+      const res = await addInventoryItemAction(row.productId, bids);
       setAddingId(null);
       if (res.ok) {
-        toast.success(`${row.name} ro'yxatga qo'shildi.`);
+        toast.success(
+          res.added > 0
+            ? `${row.name} — ${res.added} ta filialga qo'shildi.`
+            : `${row.name} tanlangan filiallarda allaqachon bor.`
+        );
         setResults((prev) =>
-          prev.map((r) => (r.productId === row.productId ? { ...r, inList: true } : r))
+          prev.map((r) =>
+            r.productId === row.productId
+              ? { ...r, inBranchIds: [...new Set([...r.inBranchIds, ...bids])] }
+              : r
+          )
         );
         onAdded();
       } else toast.error(res.error);
@@ -266,6 +372,8 @@ function AddSkuDialog({
           <DialogDescription>Nomi yoki 1C kodi bo&apos;yicha qidiring (kamida 2 belgi).</DialogDescription>
         </DialogHeader>
 
+        <BranchPicker branches={branches} selected={sel} onChange={setSel} />
+
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -277,7 +385,7 @@ function AddSkuDialog({
           />
         </div>
 
-        <div className="max-h-[50vh] overflow-y-auto rounded-lg border border-border/60">
+        <div className="max-h-[45vh] overflow-y-auto rounded-lg border border-border/60">
           {searching ? (
             <p className="p-4 text-center text-xs text-muted-foreground">
               <Loader2 className="mr-1.5 inline h-3.5 w-3.5 animate-spin" />Qidirilmoqda…
@@ -288,38 +396,112 @@ function AddSkuDialog({
             </p>
           ) : (
             <div className="divide-y divide-border/40">
-              {results.map((r) => (
-                <div key={r.productId} className="flex items-center gap-2 px-3 py-2 text-sm">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">{r.name}</p>
-                    <p className="text-[11px] text-muted-foreground">
-                      {r.code}
-                      {r.subName ? ` · ${r.subName}` : ""} · qoldiq: {fmtQty(r.currentStock)}
-                    </p>
-                  </div>
-                  {r.inList ? (
-                    <span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-medium text-primary">
-                      <Check className="h-3.5 w-3.5" /> Ro&apos;yxatda
-                    </span>
-                  ) : (
+              {results.map((r) => {
+                const missing = [...sel].filter((id) => !r.inBranchIds.includes(id));
+                const fullyIn = sel.size > 0 && missing.length === 0;
+                return (
+                  <div key={r.productId} className="flex items-center gap-2 px-3 py-2 text-sm">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium">{r.name}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {r.code}
+                        {r.subName ? ` · ${r.subName}` : ""} · qoldiq: {fmtQty(r.currentStock)}
+                        {r.inBranchIds.length > 0 && (
+                          <span className="text-primary"> · {r.inBranchIds.length}/{branches.length} filialda</span>
+                        )}
+                      </p>
+                    </div>
                     <Button
                       size="sm"
                       variant="outline"
                       className="h-7 shrink-0 gap-1 px-2 text-xs"
-                      disabled={addingId === r.productId}
+                      disabled={addingId === r.productId || fullyIn}
                       onClick={() => add(r)}
                     >
                       {addingId === r.productId
                         ? <Loader2 className="h-3 w-3 animate-spin" />
                         : <Plus className="h-3 w-3" />}
-                      Qo&apos;shish
+                      {fullyIn ? "Qo'shilgan" : "Qo'shish"}
                     </Button>
-                  )}
-                </div>
-              ))}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Excel (xlsx) orqali kodlar ro'yxatini yuklash ────────────────────────────
+function XlsxImportDialog({
+  open,
+  onOpenChange,
+  branches,
+  onImported,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  branches: BranchOpt[];
+  onImported: () => void;
+}) {
+  const [file, setFile] = useState<File | null>(null);
+  const [sel, setSel] = useState<Set<number>>(new Set(branches.map((b) => b.id)));
+  const [running, startRun] = useTransition();
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const run = () => {
+    if (!file) { toast.error("Fayl tanlang."); return; }
+    if (sel.size === 0) { toast.error("Kamida bitta filial tanlang."); return; }
+    const fd = new FormData();
+    fd.set("file", file);
+    fd.set("branchIds", JSON.stringify([...sel]));
+    startRun(async () => {
+      const res = await importInventoryItemsXlsxAction(fd);
+      if (res.ok) {
+        toast.success(
+          `${res.matched} ta SKU topildi, ${res.added} ta (SKU × filial) qo'shildi.` +
+            (res.unknownCodes.length > 0 ? ` Topilmagan kodlar: ${res.unknownCodes.join(", ")}${res.totalCodes - res.matched > res.unknownCodes.length ? "…" : ""}` : "")
+        );
+        setFile(null);
+        if (inputRef.current) inputRef.current.value = "";
+        onOpenChange(false);
+        onImported();
+      } else toast.error(res.error);
+    });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Excel&apos;dan SKU yuklash</DialogTitle>
+          <DialogDescription>
+            Faylda 1C SKU kodlari bo&apos;lsin (ustun/format erkin — barcha katakdagi kodlar
+            o&apos;qiladi). Topilgan SKU&apos;lar tanlangan filiallarga qo&apos;shiladi.
+          </DialogDescription>
+        </DialogHeader>
+
+        <BranchPicker branches={branches} selected={sel} onChange={setSel} />
+
+        <Input
+          ref={inputRef}
+          type="file"
+          accept=".xlsx,.xls,.csv"
+          className="h-9 cursor-pointer"
+          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+        />
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={running}>
+            Bekor qilish
+          </Button>
+          <Button onClick={run} disabled={running || !file} className="gap-1.5">
+            {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileUp className="h-3.5 w-3.5" />}
+            Yuklash
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

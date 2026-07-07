@@ -2,12 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import * as XLSX from "xlsx";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canManageInventoryItems } from "@/lib/roles";
 import { actionError } from "@/lib/action-error";
 import { AuthorizationError } from "@/lib/auth-helpers";
 import { decimalToNumber } from "@/lib/format";
+import { parseCode } from "@/lib/parsers/utils";
 
 // Ro'yxatni (belgilangan SKU'lar) boshqarish — faqat SYSTEM_ADMIN va CEO.
 async function requireItemsManager() {
@@ -24,8 +26,11 @@ export type InventorySearchRow = {
   name: string;
   subName: string | null;
   currentStock: number | null;
-  inList: boolean; // allaqachon inventarizatsiya ro'yxatida
+  inBranchIds: number[]; // qaysi filiallarda allaqachon ro'yxatda
 };
+
+// Filial tanlovi — kamida bitta, mavjud Branch id'lar (createMany FK baribir tekshiradi).
+const branchIdsSchema = z.array(z.coerce.number().int().positive()).min(1, "Kamida bitta filial tanlang.").max(50);
 
 const qSchema = z.string().trim().min(1, "Qidiruv so'zi bo'sh.").max(100);
 
@@ -59,9 +64,12 @@ export async function searchProductsForInventoryAction(
 
     const existing = await prisma.inventoryItem.findMany({
       where: { productId: { in: products.map((p) => p.id) } },
-      select: { productId: true },
+      select: { productId: true, branchId: true },
     });
-    const inList = new Set(existing.map((e) => e.productId));
+    const inBranches = new Map<number, number[]>();
+    for (const e of existing) {
+      inBranches.set(e.productId, [...(inBranches.get(e.productId) ?? []), e.branchId]);
+    }
 
     return {
       ok: true,
@@ -71,7 +79,7 @@ export async function searchProductsForInventoryAction(
         name: p.name,
         subName: p.category?.name ?? null,
         currentStock: p.currentStock == null ? null : decimalToNumber(p.currentStock),
-        inList: inList.has(p.id),
+        inBranchIds: inBranches.get(p.id) ?? [],
       })),
     };
   } catch (err) {
@@ -93,10 +101,11 @@ export async function autoAddOosItemsAction(): Promise<
 
     // Faqat SO'NGGI mavjud kun (max periodEnd) — eski kunlardan "muammo" olib kelmaymiz
     // (kunlik snapshot: periodStart == periodEnd; inventory-report bilan bir xil qoida).
-    const rows = await prisma.$queryRaw<{ productId: number; day: string }[]>`
+    // Har filial kesimida top-50: (productId, branchId) juftliklar — ro'yxat ham filial-aware.
+    const rows = await prisma.$queryRaw<{ productId: number; branchId: number; day: string }[]>`
       WITH mx AS (SELECT max("periodEnd") AS d FROM "ProductSales"),
       prob AS (
-        SELECT ps."productId",
+        SELECT ps."productId", ps."branchId",
                ROW_NUMBER() OVER (PARTITION BY ps."branchId" ORDER BY ps."soldQty" DESC) AS rn
         FROM "ProductSales" ps
         JOIN "Product" p ON p.id = ps."productId"
@@ -105,7 +114,7 @@ export async function autoAddOosItemsAction(): Promise<
           AND ps."soldQty" IS NOT NULL AND ps."soldQty" > 0
           AND p."archivedAt" IS NULL
       )
-      SELECT DISTINCT "productId", (SELECT d FROM mx)::text AS day
+      SELECT "productId", "branchId", (SELECT d FROM mx)::text AS day
       FROM prob WHERE rn <= 50
     `;
     if (rows.length === 0) {
@@ -113,7 +122,7 @@ export async function autoAddOosItemsAction(): Promise<
     }
 
     const res = await prisma.inventoryItem.createMany({
-      data: rows.map((r) => ({ productId: r.productId, createdById: Number(user.id) })),
+      data: rows.map((r) => ({ productId: r.productId, branchId: r.branchId, createdById: Number(user.id) })),
       skipDuplicates: true, // allaqachon ro'yxatda borlari tegilmaydi
     });
 
@@ -124,21 +133,82 @@ export async function autoAddOosItemsAction(): Promise<
   }
 }
 
-/** SKU'ni inventarizatsiya ro'yxatiga qo'shish. */
+/** SKU'ni tanlangan filial(lar) uchun inventarizatsiya ro'yxatiga qo'shish. */
 export async function addInventoryItemAction(
-  productId: number
-): Promise<{ ok: true } | { ok: false; error: string }> {
+  productId: number,
+  branchIds: number[]
+): Promise<{ ok: true; added: number } | { ok: false; error: string }> {
   try {
     const user = await requireItemsManager();
     const pid = z.coerce.number().int().positive().parse(productId);
-    await prisma.inventoryItem.create({
-      data: { productId: pid, createdById: Number(user.id) },
+    const bids = branchIdsSchema.parse(branchIds);
+    const res = await prisma.inventoryItem.createMany({
+      data: bids.map((branchId) => ({ productId: pid, branchId, createdById: Number(user.id) })),
+      skipDuplicates: true, // (SKU × filial) allaqachon bo'lsa tegilmaydi
     });
     revalidatePath("/inventarizatsiya");
-    return { ok: true };
+    return { ok: true, added: res.count };
   } catch (err) {
-    // P2002 (productId unique) — actionError "allaqachon mavjud" deb qaytaradi
     return actionError(err, "addInventoryItem");
+  }
+}
+
+/**
+ * Excel (xlsx/csv) orqali SKU kodlari ro'yxatini tanlangan filial(lar)ga qo'shish.
+ * Fayl formati erkin: barcha kataklardan 1C kodi ko'rinishidagi qiymatlar olinadi
+ * (raqam yoki "50 911" kabi probelli matn) va Product.code bilan solishtiriladi.
+ */
+export async function importInventoryItemsXlsxAction(
+  formData: FormData
+): Promise<
+  | { ok: true; added: number; matched: number; unknownCodes: number[]; totalCodes: number }
+  | { ok: false; error: string }
+> {
+  try {
+    const user = await requireItemsManager();
+    const bids = branchIdsSchema.parse(
+      JSON.parse(String(formData.get("branchIds") ?? "[]")) as unknown
+    );
+    const file = formData.get("file");
+    if (!(file instanceof File) || file.size === 0) return { ok: false, error: "Fayl tanlanmagan." };
+    if (file.size > 5 * 1024 * 1024) return { ok: false, error: "Fayl 5MB dan oshmasin." };
+
+    const wb = XLSX.read(Buffer.from(await file.arrayBuffer()), { type: "buffer" });
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    if (!sheet) return { ok: false, error: "Bo'sh fayl." };
+    const aoa = XLSX.utils.sheet_to_json<(unknown | null)[]>(sheet, { header: 1, defval: null, raw: true });
+
+    // Barcha kataklardan kod ko'rinishidagi qiymatlar (dublikatsiz)
+    const codes = new Set<number>();
+    for (const row of aoa) for (const cell of row ?? []) {
+      const c = parseCode(cell);
+      if (c != null) codes.add(c);
+    }
+    if (codes.size === 0) return { ok: false, error: "Faylda SKU kodlari topilmadi." };
+    if (codes.size > 5000) return { ok: false, error: "Juda ko'p kod (>5000). Faylni bo'lib yuklang." };
+
+    const products = await prisma.product.findMany({
+      where: { code: { in: [...codes] }, archivedAt: null },
+      select: { id: true, code: true },
+    });
+    const foundCodes = new Set(products.map((p) => p.code));
+    const unknownCodes = [...codes].filter((c) => !foundCodes.has(c)).slice(0, 20);
+
+    if (products.length === 0) {
+      return { ok: false, error: "Hech bir kod bazadagi SKU'ga mos kelmadi." };
+    }
+
+    const res = await prisma.inventoryItem.createMany({
+      data: products.flatMap((p) =>
+        bids.map((branchId) => ({ productId: p.id, branchId, createdById: Number(user.id) }))
+      ),
+      skipDuplicates: true,
+    });
+
+    revalidatePath("/inventarizatsiya");
+    return { ok: true, added: res.count, matched: products.length, unknownCodes, totalCodes: codes.size };
+  } catch (err) {
+    return actionError(err, "importInventoryItemsXlsx");
   }
 }
 
