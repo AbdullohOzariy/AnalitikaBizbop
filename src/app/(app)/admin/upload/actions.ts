@@ -424,6 +424,55 @@ function isMarkaziySklad(r: { filial: string; skladKod?: string | null }): boole
   return f.includes("марказий") || f.includes("markaziy");
 }
 
+// 1C ruscha kalitlari → bizning kalitlar (ular o'z strukturasini o'zgartirmasin).
+const RU_KEYS: Record<string, string> = {
+  "Код": "kod",
+  "Артикул": "artikul",
+  "Номенклатура": "nom",
+  "Склад": "filial",
+  "СкладКод": "skladKod",
+  "Остаток": "qoldiq",
+  "Количество": "soni",
+  "ПродажаЦена": "narx",
+  "ПродажаСумма": "summa",
+  "СебестЦена": "tannarx",
+  "СебестСумма": "tansumma",
+};
+
+/**
+ * Kiruvchi body'ni kanonik shaklga keltiradi:
+ *  - qator kalitlari ruscha bo'lsa (Код, Склад, Остаток...) — o'giriladi;
+ *  - top-level to'g'ridan-to'g'ri massiv bo'lsa — { sana: bugun, sotuv: [...] };
+ *  - sana "Дата" kaliti bilan ham kelishi mumkin; berilmasa — bugungi Toshkent kuni.
+ */
+function normalizeJsonBody(body: unknown): unknown {
+  const normRow = (row: unknown): unknown => {
+    if (typeof row !== "object" || row === null || Array.isArray(row)) return row;
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(row as Record<string, unknown>)) {
+      out[RU_KEYS[k.trim()] ?? k] = v;
+    }
+    return out;
+  };
+  if (Array.isArray(body)) {
+    return { sana: todayTashkentISO(), sotuv: body.map(normRow) };
+  }
+  if (typeof body !== "object" || body === null) return body;
+  const b = body as Record<string, unknown>;
+  const sotuvRaw = b.sotuv ?? b["Данные"] ?? b.rows;
+  // Sana: "YYYY-MM-DD" yoki 1C odatiy "DD.MM.YYYY" — ikkalasi ham qabul qilinadi.
+  let sana = b.sana ?? b["Дата"] ?? b["Sana"] ?? todayTashkentISO();
+  if (typeof sana === "string") {
+    const m = sana.trim().match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+    if (m) sana = `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+  }
+  return {
+    ...b,
+    sana,
+    sotuv: Array.isArray(sotuvRaw) ? sotuvRaw.map(normRow) : sotuvRaw,
+  };
+}
+
 /**
  * 1C kunlik JSON importi — IMPORT_TOKEN bilan (sessiyasiz). Route: /api/import/kunlik.
  * Bir xil body ikki marta kelsa hash bo'yicha dublikat deb o'tkazib yuboriladi.
@@ -437,7 +486,7 @@ export async function importSalesJsonViaToken(input: {
     if (expected.length < 16) return { ok: false, error: "IMPORT_TOKEN sozlanmagan (server)." };
     if (!input.token || !timingSafeEq(input.token, expected)) return { ok: false, error: "Token noto'g'ri." };
 
-    const parsed = jsonImportSchema.safeParse(input.body);
+    const parsed = jsonImportSchema.safeParse(normalizeJsonBody(input.body));
     if (!parsed.success) {
       const i = parsed.error.issues[0];
       return { ok: false, error: `Body noto'g'ri: ${i?.path.join(".")} — ${i?.message}` };
