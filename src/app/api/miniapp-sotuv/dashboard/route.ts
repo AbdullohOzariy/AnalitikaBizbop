@@ -8,7 +8,8 @@
  * kesimini bermaydi. Cheklar — kpiByBranch(range) dan.
  */
 import { NextResponse } from "next/server";
-import { parseDateParam } from "@/lib/date";
+import { prisma } from "@/lib/prisma";
+import { parseDateParam, isoDay } from "@/lib/date";
 import { getDefaultRange, type DateRange } from "@/lib/analytics";
 import {
   kpiByBranch,
@@ -87,7 +88,7 @@ export async function GET(req: Request) {
   // Cheklovsizmi (na filtr, na qamrov) — marja/reja uchun bitta jami so'rov kifoya.
   const unrestricted = !branchId && user.branchIds === null;
 
-  const [salesPerBranch, marja, planTotal] = await Promise.all([
+  const [salesPerBranch, marja, planTotal, lastPs] = await Promise.all([
     // Har qamrov-filial savdosi (keshlangan — sekinlik muammo emas). Ma'lumot yo'q = 0.
     Promise.all(
       scopeRows.map(async (r) => {
@@ -104,6 +105,8 @@ export async function GET(req: Request) {
       const per = await Promise.all(scopeIds.map((b) => dailyPlanByGroup(range, b)));
       return per.reduce((s, p) => s + p.days.reduce((x, d) => x + d.total, 0), 0);
     })(),
+    // So'nggi mavjud ma'lumot kuni — "Bugun" hali kelmagan bo'lsa UI shu kunni taklif qiladi.
+    prisma.productSales.aggregate({ _max: { periodEnd: true } }).catch(() => null),
   ]);
 
   const salesMap = new Map(salesPerBranch.map((s) => [s.branchId, s.sales]));
@@ -135,5 +138,7 @@ export async function GET(req: Request) {
       fakt: totalSales,
       percent: planTotal > 0 ? (totalSales / planTotal) * 100 : 0,
     },
+    // So'nggi mavjud kun (YYYY-MM-DD) — bo'sh davr UI'sida "ma'lumot shu kungacha" ko'rsatiladi.
+    lastDataDay: lastPs?._max.periodEnd ? isoDay(lastPs._max.periodEnd) : null,
   });
 }

@@ -11,9 +11,15 @@ import { todayTashkentISO } from "@/lib/date";
 type TgWebApp = {
   initData: string;
   initDataUnsafe?: { user?: { id?: number; first_name?: string; username?: string } };
+  colorScheme?: "light" | "dark";
   ready: () => void;
   expand: () => void;
-  HapticFeedback?: { notificationOccurred: (t: "success" | "error" | "warning") => void };
+  onEvent?: (event: string, cb: () => void) => void;
+  HapticFeedback?: {
+    notificationOccurred: (t: "success" | "error" | "warning") => void;
+    selectionChanged?: () => void;
+    impactOccurred?: (style: "light" | "medium" | "heavy") => void;
+  };
 };
 declare global {
   interface Window { Telegram?: { WebApp?: TgWebApp } }
