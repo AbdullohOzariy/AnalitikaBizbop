@@ -375,6 +375,129 @@ export async function importSalesViaToken(input: {
   }
 }
 
+// ─── 1C JSON kunlik import (/api/import/kunlik) ──────────────────────────────
+// Kontrakt: { sana, sotuv: [{filial, kod, nom, qoldiq?, soni?, narx?, tannarx?,
+// summa?, tansumma?}], sklad?: [{kod, qoldiq}] }. sotuv qatorlari mavjud v3
+// quvuriga (uploadV3: Product upsert → ProductSales → CategorySales derive →
+// denorm → kesh) beriladi; sklad — WarehouseStock (markaziy ombor) upsert.
+
+const jsonRowSchema = z.object({
+  filial: z.string().trim().min(1).max(100),
+  kod: z.coerce.number().int().positive(),
+  nom: z.string().trim().min(1).max(300),
+  qoldiq: z.coerce.number().min(-1_000_000_000).max(1_000_000_000).nullish(),
+  soni: z.coerce.number().min(-1_000_000_000).max(1_000_000_000).nullish(),
+  narx: z.coerce.number().min(0).max(1_000_000_000_000).nullish(),
+  tannarx: z.coerce.number().min(0).max(1_000_000_000_000).nullish(),
+  summa: z.coerce.number().min(-1e15).max(1e15).nullish(),
+  tansumma: z.coerce.number().min(-1e15).max(1e15).nullish(),
+});
+
+const jsonImportSchema = z.object({
+  sana: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "sana YYYY-MM-DD bo'lsin"),
+  sotuv: z.array(jsonRowSchema).min(1, "sotuv bo'sh").max(100_000),
+  sklad: z
+    .array(z.object({ kod: z.coerce.number().int().positive(), qoldiq: z.coerce.number().min(-1e9).max(1e9) }))
+    .max(100_000)
+    .optional(),
+});
+
+/**
+ * 1C kunlik JSON importi — IMPORT_TOKEN bilan (sessiyasiz). Route: /api/import/kunlik.
+ * Bir xil body ikki marta kelsa hash bo'yicha dublikat deb o'tkazib yuboriladi.
+ */
+export async function importSalesJsonViaToken(input: {
+  token: string;
+  body: unknown;
+}): Promise<UploadResult & { sklad?: { updated: number; unknownCodes: number[] } }> {
+  try {
+    const expected = process.env.IMPORT_TOKEN ?? "";
+    if (expected.length < 16) return { ok: false, error: "IMPORT_TOKEN sozlanmagan (server)." };
+    if (!input.token || !timingSafeEq(input.token, expected)) return { ok: false, error: "Token noto'g'ri." };
+
+    const parsed = jsonImportSchema.safeParse(input.body);
+    if (!parsed.success) {
+      const i = parsed.error.issues[0];
+      return { ok: false, error: `Body noto'g'ri: ${i?.path.join(".")} — ${i?.message}` };
+    }
+    const p = parsed.data;
+    const user = await resolveImportUser();
+
+    const day = new Date(p.sana + "T00:00:00.000Z");
+    if (Number.isNaN(day.getTime())) return { ok: false, error: "sana noto'g'ri." };
+
+    // JSON qatorlari → v3 parse natijasi shakli (mavjud quvur bilan bir xil semantika).
+    const productRows = p.sotuv.map((r) => {
+      const soni = r.soni ?? null;
+      const narx = r.narx ?? null;
+      const tannarx = r.tannarx ?? null;
+      const amount = r.summa ?? (soni != null && narx != null ? soni * narx : 0);
+      const costAmount = r.tansumma ?? (soni != null && tannarx != null ? soni * tannarx : null);
+      return {
+        branchAlias: r.filial,
+        productCode: r.kod,
+        productName: r.nom,
+        parentCategoryCode: null, // kategoriya master (iyerarxiya) dan olinadi
+        stockQty: r.qoldiq ?? null,
+        soldQty: soni,
+        amount,
+        costAmount,
+        salePrice: narx,
+        costPrice: tannarx,
+      };
+    });
+
+    const buf = Buffer.from(JSON.stringify(input.body));
+    const hash = sha256(buf);
+    await ensureNotDuplicate(hash);
+
+    const result = {
+      version: "v3" as const,
+      periodStart: day,
+      periodEnd: day,
+      productRows,
+      categoryRowCount: 0,
+    };
+    const file = new File([new Uint8Array(buf)], `1c-kunlik-${p.sana}.json`);
+    const label = `1C JSON ${p.sana}`;
+
+    const upload = await uploadV3(result, buf, hash, file, { label }, user, new Map(), []);
+    if (!upload.ok) return upload;
+
+    // Markaziy sklad qoldig'i — WarehouseStock upsert (kod → productId topilganlar).
+    let sklad: { updated: number; unknownCodes: number[] } | undefined;
+    if (p.sklad && p.sklad.length > 0) {
+      const codes = [...new Set(p.sklad.map((s) => s.kod))];
+      const prods = await prisma.product.findMany({
+        where: { code: { in: codes } },
+        select: { id: true, code: true },
+      });
+      const idByCode = new Map(prods.map((x) => [x.code, x.id]));
+      const rows = p.sklad.filter((s) => idByCode.has(s.kod));
+      const BATCH = 1000;
+      for (let i = 0; i < rows.length; i += BATCH) {
+        const chunk = rows.slice(i, i + BATCH);
+        const vals = chunk.map(
+          (s) => Prisma.sql`(${idByCode.get(s.kod)!}::int, ${new Prisma.Decimal(s.qoldiq)}::numeric)`
+        );
+        await prisma.$executeRaw`
+          INSERT INTO "WarehouseStock" ("productId", "qty", "updatedAt")
+          SELECT v.pid, v.q, now() FROM (VALUES ${Prisma.join(vals)}) AS v(pid, q)
+          ON CONFLICT ("productId") DO UPDATE SET "qty" = EXCLUDED."qty", "updatedAt" = now()
+        `;
+      }
+      sklad = {
+        updated: rows.length,
+        unknownCodes: codes.filter((c) => !idByCode.has(c)).slice(0, 20),
+      };
+    }
+
+    return { ...upload, sklad };
+  } catch (err) {
+    return actionError(err, "import-json");
+  }
+}
+
 // ─── v3 upload oqimi: Product upsert → ProductSales upsert → CategorySales derive ─
 
 async function uploadV3(
