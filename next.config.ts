@@ -14,8 +14,9 @@ const nextConfig: NextConfig = {
     serverActions: {
       allowedOrigins: ["supplier.oilagroup.uz", "*.oilagroup.uz"],
       // Server Action body default 1MB — sotuv/tashrif Excel fayllari (25k+ SKU)
-      // shundan katta bo'lib "Body exceeded 1 MB limit" xatosi berardi. 25MB gacha ruxsat.
-      bodySizeLimit: "25mb",
+      // shundan katta bo'lib "Body exceeded 1 MB limit" xatosi berardi. 60MB gacha ruxsat
+      // (1C kunlik JSON kirill bilan katta bo'ladi — gzip ham qo'llab-quvvatlanadi).
+      bodySizeLimit: "60mb",
     },
   },
   async redirects() {

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import zlib from "node:zlib";
 import { importSalesJsonViaToken } from "@/app/(app)/admin/upload/actions";
 import { rateLimit, clientIp } from "@/lib/spisaniya/rate-limit";
 
@@ -47,11 +48,21 @@ export async function POST(req: NextRequest) {
   const token =
     req.headers.get("x-import-token") || req.nextUrl.searchParams.get("token") || "";
 
+  // Body'ni xom o'qib, kerak bo'lsa ochamiz (Content-Encoding: gzip/deflate). Katta JSON
+  // (kirill UTF-8 → 8mln belgi ~16MB) route-body chegarasidan oshadi; 1C gzip yuborsa,
+  // sim orqali ~1-2MB bo'lib chegaradan o'tadi, server bu yerda ochadi.
   let body: unknown;
   try {
-    body = await req.json();
+    const raw = Buffer.from(await req.arrayBuffer());
+    const enc = (req.headers.get("content-encoding") || "").toLowerCase();
+    const text = enc.includes("gzip")
+      ? zlib.gunzipSync(raw).toString("utf8")
+      : enc.includes("deflate")
+        ? zlib.inflateSync(raw).toString("utf8")
+        : raw.toString("utf8");
+    body = JSON.parse(text);
   } catch {
-    return NextResponse.json({ ok: false, error: "Body JSON emas." }, { status: 400 });
+    return NextResponse.json({ ok: false, error: "Body JSON emas (yoki gzip ochilmadi)." }, { status: 400 });
   }
 
   try {
