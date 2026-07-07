@@ -67,11 +67,14 @@ export function SotuvApp() {
   const [deniedMsg, setDeniedMsg] = useState("");
   const [me, setMe] = useState<MeUser | null>(null);
   const [tab, setTab] = useState<"hisobot" | "inventar">("hisobot");
+  const [tgId, setTgId] = useState<number | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
     tg?.ready(); tg?.expand();
     (async () => {
+      setTgId(tg?.initDataUnsafe?.user?.id ?? null);
       try {
         const r = await api<{ ok: true; user: MeUser }>("/api/miniapp-sotuv/me");
         setMe(r.user);
@@ -83,6 +86,23 @@ export function SotuvApp() {
     })();
   }, []);
 
+  const copyId = () => {
+    if (tgId == null) return;
+    navigator.clipboard?.writeText(String(tgId)).then(
+      () => { setCopied(true); setTimeout(() => setCopied(false), 1500); },
+      () => {}
+    );
+  };
+  const idBlock = tgId != null && (
+    <div className="idbox">
+      <span className="muted">Sizning Telegram ID:</span>
+      <button className="idbtn" onClick={copyId}>
+        <span className="idnum">{tgId}</span>
+        <span>{copied ? "✅ nusxa olindi" : "📋 nusxa olish"}</span>
+      </button>
+    </div>
+  );
+
   if (phase === "loading") return <Shell><p className="muted center">Yuklanmoqda…</p></Shell>;
   if (phase === "denied" || !me) {
     return (
@@ -90,7 +110,11 @@ export function SotuvApp() {
         <div className="card center">
           <div className="lockic">🔒</div>
           <h2>Kirish yo&apos;q</h2>
-          <p className="muted">{deniedMsg || "Hisobingiz platformaga bog'lanmagan. Admin bilan bog'laning."}</p>
+          <p className="muted">{deniedMsg || "Hisobingiz platformaga bog'lanmagan."}</p>
+          {idBlock}
+          <p className="muted" style={{ marginTop: 8, fontSize: 12 }}>
+            Yuqoridagi ID&apos;ni administratorga yuboring — u sizni tizimga bog&apos;laydi.
+          </p>
         </div>
       </Shell>
     );
@@ -98,7 +122,7 @@ export function SotuvApp() {
 
   return (
     <Shell>
-      <p className="hello">👋 {me.name}</p>
+      <p className="hello">👋 {me.name} {tgId != null && <span className="tgidlbl">🆔 {tgId}</span>}</p>
       {tab === "hisobot" ? <HisobotTab me={me} /> : <InventarTab me={me} />}
       {me.canInventory && (
         <div className="tabs">
@@ -414,6 +438,12 @@ function Shell({ children }: { children: React.ReactNode }) {
         .small { font-size: 12px; margin: 4px 0 0; }
         .lockic { width: 64px; height: 64px; margin: 0 auto 12px; display: flex; align-items: center;
           justify-content: center; font-size: 28px; border-radius: 20px; background: rgba(130,130,140,.10); }
+        .idbox { margin: 14px 0 0; display: flex; flex-direction: column; gap: 6px; align-items: center; }
+        .idbtn { display: inline-flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 12px;
+          border: 1px solid var(--line); background: rgba(16,185,129,.08); color: inherit; font-size: 12px;
+          cursor: pointer; }
+        .idnum { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: .5px; }
+        .tgidlbl { font-weight: 600; font-variant-numeric: tabular-nums; opacity: .75; }
         .chips { display: flex; gap: 7px; margin-bottom: 10px; }
         .chip { flex: 1; font-size: 13px; font-weight: 600; padding: 9px 12px; border-radius: 999px;
           border: 1px solid var(--line); background: var(--tg-theme-secondary-bg-color, #fff); color: inherit;

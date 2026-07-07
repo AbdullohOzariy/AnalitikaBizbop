@@ -10,6 +10,7 @@ import { todayTashkentISO } from "@/lib/date";
 
 type TgWebApp = {
   initData: string;
+  initDataUnsafe?: { user?: { id?: number; first_name?: string; username?: string } };
   ready: () => void;
   expand: () => void;
   HapticFeedback?: { notificationOccurred: (t: "success" | "error" | "warning") => void };
