@@ -384,11 +384,14 @@ export async function importSalesViaToken(input: {
 // CategorySales derive → denorm → kesh).
 
 // 1C raqamlarni string yuborishi mumkin ("58,000" / "34 990,0") — parseAmount tushunadi.
+// MUHIM: .optional() TASHQI pipe'da — aks holda zod obyekt darajasida maydonni majburiy sanaydi.
 const jsonNum = (min: number, max: number) =>
-  z.preprocess(
-    (v) => (typeof v === "string" ? parseAmount(v) : v),
-    z.number().min(min).max(max).nullish()
-  );
+  z
+    .preprocess(
+      (v) => (typeof v === "string" ? parseAmount(v) : v),
+      z.number().min(min).max(max).nullable()
+    )
+    .optional();
 
 const jsonRowSchema = z.object({
   filial: z.string().trim().min(1).max(150),
