@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import * as XLSX from "xlsx";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@/generated/prisma/client";
 import { auth } from "@/auth";
 import { canManageInventoryItems } from "@/lib/roles";
 import { actionError } from "@/lib/action-error";
@@ -87,22 +88,29 @@ export async function searchProductsForInventoryAction(
   }
 }
 
+export type AutoFillMode = "oos" | "top";
+
 /**
- * OOS'dan avto to'ldirish: so'nggi mavjud kun snapshot'ida qoldig'i ≤ 0, lekin sotuvi
- * bor (eng tekshirish zarur) tovarlardan HAR FILIAL kesimida top-50 tasini (soldQty
- * bo'yicha) ro'yxatga qo'shadi. Ro'yxat filialga bog'lanmagan (union) — sanash baribir
- * filial kesimida bo'ladi. Allaqachon ro'yxatdagilar o'tkazib yuboriladi.
+ * Avto to'ldirish — so'nggi mavjud kun snapshot'i bo'yicha HAR FILIAL kesimida top-50
+ * (SKU × filial) juftlik o'sha filial ro'yxatiga qo'shiladi. Rejimlar:
+ *   "oos" — qoldig'i ≤ 0, lekin sotuvi bor (muammoli, eng tekshirish zarur);
+ *   "top" — oxirgi sotuvga ko'ra ENG KO'P sotilganlar (qoldiq holatidan qat'i nazar).
+ * Allaqachon ro'yxatdagilar o'tkazib yuboriladi.
  */
-export async function autoAddOosItemsAction(): Promise<
+export async function autoAddOosItemsAction(mode: AutoFillMode = "oos"): Promise<
   { ok: true; added: number; candidates: number; day: string } | { ok: false; error: string }
 > {
   try {
     const user = await requireItemsManager();
+    const m = z.enum(["oos", "top"]).parse(mode);
+    // "oos" rejimida qo'shimcha shart: qoldiq ≤ 0 (muammoli). "top"da shart yo'q.
+    const oosCond =
+      m === "oos" ? Prisma.sql`AND ps."stockQty" IS NOT NULL AND ps."stockQty" <= 0` : Prisma.empty;
 
-    // Faqat SO'NGGI mavjud kun (max periodEnd) — eski kunlardan "muammo" olib kelmaymiz
+    // Faqat SO'NGGI mavjud kun (max periodEnd) — eski kunlardan ma'lumot olib kelmaymiz
     // (kunlik snapshot: periodStart == periodEnd; inventory-report bilan bir xil qoida).
     // Har filial kesimida top-50: (productId, branchId) juftliklar — ro'yxat ham filial-aware.
-    const rows = await prisma.$queryRaw<{ productId: number; branchId: number; day: string }[]>`
+    const rows = await prisma.$queryRaw<{ productId: number; branchId: number; day: string }[]>(Prisma.sql`
       WITH mx AS (SELECT max("periodEnd") AS d FROM "ProductSales"),
       prob AS (
         SELECT ps."productId", ps."branchId",
@@ -110,15 +118,15 @@ export async function autoAddOosItemsAction(): Promise<
         FROM "ProductSales" ps
         JOIN "Product" p ON p.id = ps."productId"
         WHERE ps."periodEnd" = (SELECT d FROM mx)
-          AND ps."stockQty" IS NOT NULL AND ps."stockQty" <= 0
           AND ps."soldQty" IS NOT NULL AND ps."soldQty" > 0
           AND p."archivedAt" IS NULL
+          ${oosCond}
       )
       SELECT "productId", "branchId", (SELECT d FROM mx)::text AS day
       FROM prob WHERE rn <= 50
-    `;
+    `);
     if (rows.length === 0) {
-      return { ok: false, error: "OOS muammoli tovar topilmadi (so'nggi kun ma'lumotida)." };
+      return { ok: false, error: "Mos tovar topilmadi (so'nggi kun ma'lumotida)." };
     }
 
     const res = await prisma.inventoryItem.createMany({

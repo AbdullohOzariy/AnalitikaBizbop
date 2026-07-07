@@ -19,6 +19,7 @@ import {
   autoAddOosItemsAction,
   importInventoryItemsXlsxAction,
   type InventorySearchRow,
+  type AutoFillMode,
 } from "./actions";
 
 export type InventoryItemRow = {
@@ -100,6 +101,7 @@ export function ItemsClient({
   const [addOpen, setAddOpen] = useState(false);
   const [xlsxOpen, setXlsxOpen] = useState(false);
   const [oosOpen, setOosOpen] = useState(false);
+  const [autoMode, setAutoMode] = useState<AutoFillMode>("oos");
   const [oosRunning, startOos] = useTransition();
   const [del, setDel] = useState<InventoryItemRow | null>(null);
   const [deleting, startDelete] = useTransition();
@@ -109,7 +111,7 @@ export function ItemsClient({
 
   const runOosAuto = () => {
     startOos(async () => {
-      const res = await autoAddOosItemsAction();
+      const res = await autoAddOosItemsAction(autoMode);
       if (res.ok) {
         toast.success(
           res.added > 0
@@ -155,7 +157,7 @@ export function ItemsClient({
         {canManage && (
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => setOosOpen(true)}>
-              <Zap className="h-3.5 w-3.5 text-amber-500" /> OOS&apos;dan avto to&apos;ldirish
+              <Zap className="h-3.5 w-3.5 text-amber-500" /> Avto to&apos;ldirish
             </Button>
             <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => setXlsxOpen(true)}>
               <FileUp className="h-3.5 w-3.5" /> Excel&apos;dan yuklash
@@ -167,17 +169,38 @@ export function ItemsClient({
         )}
       </div>
 
-      {/* OOS avto to'ldirish — tasdiqlash dialogi */}
+      {/* Avto to'ldirish — rejim tanlash + tasdiqlash dialogi */}
       <Dialog open={oosOpen} onOpenChange={setOosOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>OOS&apos;dan avto to&apos;ldirish</DialogTitle>
+            <DialogTitle>Avto to&apos;ldirish</DialogTitle>
             <DialogDescription>
-              So&apos;nggi kun ma&apos;lumotida <b>qoldig&apos;i 0 yoki minus, lekin sotuvi bor</b> (eng
-              tekshirish zarur) tovarlardan <b>har bir filial kesimida top-50 tasi</b> o&apos;sha
-              filialning ro&apos;yxatiga qo&apos;shiladi. Allaqachon borlari takrorlanmaydi.
+              So&apos;nggi kun ma&apos;lumoti bo&apos;yicha <b>har bir filial kesimida top-50</b> SKU
+              o&apos;sha filialning ro&apos;yxatiga qo&apos;shiladi. Allaqachon borlari takrorlanmaydi.
             </DialogDescription>
           </DialogHeader>
+          <div className="space-y-1.5">
+            {(
+              [
+                { v: "oos", t: "🔥 OOS muammoli", d: "Qoldig'i 0 yoki minus, lekin sotuvi bor — eng tekshirish zarur tovarlar." },
+                { v: "top", t: "📈 Eng ko'p sotilgan", d: "Oxirgi sotuvga ko'ra eng yuqori 50 SKU — qoldiq holatidan qat'i nazar." },
+              ] as { v: AutoFillMode; t: string; d: string }[]
+            ).map((o) => (
+              <button
+                key={o.v}
+                type="button"
+                onClick={() => setAutoMode(o.v)}
+                className={`w-full rounded-lg border p-2.5 text-left transition-colors ${
+                  autoMode === o.v
+                    ? "border-primary/50 bg-primary/5"
+                    : "border-border hover:bg-muted/50"
+                }`}
+              >
+                <p className="text-sm font-medium">{o.t}</p>
+                <p className="text-xs text-muted-foreground">{o.d}</p>
+              </button>
+            ))}
+          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOosOpen(false)} disabled={oosRunning}>
               Bekor qilish
