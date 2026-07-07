@@ -28,6 +28,7 @@ const ROLE_CONFIG: Record<
   HEAD_CAT_MANAGER: { label: "Kat. menejerlari boshi", tone: "blue", icon: "H" },
   MERCHANDISER: { label: "Merchandayzer",       tone: "blue",   icon: "M" },
   OPERATOR:     { label: "Operator",            tone: "muted",  icon: "O" },
+  INVENTORY:    { label: "Inventar xodim",      tone: "muted",  icon: "I" },
   VIEWER:       { label: "Ko'ruvchi",           tone: "muted",  icon: "V" },
 };
 
@@ -57,18 +58,26 @@ export default async function UsersPage() {
   const session = await auth();
   if (!session?.user.roles.includes("SYSTEM_ADMIN")) redirect("/dashboard");
 
-  const [users, catRows] = await Promise.all([
+  const [users, catRows, branchRows] = await Promise.all([
     prisma.user.findMany({
       orderBy: [{ role: "asc" }, { createdAt: "asc" }],
-      include: { managedCategories: { select: { categoryId: true } } },
+      include: {
+        managedCategories: { select: { categoryId: true } },
+        branches: { select: { branchId: true } },
+      },
     }),
     prisma.category.findMany({
       where: { parentId: null },
       select: { id: true, name: true, group: { select: { name: true } } },
       orderBy: [{ groupId: "asc" }, { sortOrder: "asc" }],
     }),
+    prisma.branch.findMany({
+      select: { id: true, name: true },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    }),
   ]);
   const categories = catRows.map((c) => ({ id: c.id, name: c.name, group: c.group?.name ?? null }));
+  const branchName = new Map(branchRows.map((b) => [b.id, b.name]));
 
   const totalAdmin      = users.filter((u) => u.role === "SYSTEM_ADMIN").length;
   const totalCatManager = users.filter((u) => u.role === "CAT_MANAGER").length;
@@ -128,6 +137,7 @@ export default async function UsersPage() {
                     <TableHead className="pl-5">Foydalanuvchi</TableHead>
                     <TableHead className="hidden sm:table-cell">Login</TableHead>
                     <TableHead>Rol</TableHead>
+                    <TableHead className="hidden lg:table-cell">Filiallar</TableHead>
                     <TableHead className="hidden md:table-cell">Qo'shilgan</TableHead>
                     <TableHead className="w-10 pr-5"></TableHead>
                   </TableRow>
@@ -163,9 +173,12 @@ export default async function UsersPage() {
                           </div>
                         </TableCell>
 
-                        {/* Login (katta ekranda) */}
+                        {/* Login (katta ekranda) + Telegram ID */}
                         <TableCell className="hidden sm:table-cell text-sm text-muted-foreground">
-                          {u.email}
+                          <span className="block">{u.email}</span>
+                          {u.telegramId != null && (
+                            <span className="block text-xs text-muted-foreground/70">TG: {String(u.telegramId)}</span>
+                          )}
                         </TableCell>
 
                         {/* Rol badge — asosiy + qo'shimcha rollar */}
@@ -179,6 +192,17 @@ export default async function UsersPage() {
                               );
                             })}
                           </div>
+                        </TableCell>
+
+                        {/* Filiallar (katta ekranda) — bo'sh = barcha filiallar */}
+                        <TableCell className="hidden lg:table-cell text-xs text-muted-foreground max-w-[180px]">
+                          {u.branches.length === 0 ? (
+                            <span>Barcha filiallar</span>
+                          ) : (
+                            <span className="block truncate" title={u.branches.map((b) => branchName.get(b.branchId) ?? b.branchId).join(", ")}>
+                              {u.branches.map((b) => branchName.get(b.branchId) ?? b.branchId).join(", ")}
+                            </span>
+                          )}
                         </TableCell>
 
                         {/* Sana (o'rta ekrandan) */}
@@ -197,6 +221,9 @@ export default async function UsersPage() {
                             isSelf={isSelf}
                             categories={categories}
                             managedCategoryIds={u.managedCategories.map((m) => m.categoryId)}
+                            telegramId={u.telegramId != null ? String(u.telegramId) : null}
+                            branches={branchRows}
+                            branchIds={u.branches.map((b) => b.branchId)}
                           />
                         </TableCell>
                       </TableRow>
@@ -213,7 +240,7 @@ export default async function UsersPage() {
           title="Yangi foydalanuvchi"
           description="Ma'lumotlarni to'ldiring va qo'shing."
         >
-          <CreateUserForm />
+          <CreateUserForm branches={branchRows} />
         </SectionCard>
       </div>
     </div>

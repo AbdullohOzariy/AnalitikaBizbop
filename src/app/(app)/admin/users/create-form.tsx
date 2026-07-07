@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import { User, KeyRound, AtSign, Eye, EyeOff, Loader2 } from "lucide-react";
+import { User, KeyRound, AtSign, Eye, EyeOff, Loader2, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -51,21 +51,26 @@ const ROLE_OPTIONS = [
   { value: "HEAD_CAT_MANAGER", label: "Kategoriya menejerlari boshi", desc: "BARCHA kategoriyalar bo'yicha menejer ishi + yetkazib beruvchilarni ko'rish" },
   { value: "MERCHANDISER", label: "Merchandayzer",       desc: "Faqat Promo (Aksiyalar) — ko'rish va tahrirlash" },
   { value: "OPERATOR",     label: "Operator",            desc: "Faqat Hisobdan chiqarish + Sverka — kuzatish (read-only)" },
+  { value: "INVENTORY",    label: "Inventar xodim",      desc: "Faqat Sotuv dashboard + Inventarizatsiya (mini app)" },
   { value: "SYSTEM_ADMIN", label: "System Admin",        desc: "To'liq huquq — barcha tahrir + Tizim bo'limi" },
 ] as const;
 
 type RoleV = (typeof ROLE_OPTIONS)[number]["value"];
 
+type BranchOption = { id: number; name: string };
+
 // ── Forma ─────────────────────────────────────────────────────────────────────
-export function CreateUserForm() {
+export function CreateUserForm({ branches }: { branches: BranchOption[] }) {
   const formRef = useRef<HTMLFormElement>(null);
   const [role, setRole]           = useState<RoleV>("CAT_MANAGER");
   const [extra, setExtra]         = useState<Set<string>>(new Set());
+  const [selBranches, setSelBranches] = useState<Set<number>>(new Set());
   const [showPass, setShowPass]   = useState(false);
   const [isPending, start]        = useTransition();
 
   const changeRole = (v: RoleV) => { setRole(v); setExtra((prev) => { const n = new Set(prev); n.delete(v); return n; }); };
   const toggleExtra = (v: string) => setExtra((prev) => { const n = new Set(prev); if (n.has(v)) n.delete(v); else n.add(v); return n; });
+  const toggleBranch = (id: number) => setSelBranches((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -77,12 +82,15 @@ export function CreateUserForm() {
         password: String(fd.get("password") ?? ""),
         role,
         extraRoles: [...extra].filter((r) => r !== role) as RoleV[],
+        telegramId: String(fd.get("telegramId") ?? ""),
+        branchIds: [...selBranches],
       });
       if (res.ok) {
         toast.success("Foydalanuvchi qo'shildi.");
         formRef.current?.reset();
         setRole("CAT_MANAGER");
         setExtra(new Set());
+        setSelBranches(new Set());
         setShowPass(false);
       } else {
         toast.error(res.error);
@@ -142,6 +150,21 @@ export function CreateUserForm() {
         </button>
       </InputField>
 
+      {/* Telegram ID (ixtiyoriy) */}
+      <InputField id="u-tg" label="Telegram ID (ixtiyoriy)" icon={Send}>
+        <Input
+          id="u-tg"
+          name="telegramId"
+          type="text"
+          inputMode="numeric"
+          pattern="\d{5,15}"
+          placeholder="Masalan: 123456789"
+          disabled={isPending}
+          className="pl-9 h-11 rounded-xl"
+          autoComplete="off"
+        />
+      </InputField>
+
       {/* Asosiy rol */}
       <div className="space-y-1.5">
         <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
@@ -185,6 +208,30 @@ export function CreateUserForm() {
                   {on && <Check className="h-3 w-3" />}
                 </span>
                 <span className="truncate">{o.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Filiallar */}
+      <div className="space-y-1.5">
+        <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          Filiallar
+        </Label>
+        <p className="text-[11px] text-muted-foreground">
+          {selBranches.size === 0 ? "Hech biri tanlanmagan — barcha filiallar ochiq." : `${selBranches.size} ta filial tanlandi.`}
+        </p>
+        <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+          {branches.map((b) => {
+            const on = selBranches.has(b.id);
+            return (
+              <button key={b.id} type="button" onClick={() => toggleBranch(b.id)} disabled={isPending}
+                className={`flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left text-xs transition-colors ${on ? "border-primary/40 bg-primary/10 text-primary" : "border-border hover:bg-muted/50"}`}>
+                <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${on ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/40"}`}>
+                  {on && <Check className="h-3 w-3" />}
+                </span>
+                <span className="truncate">{b.name}</span>
               </button>
             );
           })}

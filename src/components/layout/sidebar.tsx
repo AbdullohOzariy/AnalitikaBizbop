@@ -149,6 +149,15 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    // INVENTORY izolatsiyasi: bu rol faqat shu guruh item'larida bor (+ auth.config
+    // unga /sotuv-dashboard'ni ochadi) — boshqa bo'limlar ko'rinmaydi.
+    label: "Inventarizatsiya",
+    items: [
+      { href: "/inventarizatsiya",         label: "SKU ro'yxati", icon: ClipboardList, roles: [SA, A, "CEO", "INVENTORY"] },
+      { href: "/inventarizatsiya/hisobot", label: "Hisobot",      icon: BarChart2,     roles: [SA, A, "CEO", "INVENTORY"] },
+    ],
+  },
+  {
     label: "Baza",
     items: [
       { href: "/baza/sotuv",         label: "Sotuv",             icon: Database,      roles: [SA, A] },

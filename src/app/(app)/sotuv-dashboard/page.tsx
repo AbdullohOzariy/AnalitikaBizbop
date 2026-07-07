@@ -50,7 +50,8 @@ export default async function SotuvDashboardPage({
   const session = await auth();
   if (!session) redirect("/login");
   const roles = session.user.roles;
-  if (!isAdminTier(roles) && !hasRole(roles, "CEO", "SUPPLYCHAIN")) redirect("/dashboard-v2");
+  // INVENTORY (inventar xodimi) ham sotuv hisobotini ko'radi (izolatsiya: faqat shu + inventarizatsiya)
+  if (!isAdminTier(roles) && !hasRole(roles, "CEO", "SUPPLYCHAIN", "INVENTORY")) redirect("/dashboard-v2");
 
   const sp = await searchParams;
   const now = new Date();

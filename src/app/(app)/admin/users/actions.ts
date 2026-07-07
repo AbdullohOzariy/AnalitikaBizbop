@@ -10,16 +10,46 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { actionError } from "@/lib/action-error";
 
-const ROLE_VALUES = ["SYSTEM_ADMIN", "ADMIN", "CAT_MANAGER", "CEO", "SUPPLYCHAIN", "HEAD_CAT_MANAGER", "MERCHANDISER", "OPERATOR"] as const;
+const ROLE_VALUES = ["SYSTEM_ADMIN", "ADMIN", "CAT_MANAGER", "CEO", "SUPPLYCHAIN", "HEAD_CAT_MANAGER", "MERCHANDISER", "OPERATOR", "INVENTORY"] as const;
 const roleEnum = z.enum(ROLE_VALUES);
+
+// Telegram ID: bo'sh satr = bog'lanmagan (null), aks holda 5–15 xonali raqam → BigInt
+const telegramIdSchema = z
+  .string()
+  .trim()
+  .optional()
+  .default("")
+  .transform((s, ctx) => {
+    if (s === "") return null;
+    if (!/^\d{5,15}$/.test(s)) {
+      ctx.addIssue({ code: "custom", message: "Telegram ID 5–15 xonali raqam bo'lishi kerak." });
+      return z.NEVER;
+    }
+    return BigInt(s);
+  });
+
+// Biriktirilgan filiallar — bo'sh ro'yxat = barcha filiallar (cheklovsiz)
+const branchIdsSchema = z.array(z.number().int().positive()).max(50).optional().default([]);
 
 const createSchema = z.object({
   name: z.string().trim().min(1).max(100),
   email: z.string().trim().min(1).max(100), // login — email bo'lishi shart emas
   password: z.string().min(6, "Parol kamida 6 belgi"),
   role: roleEnum, // asosiy rol
-  extraRoles: z.array(roleEnum).max(7).optional().default([]), // qo'shimcha rollar (union)
+  extraRoles: z.array(roleEnum).max(8).optional().default([]), // qo'shimcha rollar (union)
+  telegramId: telegramIdSchema,
+  branchIds: branchIdsSchema,
 });
+
+// telegramId unique — P2002 shu maydonga tegishlimi (actionError generik xabar beradi)
+function isTelegramIdConflict(err: unknown): boolean {
+  const e = err as { code?: string; meta?: { target?: unknown } };
+  if (e?.code !== "P2002") return false;
+  const target = e.meta?.target;
+  const fields = Array.isArray(target) ? target.join(",") : String(target ?? "");
+  return fields.includes("telegramId");
+}
+const TG_TAKEN = "Bu Telegram ID boshqa foydalanuvchiga biriktirilgan.";
 
 // Qo'shimcha rollarni normallashtirish: dublikatsiz va asosiy roldan tashqari.
 function normExtraRoles(role: string, extraRoles: readonly string[]): Role[] {
@@ -69,15 +99,24 @@ export async function createUserAction(
     const exists = await prisma.user.findUnique({ where: { email: parsed.email } });
     if (exists) return { ok: false, error: "Bu login band." };
     const passwordHash = await bcrypt.hash(parsed.password, 12);
-    await prisma.user.create({
-      data: {
-        name: parsed.name,
-        email: parsed.email,
-        passwordHash,
-        role: parsed.role as Role,
-        extraRoles: normExtraRoles(parsed.role, parsed.extraRoles),
-      },
-    });
+    try {
+      await prisma.user.create({
+        data: {
+          name: parsed.name,
+          email: parsed.email,
+          passwordHash,
+          role: parsed.role as Role,
+          extraRoles: normExtraRoles(parsed.role, parsed.extraRoles),
+          telegramId: parsed.telegramId,
+          ...(parsed.branchIds.length > 0
+            ? { branches: { createMany: { data: parsed.branchIds.map((branchId) => ({ branchId })) } } }
+            : {}),
+        },
+      });
+    } catch (e) {
+      if (isTelegramIdConflict(e)) return { ok: false, error: TG_TAKEN };
+      throw e;
+    }
 
     revalidatePath("/admin/users");
     return { ok: true };
@@ -91,7 +130,9 @@ const updateSchema = z.object({
   name: z.string().trim().min(1).max(100),
   email: z.string().trim().min(1).max(100),
   role: roleEnum,
-  extraRoles: z.array(roleEnum).max(7).optional().default([]),
+  extraRoles: z.array(roleEnum).max(8).optional().default([]),
+  telegramId: telegramIdSchema,
+  branchIds: branchIdsSchema,
 });
 
 /** Foydalanuvchi ma'lumotlarini (nom, login, rol) tahrirlash — faqat System Admin. */
@@ -124,13 +165,22 @@ export async function updateUserAction(
         }
         await tx.user.update({
           where: { id: p.id },
-          data: { name: p.name, email: p.email, role: p.role as Role, extraRoles: extra },
+          data: { name: p.name, email: p.email, role: p.role as Role, extraRoles: extra, telegramId: p.telegramId },
         });
+        // Filial biriktirishlari to'liq yangilanadi (bo'sh = barcha filiallar)
+        await tx.userBranch.deleteMany({ where: { userId: p.id } });
+        if (p.branchIds.length > 0) {
+          await tx.userBranch.createMany({
+            data: p.branchIds.map((branchId) => ({ userId: p.id, branchId })),
+            skipDuplicates: true,
+          });
+        }
         // CAT_MANAGER butunlay olib tashlansa — kategoriya biriktirishlari ortiqcha
         if (wasCatMgr && !willBeCatMgr) await tx.categoryManager.deleteMany({ where: { userId: p.id } });
       }, { isolationLevel: "Serializable" });
     } catch (e) {
       if (e instanceof LastAdminError) return { ok: false, error: e.message };
+      if (isTelegramIdConflict(e)) return { ok: false, error: TG_TAKEN };
       throw e;
     }
     revalidatePath("/admin/users");
@@ -171,6 +221,8 @@ export async function deleteUserAction(
         await tx.productBatch.updateMany({ where: { createdById: id }, data: { createdById: meId } });
         await tx.expense.updateMany({ where: { createdById: id }, data: { createdById: meId } });
         await tx.promoCampaign.updateMany({ where: { createdById: id }, data: { createdById: meId } });
+        await tx.inventoryItem.updateMany({ where: { createdById: id }, data: { createdById: meId } });
+        await tx.inventoryCount.updateMany({ where: { countedById: id }, data: { countedById: meId } });
         await tx.user.delete({ where: { id } });
       }, { isolationLevel: "Serializable" });
     } catch (e) {

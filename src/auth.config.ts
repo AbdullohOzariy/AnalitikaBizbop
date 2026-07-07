@@ -32,6 +32,7 @@ export const authConfig = {
         "/api/rasm-yukla",
         "/api/ruxsat",
         "/api/import", // 1C avto sotuv importi — IMPORT_TOKEN bilan himoyalangan (sessiyasiz)
+        "/api/miniapp-sotuv", // BizbopSotuv mini app — initData HMAC + User.telegramId bilan himoyalangan
         "/api/sverka", // sverka mini app API'lari — o'zi initData HMAC + SverkaXodim bilan himoyalangan
         "/miniapp",
         "/anketa", // yetkazib beruvchi anketasi — public forma
@@ -50,6 +51,8 @@ export const authConfig = {
               ? "/promo/doimiy"
               : role === "OPERATOR"
               ? "/chiqim"
+              : role === "INVENTORY"
+              ? "/sotuv-dashboard"
               : role === "CAT_MANAGER" || role === "SUPPLYCHAIN" || role === "HEAD_CAT_MANAGER"
               ? "/dashboard-v2"
               : "/dashboard";
@@ -64,15 +67,20 @@ export const authConfig = {
       if (isLoggedIn) {
         const u = (auth as { user?: { role?: string; roles?: string[] } })?.user;
         const roles = u?.roles ?? (u?.role ? [u.role] : []);
-        const ISOLATED = new Set(["MERCHANDISER", "OPERATOR"]);
+        const ISOLATED = new Set(["MERCHANDISER", "OPERATOR", "INVENTORY"]);
         const allIsolated = roles.length > 0 && roles.every((r) => ISOLATED.has(r));
         if (allIsolated) {
           const allowed: string[] = [];
           if (roles.includes("MERCHANDISER")) allowed.push("/promo", "/api/promo");
           if (roles.includes("OPERATOR")) allowed.push("/chiqim", "/sverka", "/api/chiqim", "/api/sverka");
+          if (roles.includes("INVENTORY")) allowed.push("/sotuv-dashboard", "/inventarizatsiya");
           const ok = allowed.some((p) => pathname === p || pathname.startsWith(p + "/"));
           if (!ok) {
-            const dest = roles.includes("MERCHANDISER") ? "/promo/doimiy" : "/chiqim";
+            const dest = roles.includes("MERCHANDISER")
+              ? "/promo/doimiy"
+              : roles.includes("OPERATOR")
+              ? "/chiqim"
+              : "/sotuv-dashboard";
             return Response.redirect(new URL(dest, request.nextUrl));
           }
         }

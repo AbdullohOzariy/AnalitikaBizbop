@@ -19,6 +19,10 @@ import {
   canSeeSverka,
   isMerchandiser,
   isOperator,
+  isInventoryRole,
+  canSeeInventory,
+  canDoInventory,
+  canManageInventoryItems,
 } from "@/lib/roles";
 
 // Rol modeli — xavfsizlikning markazi. Har bir action shu predikatlarga tayanadi;
@@ -127,6 +131,45 @@ describe("CAT_MANAGER — zakaz o'z doirasiga cheklangan", () => {
   it("suppliers'ni ko'radi lekin tahrirlaydi ham (dizayn bo'yicha)", () => {
     expect(canSeeSuppliers("CAT_MANAGER")).toBe(true);
     expect(canEditSuppliers("CAT_MANAGER")).toBe(true);
+  });
+});
+
+describe("INVENTORY — izolatsiyalangan (sotuv hisobot + inventarizatsiya)", () => {
+  const r = "INVENTORY";
+  it("inventarizatsiya predikatlaridan o'tadi", () => {
+    expect(isInventoryRole(r)).toBe(true);
+    expect(canSeeInventory(r)).toBe(true);
+    expect(canDoInventory(r)).toBe(true);
+  });
+  it("SKU ro'yxatini BOSHQARA olmaydi (faqat SA/CEO)", () => {
+    expect(canManageInventoryItems(r)).toBe(false);
+  });
+  it("boshqa HECH BIR bo'limga kira olmaydi", () => {
+    for (const pred of [
+      isSystemAdmin, isAdminTier, canSeeAnalytics, canManageOrders, canReviewAnketa,
+      canSeeSuppliers, canEditSuppliers, canSeePme, canEditPme, canManageWarehouse,
+      canSeeAnalyze, canSeePromo, canEditPromo, canSeeChiqim, canSeeSverka,
+    ]) {
+      expect(pred(r), pred.name).toBe(false);
+    }
+  });
+});
+
+describe("Inventarizatsiya kirish matritsasi", () => {
+  it("CEO: ko'radi, sanaydi, ro'yxat boshqaradi", () => {
+    expect(canSeeInventory("CEO")).toBe(true);
+    expect(canDoInventory("CEO")).toBe(true);
+    expect(canManageInventoryItems("CEO")).toBe(true);
+  });
+  it("ADMIN (read-only): ko'radi, lekin sanay olmaydi va boshqara olmaydi", () => {
+    expect(canSeeInventory("ADMIN")).toBe(true);
+    expect(canDoInventory("ADMIN")).toBe(false);
+    expect(canManageInventoryItems("ADMIN")).toBe(false);
+  });
+  it("boshqa rollar (CAT_MANAGER, SUPPLYCHAIN, OPERATOR) umuman kira olmaydi", () => {
+    for (const role of ["CAT_MANAGER", "SUPPLYCHAIN", "OPERATOR", "MERCHANDISER"]) {
+      expect(canSeeInventory(role), role).toBe(false);
+    }
   });
 });
 

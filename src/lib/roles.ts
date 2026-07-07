@@ -112,3 +112,24 @@ export const canSeeChiqim = (r: Roles): boolean => canSeeAnalytics(r) || isOpera
 /** Sverka bo'limini KO'RA oladiganlar — SYSTEM_ADMIN, ADMIN, SUPPLYCHAIN, CEO + operator. */
 export const canSeeSverka = (r: Roles): boolean =>
   hasRole(r, "SYSTEM_ADMIN", "ADMIN", "SUPPLYCHAIN", "CEO", "OPERATOR");
+
+// ─── Inventarizatsiya (BizbopSotuv miniapp + ERP bo'limi) ─────────────────────
+// INVENTORY — IZOLATSIYALANGAN rol: platformada faqat sotuv hisobot (sotuv-dashboard)
+// va Inventarizatsiya bo'limini ko'radi. Miniapp'da dashboard + sanash kiritadi.
+// Miniapp/dashboard ma'lumotlari foydalanuvchiga biriktirilgan filiallar (UserBranch)
+// bilan cheklanadi; biriktirilmagan = barcha filiallar.
+
+/** Inventar xodimi roli (redirect/izolatsiya tekshiruvlari uchun). */
+export const isInventoryRole = (r: Roles): boolean => hasRole(r, "INVENTORY");
+
+/** Inventarizatsiya bo'limini KO'RA oladiganlar — read-only ADMIN ham ko'radi. */
+export const canSeeInventory = (r: Roles): boolean =>
+  hasRole(r, "SYSTEM_ADMIN", "ADMIN", "CEO", "INVENTORY");
+
+/** Inventarizatsiya SANASHINI kirita oladiganlar — faqat SA, CEO va Inventar xodim. */
+export const canDoInventory = (r: Roles): boolean =>
+  hasRole(r, "SYSTEM_ADMIN", "CEO", "INVENTORY");
+
+/** Belgilangan SKU ro'yxatini BOSHQARA oladiganlar (qo'shish/o'chirish) — SA va CEO. */
+export const canManageInventoryItems = (r: Roles): boolean =>
+  hasRole(r, "SYSTEM_ADMIN", "CEO");

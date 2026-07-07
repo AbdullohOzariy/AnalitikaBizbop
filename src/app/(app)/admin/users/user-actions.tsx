@@ -35,10 +35,12 @@ const ROLE_OPTS = [
   { v: "CEO",          l: "CEO", d: "Ko'rish (Dashboard V1+V2)" },
   { v: "MERCHANDISER", l: "Merchandayzer", d: "Faqat Promo (Aksiyalar)" },
   { v: "OPERATOR",     l: "Operator", d: "Faqat Hisobdan chiqarish + Sverka (kuzatuv)" },
+  { v: "INVENTORY",    l: "Inventar xodim", d: "Faqat Sotuv dashboard + Inventarizatsiya (mini app)" },
 ] as const;
 const ROLE_LABEL: Record<string, string> = Object.fromEntries(ROLE_OPTS.map((o) => [o.v, o.l]));
 
 type CatOption = { id: number; name: string; group: string | null };
+type BranchOption = { id: number; name: string };
 
 type RoleV = (typeof ROLE_OPTS)[number]["v"];
 
@@ -51,6 +53,9 @@ export function UserActions({
   isSelf,
   categories,
   managedCategoryIds,
+  telegramId,
+  branches,
+  branchIds,
 }: {
   id: number;
   name: string;
@@ -60,6 +65,9 @@ export function UserActions({
   isSelf: boolean;
   categories: CatOption[];
   managedCategoryIds: number[];
+  telegramId: string | null;
+  branches: BranchOption[];
+  branchIds: number[];
 }) {
   const [pwOpen, setPwOpen]       = useState(false);
   const [delOpen, setDelOpen]     = useState(false);
@@ -75,15 +83,25 @@ export function UserActions({
   const [eEmail, setEEmail] = useState(email);
   const [eRole, setERole] = useState(role);
   const [eExtra, setEExtra] = useState<Set<string>>(new Set(extraRoles));
-  const openEdit = () => { setEName(name); setEEmail(email); setERole(role); setEExtra(new Set(extraRoles)); setEditOpen(true); };
+  const [eTg, setETg] = useState(telegramId ?? "");
+  const [eBranches, setEBranches] = useState<Set<number>>(new Set(branchIds));
+  const openEdit = () => {
+    setEName(name); setEEmail(email); setERole(role); setEExtra(new Set(extraRoles));
+    setETg(telegramId ?? ""); setEBranches(new Set(branchIds)); setEditOpen(true);
+  };
   // Asosiy rol o'zgarsa — uni qo'shimchalardan chiqaramiz (takror bo'lmasin)
   const changeRole = (v: string) => { setERole(v); setEExtra((prev) => { const n = new Set(prev); n.delete(v); return n; }); };
   const toggleExtra = (v: string) => setEExtra((prev) => { const n = new Set(prev); if (n.has(v)) n.delete(v); else n.add(v); return n; });
+  const toggleBranch = (bid: number) => setEBranches((prev) => { const n = new Set(prev); if (n.has(bid)) n.delete(bid); else n.add(bid); return n; });
   const onSaveEdit = () => {
     if (!eName.trim() || !eEmail.trim()) { toast.error("Nom va login bo'sh bo'lmasin."); return; }
+    if (eTg.trim() !== "" && !/^\d{5,15}$/.test(eTg.trim())) { toast.error("Telegram ID 5–15 xonali raqam bo'lishi kerak."); return; }
     const extra = [...eExtra].filter((r) => r !== eRole) as RoleV[];
     start(async () => {
-      const res = await updateUserAction({ id, name: eName.trim(), email: eEmail.trim(), role: eRole as RoleV, extraRoles: extra });
+      const res = await updateUserAction({
+        id, name: eName.trim(), email: eEmail.trim(), role: eRole as RoleV, extraRoles: extra,
+        telegramId: eTg.trim(), branchIds: [...eBranches],
+      });
       if (res.ok) { toast.success("Saqlandi."); setEditOpen(false); }
       else toast.error(res.error);
     });
@@ -202,7 +220,7 @@ export function UserActions({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-3 py-2">
+          <div className="max-h-[65vh] space-y-3 overflow-y-auto py-2 pr-1">
             <div className="space-y-1.5">
               <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Ism</Label>
               <Input value={eName} onChange={(e) => setEName(e.target.value)} disabled={isPending} className="h-10 rounded-xl" />
@@ -210,6 +228,21 @@ export function UserActions({
             <div className="space-y-1.5">
               <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Login</Label>
               <Input value={eEmail} onChange={(e) => setEEmail(e.target.value)} disabled={isPending} className="h-10 rounded-xl" autoComplete="off" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Telegram ID (ixtiyoriy)</Label>
+              <Input
+                value={eTg}
+                onChange={(e) => setETg(e.target.value)}
+                disabled={isPending}
+                inputMode="numeric"
+                placeholder="Bo'sh = bog'lanmagan"
+                className="h-10 rounded-xl"
+                autoComplete="off"
+              />
+              {eTg.trim() !== "" && !/^\d{5,15}$/.test(eTg.trim()) && (
+                <p className="text-xs text-destructive">5–15 xonali raqam kiriting.</p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Asosiy rol</Label>
@@ -246,6 +279,27 @@ export function UserActions({
                         {on && <Check className="h-3 w-3" />}
                       </span>
                       <span className="truncate">{o.l}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Filiallar</Label>
+              <p className="text-[11px] text-muted-foreground">
+                {eBranches.size === 0 ? "Hech biri tanlanmagan — barcha filiallar ochiq." : `${eBranches.size} ta filial tanlandi.`}
+              </p>
+              <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+                {branches.map((b) => {
+                  const on = eBranches.has(b.id);
+                  return (
+                    <button key={b.id} type="button" onClick={() => toggleBranch(b.id)} disabled={isPending}
+                      className={`flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left text-xs transition-colors ${on ? "border-primary/40 bg-primary/10 text-primary" : "border-border hover:bg-muted/50"}`}>
+                      <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${on ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/40"}`}>
+                        {on && <Check className="h-3 w-3" />}
+                      </span>
+                      <span className="truncate">{b.name}</span>
                     </button>
                   );
                 })}
