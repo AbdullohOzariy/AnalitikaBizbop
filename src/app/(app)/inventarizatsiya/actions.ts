@@ -79,6 +79,51 @@ export async function searchProductsForInventoryAction(
   }
 }
 
+/**
+ * OOS'dan avto to'ldirish: so'nggi mavjud kun snapshot'ida qoldig'i ≤ 0, lekin sotuvi
+ * bor (eng tekshirish zarur) tovarlardan HAR FILIAL kesimida top-50 tasini (soldQty
+ * bo'yicha) ro'yxatga qo'shadi. Ro'yxat filialga bog'lanmagan (union) — sanash baribir
+ * filial kesimida bo'ladi. Allaqachon ro'yxatdagilar o'tkazib yuboriladi.
+ */
+export async function autoAddOosItemsAction(): Promise<
+  { ok: true; added: number; candidates: number; day: string } | { ok: false; error: string }
+> {
+  try {
+    const user = await requireItemsManager();
+
+    // Faqat SO'NGGI mavjud kun (max periodEnd) — eski kunlardan "muammo" olib kelmaymiz
+    // (kunlik snapshot: periodStart == periodEnd; inventory-report bilan bir xil qoida).
+    const rows = await prisma.$queryRaw<{ productId: number; day: string }[]>`
+      WITH mx AS (SELECT max("periodEnd") AS d FROM "ProductSales"),
+      prob AS (
+        SELECT ps."productId",
+               ROW_NUMBER() OVER (PARTITION BY ps."branchId" ORDER BY ps."soldQty" DESC) AS rn
+        FROM "ProductSales" ps
+        JOIN "Product" p ON p.id = ps."productId"
+        WHERE ps."periodEnd" = (SELECT d FROM mx)
+          AND ps."stockQty" IS NOT NULL AND ps."stockQty" <= 0
+          AND ps."soldQty" IS NOT NULL AND ps."soldQty" > 0
+          AND p."archivedAt" IS NULL
+      )
+      SELECT DISTINCT "productId", (SELECT d FROM mx)::text AS day
+      FROM prob WHERE rn <= 50
+    `;
+    if (rows.length === 0) {
+      return { ok: false, error: "OOS muammoli tovar topilmadi (so'nggi kun ma'lumotida)." };
+    }
+
+    const res = await prisma.inventoryItem.createMany({
+      data: rows.map((r) => ({ productId: r.productId, createdById: Number(user.id) })),
+      skipDuplicates: true, // allaqachon ro'yxatda borlari tegilmaydi
+    });
+
+    revalidatePath("/inventarizatsiya");
+    return { ok: true, added: res.count, candidates: rows.length, day: rows[0].day.slice(0, 10) };
+  } catch (err) {
+    return actionError(err, "autoAddOosItems");
+  }
+}
+
 /** SKU'ni inventarizatsiya ro'yxatiga qo'shish. */
 export async function addInventoryItemAction(
   productId: number

@@ -10,12 +10,13 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Plus, Trash2, Search, Loader2, Check } from "lucide-react";
+import { Plus, Trash2, Search, Loader2, Check, Zap } from "lucide-react";
 import { toast } from "sonner";
 import {
   searchProductsForInventoryAction,
   addInventoryItemAction,
   removeInventoryItemAction,
+  autoAddOosItemsAction,
   type InventorySearchRow,
 } from "./actions";
 
@@ -41,8 +42,25 @@ export function ItemsClient({
 }) {
   const router = useRouter();
   const [addOpen, setAddOpen] = useState(false);
+  const [oosOpen, setOosOpen] = useState(false);
+  const [oosRunning, startOos] = useTransition();
   const [del, setDel] = useState<InventoryItemRow | null>(null);
   const [deleting, startDelete] = useTransition();
+
+  const runOosAuto = () => {
+    startOos(async () => {
+      const res = await autoAddOosItemsAction();
+      if (res.ok) {
+        toast.success(
+          res.added > 0
+            ? `${res.added} ta SKU qo'shildi (nomzod: ${res.candidates}, sana: ${res.day}).`
+            : `Yangi SKU yo'q — ${res.candidates} ta nomzodning hammasi allaqachon ro'yxatda.`
+        );
+        setOosOpen(false);
+        router.refresh();
+      } else toast.error(res.error);
+    });
+  };
 
   const confirmDelete = () => {
     if (!del) return;
@@ -63,11 +81,39 @@ export function ItemsClient({
           Ro&apos;yxatda <b className="text-foreground">{rows.length}</b> ta SKU
         </p>
         {canManage && (
-          <Button size="sm" className="ml-auto h-8 gap-1.5" onClick={() => setAddOpen(true)}>
-            <Plus className="h-3.5 w-3.5" /> SKU qo&apos;shish
-          </Button>
+          <div className="ml-auto flex items-center gap-2">
+            <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => setOosOpen(true)}>
+              <Zap className="h-3.5 w-3.5 text-amber-500" /> OOS&apos;dan avto to&apos;ldirish
+            </Button>
+            <Button size="sm" className="h-8 gap-1.5" onClick={() => setAddOpen(true)}>
+              <Plus className="h-3.5 w-3.5" /> SKU qo&apos;shish
+            </Button>
+          </div>
         )}
       </div>
+
+      {/* OOS avto to'ldirish — tasdiqlash dialogi */}
+      <Dialog open={oosOpen} onOpenChange={setOosOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>OOS&apos;dan avto to&apos;ldirish</DialogTitle>
+            <DialogDescription>
+              So&apos;nggi kun ma&apos;lumotida <b>qoldig&apos;i 0 yoki minus, lekin sotuvi bor</b> (eng
+              tekshirish zarur) tovarlardan <b>har bir filial kesimida top-50 tasi</b> ro&apos;yxatga
+              qo&apos;shiladi. Allaqachon ro&apos;yxatda borlari takrorlanmaydi.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOosOpen(false)} disabled={oosRunning}>
+              Bekor qilish
+            </Button>
+            <Button onClick={runOosAuto} disabled={oosRunning} className="gap-1.5">
+              {oosRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
+              Qo&apos;shish
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="overflow-hidden rounded-xl border border-border bg-card">
         <Table>
