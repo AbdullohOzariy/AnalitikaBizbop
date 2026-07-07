@@ -13,7 +13,7 @@ import { ANALYTICS_CACHE_TAG } from "@/lib/analytics";
 import { warmAnalyticsCaches } from "@/lib/warm";
 import { updateProductMatrixClasses } from "@/lib/abc-xyz";
 import { actionError } from "@/lib/action-error";
-import { sha256 } from "@/lib/parsers/utils";
+import { sha256, parseAmount } from "@/lib/parsers/utils";
 import { parseSalesWorkbook } from "@/lib/parsers/sales";
 import { parseVisitsWorkbook } from "@/lib/parsers/visits";
 import { matchCategoryNames, matchBranchAlias } from "@/lib/ai-matcher";
@@ -376,31 +376,50 @@ export async function importSalesViaToken(input: {
 }
 
 // ─── 1C JSON kunlik import (/api/import/kunlik) ──────────────────────────────
-// Kontrakt: { sana, sotuv: [{filial, kod, nom, qoldiq?, soni?, narx?, tannarx?,
-// summa?, tansumma?}], sklad?: [{kod, qoldiq}] }. sotuv qatorlari mavjud v3
-// quvuriga (uploadV3: Product upsert → ProductSales → CategorySales derive →
-// denorm → kesh) beriladi; sklad — WarehouseStock (markaziy ombor) upsert.
+// Kontrakt (1C "Сотув + Остатка" ko'rinishiga mos): { sana, sotuv: [{filial,
+// skladKod?, kod, nom, artikul?, qoldiq?, soni?, narx?, tannarx?, summa?,
+// tansumma?}], sklad?: [{kod, qoldiq}] }. Markaziy sklad qatorlari (skladKod
+// "Markaziy" yoki filial nomida "марказий/markaziy") — WarehouseStock'ga; qolgan
+// sotuv qatorlari mavjud v3 quvuriga (Product upsert → ProductSales →
+// CategorySales derive → denorm → kesh).
+
+// 1C raqamlarni string yuborishi mumkin ("58,000" / "34 990,0") — parseAmount tushunadi.
+const jsonNum = (min: number, max: number) =>
+  z.preprocess(
+    (v) => (typeof v === "string" ? parseAmount(v) : v),
+    z.number().min(min).max(max).nullish()
+  );
 
 const jsonRowSchema = z.object({
-  filial: z.string().trim().min(1).max(100),
+  filial: z.string().trim().min(1).max(150),
+  skladKod: z.string().trim().max(100).nullish(), // filial qisqa kodi (GoldMart, MEGA...) — moslashda ustuvor
   kod: z.coerce.number().int().positive(),
   nom: z.string().trim().min(1).max(300),
-  qoldiq: z.coerce.number().min(-1_000_000_000).max(1_000_000_000).nullish(),
-  soni: z.coerce.number().min(-1_000_000_000).max(1_000_000_000).nullish(),
-  narx: z.coerce.number().min(0).max(1_000_000_000_000).nullish(),
-  tannarx: z.coerce.number().min(0).max(1_000_000_000_000).nullish(),
-  summa: z.coerce.number().min(-1e15).max(1e15).nullish(),
-  tansumma: z.coerce.number().min(-1e15).max(1e15).nullish(),
+  artikul: z.string().trim().max(200).nullish(), // 1C artikul — hozircha saqlanmaydi (qabul qilinadi)
+  qoldiq: jsonNum(-1_000_000_000, 1_000_000_000),
+  soni: jsonNum(-1_000_000_000, 1_000_000_000),
+  narx: jsonNum(0, 1_000_000_000_000),
+  tannarx: jsonNum(0, 1_000_000_000_000),
+  summa: jsonNum(-1e15, 1e15),
+  tansumma: jsonNum(-1e15, 1e15),
 });
 
 const jsonImportSchema = z.object({
   sana: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "sana YYYY-MM-DD bo'lsin"),
   sotuv: z.array(jsonRowSchema).min(1, "sotuv bo'sh").max(100_000),
   sklad: z
-    .array(z.object({ kod: z.coerce.number().int().positive(), qoldiq: z.coerce.number().min(-1e9).max(1e9) }))
+    .array(z.object({ kod: z.coerce.number().int().positive(), qoldiq: jsonNum(-1e9, 1e9) }))
     .max(100_000)
     .optional(),
 });
+
+/** Markaziy sklad qatorimi — skladKod "Markaziy" yoki filial nomida "марказий склад". */
+function isMarkaziySklad(r: { filial: string; skladKod?: string | null }): boolean {
+  const kod = (r.skladKod ?? "").trim().toLowerCase();
+  if (kod === "markaziy" || kod === "марказий") return true;
+  const f = r.filial.toLowerCase();
+  return f.includes("марказий") || f.includes("markaziy");
+}
 
 /**
  * 1C kunlik JSON importi — IMPORT_TOKEN bilan (sessiyasiz). Route: /api/import/kunlik.
@@ -426,15 +445,21 @@ export async function importSalesJsonViaToken(input: {
     const day = new Date(p.sana + "T00:00:00.000Z");
     if (Number.isNaN(day.getTime())) return { ok: false, error: "sana noto'g'ri." };
 
+    // Markaziy sklad qatorlari (skladKod "Markaziy" / nomida "марказий") filial sotuviga
+    // kirmaydi — WarehouseStock'ga boradi. Qolganlari — filial kesimidagi sotuv/qoldiq.
+    const filialRows = p.sotuv.filter((r) => !isMarkaziySklad(r));
+    const markaziyRows = p.sotuv.filter(isMarkaziySklad);
+
     // JSON qatorlari → v3 parse natijasi shakli (mavjud quvur bilan bir xil semantika).
-    const productRows = p.sotuv.map((r) => {
+    const productRows = filialRows.map((r) => {
       const soni = r.soni ?? null;
       const narx = r.narx ?? null;
       const tannarx = r.tannarx ?? null;
       const amount = r.summa ?? (soni != null && narx != null ? soni * narx : 0);
       const costAmount = r.tansumma ?? (soni != null && tannarx != null ? soni * tannarx : null);
       return {
-        branchAlias: r.filial,
+        // Moslashda skladKod (qisqa, barqaror) ustuvor; bo'lmasa to'liq nom
+        branchAlias: r.skladKod?.trim() || r.filial,
         productCode: r.kod,
         productName: r.nom,
         parentCategoryCode: null, // kategoriya master (iyerarxiya) dan olinadi
@@ -451,29 +476,43 @@ export async function importSalesJsonViaToken(input: {
     const hash = sha256(buf);
     await ensureNotDuplicate(hash);
 
-    const result = {
-      version: "v3" as const,
-      periodStart: day,
-      periodEnd: day,
-      productRows,
-      categoryRowCount: 0,
+    let upload: UploadResult = {
+      ok: true,
+      fileId: 0,
+      summary: "Filial sotuv qatorlari yo'q (faqat markaziy sklad).",
     };
-    const file = new File([new Uint8Array(buf)], `1c-kunlik-${p.sana}.json`);
-    const label = `1C JSON ${p.sana}`;
-
-    const upload = await uploadV3(result, buf, hash, file, { label }, user, new Map(), []);
-    if (!upload.ok) return upload;
+    if (productRows.length > 0) {
+      const result = {
+        version: "v3" as const,
+        periodStart: day,
+        periodEnd: day,
+        productRows,
+        categoryRowCount: 0,
+      };
+      const file = new File([new Uint8Array(buf)], `1c-kunlik-${p.sana}.json`);
+      const label = `1C JSON ${p.sana}`;
+      upload = await uploadV3(result, buf, hash, file, { label }, user, new Map(), []);
+      if (!upload.ok) return upload;
+    }
 
     // Markaziy sklad qoldig'i — WarehouseStock upsert (kod → productId topilganlar).
+    // Manba: sotuv ichidagi markaziy qatorlar + (ixtiyoriy) alohida sklad[] massivi.
+    const skladInput = [
+      ...markaziyRows.map((r) => ({ kod: r.kod, qoldiq: r.qoldiq ?? null })),
+      ...(p.sklad ?? []),
+    ].filter((s): s is { kod: number; qoldiq: number } => s.qoldiq != null);
     let sklad: { updated: number; unknownCodes: number[] } | undefined;
-    if (p.sklad && p.sklad.length > 0) {
-      const codes = [...new Set(p.sklad.map((s) => s.kod))];
+    if (skladInput.length > 0) {
+      const byCode = new Map<number, number>(); // oxirgisi g'olib
+      for (const s of skladInput) byCode.set(s.kod, s.qoldiq);
+      const skladRows = [...byCode.entries()].map(([kod, qoldiq]) => ({ kod, qoldiq }));
+      const codes = skladRows.map((s) => s.kod);
       const prods = await prisma.product.findMany({
         where: { code: { in: codes } },
         select: { id: true, code: true },
       });
       const idByCode = new Map(prods.map((x) => [x.code, x.id]));
-      const rows = p.sklad.filter((s) => idByCode.has(s.kod));
+      const rows = skladRows.filter((s) => idByCode.has(s.kod));
       const BATCH = 1000;
       for (let i = 0; i < rows.length; i += BATCH) {
         const chunk = rows.slice(i, i + BATCH);
