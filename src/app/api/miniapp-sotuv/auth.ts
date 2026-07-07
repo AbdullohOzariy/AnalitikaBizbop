@@ -31,7 +31,10 @@ export async function authMiniapp(
   rlLimit = 60
 ): Promise<{ user: MiniappUser } | { fail: NextResponse }> {
   const tgUser = verifyInitData(req.headers.get("x-telegram-init-data") || "", 3600, SOTUV_BOT_TOKEN);
-  if (!tgUser) return { fail: miniappXato("Telegram orqali oching.", 401) };
+  if (!tgUser) {
+    console.warn("[miniapp-sotuv] initData imzosi tekshirilmadi (noto'g'ri bot yoki eskirgan)");
+    return { fail: miniappXato("Telegram imzosi tekshirilmadi. Mini app'ni BizbopSotuv bot menyusidan oching.", 401) };
+  }
 
   if (!rateLimit(`msotuv-${rlKey}:${tgUser.id}`, rlLimit, 60_000)) {
     return { fail: miniappXato("Juda ko'p so'rov. Birozdan keyin urinib ko'ring.", 429) };
@@ -39,7 +42,8 @@ export async function authMiniapp(
 
   const user = await userByTelegramId(tgUser.id);
   if (!user) {
-    return { fail: miniappXato("Hisobingiz platformaga bog'lanmagan. Admin bilan bog'laning.", 403) };
+    console.warn(`[miniapp-sotuv] telegramId topilmadi: ${tgUser.id}`);
+    return { fail: miniappXato(`Sizning Telegram ID (${tgUser.id}) tizimga ulanmagan. Shu ID'ni administratorga yuboring.`, 403) };
   }
   return { user };
 }
