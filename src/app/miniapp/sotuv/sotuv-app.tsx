@@ -2,11 +2,10 @@
 
 /**
  * BizbopSotuv Mini App — 2 tab:
- *   📊 Hisobot — davr/filial tanlab KPI, filiallar kesimi, Reja-Fakt, marja.
- *   📦 Inventar — belgilangan SKU'larni sanash: tizim qoldig'i, kiritish, farq, saqlash.
+ *   📊 Hisobot — davr/filial tanlab KPI, filiallar kesimi (bar), Reja-Fakt, marja.
+ *   📦 Inventar — belgilangan SKU'larni sanash: tizim qoldig'i, +/− stepper, farq, saqlash.
  * Auth: Telegram initData ("x-telegram-init-data" header) → /api/miniapp-sotuv/me.
- * Window.Telegram global tipi sverka-app.tsx da e'lon qilingan (declare global) —
- * shu deklaratsiyadan foydalanamiz, dublikat e'lon qilinmaydi.
+ * Window.Telegram global tipi sverka-app.tsx da e'lon qilingan (declare global).
  */
 import { useEffect, useState } from "react";
 import { isoDay, todayTashkentISO } from "@/lib/date";
@@ -62,6 +61,9 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return j;
 }
 
+const initials = (name: string) =>
+  name.trim().split(/\s+/).slice(0, 2).map((s) => s[0]?.toUpperCase() ?? "").join("") || "•";
+
 export function SotuvApp() {
   const [phase, setPhase] = useState<"loading" | "denied" | "app">("loading");
   const [deniedMsg, setDeniedMsg] = useState("");
@@ -93,28 +95,26 @@ export function SotuvApp() {
       () => {}
     );
   };
-  const idBlock = tgId != null && (
-    <div className="idbox">
-      <span className="muted">Sizning Telegram ID:</span>
-      <button className="idbtn" onClick={copyId}>
-        <span className="idnum">{tgId}</span>
-        <span>{copied ? "✅ nusxa olindi" : "📋 nusxa olish"}</span>
-      </button>
-    </div>
-  );
 
-  if (phase === "loading") return <Shell><p className="muted center">Yuklanmoqda…</p></Shell>;
+  if (phase === "loading") {
+    return <Shell><div className="skwrap"><div className="sk h" /><div className="sk r" /><div className="sk r" /><div className="sk c" /></div></Shell>;
+  }
   if (phase === "denied" || !me) {
     return (
       <Shell>
-        <div className="card center">
+        <div className="locked">
           <div className="lockic">🔒</div>
-          <h2>Kirish yo&apos;q</h2>
-          <p className="muted">{deniedMsg || "Hisobingiz platformaga bog'lanmagan."}</p>
-          {idBlock}
-          <p className="muted" style={{ marginTop: 8, fontSize: 12 }}>
-            Yuqoridagi ID&apos;ni administratorga yuboring — u sizni tizimga bog&apos;laydi.
-          </p>
+          <h2>Hisobingiz ulanmagan</h2>
+          <p className="muted">{deniedMsg || "Bu bo'lim faqat ro'yxatdan o'tgan xodimlar uchun."}</p>
+          {tgId != null && (
+            <>
+              <button className="idbtn" onClick={copyId}>
+                <span className="idnum">{tgId}</span>
+                <span className="idc">{copied ? "✅ nusxa olindi" : "📋 nusxa olish"}</span>
+              </button>
+              <p className="muted small">Ushbu ID&apos;ni administratorga yuboring — u sizni tizimga bog&apos;laydi.</p>
+            </>
+          )}
         </div>
       </Shell>
     );
@@ -122,16 +122,16 @@ export function SotuvApp() {
 
   return (
     <Shell>
-      <p className="hello">👋 {me.name} {tgId != null && <span className="tgidlbl">🆔 {tgId}</span>}</p>
+      <div className="brandbar">
+        <span className="branddot" />
+        <b>{tab === "hisobot" ? "BizbopSotuv" : "Inventar"}</b>
+        <span className="who"><span className="avatar">{initials(me.name)}</span>{me.name}</span>
+      </div>
       {tab === "hisobot" ? <HisobotTab me={me} /> : <InventarTab me={me} />}
       {me.canInventory && (
-        <div className="tabs">
-          <button className={`tabbtn ${tab === "hisobot" ? "on" : ""}`} onClick={() => setTab("hisobot")}>
-            📊 Hisobot
-          </button>
-          <button className={`tabbtn ${tab === "inventar" ? "on" : ""}`} onClick={() => setTab("inventar")}>
-            📦 Inventar
-          </button>
+        <div className="tabbar">
+          <button className={`tabbtn ${tab === "hisobot" ? "on" : ""}`} onClick={() => setTab("hisobot")}>📊 Hisobot</button>
+          <button className={`tabbtn ${tab === "inventar" ? "on" : ""}`} onClick={() => setTab("inventar")}>📦 Inventar</button>
         </div>
       )}
     </Shell>
@@ -143,9 +143,7 @@ export function SotuvApp() {
 function HisobotTab({ me }: { me: MeUser }) {
   const single = me.branches.length === 1;
   const [davr, setDavr] = useState<Davr>("bugun");
-  // 0 = Jami (barcha qamrov filiallari); bitta filial bo'lsa avto-tanlangan.
   const [branchId, setBranchId] = useState<number>(single ? me.branches[0].id : 0);
-  // Holat kalit bilan saqlanadi — "loading" render'da derive qilinadi (effektda sync setState yo'q).
   const [res, setRes] = useState<{ key: string; data: DashData | null; err: string } | null>(null);
   const key = `${davr}|${branchId}`;
   const loading = res?.key !== key;
@@ -169,81 +167,78 @@ function HisobotTab({ me }: { me: MeUser }) {
     return () => { cancelled = true; };
   }, [davr, branchId]);
 
+  const maxBranch = data ? Math.max(1, ...data.branches.map((b) => b.sales)) : 1;
+
   return (
     <>
-      <div className="chips">
+      <div className="seg">
         {DAVRLAR.map((d) => (
-          <button key={d.key} className={`chip ${davr === d.key ? "on" : ""}`} onClick={() => setDavr(d.key)}>
-            {d.label}
-          </button>
+          <button key={d.key} className={davr === d.key ? "on" : ""} onClick={() => setDavr(d.key)}>{d.label}</button>
         ))}
       </div>
 
       {!single && (
-        <select className="inp sel" value={branchId} onChange={(e) => setBranchId(Number(e.target.value))}>
-          {me.branches.length > 1 && <option value={0}>Jami (barcha filiallar)</option>}
-          {me.branches.map((b) => (
-            <option key={b.id} value={b.id}>{b.name}</option>
-          ))}
-        </select>
+        <div className="selrow">
+          <select className="sel" value={branchId} onChange={(e) => setBranchId(Number(e.target.value))}>
+            {me.branches.length > 1 && <option value={0}>Jami · barcha filiallar</option>}
+            {me.branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+        </div>
       )}
 
       {err && <p className="err">{err}</p>}
-      {loading && <p className="muted center">Yuklanmoqda…</p>}
+      {loading && <div className="skwrap"><div className="sk h" /><div className="sk r" /><div className="sk c" /></div>}
 
       {!loading && data && (
         <>
-          <div className="kpis">
-            <div className="kpi big">
-              <small>Savdo</small>
-              <b>{formatUZS(data.kpi.sales, { compact: true })}</b>
-            </div>
-            <div className="kpi">
-              <small>Cheklar</small>
-              <b>{formatNumber(data.kpi.receipts)}</b>
-            </div>
-            <div className="kpi">
-              <small>O&apos;rtacha chek</small>
-              <b>{formatUZS(data.kpi.avgReceipt, { compact: true })}</b>
-            </div>
+          <div className="hero">
+            <div className="lbl">Savdo · {DAVRLAR.find((d) => d.key === davr)?.label.toLowerCase()}</div>
+            <div className="heroval">{formatUZS(data.kpi.sales, { compact: true })}</div>
           </div>
 
-          <div className="card sect">
-            <div className="secthead">
-              <b>Reja-Fakt</b>
-              <span className={data.plan.percent >= 100 ? "ok" : "warn"}>
+          <div className="kpi2">
+            <div className="kpi"><div className="lbl">Cheklar</div><div className="v">{formatNumber(data.kpi.receipts)}</div></div>
+            <div className="kpi"><div className="lbl">O&apos;rtacha chek</div><div className="v">{formatUZS(data.kpi.avgReceipt, { compact: true })}</div></div>
+          </div>
+
+          <div className="card">
+            <div className="chead">
+              <b>Reja bajarilishi</b>
+              <span className={`pct ${data.plan.percent >= 100 ? "good" : "warn"}`}>
                 {data.plan.plan > 0 ? `${data.plan.percent.toFixed(1)}%` : "reja yo'q"}
               </span>
             </div>
-            <div className="bar">
-              <i style={{ width: `${Math.min(100, data.plan.percent)}%` }} />
+            <div className="plan"><i style={{ width: `${Math.min(100, data.plan.percent)}%` }} /><span className="target" style={{ left: "100%" }} /></div>
+            <div className="planfoot">
+              <span>Fakt {formatUZS(data.plan.fakt, { compact: true })}</span>
+              <span>Reja {formatUZS(data.plan.plan, { compact: true })}</span>
             </div>
-            <p className="muted small">
-              Fakt {formatUZS(data.plan.fakt, { compact: true })} · Reja {formatUZS(data.plan.plan, { compact: true })}
-            </p>
           </div>
 
           {data.branches.length > 1 && (
-            <div className="card sect">
-              <div className="secthead"><b>Filiallar</b></div>
+            <div className="card">
+              <div className="chead"><b>Filiallar kesimi</b><span className="pct muted-c">{data.branches.length} ta</span></div>
               {data.branches.map((b) => (
-                <div key={b.id} className="row">
-                  <span className="rname">{b.name}</span>
-                  <span className="rval">{formatUZS(b.sales, { compact: true })}</span>
-                  <span className="rshare">{b.share.toFixed(1)}%</span>
+                <div key={b.id} className="brow">
+                  <span className="bn">{b.name}</span>
+                  <span className="bv">{formatUZS(b.sales, { compact: true })}</span>
+                  <div className="track"><i style={{ width: `${Math.max(4, (b.sales / maxBranch) * 100)}%` }} /></div>
+                  <span className="sh">{b.share.toFixed(1)}%</span>
                 </div>
               ))}
             </div>
           )}
 
-          <div className="card sect">
-            <div className="secthead"><b>Marja (guruhlar)</b></div>
+          <div className="card">
+            <div className="chead"><b>Marja · guruhlar</b></div>
             {data.marja.length === 0 && <p className="muted">Ma&apos;lumot yo&apos;q</p>}
             {data.marja.map((m) => (
-              <div key={m.name} className="row">
-                <span className="rname">{m.name}</span>
-                <span className="rval">{formatUZS(m.sales, { compact: true })}</span>
-                <span className="rshare">{m.marja == null ? "—" : `${m.marja.toFixed(1)}%`}</span>
+              <div key={m.name} className="mrow">
+                <span className="mn">{m.name}</span>
+                <span className="mv">{formatUZS(m.sales, { compact: true })}</span>
+                <span className="mm" style={{ color: m.marja == null ? "var(--ink-3)" : m.marja >= 20 ? "var(--brand-deep)" : m.marja >= 12 ? "var(--ink)" : "var(--surplus)" }}>
+                  {m.marja == null ? "—" : `${m.marja.toFixed(1)}%`}
+                </span>
               </div>
             ))}
           </div>
@@ -259,7 +254,6 @@ type EditVal = { qty: string; note: string };
 
 function InventarTab({ me }: { me: MeUser }) {
   const [branchId, setBranchId] = useState<number>(me.branches[0]?.id ?? 0);
-  // Yuklangan ro'yxat kalit (filial) bilan saqlanadi — "loading" render'da derive qilinadi.
   const [res, setRes] = useState<{ branchId: number; items: InvItem[]; err: string } | null>(null);
   const [vals, setVals] = useState<Record<number, EditVal>>({});
   const [saving, setSaving] = useState(false);
@@ -275,11 +269,8 @@ function InventarTab({ me }: { me: MeUser }) {
     let cancelled = false;
     (async () => {
       try {
-        const r = await api<{ ok: true; sanaKuni: string; items: InvItem[] }>(
-          `/api/miniapp-sotuv/inventar?branchId=${branchId}`
-        );
+        const r = await api<{ ok: true; sanaKuni: string; items: InvItem[] }>(`/api/miniapp-sotuv/inventar?branchId=${branchId}`);
         if (cancelled) return;
-        // Bugungi kiritilganlar oldindan to'ldiriladi (davomiy tahrirlash).
         const v: Record<number, EditVal> = {};
         for (const it of r.items) {
           v[it.productId] = { qty: it.countedQty == null ? "" : String(it.countedQty), note: it.note ?? "" };
@@ -288,9 +279,7 @@ function InventarTab({ me }: { me: MeUser }) {
         setErr(""); setSavedMsg("");
         setRes({ branchId, items: r.items, err: "" });
       } catch (e) {
-        if (!cancelled) {
-          setRes({ branchId, items: [], err: e instanceof Error ? e.message : "Xatolik yuz berdi" });
-        }
+        if (!cancelled) setRes({ branchId, items: [], err: e instanceof Error ? e.message : "Xatolik yuz berdi" });
       }
     })();
     return () => { cancelled = true; };
@@ -302,6 +291,12 @@ function InventarTab({ me }: { me: MeUser }) {
       return { ...v, [productId]: { ...cur, ...patch } };
     });
     setSavedMsg("");
+  };
+
+  const bump = (it: InvItem, delta: number) => {
+    const cur = vals[it.productId]?.qty ?? "";
+    const base = cur.trim() === "" || !Number.isFinite(Number(cur)) ? it.systemQty : Number(cur);
+    setVal(it.productId, { qty: String(Math.max(0, Math.round((base + delta) * 1000) / 1000)) });
   };
 
   const filled = items.filter((it) => {
@@ -317,17 +312,11 @@ function InventarTab({ me }: { me: MeUser }) {
         branchId,
         items: filled.map((it) => {
           const v = vals[it.productId];
-          return {
-            productId: it.productId,
-            countedQty: Number(v.qty),
-            ...(v.note.trim() ? { note: v.note.trim() } : {}),
-          };
+          return { productId: it.productId, countedQty: Number(v.qty), ...(v.note.trim() ? { note: v.note.trim() } : {}) };
         }),
       };
       const r = await api<{ ok: true; saved: number }>("/api/miniapp-sotuv/inventar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
       });
       window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred("success");
       setSavedMsg(`✓ ${r.saved} ta SKU saqlandi`);
@@ -345,172 +334,228 @@ function InventarTab({ me }: { me: MeUser }) {
 
   return (
     <>
-      {me.branches.length > 1 && (
-        <select className="inp sel" value={branchId} onChange={(e) => setBranchId(Number(e.target.value))}>
-          {me.branches.map((b) => (
-            <option key={b.id} value={b.id}>{b.name}</option>
-          ))}
-        </select>
+      {me.branches.length > 1 ? (
+        <div className="selrow">
+          <select className="sel" value={branchId} onChange={(e) => setBranchId(Number(e.target.value))}>
+            {me.branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+        </div>
+      ) : (
+        <p className="statline">📍 {me.branches[0].name}</p>
       )}
-      {me.branches.length === 1 && <p className="muted small">Filial: {me.branches[0].name}</p>}
+
+      {!loading && !loadErr && items.length > 0 && (
+        <p className="statline">Bugun · {items.length} ta SKU · {filled.length} ta kiritildi</p>
+      )}
 
       {(loadErr || err) && <p className="err">{loadErr || err}</p>}
       {savedMsg && <p className="saved">{savedMsg}</p>}
-      {loading && <p className="muted center">Yuklanmoqda…</p>}
+      {loading && <div className="skwrap"><div className="sk inv" /><div className="sk inv" /><div className="sk inv" /></div>}
 
       {!loading && !loadErr && items.length === 0 && (
-        <div className="card center"><p className="muted">Inventar ro&apos;yxati bo&apos;sh — SKU platformada belgilanadi.</p></div>
+        <div className="empty">
+          <div className="lockic" style={{ background: "var(--brand-soft)" }}>📦</div>
+          <p className="muted">Bu filial uchun sanaladigan SKU belgilanmagan.</p>
+          <p className="muted small">Ro&apos;yxat platformada (Inventarizatsiya bo&apos;limi) tuziladi.</p>
+        </div>
       )}
 
       {!loading && items.map((it) => {
         const v = vals[it.productId] ?? { qty: "", note: "" };
         const num = v.qty.trim() === "" ? null : Number(v.qty);
         const diff = num != null && Number.isFinite(num) ? num - it.systemQty : null;
+        const pill = diff == null ? "none" : diff === 0 ? "zero" : diff > 0 ? "surp" : "short";
+        const pillText = diff == null ? "—" : diff === 0 ? "✓ mos" : `${diff > 0 ? "+" : ""}${Number(diff.toFixed(3)).toLocaleString("uz-UZ")}`;
+        const showNote = (diff != null && diff !== 0) || v.note !== "";
         return (
-          <div key={it.productId} className="card inv">
-            <div className="invhead">
-              <div>
-                <b className="invname">{it.name}</b>
-                <p className="muted small">Kod: {it.code} · Tizim: {formatNumber(it.systemQty)}</p>
+          <div key={it.productId} className="invcard">
+            <div className="invtop">
+              <div className="invtitle">
+                <div className="invname">{it.name}</div>
+                <div className="invmeta">Kod {it.code} · Tizim: <b>{formatNumber(it.systemQty)}</b></div>
               </div>
-              {diff != null && (
-                <span className={`diff ${diff === 0 ? "zero" : diff > 0 ? "plus" : "minus"}`}>
-                  {diff > 0 ? "+" : ""}{Number(diff.toFixed(3)).toLocaleString("uz-UZ")}
-                </span>
-              )}
+              <span className={`pill ${pill}`}>{pillText}</span>
             </div>
-            <input
-              type="number" inputMode="decimal" min={0} className="inp"
-              placeholder="Sanaldi…"
-              value={v.qty}
-              onChange={(e) => setVal(it.productId, { qty: e.target.value })}
-            />
-            {(diff != null && diff !== 0) || v.note ? (
+            <div className="counter">
+              <button className="step" onClick={() => bump(it, -1)} aria-label="Kamaytirish">−</button>
               <input
-                className="inp note" placeholder="Izoh (masalan kamomad sababi)…" maxLength={500}
-                value={v.note}
-                onChange={(e) => setVal(it.productId, { note: e.target.value })}
+                type="number" inputMode="decimal" min={0}
+                className={v.qty.trim() !== "" ? "filled" : ""}
+                placeholder="Sanaldi…" value={v.qty}
+                onChange={(e) => setVal(it.productId, { qty: e.target.value })}
               />
-            ) : null}
+              <button className="step" onClick={() => bump(it, 1)} aria-label="Ko'paytirish">+</button>
+            </div>
+            {showNote && (
+              <input className="invnote" placeholder="Izoh (kamomad/ortiqcha sababi)…" maxLength={500}
+                value={v.note} onChange={(e) => setVal(it.productId, { note: e.target.value })} />
+            )}
           </div>
         );
       })}
 
       {!loading && items.length > 0 && (
-        <button className="btn save" disabled={saving || filled.length === 0} onClick={save}>
-          {saving ? "Saqlanmoqda…" : `✅ Saqlash (${filled.length} ta)`}
-        </button>
+        <div className="savebar">
+          <button className="savebtn" disabled={saving || filled.length === 0} onClick={save}>
+            {saving ? "Saqlanmoqda…" : <>✅ Saqlash <span className="cnt">{filled.length} ta</span></>}
+          </button>
+        </div>
       )}
     </>
   );
 }
 
-// ─── Shell (sverka-app dizayn tili: emerald, tg-tema) ─────────────────────────
+// ─── Shell + dizayn ──────────────────────────────────────────────────────────
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="wrap">
-      <header className="brandbar">
-        <span className="branddot" />
-        <b>BizbopSotuv</b>
-        <small>BizBop</small>
-      </header>
       {children}
       <style>{`
-        .wrap { max-width: 440px; margin: 0 auto; padding: 0 16px 96px;
-          font-family: -apple-system, system-ui, sans-serif;
-          background: var(--tg-theme-bg-color, #F2F3F7); color: var(--tg-theme-text-color, #0B0B0F);
-          min-height: 100dvh;
-          --brand: #1FBF5C; --brand4: #3DD17A; --brand6: #15A34A; --line: rgba(130,130,140,.16); }
-        .brandbar { display: flex; align-items: center; gap: 9px; padding: 16px 2px 10px; }
-        .brandbar b { font-family: Sora, -apple-system, sans-serif; font-size: 17px; letter-spacing: -.3px; }
-        .brandbar small { margin-left: auto; font-size: 11px; font-weight: 600; text-transform: uppercase;
-          letter-spacing: .6px; color: var(--tg-theme-hint-color, #8A8A8E); }
-        .branddot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand);
-          box-shadow: 0 0 0 4px rgba(31,191,92,.15); }
-        .hello { margin: 0 2px 10px; font-size: 13px; font-weight: 600;
-          color: var(--tg-theme-hint-color, #8A8A8E); }
-        .card { background: var(--tg-theme-secondary-bg-color, #fff); border: 1px solid var(--line);
-          border-radius: 18px; padding: 14px;
-          box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 8px 24px -12px rgba(15,23,42,.10); }
-        .center { text-align: center; padding: 30px 16px; }
-        .muted { color: var(--tg-theme-hint-color, #8A8A8E); font-size: 13px; line-height: 1.45; }
-        .small { font-size: 12px; margin: 4px 0 0; }
-        .lockic { width: 64px; height: 64px; margin: 0 auto 12px; display: flex; align-items: center;
-          justify-content: center; font-size: 28px; border-radius: 20px; background: rgba(130,130,140,.10); }
-        .idbox { margin: 14px 0 0; display: flex; flex-direction: column; gap: 6px; align-items: center; }
-        .idbtn { display: inline-flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 12px;
-          border: 1px solid var(--line); background: rgba(16,185,129,.08); color: inherit; font-size: 12px;
-          cursor: pointer; }
-        .idnum { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: .5px; }
-        .tgidlbl { font-weight: 600; font-variant-numeric: tabular-nums; opacity: .75; }
-        .chips { display: flex; gap: 7px; margin-bottom: 10px; }
-        .chip { flex: 1; font-size: 13px; font-weight: 600; padding: 9px 12px; border-radius: 999px;
-          border: 1px solid var(--line); background: var(--tg-theme-secondary-bg-color, #fff); color: inherit;
-          transition: transform .1s; }
-        .chip:active { transform: scale(.96); }
-        .chip.on { background: linear-gradient(180deg, var(--brand4), var(--brand6)); color: #fff;
-          border-color: transparent; box-shadow: 0 8px 24px -6px rgba(31,191,92,.40); }
-        .inp { width: 100%; box-sizing: border-box; font-size: 16px; padding: 12px 14px;
-          border-radius: 14px; border: 1px solid var(--line);
-          background: var(--tg-theme-secondary-bg-color, #fff); color: inherit; outline: none;
-          transition: border-color .15s, box-shadow .15s; }
-        .inp:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(31,191,92,.15); }
-        .sel { margin-bottom: 10px; appearance: none; }
-        .kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
-        .kpi { background: var(--tg-theme-secondary-bg-color, #fff); border: 1px solid var(--line);
-          border-radius: 16px; padding: 12px 14px; display: flex; flex-direction: column; gap: 3px; }
-        .kpi.big { grid-column: 1 / -1; }
-        .kpi small { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
-          color: var(--tg-theme-hint-color, #8A8A8E); }
-        .kpi b { font-family: Sora, -apple-system, sans-serif; font-size: 19px; letter-spacing: -.4px; }
-        .kpi.big b { font-size: 26px; color: var(--brand6); }
-        .sect { margin-bottom: 10px; }
-        .secthead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-        .secthead b { font-size: 14px; }
-        .secthead .ok { color: var(--brand6); font-weight: 700; font-size: 13px; }
-        .secthead .warn { color: #D97706; font-weight: 700; font-size: 13px; }
-        .bar { height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; }
-        .bar i { display: block; height: 100%; border-radius: 99px;
-          background: linear-gradient(90deg, var(--brand4), var(--brand6)); transition: width .25s ease; }
-        .row { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-top: 1px solid var(--line);
-          font-size: 13.5px; }
-        .row:first-of-type { border-top: none; }
-        .rname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .rval { font-weight: 700; }
-        .rshare { width: 52px; text-align: right; color: var(--tg-theme-hint-color, #8A8A8E); font-weight: 600; }
-        .inv { margin-bottom: 8px; }
-        .invhead { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;
-          margin-bottom: 8px; }
-        .invname { font-size: 14px; line-height: 1.3; }
-        .diff { flex: 0 0 auto; font-weight: 800; font-size: 14px; padding: 4px 10px; border-radius: 10px; }
-        .diff.zero { color: var(--tg-theme-hint-color, #8A8A8E); background: rgba(130,130,140,.10); }
-        .diff.plus { color: var(--brand6); background: rgba(31,191,92,.12); }
-        .diff.minus { color: #DC2626; background: rgba(220,38,38,.10); }
-        .note { margin-top: 8px; font-size: 13px; padding: 9px 12px; }
-        .btn { width: 100%; font-size: 15.5px; font-weight: 700; letter-spacing: -.2px; padding: 15px;
-          border-radius: 16px; border: none; color: #fff;
-          background: linear-gradient(180deg, var(--brand4), var(--brand6));
-          box-shadow: 0 8px 24px -6px rgba(31,191,92,.40); transition: transform .12s, box-shadow .12s; }
-        .btn:active { transform: scale(.97); }
-        .btn:disabled { opacity: .4; box-shadow: none; }
-        .btn.save { margin-top: 4px; }
-        .tabs { position: fixed; bottom: 0; left: 0; right: 0; display: flex; gap: 8px;
-          max-width: 440px; margin: 0 auto; padding: 10px 16px calc(12px + env(safe-area-inset-bottom));
-          background: var(--tg-theme-bg-color, #F2F3F7); border-top: 1px solid var(--line); }
-        .tabbtn { flex: 1; font-size: 14px; font-weight: 700; padding: 13px; border-radius: 14px;
-          border: 1px solid var(--line); background: var(--tg-theme-secondary-bg-color, #fff); color: inherit;
-          transition: transform .1s; }
+        .wrap { max-width: 460px; margin: 0 auto; padding: 8px 15px 96px;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+          -webkit-font-smoothing: antialiased; min-height: 100dvh;
+          background: var(--tg-theme-bg-color, #F3F6F4); color: var(--tg-theme-text-color, #0C1512);
+          --card: var(--tg-theme-secondary-bg-color, #fff);
+          --card-2: color-mix(in srgb, var(--tg-theme-secondary-bg-color, #fff) 60%, var(--tg-theme-bg-color, #F3F6F4));
+          --ink: var(--tg-theme-text-color, #0C1512);
+          --ink-2: color-mix(in srgb, var(--tg-theme-text-color, #0C1512) 62%, var(--tg-theme-hint-color, #8A9C93));
+          --ink-3: var(--tg-theme-hint-color, #8A9C93);
+          --line: color-mix(in srgb, var(--tg-theme-hint-color, #8A9C93) 26%, transparent);
+          --line-2: color-mix(in srgb, var(--tg-theme-hint-color, #8A9C93) 13%, transparent);
+          --brand: #10B981; --brand-deep: #0E9C6D; --brand-soft: rgba(16,185,129,.12);
+          --shortage: #E5484D; --shortage-soft: rgba(229,72,77,.12);
+          --surplus: #EA9A0B; --surplus-soft: rgba(234,154,11,.14);
+          --match-soft: rgba(16,185,129,.14);
+          --shadow: 0 1px 2px rgba(8,30,20,.05), 0 10px 26px -14px rgba(8,30,20,.20);
+          --lift: 0 12px 30px -8px rgba(16,185,129,.42); }
+
+        .brandbar { display: flex; align-items: center; gap: 9px; padding: 14px 2px 12px; }
+        .branddot { width: 9px; height: 9px; border-radius: 50%; background: var(--brand); box-shadow: 0 0 0 4px var(--brand-soft); }
+        .brandbar b { font-size: 16px; letter-spacing: -.3px; }
+        .who { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--ink-3); font-weight: 600; }
+        .avatar { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 10px; font-weight: 700; color: #fff;
+          background: linear-gradient(135deg, var(--brand), var(--brand-deep)); }
+
+        .muted { color: var(--ink-3); font-size: 13px; line-height: 1.5; }
+        .small { font-size: 12px; margin-top: 6px; }
+        .center { text-align: center; padding: 26px 16px; }
+        .statline { color: var(--ink-2); font-size: 12.5px; font-weight: 600; margin: 0 2px 10px; }
+
+        .seg { display: flex; padding: 3px; gap: 2px; background: var(--card-2); border: 1px solid var(--line); border-radius: 14px; margin-bottom: 11px; }
+        .seg button { flex: 1; border: 0; background: transparent; color: var(--ink-2); font-size: 13px; font-weight: 600; padding: 9px 0; border-radius: 11px; transition: .18s; }
+        .seg button:active { transform: scale(.97); }
+        .seg button.on { background: var(--card); color: var(--ink); box-shadow: var(--shadow); }
+
+        .selrow { margin-bottom: 11px; }
+        .sel { width: 100%; appearance: none; border: 1px solid var(--line); background: var(--card); color: var(--ink);
+          border-radius: 13px; padding: 12px 34px 12px 14px; font-size: 14.5px; font-weight: 600; outline: none;
+          background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2 4l4 4 4-4' stroke='%238A9C93' stroke-width='1.6' fill='none' stroke-linecap='round'/></svg>");
+          background-repeat: no-repeat; background-position: right 14px center; }
+        .sel:focus { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+
+        .hero { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 15px 16px; box-shadow: var(--shadow); margin-bottom: 9px; position: relative; overflow: hidden; }
+        .hero::after { content: ""; position: absolute; right: -30px; top: -30px; width: 120px; height: 120px; border-radius: 50%; background: var(--brand-soft); pointer-events: none; }
+        .hero .lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--ink-3); }
+        .heroval { font-size: 30px; font-weight: 800; letter-spacing: -.8px; margin-top: 4px; font-variant-numeric: tabular-nums; position: relative; }
+
+        .kpi2 { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-bottom: 11px; }
+        .kpi { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 12px 13px; box-shadow: var(--shadow); }
+        .kpi .lbl { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--ink-3); }
+        .kpi .v { font-size: 19px; font-weight: 800; letter-spacing: -.4px; margin-top: 3px; font-variant-numeric: tabular-nums; }
+
+        .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 14px; box-shadow: var(--shadow); margin-bottom: 11px; }
+        .chead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 11px; }
+        .chead b { font-size: 13.5px; letter-spacing: -.1px; }
+        .pct { font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; }
+        .pct.good { color: var(--brand-deep); } .pct.warn { color: var(--surplus); } .pct.muted-c { color: var(--ink-3); }
+
+        .plan { position: relative; height: 10px; border-radius: 99px; background: var(--line); margin-bottom: 9px; }
+        .plan i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--brand), var(--brand-deep)); transition: width .3s ease; }
+        .plan .target { position: absolute; top: -4px; height: 18px; width: 2px; background: var(--ink-3); border-radius: 2px; transform: translateX(-1px); }
+        .planfoot { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+
+        .brow { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 9px 0; border-top: 1px solid var(--line-2); }
+        .brow:first-of-type { border-top: 0; }
+        .bn { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .bv { font-size: 13.5px; font-weight: 800; font-variant-numeric: tabular-nums; text-align: right; }
+        .track { grid-column: 1 / -1; height: 6px; border-radius: 99px; background: var(--line-2); overflow: hidden; margin-top: 3px; }
+        .track i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--brand), var(--brand-deep)); transition: width .3s ease; }
+        .sh { grid-column: 2; font-size: 11px; color: var(--ink-3); font-weight: 700; font-variant-numeric: tabular-nums; }
+
+        .mrow { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line-2); font-size: 13.5px; }
+        .mrow:first-of-type { border-top: 0; }
+        .mn { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .mv { font-weight: 700; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+        .mm { width: 54px; text-align: right; font-weight: 800; font-variant-numeric: tabular-nums; }
+
+        .invcard { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 13px 14px; box-shadow: var(--shadow); margin-bottom: 9px; }
+        .invtop { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 11px; }
+        .invtitle { min-width: 0; }
+        .invname { font-size: 14px; font-weight: 700; line-height: 1.25; letter-spacing: -.1px; }
+        .invmeta { font-size: 11.5px; color: var(--ink-3); margin-top: 3px; font-variant-numeric: tabular-nums; }
+        .invmeta b { color: var(--ink-2); font-weight: 700; }
+        .pill { flex: 0 0 auto; font-size: 13px; font-weight: 800; padding: 5px 11px; border-radius: 10px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .pill.short { color: var(--shortage); background: var(--shortage-soft); }
+        .pill.surp { color: var(--surplus); background: var(--surplus-soft); }
+        .pill.zero { color: var(--brand-deep); background: var(--match-soft); }
+        .pill.none { color: var(--ink-3); background: var(--line-2); }
+
+        .counter { display: flex; align-items: stretch; gap: 8px; }
+        .counter .step { width: 46px; flex: 0 0 auto; border: 1px solid var(--line); background: var(--card-2); color: var(--ink);
+          border-radius: 12px; font-size: 22px; font-weight: 700; line-height: 1; }
+        .counter .step:active { transform: scale(.94); background: var(--brand-soft); }
+        .counter input { flex: 1; min-width: 0; text-align: center; font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums;
+          border: 1.5px solid var(--line); background: var(--card-2); color: var(--ink); border-radius: 12px; padding: 11px 8px; outline: none;
+          -moz-appearance: textfield; }
+        .counter input::-webkit-outer-spin-button, .counter input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        .counter input:focus { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+        .counter input.filled { border-color: var(--brand); }
+        .invnote { margin-top: 8px; width: 100%; box-sizing: border-box; border: 1px solid var(--line); background: var(--card-2); color: var(--ink);
+          border-radius: 11px; padding: 9px 12px; font-size: 13px; outline: none; }
+        .invnote:focus { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+
+        .empty { text-align: center; padding: 34px 20px; }
+
+        .tabbar { position: fixed; left: 0; right: 0; bottom: 0; display: flex; gap: 8px; max-width: 460px; margin: 0 auto;
+          padding: 9px 15px calc(11px + env(safe-area-inset-bottom));
+          background: color-mix(in srgb, var(--tg-theme-bg-color, #F3F6F4) 88%, transparent); backdrop-filter: blur(14px); border-top: 1px solid var(--line); z-index: 30; }
+        .tabbtn { flex: 1; border: 1px solid var(--line); background: var(--card); color: var(--ink-2); font-size: 12.5px; font-weight: 700;
+          padding: 12px; border-radius: 13px; transition: .12s; }
         .tabbtn:active { transform: scale(.97); }
-        .tabbtn.on { background: linear-gradient(180deg, var(--brand4), var(--brand6)); color: #fff;
-          border-color: transparent; box-shadow: 0 8px 24px -6px rgba(31,191,92,.40); }
-        .err { color: #DC2626; font-size: 13px; font-weight: 500; margin: 10px 2px;
-          background: rgba(220,38,38,.08); border: 1px solid rgba(220,38,38,.25);
-          border-radius: 12px; padding: 10px 13px; }
-        .saved { color: var(--brand6); font-size: 13px; font-weight: 700; margin: 10px 2px;
-          background: rgba(31,191,92,.10); border: 1px solid rgba(31,191,92,.25);
-          border-radius: 12px; padding: 10px 13px; }
-        h2 { margin: 6px 0; font-family: Sora, -apple-system, sans-serif; font-size: 20px; letter-spacing: -.4px; }
+        .tabbtn.on { background: linear-gradient(180deg, var(--brand), var(--brand-deep)); color: #fff; border-color: transparent; box-shadow: var(--lift); }
+
+        .savebar { position: fixed; left: 0; right: 0; bottom: 0; max-width: 460px; margin: 0 auto;
+          padding: 11px 15px calc(13px + env(safe-area-inset-bottom));
+          background: color-mix(in srgb, var(--tg-theme-bg-color, #F3F6F4) 88%, transparent); backdrop-filter: blur(14px); border-top: 1px solid var(--line); z-index: 30; }
+        .savebtn { width: 100%; border: 0; border-radius: 15px; padding: 15px; font-size: 15px; font-weight: 800; letter-spacing: -.2px; color: #fff;
+          background: linear-gradient(180deg, var(--brand), var(--brand-deep)); box-shadow: var(--lift);
+          display: flex; align-items: center; justify-content: center; gap: 8px; transition: transform .12s; }
+        .savebtn:active { transform: scale(.98); }
+        .savebtn:disabled { opacity: .45; box-shadow: none; }
+        .savebtn .cnt { background: rgba(255,255,255,.24); border-radius: 8px; padding: 1px 8px; font-variant-numeric: tabular-nums; }
+
+        .err { color: var(--shortage); font-size: 13px; font-weight: 600; margin: 6px 2px 10px; background: var(--shortage-soft);
+          border: 1px solid var(--shortage-soft); border-radius: 12px; padding: 10px 13px; }
+        .saved { color: var(--brand-deep); font-size: 13px; font-weight: 700; margin: 6px 2px 10px; background: var(--brand-soft);
+          border: 1px solid var(--brand-soft); border-radius: 12px; padding: 10px 13px; }
+
+        .locked { text-align: center; padding: 44px 20px; }
+        .lockic { width: 62px; height: 62px; margin: 0 auto 14px; display: grid; place-items: center; font-size: 26px; border-radius: 20px; background: color-mix(in srgb, var(--ink-3) 12%, transparent); }
+        .locked h2 { margin: 0 0 6px; font-size: 19px; letter-spacing: -.3px; }
+        .idbtn { margin: 16px auto 8px; display: inline-flex; flex-direction: column; align-items: center; gap: 3px; border: 1px solid var(--line);
+          background: var(--brand-soft); border-radius: 14px; padding: 12px 22px; color: inherit; }
+        .idbtn:active { transform: scale(.97); }
+        .idnum { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: .5px; }
+        .idc { font-size: 11px; color: var(--ink-2); font-weight: 600; }
+        h2 { margin: 6px 0; }
+
+        .skwrap { display: flex; flex-direction: column; gap: 9px; padding-top: 4px; }
+        .sk { border-radius: 16px; background: linear-gradient(100deg, var(--line-2) 30%, var(--line) 50%, var(--line-2) 70%);
+          background-size: 200% 100%; animation: sh 1.3s infinite; }
+        .sk.h { height: 82px; } .sk.r { height: 120px; } .sk.c { height: 150px; } .sk.inv { height: 118px; }
+        @keyframes sh { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+        @media (prefers-reduced-motion: reduce) { .sk { animation: none; } .seg button, .tabbtn, .savebtn, .counter .step { transition: none; } }
       `}</style>
     </div>
   );
