@@ -198,7 +198,7 @@ export function DesignBanner({ data, format, logoData }: { data: DesignData; for
       {/* ── CHAP: yashil panel ── */}
       <div
         style={{
-          display: "flex", flexDirection: "column", justifyContent: "space-between",
+          display: "flex", flexDirection: "column",
           width: S.leftPct, height: "100%", backgroundColor: GREEN, padding: S.pad,
           borderTopRightRadius: S.radius, borderBottomRightRadius: S.radius,
         }}
@@ -213,24 +213,26 @@ export function DesignBanner({ data, format, logoData }: { data: DesignData; for
           )}
         </div>
 
-        {/* narxlar */}
-        <div style={{ display: "flex", flexDirection: "column" }}>
-          <div style={{ display: "flex", alignItems: "baseline", fontSize: S.oldSize, color: "#dcfce7" }}>
-            <span style={{ fontFamily: "Golos", textDecoration: "line-through" }}>{money(data.regularPrice)}</span>
-            <span style={{ marginLeft: 12, textDecoration: "line-through" }}>so&apos;m</span>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", marginTop: 6 }}>
-            <div style={{ display: "flex", fontSize: S.newSize, fontWeight: 700, color: "#ffffff", lineHeight: 0.95, fontFamily: "Golos" }}>
-              {money(data.promoPrice)}
+        {/* narxlar — pastga yopishgan (sana ustida ozgina tepada) */}
+        <div style={{ display: "flex", flexGrow: 1, alignItems: "flex-end" }}>
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            <div style={{ display: "flex", alignItems: "baseline", fontSize: S.oldSize, color: "#dcfce7" }}>
+              <span style={{ fontFamily: "Golos", textDecoration: "line-through" }}>{money(data.regularPrice)}</span>
+              <span style={{ marginLeft: 12, textDecoration: "line-through" }}>so&apos;m</span>
             </div>
-            <div style={{ display: "flex", fontSize: Math.round(S.newSize * 0.42), fontWeight: 700, color: "#ffffff", lineHeight: 1 }}>
-              so&apos;m
+            <div style={{ display: "flex", flexDirection: "column", marginTop: 6 }}>
+              <div style={{ display: "flex", fontSize: S.newSize, fontWeight: 700, color: "#ffffff", lineHeight: 0.95, fontFamily: "Golos" }}>
+                {money(data.promoPrice)}
+              </div>
+              <div style={{ display: "flex", fontSize: Math.round(S.newSize * 0.42), fontWeight: 700, color: "#ffffff", lineHeight: 1 }}>
+                so&apos;m
+              </div>
             </div>
           </div>
         </div>
 
         {/* sana */}
-        <div style={{ display: "flex", fontSize: S.dateSize, color: "#ffffff", fontWeight: 700 }}>{data.dateText}</div>
+        <div style={{ display: "flex", fontSize: S.dateSize, color: "#ffffff", fontWeight: 700, marginTop: 28 }}>{data.dateText}</div>
       </div>
 
       {/* ── O'NG: oq panel ── */}
