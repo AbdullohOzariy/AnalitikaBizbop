@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
-import { Search, X, Loader2, Plus, Trash2, Check, FolderPlus, Folder, Pencil, GripVertical, ImageIcon, Download, Upload } from "lucide-react";
+import { Search, X, Loader2, Plus, Trash2, Check, FolderPlus, FolderInput, Folder, Pencil, GripVertical, ImageIcon, Download, Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatUZS } from "@/lib/format";
 import { toast } from "sonner";
@@ -51,6 +51,81 @@ function fmtMoney(n: number) {
 function diffPctClass(pct: number) {
   return pct > 0 ? "text-emerald-600 dark:text-emerald-400" : pct < 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground";
 }
+/** Mobil badge fon+matn rangi (diffPctClass'ning badge varianti). */
+function diffBadgeClass(pct: number) {
+  return pct > 0
+    ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+    : pct < 0
+    ? "bg-red-500/10 text-red-600 dark:text-red-400"
+    : "bg-muted text-muted-foreground";
+}
+
+/** Bitta SKU narx/limit tahriri — ItemRow (desktop) va ItemCardMobile ikkalasi ham shu hook'dan foydalanadi. */
+function useItemEditor(row: PromoItemRow, onChanged: () => void) {
+  const [reg, setReg] = useState(String(row.regularPrice));
+  const [promo, setPromo] = useState(String(row.promoPrice));
+  const [limit, setLimit] = useState(row.promoLimit != null ? String(row.promoLimit) : "");
+  const [isPending, start] = useTransition();
+  const [saved, setSaved] = useState(false);
+
+  // Live derive (render — effekt EMAS)
+  const regN = Number(reg) || 0;
+  const promoN = Number(promo) || 0;
+  const diff = regN - promoN;
+  const pct = regN > 0 ? (diff / regN) * 100 : 0;
+
+  const save = () => {
+    const r = Number(reg), p = Number(promo);
+    const l = limit.trim() === "" ? null : Number(limit);
+    if (!(r > 0) || !(p > 0)) { toast.error("Narxlar musbat bo'lishi kerak."); return; }
+    if (l != null && !(l > 0)) { toast.error("Limit musbat bo'lishi kerak."); return; }
+    const changed = r !== row.regularPrice || p !== row.promoPrice || l !== row.promoLimit;
+    if (!changed) return;
+    start(async () => {
+      const res = await updateItemAction({ id: row.id, regularPrice: r, promoPrice: p, promoLimit: l });
+      if (res.ok) { setSaved(true); onChanged(); setTimeout(() => setSaved(false), 1200); }
+      else toast.error(res.error);
+    });
+  };
+
+  const del = () => {
+    start(async () => {
+      const res = await deleteItemAction({ id: row.id });
+      if (res.ok) onChanged();
+      else toast.error(res.error);
+    });
+  };
+
+  return { reg, setReg, promo, setPromo, limit, setLimit, isPending, saved, diff, pct, save, del };
+}
+
+/** Guruh nomi tahriri/o'chirish — GroupBlock (desktop) va GroupCardMobile ikkalasi ham shu hook'dan foydalanadi. */
+function useGroupEditor(group: PromoGroupRow, onChanged: () => void) {
+  const [renaming, setRenaming] = useState(false);
+  const [name, setName] = useState(group.name);
+  const [delOpen, setDelOpen] = useState(false);
+  const [isPending, start] = useTransition();
+
+  const saveName = () => {
+    const n = name.trim();
+    if (!n || n === group.name) { setRenaming(false); setName(group.name); return; }
+    start(async () => {
+      const res = await renameGroupAction({ id: group.id, name: n });
+      if (res.ok) { setRenaming(false); onChanged(); }
+      else { toast.error(res.error); setName(group.name); }
+    });
+  };
+
+  const doDelete = (keepItems: boolean) => {
+    start(async () => {
+      const res = await deleteGroupAction({ id: group.id, keepItems });
+      if (res.ok) { setDelOpen(false); onChanged(); }
+      else toast.error(res.error);
+    });
+  };
+
+  return { renaming, setRenaming, name, setName, saveName, delOpen, setDelOpen, isPending, doDelete };
+}
 
 /** Aksiya SKU qatorlari — narxlar (ruchnoy) + farq/% (auto). */
 export function CampaignItems({
@@ -68,6 +143,8 @@ export function CampaignItems({
   const [addOpen, setAddOpen] = useState(false);
   const [groupOpen, setGroupOpen] = useState(false);
   const [design, setDesign] = useState<{ kind: "item" | "group"; id: number; title: string } | null>(null);
+  // Mobilda drag-drop ishlamagani uchun — "Guruhga ko'chirish" dialogi shu SKU uchun ochiladi
+  const [moveRow, setMoveRow] = useState<PromoItemRow | null>(null);
   const reqId = useRef(0);
 
   // Drag-drop: drag qilinayotgan SKU id'si dataTransfer orqali uzatiladi (ref'siz —
@@ -134,17 +211,17 @@ export function CampaignItems({
               type="button"
               onClick={() => downloadFile(`/api/promo/${campaignId}/designs`, `aksiya-${campaignId}-dizaynlar.zip`, "Dizaynlar tayyorlanmoqda…")}
               title="Barcha tayyor dizaynlarni (A4 + Instagram) bitta ZIP qilib yuklash"
-              className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-border bg-card px-3 text-xs font-medium transition-colors hover:bg-secondary"
+              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-border bg-card px-3 text-xs font-medium transition-colors hover:bg-secondary md:h-8"
             >
               <Download className="h-3.5 w-3.5" /> Dizaynlar ({preparedCount})
             </button>
           )}
           {canEdit && (
             <>
-              <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => setGroupOpen(true)}>
+              <Button size="sm" variant="outline" className="h-9 gap-1.5 md:h-8" onClick={() => setGroupOpen(true)}>
                 <FolderPlus className="h-3.5 w-3.5" /> Guruh qo&apos;shish
               </Button>
-              <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => setAddOpen(true)}>
+              <Button size="sm" variant="outline" className="h-9 gap-1.5 md:h-8" onClick={() => setAddOpen(true)}>
                 <Plus className="h-3.5 w-3.5" /> SKU qo&apos;shish
               </Button>
             </>
@@ -152,7 +229,8 @@ export function CampaignItems({
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-border/60">
+      {/* Desktop — jadval (md+) */}
+      <div className="hidden overflow-x-auto rounded-lg border border-border/60 md:block">
         <table className="w-full min-w-[760px] text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
@@ -231,6 +309,51 @@ export function CampaignItems({
         </table>
       </div>
 
+      {/* Mobil — SKU kartalari (<md). Drag-drop o'rniga "Guruhga ko'chirish" dialogi. */}
+      <div className="space-y-2 md:hidden">
+        {rows.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-border/60 px-3 py-6 text-center text-xs text-muted-foreground">
+            {loading ? "Yuklanmoqda…" : "Hali SKU qo'shilmagan."}
+          </p>
+        ) : (
+          <>
+            {groups.map((g) => {
+              const gItems = rows.filter((r) => r.groupId === g.id);
+              return (
+                <GroupCardMobile
+                  key={g.id}
+                  group={g}
+                  items={gItems}
+                  canEdit={canEdit}
+                  hasGroups={groups.length > 0}
+                  onChanged={reload}
+                  onMove={canEdit ? (r) => setMoveRow(r) : undefined}
+                  onDesign={canEdit ? () => setDesign({ kind: "group", id: g.id, title: g.name }) : undefined}
+                  onItemDesign={canEdit ? (r) => setDesign({ kind: "item", id: r.id, title: r.name }) : undefined}
+                />
+              );
+            })}
+            {groups.length > 0 && ungrouped.length > 0 && (
+              <p className="px-1 pt-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Guruhsiz</p>
+            )}
+            {ungrouped.map((r) => (
+              <ItemCardMobile
+                key={r.id}
+                row={r}
+                canEdit={canEdit}
+                hasGroups={groups.length > 0}
+                onChanged={reload}
+                onMove={canEdit ? () => setMoveRow(r) : undefined}
+                onDesign={canEdit ? () => setDesign({ kind: "item", id: r.id, title: r.name }) : undefined}
+              />
+            ))}
+            {ungrouped.length === 0 && groups.length > 0 && (
+              <p className="px-1 py-2 text-center text-xs text-muted-foreground">Guruhsiz SKU yo&apos;q</p>
+            )}
+          </>
+        )}
+      </div>
+
       {addOpen && (
         <AddItemDialog
           campaignId={campaignId}
@@ -256,21 +379,32 @@ export function CampaignItems({
           onSaved={reload}
         />
       )}
+      {moveRow && (
+        <MoveToGroupDialog
+          row={moveRow}
+          groups={groups}
+          onMove={applyMove}
+          onClose={() => setMoveRow(null)}
+        />
+      )}
     </div>
   );
 }
 
 /** Rasm yuklangan dizaynni qatorning o'zidan yuklab olish — A4 va Instagram PNG. */
-function RowDesignLinks({ kind, id }: { kind: "item" | "group"; id: number }) {
+function RowDesignLinks({ kind, id, size = "sm" }: { kind: "item" | "group"; id: number; size?: "sm" | "md" }) {
   const base = `/api/promo/design?kind=${kind}&id=${id}`;
-  const cls = "inline-flex items-center gap-0.5 rounded-md border border-border bg-card px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-primary";
+  const cls = size === "md"
+    ? "inline-flex h-9 items-center gap-1 rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-primary"
+    : "inline-flex items-center gap-0.5 rounded-md border border-border bg-card px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-primary";
+  const iconCls = size === "md" ? "h-3.5 w-3.5" : "h-3 w-3";
   return (
-    <span className="flex items-center gap-1">
+    <span className={cn("flex items-center", size === "md" ? "gap-2" : "gap-1")}>
       <button type="button" onClick={() => downloadFile(`${base}&format=a4`, "aksiya-design-a4.png")} className={cls} title="A4 banner (PNG) yuklab olish">
-        <Download className="h-3 w-3" /> A4
+        <Download className={iconCls} /> A4
       </button>
       <button type="button" onClick={() => downloadFile(`${base}&format=instagram`, "aksiya-design-instagram.png")} className={cls} title="Instagram banner (PNG) yuklab olish">
-        <Download className="h-3 w-3" /> Insta
+        <Download className={iconCls} /> Insta
       </button>
     </span>
   );
@@ -293,28 +427,7 @@ function GroupBlock({
   onItemDragEnd: () => void;
   onDesign?: () => void;
 }) {
-  const [renaming, setRenaming] = useState(false);
-  const [name, setName] = useState(group.name);
-  const [delOpen, setDelOpen] = useState(false);
-  const [isPending, start] = useTransition();
-
-  const saveName = () => {
-    const n = name.trim();
-    if (!n || n === group.name) { setRenaming(false); setName(group.name); return; }
-    start(async () => {
-      const res = await renameGroupAction({ id: group.id, name: n });
-      if (res.ok) { setRenaming(false); onChanged(); }
-      else { toast.error(res.error); setName(group.name); }
-    });
-  };
-
-  const doDelete = (keepItems: boolean) => {
-    start(async () => {
-      const res = await deleteGroupAction({ id: group.id, keepItems });
-      if (res.ok) { setDelOpen(false); onChanged(); }
-      else toast.error(res.error);
-    });
-  };
+  const { renaming, setRenaming, name, setName, saveName, delOpen, setDelOpen, isPending, doDelete } = useGroupEditor(group, onChanged);
 
   return (
     <>
@@ -443,40 +556,7 @@ function ItemRow({ row, canEdit, onChanged, grouped, onDragStartItem, onDragEndI
   row: PromoItemRow; canEdit: boolean; onChanged: () => void; grouped?: boolean;
   onDragStartItem?: (e: React.DragEvent) => void; onDragEndItem?: () => void; onDesign?: () => void;
 }) {
-  const [reg, setReg] = useState(String(row.regularPrice));
-  const [promo, setPromo] = useState(String(row.promoPrice));
-  const [limit, setLimit] = useState(row.promoLimit != null ? String(row.promoLimit) : "");
-  const [isPending, start] = useTransition();
-  const [saved, setSaved] = useState(false);
-
-  // Live derive (render — effekt EMAS)
-  const regN = Number(reg) || 0;
-  const promoN = Number(promo) || 0;
-  const diff = regN - promoN;
-  const pct = regN > 0 ? (diff / regN) * 100 : 0;
-
-  const save = () => {
-    const r = Number(reg), p = Number(promo);
-    const l = limit.trim() === "" ? null : Number(limit);
-    if (!(r > 0) || !(p > 0)) { toast.error("Narxlar musbat bo'lishi kerak."); return; }
-    if (l != null && !(l > 0)) { toast.error("Limit musbat bo'lishi kerak."); return; }
-    const changed = r !== row.regularPrice || p !== row.promoPrice || l !== row.promoLimit;
-    if (!changed) return;
-    start(async () => {
-      const res = await updateItemAction({ id: row.id, regularPrice: r, promoPrice: p, promoLimit: l });
-      if (res.ok) { setSaved(true); onChanged(); setTimeout(() => setSaved(false), 1200); }
-      else toast.error(res.error);
-    });
-  };
-
-  const del = () => {
-    start(async () => {
-      const res = await deleteItemAction({ id: row.id });
-      if (res.ok) onChanged();
-      else toast.error(res.error);
-    });
-  };
-
+  const { reg, setReg, promo, setPromo, limit, setLimit, isPending, saved, diff, pct, save, del } = useItemEditor(row, onChanged);
   const numInput = "h-8 w-28 rounded-lg text-right tabular-nums";
   return (
     <tr className="border-b border-border/40 last:border-0 hover:bg-muted/20">
@@ -537,6 +617,221 @@ function ItemRow({ row, canEdit, onChanged, grouped, onDragStartItem, onDragEndI
         </td>
       )}
     </tr>
+  );
+}
+
+/** Mobilda drag-drop yo'q — SKU'ni qaysi guruhga (yoki guruhsizga) ko'chirish tanlanadi. */
+function MoveToGroupDialog({
+  row, groups, onMove, onClose,
+}: {
+  row: PromoItemRow;
+  groups: PromoGroupRow[];
+  onMove: (itemId: number, groupId: number | null) => void;
+  onClose: () => void;
+}) {
+  const optBtn = (active: boolean) =>
+    cn(
+      "flex h-11 w-full items-center justify-between rounded-xl border px-3 text-left text-sm transition-colors",
+      active ? "border-primary bg-primary/10 text-primary" : "border-border hover:bg-muted/50"
+    );
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Guruhga ko&apos;chirish</DialogTitle>
+          <DialogDescription className="text-sm text-muted-foreground">
+            &quot;{row.name}&quot; qaysi guruhga ko&apos;chirilsin?
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-1.5 py-1">
+          <button type="button" onClick={() => { onMove(row.id, null); onClose(); }} className={optBtn(row.groupId == null)}>
+            Guruhsiz
+            {row.groupId == null && <Check className="h-4 w-4 shrink-0" />}
+          </button>
+          {groups.map((g) => (
+            <button key={g.id} type="button" onClick={() => { onMove(row.id, g.id); onClose(); }} className={optBtn(row.groupId === g.id)}>
+              <span className="min-w-0 truncate">{g.name}</span>
+              {row.groupId === g.id && <Check className="h-4 w-4 shrink-0" />}
+            </button>
+          ))}
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" className="rounded-xl" onClick={onClose}>Yopish</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Mobil guruh kartasi — sarlavha (nom, SKU soni, amallar) + ichida SKU kartalari indent bilan.
+ *  Desktop'dagi GroupBlock (jadval qatori) o'rniga <md ekranlarda ishlatiladi. */
+function GroupCardMobile({
+  group, items, canEdit, hasGroups, onChanged, onMove, onDesign, onItemDesign,
+}: {
+  group: PromoGroupRow;
+  items: PromoItemRow[];
+  canEdit: boolean;
+  hasGroups: boolean;
+  onChanged: () => void;
+  onMove?: (row: PromoItemRow) => void;
+  onDesign?: () => void;
+  onItemDesign?: (row: PromoItemRow) => void;
+}) {
+  const { renaming, setRenaming, name, setName, saveName, delOpen, setDelOpen, isPending, doDelete } = useGroupEditor(group, onChanged);
+  const iconBtn = "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground";
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-primary/25 bg-primary/5">
+      <div className="flex items-center gap-1.5 px-3 py-2">
+        <Folder className="h-4 w-4 shrink-0 text-primary" />
+        {renaming ? (
+          <Input
+            value={name} autoFocus disabled={isPending}
+            className="h-9 min-w-0 flex-1 text-sm font-semibold"
+            onChange={(e) => setName(e.target.value)}
+            onBlur={saveName}
+            onKeyDown={(e) => { if (e.key === "Enter") saveName(); if (e.key === "Escape") { setRenaming(false); setName(group.name); } }}
+          />
+        ) : (
+          <span className="min-w-0 flex-1 truncate font-semibold">{group.name}</span>
+        )}
+        <span className="shrink-0 text-[11px] text-muted-foreground">{items.length} SKU</span>
+        {canEdit && !renaming && (
+          <span className="flex shrink-0 items-center">
+            {onDesign && (
+              <button type="button" onClick={onDesign} aria-label="Dizayn" title="Dizayn banner (rasm + nom)" className={iconBtn}>
+                <ImageIcon className="h-4 w-4" />
+              </button>
+            )}
+            <button type="button" onClick={() => setRenaming(true)} aria-label="Nomini o'zgartirish" title="Nomini o'zgartirish" className={iconBtn}>
+              <Pencil className="h-4 w-4" />
+            </button>
+            <button type="button" onClick={() => setDelOpen(true)} aria-label="Guruhni o'chirish" title="Guruhni o'chirish" className={cn(iconBtn, "hover:text-destructive")}>
+              {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            </button>
+          </span>
+        )}
+      </div>
+      {group.hasImage && (
+        <div className="flex justify-end border-t border-border/40 px-3 py-1.5">
+          <RowDesignLinks kind="group" id={group.id} size="md" />
+        </div>
+      )}
+      <div className="space-y-2 border-t border-border/40 bg-background/50 p-2 pl-3">
+        {items.length === 0 ? (
+          <p className="px-2 py-2 text-xs text-muted-foreground">Guruh bo&apos;sh.</p>
+        ) : (
+          items.map((r) => (
+            <ItemCardMobile
+              key={r.id}
+              row={r}
+              canEdit={canEdit}
+              hasGroups={hasGroups}
+              onChanged={onChanged}
+              onMove={onMove ? () => onMove(r) : undefined}
+              onDesign={onItemDesign ? () => onItemDesign(r) : undefined}
+            />
+          ))
+        )}
+      </div>
+      {delOpen && (
+        <DeleteGroupDialog
+          groupName={group.name}
+          count={items.length}
+          isPending={isPending}
+          onDelete={doDelete}
+          onClose={() => setDelOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Mobil SKU kartasi — jadval qatoriga muqobil (<md). Narxlar/limit canEdit bo'lsa inputlar
+ *  (blur-save), bo'lmasa matn. Pastda amallar: dizayn, guruhga ko'chirish, o'chirish. */
+function ItemCardMobile({
+  row, canEdit, hasGroups, onChanged, onMove, onDesign,
+}: {
+  row: PromoItemRow;
+  canEdit: boolean;
+  hasGroups: boolean;
+  onChanged: () => void;
+  onMove?: () => void;
+  onDesign?: () => void;
+}) {
+  const { reg, setReg, promo, setPromo, limit, setLimit, isPending, saved, diff, pct, save, del } = useItemEditor(row, onChanged);
+  const numInput = "h-9 rounded-lg text-right text-sm tabular-nums";
+  const roInput = "flex h-9 items-center justify-end rounded-lg bg-muted/30 px-2 text-sm tabular-nums";
+  const actionBtn = "inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground";
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-sm font-medium leading-snug">{row.name}</div>
+          <div className="font-mono text-[11px] text-muted-foreground">{row.code}</div>
+        </div>
+        <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums", diffBadgeClass(pct))}>
+          {pct ? `${pct.toFixed(1)}%` : "—"}
+        </span>
+      </div>
+
+      <div className="mt-2.5 grid grid-cols-3 gap-2">
+        <div className="space-y-1">
+          <Label className="text-[11px] text-muted-foreground">Sotilish narxi</Label>
+          {canEdit
+            ? <Input value={reg} disabled={isPending} type="number" inputMode="decimal" className={numInput}
+                onChange={(e) => setReg(e.target.value)} onBlur={save} onKeyDown={(e) => e.key === "Enter" && save()} />
+            : <div className={roInput}>{fmtMoney(row.regularPrice)}</div>}
+        </div>
+        <div className="space-y-1">
+          <Label className="text-[11px] text-muted-foreground">Aksiya narxi</Label>
+          {canEdit
+            ? <Input value={promo} disabled={isPending} type="number" inputMode="decimal" className={numInput}
+                onChange={(e) => setPromo(e.target.value)} onBlur={save} onKeyDown={(e) => e.key === "Enter" && save()} />
+            : <div className={roInput}>{fmtMoney(row.promoPrice)}</div>}
+        </div>
+        <div className="space-y-1">
+          <Label className="text-[11px] text-muted-foreground">Limit</Label>
+          {canEdit
+            ? <Input value={limit} disabled={isPending} type="number" inputMode="decimal" placeholder="—" className={numInput}
+                onChange={(e) => setLimit(e.target.value)} onBlur={save} onKeyDown={(e) => e.key === "Enter" && save()} />
+            : <div className={cn(roInput, "text-muted-foreground")}>{row.promoLimit != null ? fmtMoney(row.promoLimit) : "—"}</div>}
+        </div>
+      </div>
+
+      <div className="mt-2 text-xs text-muted-foreground">
+        Farqi: <b className="text-foreground tabular-nums">{diff > 0 ? `−${fmtMoney(diff)}` : diff < 0 ? `+${fmtMoney(-diff)}` : "—"}</b>
+      </div>
+
+      {canEdit && (
+        <div className="mt-2.5 flex flex-wrap items-center gap-2">
+          {onDesign && row.hasImage && <RowDesignLinks kind="item" id={row.id} size="md" />}
+          {onDesign && (
+            <button type="button" onClick={onDesign} className={actionBtn}>
+              <ImageIcon className="h-3.5 w-3.5" /> Dizayn
+            </button>
+          )}
+          {hasGroups && onMove && (
+            <button type="button" onClick={onMove} className={actionBtn}>
+              <FolderInput className="h-3.5 w-3.5" /> Guruhga
+            </button>
+          )}
+          <span className="ml-auto">
+            {isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            ) : saved ? (
+              <Check className="h-5 w-5 text-emerald-500" />
+            ) : (
+              <button type="button" onClick={del} aria-label="O'chirish" title="O'chirish"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive">
+                <Trash2 className="h-4 w-4" />
+              </button>
+            )}
+          </span>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -875,7 +1170,7 @@ function DesignDialog({
   const [title, setTitle] = useState("");
   const [titleRu, setTitleRu] = useState("");
   const [imageData, setImageData] = useState<string | null>(null);
-  const [zoom, setZoom] = useState(1); // rasm yaqinlashtirish (x1..x4)
+  const [zoom, setZoom] = useState(1); // rasm yaqinlashtirish (x1..x2, kasr ham)
   const [dirty, setDirty] = useState(false); // saqlanmagan o'zgarish bormi
   const [isPending, startSave] = useTransition();
   const reqId = useRef(0);
@@ -926,11 +1221,11 @@ function DesignDialog({
     downloadFile(`${base}&format=${format}`, `aksiya-design-${format}.png`);
   };
   const dlCls = (active: boolean) =>
-    cn("inline-flex h-9 items-center gap-1.5 rounded-xl border border-border bg-card px-3 text-xs font-medium transition-colors hover:bg-secondary", !active && "pointer-events-none opacity-50");
+    cn("inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl border border-border bg-card px-3 text-xs font-medium transition-colors hover:bg-secondary sm:flex-none", !active && "pointer-events-none opacity-50");
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Dizayn banner</DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground">
@@ -977,17 +1272,17 @@ function DesignDialog({
                 </label>
               )}
               {imageData && (
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-muted-foreground">Yaqinlashtirish:</span>
-                  {[1, 2, 3, 4].map((z) => (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground">Kattalashtirish:</span>
+                  {[1, 1.3, 1.7, 2].map((z) => (
                     <button
                       key={z}
                       type="button"
                       disabled={isPending}
                       onClick={() => { setZoom(z); setDirty(true); }}
                       className={cn(
-                        "rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors",
-                        zoom === z ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground hover:bg-secondary"
+                        "rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors",
+                        Math.abs(zoom - z) < 0.01 ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground hover:bg-secondary"
                       )}
                     >
                       x{z}
@@ -1000,7 +1295,7 @@ function DesignDialog({
         )}
 
         <DialogFooter className="flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex gap-2">
+          <div className="flex w-full gap-2 sm:w-auto">
             <button type="button" onClick={() => dl("a4")} className={dlCls(!dirty)} title={dirty ? "Avval saqlang" : "A4 yuklab olish"}>
               <Download className="h-3.5 w-3.5" /> A4
             </button>
@@ -1008,7 +1303,7 @@ function DesignDialog({
               <Download className="h-3.5 w-3.5" /> Instagram
             </button>
           </div>
-          <Button className="rounded-xl" disabled={isPending || !dirty} onClick={save}>
+          <Button className="w-full rounded-xl sm:w-auto" disabled={isPending || !dirty} onClick={save}>
             {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Saqlash"}
           </Button>
         </DialogFooter>

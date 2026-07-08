@@ -383,7 +383,7 @@ const saveDesignSchema = z.object({
   designTitleRu: z.string().trim().max(200).nullable().optional(),
   // base64 data URL (client canvas resize qilingan); ~900KB cheklov (server-action 1MB limiti).
   imageData: z.string().max(900_000).regex(/^data:image\/(png|webp);base64,/, "Rasm formati noto'g'ri").nullable().optional(),
-  imageZoom: z.number().int().min(1).max(4).optional(), // rasm yaqinlashtirish (x1..x4)
+  imageZoom: z.number().min(1).max(2).optional(), // rasm kattalashtirish (x1..x2, kasr: 1.3/1.7)
 });
 
 export async function saveDesignAction(input: {

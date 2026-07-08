@@ -13,7 +13,7 @@ export function PromoExportButtons({ campaignId, itemsCount }: { campaignId: num
   if (itemsCount === 0) return null;
   const base = `/api/promo/${campaignId}/export`;
   const cls =
-    "inline-flex h-7 items-center gap-1 rounded-lg border border-border bg-card px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground";
+    "inline-flex h-9 items-center gap-1 rounded-lg border border-border bg-card px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground md:h-7 md:px-2";
   return (
     <span className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
       <button type="button" onClick={() => downloadFile(`${base}?format=excel`, `aksiya-${campaignId}.xlsx`)} className={cls} title="Excel (.xlsx) yuklab olish">

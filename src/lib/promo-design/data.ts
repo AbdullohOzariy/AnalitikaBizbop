@@ -21,7 +21,7 @@ export type DesignData = {
   titleUz: string;
   titleRu: string | null;
   imageData: string | null;
-  imageZoom: number; // rasm yaqinlashtirish (x1..x4) — kattaroq ko'rinish
+  imageZoom: number; // rasm kattalashtirish (x1..x2, kasr: 1.3/1.7) — qirqilmasdan yirikroq ko'rinish
   regularPrice: number;
   promoPrice: number;
   discountPct: number; // butun foiz (regularPrice'dan tejaganini)

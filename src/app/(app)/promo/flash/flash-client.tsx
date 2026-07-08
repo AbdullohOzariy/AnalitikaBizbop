@@ -53,7 +53,7 @@ export function FlashClient({ branches, canEdit }: { branches: Branch[]; canEdit
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-muted-foreground">
           Bayram yoki maxsus hodisalarga atalgan vaqtinchalik aksiyalar.
         </p>
@@ -76,30 +76,30 @@ export function FlashClient({ branches, canEdit }: { branches: Branch[]; canEdit
             const st = STATUS_META[c.status];
             return (
               <div key={c.id} className="overflow-hidden rounded-xl border border-border bg-card">
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-3">
                   <button onClick={() => setOpenId(open ? null : c.id)}
-                    className="flex min-w-0 flex-1 items-center gap-2 text-left" aria-expanded={open}>
+                    className="flex min-w-0 basis-full items-center gap-2 text-left md:basis-auto md:flex-1" aria-expanded={open}>
                     {open ? <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />}
                     <span className="truncate font-semibold">{c.title}</span>
                     <Pill tone={st.tone}>{st.label}</Pill>
                   </button>
                   <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                    <CalendarDays className="h-3.5 w-3.5" />
+                    <CalendarDays className="h-3.5 w-3.5 shrink-0" />
                     {formatDateUZ(c.startDate)}{c.endDate ? ` – ${formatDateUZ(c.endDate)}` : ""}
                   </span>
-                  <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                    <Building2 className="h-3.5 w-3.5" />{c.branchName ?? "Barcha filiallar"}
+                  <span className="inline-flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+                    <Building2 className="h-3.5 w-3.5 shrink-0" /><span className="max-w-[160px] truncate">{c.branchName ?? "Barcha filiallar"}</span>
                   </span>
                   <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                    <Boxes className="h-3.5 w-3.5" />{c.itemsCount} SKU
+                    <Boxes className="h-3.5 w-3.5 shrink-0" />{c.itemsCount} SKU
                   </span>
                   <PromoExportButtons campaignId={c.id} itemsCount={c.itemsCount} />
                   {canEdit && (
-                    <span className="flex items-center gap-0.5">
-                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setForm({ mode: "edit", row: c })} aria-label="Tahrirlash">
+                    <span className="ml-auto flex items-center gap-0.5 md:ml-0">
+                      <Button size="icon" variant="ghost" className="h-9 w-9 md:h-7 md:w-7" onClick={() => setForm({ mode: "edit", row: c })} aria-label="Tahrirlash">
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
-                      <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => setDel(c)} aria-label="O'chirish">
+                      <Button size="icon" variant="ghost" className="h-9 w-9 text-destructive hover:text-destructive md:h-7 md:w-7" onClick={() => setDel(c)} aria-label="O'chirish">
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </span>

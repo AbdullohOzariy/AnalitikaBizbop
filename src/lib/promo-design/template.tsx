@@ -21,17 +21,19 @@ const GREEN = "#22C55E";
 const GREEN_DARK = "#15803D";
 const BLUE = "#2563EB";
 
-/** Mahsulot rasmi — imageZoom (x1..x4) bilan: qat'iy o'lchamli overflow-hidden qutida
- *  rasm zoom marta kattalashtiriladi (markazdan qirqiladi). Placeholder'da zoom yo'q. */
+/** Mahsulot rasmi — imageZoom (x1..x2, kasr: 1.3/1.7 ham) bilan KATTAROQ ko'rsatiladi.
+ *  QIRQILMAYDI: quti (w×h) layout'da o'z o'lchamida qoladi, rasm elementi esa zoom
+ *  marta katta chiziladi (overflow ko'rinadi) — mahsulot PNG atrofi shaffof/oq
+ *  bo'lgani uchun shunchaki yirikroq ko'rinadi. Placeholder'da zoom yo'q. */
 function ProductImage({ src, w, h, zoom, placeholder }: { src: string; w: number; h: number; zoom: number; placeholder: boolean }) {
-  const z = placeholder ? 1 : Math.min(4, Math.max(1, zoom || 1));
+  const z = placeholder ? 1 : Math.min(2, Math.max(1, zoom || 1));
   return (
-    <div style={{ display: "flex", width: w, height: h, alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+    <div style={{ display: "flex", width: w, height: h, alignItems: "center", justifyContent: "center" }}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={src}
-        width={w * z}
-        height={h * z}
+        width={Math.round(w * z)}
+        height={Math.round(h * z)}
         style={{ objectFit: "contain", opacity: placeholder ? 0.2 : 1, flexShrink: 0 }}
         alt=""
       />
