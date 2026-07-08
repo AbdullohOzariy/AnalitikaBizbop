@@ -30,6 +30,23 @@ const getUserRoles = (userId: number) =>
     { tags: [USER_ROLES_TAG], revalidate: 60 }
   )();
 
+/** DB ulanish xatosimi (Neon hiccup/timeout) — faqat shularda JWT fallback qilinadi. */
+const isDbConnError = (e: unknown) => {
+  const m = e instanceof Error ? `${e.name} ${e.message}` : String(e);
+  return /P10\d\d|connect|connection|control plane|timeout|econn|socket|terminated/i.test(m);
+};
+
+/** Neon hiccup'lari ko'pincha sub-soniya — fallback'dan oldin bitta qisqa retry. */
+async function getUserRolesRetry(userId: number) {
+  try {
+    return await getUserRoles(userId);
+  } catch (err) {
+    if (!isDbConnError(err)) throw err;
+    await new Promise((res) => setTimeout(res, 150));
+    return getUserRoles(userId);
+  }
+}
+
 declare module "next-auth" {
   interface Session {
     user: {
@@ -58,9 +75,26 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     session: async ({ session, token }) => {
       if (token?.id && session.user) {
         session.user.id = token.id as string;
-        const r = await getUserRoles(Number(token.id));
-        session.user.role = (r?.role ?? "VIEWER") as Role;
-        session.user.roles = r?.roles ?? (["VIEWER"] as Role[]);
+        try {
+          const r = await getUserRolesRetry(Number(token.id));
+          session.user.role = (r?.role ?? "VIEWER") as Role;
+          session.user.roles = r?.roles ?? (["VIEWER"] as Role[]);
+        } catch (err) {
+          if (isDbConnError(err)) {
+            // DB vaqtincha yiqilsa (Neon hiccup) sessiyani O'LDIRMAYMIZ — login paytida
+            // JWT'ga imzolanib yozilgan rollarga tushamiz (token maxAge 12h). O'chirilgan/
+            // rolsiz user baribir VIEWER (u DB null qaytargan yo'l — exception emas).
+            // DB tiklangach keyingi so'rovda rol yana DB'dan yangilanadi (kesh xatoni saqlamaydi).
+            console.error("[auth] rol o'qishda DB ulanish xatosi — JWT fallback:", err);
+            session.user.role = ((token.role as Role | undefined) ?? "VIEWER") as Role;
+            session.user.roles = (token.roles as Role[] | undefined) ?? [session.user.role];
+          } else {
+            // Kutilmagan xato (bug/schema) — fail-closed: huquqsiz VIEWER + baland log.
+            console.error("[auth] rol o'qishda KUTILMAGAN xato — VIEWER fail-closed:", err);
+            session.user.role = "VIEWER" as Role;
+            session.user.roles = ["VIEWER"] as Role[];
+          }
+        }
       }
       return session;
     },

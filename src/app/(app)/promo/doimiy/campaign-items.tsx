@@ -129,14 +129,14 @@ export function CampaignItems({
         </span>
         <div className="flex items-center gap-2">
           {preparedCount > 0 && (
-            <a
-              href={`/api/promo/${campaignId}/designs`}
-              download
+            <button
+              type="button"
+              onClick={() => downloadFile(`/api/promo/${campaignId}/designs`, `aksiya-${campaignId}-dizaynlar.zip`, "Dizaynlar tayyorlanmoqda…")}
               title="Barcha tayyor dizaynlarni (A4 + Instagram) bitta ZIP qilib yuklash"
               className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-border bg-card px-3 text-xs font-medium transition-colors hover:bg-secondary"
             >
               <Download className="h-3.5 w-3.5" /> Dizaynlar ({preparedCount})
-            </a>
+            </button>
           )}
           {canEdit && (
             <>
@@ -259,18 +259,45 @@ export function CampaignItems({
   );
 }
 
+/** Faylni fetch bilan yuklab olish — server xato qaytarsa (masalan DB/sessiya uzilishi)
+ *  brauzer "design.txt" saqlab qo'ymasin, aniq toast chiqsin. */
+async function downloadFile(url: string, fallbackName: string, loadingMsg?: string) {
+  const t = loadingMsg ? toast.loading(loadingMsg) : undefined;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      const msg = (await res.text().catch(() => "")).slice(0, 200);
+      toast.error(msg || `Yuklab olishda xato (${res.status}) — qayta urinib ko'ring.`);
+      return;
+    }
+    const blob = await res.blob();
+    const m = /filename="?([^";]+)"?/.exec(res.headers.get("Content-Disposition") ?? "");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = m?.[1] ?? fallbackName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(a.href);
+  } catch {
+    toast.error("Tarmoq xatosi — internetni tekshirib qayta urinib ko'ring.");
+  } finally {
+    if (t !== undefined) toast.dismiss(t);
+  }
+}
+
 /** Rasm yuklangan dizaynni qatorning o'zidan yuklab olish — A4 va Instagram PNG. */
 function RowDesignLinks({ kind, id }: { kind: "item" | "group"; id: number }) {
   const base = `/api/promo/design?kind=${kind}&id=${id}`;
   const cls = "inline-flex items-center gap-0.5 rounded-md border border-border bg-card px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-primary";
   return (
     <span className="flex items-center gap-1">
-      <a href={`${base}&format=a4`} download className={cls} title="A4 banner (PNG) yuklab olish">
+      <button type="button" onClick={() => downloadFile(`${base}&format=a4`, "aksiya-design-a4.png")} className={cls} title="A4 banner (PNG) yuklab olish">
         <Download className="h-3 w-3" /> A4
-      </a>
-      <a href={`${base}&format=instagram`} download className={cls} title="Instagram banner (PNG) yuklab olish">
+      </button>
+      <button type="button" onClick={() => downloadFile(`${base}&format=instagram`, "aksiya-design-instagram.png")} className={cls} title="Instagram banner (PNG) yuklab olish">
         <Download className="h-3 w-3" /> Insta
-      </a>
+      </button>
     </span>
   );
 }
@@ -914,7 +941,10 @@ function DesignDialog({
   };
 
   const base = `/api/promo/design?kind=${kind}&id=${id}`;
-  const guardDownload = (e: React.MouseEvent) => { if (dirty) { e.preventDefault(); toast.error("Avval saqlang."); } };
+  const dl = (format: "a4" | "instagram") => {
+    if (dirty) { toast.error("Avval saqlang."); return; }
+    downloadFile(`${base}&format=${format}`, `aksiya-design-${format}.png`);
+  };
   const dlCls = (active: boolean) =>
     cn("inline-flex h-9 items-center gap-1.5 rounded-xl border border-border bg-card px-3 text-xs font-medium transition-colors hover:bg-secondary", !active && "pointer-events-none opacity-50");
 
@@ -972,12 +1002,12 @@ function DesignDialog({
 
         <DialogFooter className="flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex gap-2">
-            <a href={`${base}&format=a4`} download onClick={guardDownload} className={dlCls(!dirty)} title={dirty ? "Avval saqlang" : "A4 yuklab olish"}>
+            <button type="button" onClick={() => dl("a4")} className={dlCls(!dirty)} title={dirty ? "Avval saqlang" : "A4 yuklab olish"}>
               <Download className="h-3.5 w-3.5" /> A4
-            </a>
-            <a href={`${base}&format=instagram`} download onClick={guardDownload} className={dlCls(!dirty)} title={dirty ? "Avval saqlang" : "Instagram yuklab olish"}>
+            </button>
+            <button type="button" onClick={() => dl("instagram")} className={dlCls(!dirty)} title={dirty ? "Avval saqlang" : "Instagram yuklab olish"}>
               <Download className="h-3.5 w-3.5" /> Instagram
-            </a>
+            </button>
           </div>
           <Button className="rounded-xl" disabled={isPending || !dirty} onClick={save}>
             {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Saqlash"}
