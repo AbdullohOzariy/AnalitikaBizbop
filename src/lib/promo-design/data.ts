@@ -28,6 +28,9 @@ export type DesignData = {
   badgeText: string;
   dateText: string; // "25-iyundan 1-iyulgacha"
   fileTag: string;
+  // Banner ko'rinishi: HAFTA_CHEGIRMA — dizayner maketi (katta narx + "Barakali xarid" +
+  // ijtimoiy CTA; eski narx/chegirma % ko'rsatilmaydi), qolgan turlar — klassik.
+  variant: "hafta" | "classic";
 };
 
 type PriceRow = { regularPrice: number; promoPrice: number; promoLimit: number | null };
@@ -70,6 +73,7 @@ function build(p: {
     badgeText: BADGE[p.type] ?? "AKSIYA",
     dateText: formatPromoDateRange(p.startDate, p.endDate),
     fileTag,
+    variant: p.type === "HAFTA_CHEGIRMA" ? "hafta" : "classic",
   };
 }
 

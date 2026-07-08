@@ -11,12 +11,11 @@ import { auth } from "@/auth";
 import { canSeePromo } from "@/lib/roles";
 import { getDesignData } from "@/lib/promo-design/data";
 import { DesignBanner } from "@/lib/promo-design/template";
+import { loadDesignFonts } from "@/lib/promo-design/fonts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const FONT_REG = path.join(process.cwd(), "public/fonts/DejaVuSans.ttf");
-const FONT_BOLD = path.join(process.cwd(), "public/fonts/DejaVuSans-Bold.ttf");
 const LOGO = path.join(process.cwd(), "public/logo.png");
 
 export async function GET(req: Request) {
@@ -34,17 +33,14 @@ export async function GET(req: Request) {
   const data = await getDesignData(kind, id);
   if (!data) return new NextResponse("Topilmadi", { status: 404 });
 
-  const [fontReg, fontBold, logoBuf] = await Promise.all([readFile(FONT_REG), readFile(FONT_BOLD), readFile(LOGO)]);
+  const [fonts, logoBuf] = await Promise.all([loadDesignFonts(), readFile(LOGO)]);
   const logoData = `data:image/png;base64,${logoBuf.toString("base64")}`;
   const { width, height } = format === "a4" ? { width: 1414, height: 1000 } : { width: 1080, height: 1350 };
 
   return new ImageResponse(<DesignBanner data={data} format={format} logoData={logoData} />, {
     width,
     height,
-    fonts: [
-      { name: "DejaVu", data: fontReg, weight: 400, style: "normal" },
-      { name: "DejaVu", data: fontBold, weight: 700, style: "normal" },
-    ],
+    fonts,
     headers: {
       "Content-Disposition": `attachment; filename="aksiya-design-${data.fileTag}-${format}.png"`,
       "Cache-Control": "no-store",

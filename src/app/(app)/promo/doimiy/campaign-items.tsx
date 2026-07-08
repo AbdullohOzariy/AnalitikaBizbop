@@ -252,9 +252,26 @@ export function CampaignItems({
           id={design.id}
           fallbackTitle={design.title}
           onClose={() => setDesign(null)}
+          onSaved={reload}
         />
       )}
     </div>
+  );
+}
+
+/** Rasm yuklangan dizaynni qatorning o'zidan yuklab olish — A4 va Instagram PNG. */
+function RowDesignLinks({ kind, id }: { kind: "item" | "group"; id: number }) {
+  const base = `/api/promo/design?kind=${kind}&id=${id}`;
+  const cls = "inline-flex items-center gap-0.5 rounded-md border border-border bg-card px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-primary";
+  return (
+    <span className="flex items-center gap-1">
+      <a href={`${base}&format=a4`} download className={cls} title="A4 banner (PNG) yuklab olish">
+        <Download className="h-3 w-3" /> A4
+      </a>
+      <a href={`${base}&format=instagram`} download className={cls} title="Instagram banner (PNG) yuklab olish">
+        <Download className="h-3 w-3" /> Insta
+      </a>
+    </span>
   );
 }
 
@@ -325,6 +342,7 @@ function GroupBlock({
             {dragging && !isOver && <span className="text-[10px] text-primary/70">← shu yerga tashlang</span>}
             {canEdit && !renaming && (
               <span className="ml-auto flex items-center gap-0.5">
+                {group.hasImage && <span className="mr-1.5"><RowDesignLinks kind="group" id={group.id} /></span>}
                 {onDesign && (
                   <button onClick={onDesign} title="Dizayn banner (rasm + nom)" aria-label="Dizayn"
                     className="text-muted-foreground hover:text-primary">
@@ -503,6 +521,7 @@ function ItemRow({ row, canEdit, onChanged, grouped, onDragStartItem, onDragEndI
       {canEdit && (
         <td className="px-1 py-1.5">
           <div className="flex items-center justify-center gap-1.5">
+            {onDesign && row.hasImage && <RowDesignLinks kind="item" id={row.id} />}
             {onDesign && !isPending && !saved && (
               <button onClick={onDesign} aria-label="Dizayn" title="Dizayn banner (rasm + nom)" className="text-muted-foreground hover:text-primary">
                 <ImageIcon className="h-3.5 w-3.5" />
@@ -843,12 +862,13 @@ function AddGroupDialog({
  * Instagram formatida PNG yuklab olinadi. Rasm brauzerda canvas bilan kichraytiriladi.
  */
 function DesignDialog({
-  kind, id, fallbackTitle, onClose,
+  kind, id, fallbackTitle, onClose, onSaved,
 }: {
   kind: "item" | "group";
   id: number;
   fallbackTitle: string;
   onClose: () => void;
+  onSaved?: () => void; // saqlangach ro'yxatni yangilash (hasImage/preparedCount)
 }) {
   const [loading, startLoad] = useTransition();
   const [title, setTitle] = useState("");
@@ -888,7 +908,7 @@ function DesignDialog({
         designTitleRu: titleRu.trim() || null,
         imageData: dirty ? imageData : undefined,
       });
-      if (res.ok) { setDirty(false); toast.success("Dizayn saqlandi."); }
+      if (res.ok) { setDirty(false); toast.success("Dizayn saqlandi."); onSaved?.(); }
       else toast.error(res.error);
     });
   };

@@ -13,12 +13,11 @@ import { auth } from "@/auth";
 import { canSeePromo } from "@/lib/roles";
 import { getCampaignDesigns } from "@/lib/promo-design/data";
 import { DesignBanner } from "@/lib/promo-design/template";
+import { loadDesignFonts } from "@/lib/promo-design/fonts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const FONT_REG = path.join(process.cwd(), "public/fonts/DejaVuSans.ttf");
-const FONT_BOLD = path.join(process.cwd(), "public/fonts/DejaVuSans-Bold.ttf");
 const LOGO = path.join(process.cwd(), "public/logo.png");
 
 const FORMATS = [
@@ -50,12 +49,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     );
   }
 
-  const [fontReg, fontBold, logoBuf] = await Promise.all([readFile(FONT_REG), readFile(FONT_BOLD), readFile(LOGO)]);
+  const [fonts, logoBuf] = await Promise.all([loadDesignFonts(), readFile(LOGO)]);
   const logoData = `data:image/png;base64,${logoBuf.toString("base64")}`;
-  const fonts = [
-    { name: "DejaVu", data: fontReg, weight: 400 as const, style: "normal" as const },
-    { name: "DejaVu", data: fontBold, weight: 700 as const, style: "normal" as const },
-  ];
 
   // Ketma-ket render — CPU/xotirani cheklash uchun (Satori og'ir). Nomlar unikal.
   const zip = new JSZip();

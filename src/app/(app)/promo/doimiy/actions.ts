@@ -61,12 +61,14 @@ export type PromoItemRow = {
   promoLimit: number | null; // aksiya limiti (dona)
   priceDiff: number; // = regularPrice − promoPrice (auto)
   pctDiff: number; // = diff / regularPrice * 100 (auto)
+  hasImage: boolean; // dizayn rasmi yuklanganmi (qatorda to'g'ridan-to'g'ri yuklab olish uchun)
 };
 
 export type PromoGroupRow = {
   id: number;
   name: string;
   sortOrder: number;
+  hasImage: boolean; // dizayn rasmi yuklanganmi
 };
 
 // ─── Validatsiya ────────────────────────────────────────────────────────────────
@@ -197,7 +199,7 @@ export async function listItemsAction(
     await requirePromoView();
     const campaignId = idSchema.parse(input.campaignId);
     // preparedCount = rasm yuklangan dizaynlar (guruh + guruhsiz SKU) — birdan yuklash tugmasi uchun.
-    // imageData (Text) yuklanmaydi — faqat IS NOT NULL filtri (yengil count).
+    // imageData (Text) yuklanmaydi — faqat IS NOT NULL filtri bilan id'lar (yengil).
     const [items, groups, gImg, iImg] = await Promise.all([
       prisma.promoItem.findMany({
         where: { campaignId },
@@ -212,12 +214,14 @@ export async function listItemsAction(
         orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
         select: { id: true, name: true, sortOrder: true },
       }),
-      prisma.promoItemGroup.count({ where: { campaignId, imageData: { not: null } } }),
-      prisma.promoItem.count({ where: { campaignId, groupId: null, imageData: { not: null } } }),
+      prisma.promoItemGroup.findMany({ where: { campaignId, imageData: { not: null } }, select: { id: true } }),
+      prisma.promoItem.findMany({ where: { campaignId, imageData: { not: null } }, select: { id: true, groupId: true } }),
     ]);
+    const gImgIds = new Set(gImg.map((x) => x.id));
+    const iImgIds = new Set(iImg.map((x) => x.id));
     return {
       ok: true,
-      preparedCount: gImg + iImg,
+      preparedCount: gImgIds.size + iImg.filter((x) => x.groupId == null).length,
       rows: items.map((it): PromoItemRow => {
         // Decimal → number (Prisma Decimal client'ga uzatib bo'lmaydi). Farq/% saqlanmaydi — hisoblanadi.
         const reg = Number(it.regularPrice);
@@ -234,9 +238,10 @@ export async function listItemsAction(
           promoLimit: it.promoLimit != null ? Number(it.promoLimit) : null,
           priceDiff: diff,
           pctDiff: reg > 0 ? (diff / reg) * 100 : 0,
+          hasImage: iImgIds.has(it.id),
         };
       }),
-      groups: groups.map((g): PromoGroupRow => ({ id: g.id, name: g.name, sortOrder: g.sortOrder })),
+      groups: groups.map((g): PromoGroupRow => ({ id: g.id, name: g.name, sortOrder: g.sortOrder, hasImage: gImgIds.has(g.id) })),
     };
   } catch (err) { return xato(err); }
 }
