@@ -11,6 +11,7 @@ import { Search, X, Loader2, Plus, Trash2, Check, FolderPlus, Folder, Pencil, Gr
 import { cn } from "@/lib/utils";
 import { formatUZS } from "@/lib/format";
 import { toast } from "sonner";
+import { downloadFile } from "../download";
 import {
   listItemsAction, addItemAction, updateItemAction, deleteItemAction,
   searchProductsAction, suggestPriceAction,
@@ -257,33 +258,6 @@ export function CampaignItems({
       )}
     </div>
   );
-}
-
-/** Faylni fetch bilan yuklab olish — server xato qaytarsa (masalan DB/sessiya uzilishi)
- *  brauzer "design.txt" saqlab qo'ymasin, aniq toast chiqsin. */
-async function downloadFile(url: string, fallbackName: string, loadingMsg?: string) {
-  const t = loadingMsg ? toast.loading(loadingMsg) : undefined;
-  try {
-    const res = await fetch(url);
-    if (!res.ok) {
-      const msg = (await res.text().catch(() => "")).slice(0, 200);
-      toast.error(msg || `Yuklab olishda xato (${res.status}) — qayta urinib ko'ring.`);
-      return;
-    }
-    const blob = await res.blob();
-    const m = /filename="?([^";]+)"?/.exec(res.headers.get("Content-Disposition") ?? "");
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = m?.[1] ?? fallbackName;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(a.href);
-  } catch {
-    toast.error("Tarmoq xatosi — internetni tekshirib qayta urinib ko'ring.");
-  } finally {
-    if (t !== undefined) toast.dismiss(t);
-  }
 }
 
 /** Rasm yuklangan dizaynni qatorning o'zidan yuklab olish — A4 va Instagram PNG. */
