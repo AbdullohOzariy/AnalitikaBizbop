@@ -62,13 +62,13 @@ type HSizes = {
 
 const H_A4: HSizes = {
   W: 1414, H: 1000, leftPct: "44%", rightPct: "56%", pad: 60, radius: 90,
-  titleSize: 60, ruSize: 32, oldSize: 38, priceMain: 150, priceSup: 70, priceSom: 48, dateSize: 34,
+  titleSize: 60, ruSize: 32, oldSize: 46, priceMain: 150, priceSup: 70, priceSom: 48, dateSize: 34,
   badgeSize: 30, circleSize: 165, circleText: 32, circlePct: 56, circleTop: 200, circleRight: 110,
   imgW: 560, imgH: 540, ctaSize: 26, ctaW: 600, handleSize: 24, limitSize: 26, showLimit: true,
 };
 const H_INSTA: HSizes = {
   W: 1080, H: 1350, leftPct: "46%", rightPct: "54%", pad: 52, radius: 80,
-  titleSize: 50, ruSize: 26, oldSize: 36, priceMain: 185, priceSup: 84, priceSom: 58, dateSize: 30,
+  titleSize: 50, ruSize: 26, oldSize: 44, priceMain: 185, priceSup: 84, priceSom: 58, dateSize: 30,
   badgeSize: 28, circleSize: 160, circleText: 30, circlePct: 54, circleTop: 380, circleRight: 100,
   imgW: 460, imgH: 600, ctaSize: 27, ctaW: 470, handleSize: 25, limitSize: 24, showLimit: false,
 };
@@ -104,9 +104,18 @@ function HaftaBanner({ data, S, logoData }: { data: DesignData; S: HSizes; logoD
         {/* narx — supermarket uslubi, pastga surilgan (maket bo'yicha); tepasida eski narx */}
         <div style={{ display: "flex", flexGrow: 1, flexDirection: "column", justifyContent: "flex-end" }}>
           {data.regularPrice > data.promoPrice && (
-            <div style={{ display: "flex", alignItems: "baseline", fontSize: S.oldSize, color: "#dcfce7", marginBottom: 14 }}>
-              <span style={{ fontFamily: "Golos", textDecoration: "line-through" }}>{money(data.regularPrice)}</span>
-              <span style={{ marginLeft: 10, textDecoration: "line-through" }}>so&apos;m</span>
+            /* Yaxlit ustma chiziq: text-decoration span'lar orasida uzilib, balandligi
+               farq qilardi (Golos va VelaSans metrikalari har xil) — o'rniga bitta
+               absolute chiziq butun blok bo'ylab, vertikal o'rtadan. */
+            <div
+              style={{
+                display: "flex", position: "relative", alignSelf: "flex-start", alignItems: "baseline",
+                fontSize: S.oldSize, color: "#dcfce7", marginBottom: 14,
+              }}
+            >
+              <span style={{ fontFamily: "Golos" }}>{money(data.regularPrice)}</span>
+              <span style={{ marginLeft: 10 }}>so&apos;m</span>
+              <div style={{ position: "absolute", left: 0, right: 0, top: "52%", height: Math.max(3, Math.round(S.oldSize * 0.09)), backgroundColor: "#dcfce7" }} />
             </div>
           )}
           <div style={{ display: "flex", alignItems: "flex-start", color: "#ffffff" }}>
