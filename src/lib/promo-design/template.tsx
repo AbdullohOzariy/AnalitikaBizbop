@@ -44,15 +44,17 @@ const INSTA: Sizes = {
 };
 
 // ─── HAFTA CHEGIRMASI varianti (dizayner maketi) ────────────────────────────────
-// Farqlar: narx supermarket uslubida (katta + ko'tarilgan mayda qism), eski narx va
-// chegirma % YO'Q, ko'k doira "Barakali xarid", pastda ijtimoiy tarmoq CTA + handle.
+// Farqlar: narx supermarket uslubida (katta + ko'tarilgan mayda qism), tepasida eski
+// narx (ustma chizilgan); ko'k doira chegirma bo'lsa "-N% TEJANG", bo'lmasa "Barakali
+// xarid"; pastda ijtimoiy tarmoq CTA + handle.
 
 // DIQQAT: o'ng panelga ANIQ kenglik (rightPct) shart — flexGrow bo'lsa uzun CTA matni
 // panelni kontent eniga cho'zib, hammasini kanvasdan chiqarib yuboradi (Yoga min-width).
 type HSizes = {
   W: number; H: number; leftPct: string; rightPct: string; pad: number; radius: number;
-  titleSize: number; ruSize: number; priceMain: number; priceSup: number; priceSom: number;
-  dateSize: number; badgeSize: number; circleSize: number; circleText: number;
+  titleSize: number; ruSize: number; oldSize: number;
+  priceMain: number; priceSup: number; priceSom: number;
+  dateSize: number; badgeSize: number; circleSize: number; circleText: number; circlePct: number;
   circleTop: number; circleRight: number; imgW: number; imgH: number;
   ctaSize: number; ctaW: number; handleSize: number; limitSize: number;
   showLimit: boolean; // limit qatori faqat A4 (chop) formatida ko'rsatiladi
@@ -60,14 +62,14 @@ type HSizes = {
 
 const H_A4: HSizes = {
   W: 1414, H: 1000, leftPct: "44%", rightPct: "56%", pad: 60, radius: 90,
-  titleSize: 60, ruSize: 32, priceMain: 150, priceSup: 70, priceSom: 48, dateSize: 34,
-  badgeSize: 30, circleSize: 165, circleText: 32, circleTop: 200, circleRight: 110,
+  titleSize: 60, ruSize: 32, oldSize: 38, priceMain: 150, priceSup: 70, priceSom: 48, dateSize: 34,
+  badgeSize: 30, circleSize: 165, circleText: 32, circlePct: 56, circleTop: 200, circleRight: 110,
   imgW: 560, imgH: 540, ctaSize: 26, ctaW: 600, handleSize: 24, limitSize: 26, showLimit: true,
 };
 const H_INSTA: HSizes = {
   W: 1080, H: 1350, leftPct: "46%", rightPct: "54%", pad: 52, radius: 80,
-  titleSize: 50, ruSize: 26, priceMain: 185, priceSup: 84, priceSom: 58, dateSize: 30,
-  badgeSize: 28, circleSize: 160, circleText: 30, circleTop: 380, circleRight: 100,
+  titleSize: 50, ruSize: 26, oldSize: 36, priceMain: 185, priceSup: 84, priceSom: 58, dateSize: 30,
+  badgeSize: 28, circleSize: 160, circleText: 30, circlePct: 54, circleTop: 380, circleRight: 100,
   imgW: 460, imgH: 600, ctaSize: 27, ctaW: 470, handleSize: 25, limitSize: 24, showLimit: false,
 };
 
@@ -99,8 +101,14 @@ function HaftaBanner({ data, S, logoData }: { data: DesignData; S: HSizes; logoD
           )}
         </div>
 
-        {/* narx — supermarket uslubi, pastga surilgan (maket bo'yicha) */}
-        <div style={{ display: "flex", flexGrow: 1, alignItems: "flex-end" }}>
+        {/* narx — supermarket uslubi, pastga surilgan (maket bo'yicha); tepasida eski narx */}
+        <div style={{ display: "flex", flexGrow: 1, flexDirection: "column", justifyContent: "flex-end" }}>
+          {data.regularPrice > data.promoPrice && (
+            <div style={{ display: "flex", alignItems: "baseline", fontSize: S.oldSize, color: "#dcfce7", marginBottom: 14 }}>
+              <span style={{ fontFamily: "Golos", textDecoration: "line-through" }}>{money(data.regularPrice)}</span>
+              <span style={{ marginLeft: 10, textDecoration: "line-through" }}>so&apos;m</span>
+            </div>
+          )}
           <div style={{ display: "flex", alignItems: "flex-start", color: "#ffffff" }}>
             <div style={{ display: "flex", fontSize: S.priceMain, fontWeight: 700, fontFamily: "Golos", lineHeight: 0.8 }}>
               {price.main}
@@ -154,7 +162,7 @@ function HaftaBanner({ data, S, logoData }: { data: DesignData; S: HSizes; logoD
           <img src={img} width={S.imgW} height={S.imgH} style={{ objectFit: "contain", opacity: placeholder ? 0.2 : 1 }} alt="" />
         </div>
 
-        {/* "Barakali xarid" doirasi (absolute, rasm ustida) */}
+        {/* Ko'k doira (absolute, rasm ustida): chegirma bo'lsa foiz, bo'lmasa "Barakali xarid" */}
         <div
           style={{
             display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
@@ -162,8 +170,22 @@ function HaftaBanner({ data, S, logoData }: { data: DesignData; S: HSizes; logoD
             width: S.circleSize, height: S.circleSize, borderRadius: 9999, backgroundColor: BLUE,
           }}
         >
-          <div style={{ display: "flex", fontSize: S.circleText, fontWeight: 700, color: "#ffffff", lineHeight: 1.15 }}>Barakali</div>
-          <div style={{ display: "flex", fontSize: S.circleText, fontWeight: 700, color: "#ffffff", lineHeight: 1.15 }}>xarid</div>
+          {/* Fragment EMAS — satori fragment bolalarini row qilib yotqizadi; column div shart */}
+          {data.discountPct > 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+              <div style={{ display: "flex", fontSize: S.circlePct, fontWeight: 700, color: "#ffffff", lineHeight: 1, fontFamily: "Golos" }}>
+                -{data.discountPct}%
+              </div>
+              <div style={{ display: "flex", fontSize: Math.round(S.circlePct * 0.4), fontWeight: 700, color: "#ffffff", marginTop: 5 }}>
+                TEJANG
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+              <div style={{ display: "flex", fontSize: S.circleText, fontWeight: 700, color: "#ffffff", lineHeight: 1.15 }}>Barakali</div>
+              <div style={{ display: "flex", fontSize: S.circleText, fontWeight: 700, color: "#ffffff", lineHeight: 1.15 }}>xarid</div>
+            </div>
+          )}
         </div>
 
         {/* ijtimoiy tarmoq CTA + handle */}
