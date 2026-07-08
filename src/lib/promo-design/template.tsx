@@ -21,6 +21,24 @@ const GREEN = "#22C55E";
 const GREEN_DARK = "#15803D";
 const BLUE = "#2563EB";
 
+/** Mahsulot rasmi — imageZoom (x1..x4) bilan: qat'iy o'lchamli overflow-hidden qutida
+ *  rasm zoom marta kattalashtiriladi (markazdan qirqiladi). Placeholder'da zoom yo'q. */
+function ProductImage({ src, w, h, zoom, placeholder }: { src: string; w: number; h: number; zoom: number; placeholder: boolean }) {
+  const z = placeholder ? 1 : Math.min(4, Math.max(1, zoom || 1));
+  return (
+    <div style={{ display: "flex", width: w, height: h, alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        width={w * z}
+        height={h * z}
+        style={{ objectFit: "contain", opacity: placeholder ? 0.2 : 1, flexShrink: 0 }}
+        alt=""
+      />
+    </div>
+  );
+}
+
 type Format = "a4" | "instagram";
 
 type Sizes = {
@@ -167,8 +185,7 @@ function HaftaBanner({ data, S, logoData }: { data: DesignData; S: HSizes; logoD
 
         {/* mahsulot rasmi (markaz) */}
         <div style={{ display: "flex", flexGrow: 1, alignItems: "center", justifyContent: "center" }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={img} width={S.imgW} height={S.imgH} style={{ objectFit: "contain", opacity: placeholder ? 0.2 : 1 }} alt="" />
+          <ProductImage src={img} w={S.imgW} h={S.imgH} zoom={data.imageZoom} placeholder={placeholder} />
         </div>
 
         {/* Ko'k doira (absolute, rasm ustida): chegirma bo'lsa foiz, bo'lmasa "Barakali xarid" */}
@@ -282,8 +299,7 @@ export function DesignBanner({ data, format, logoData }: { data: DesignData; for
 
         {/* mahsulot rasmi (markaz) */}
         <div style={{ display: "flex", flexGrow: 1, alignItems: "center", justifyContent: "center" }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={img} width={S.imgW} height={S.imgH} style={{ objectFit: "contain", opacity: placeholder ? 0.2 : 1 }} alt="" />
+          <ProductImage src={img} w={S.imgW} h={S.imgH} zoom={data.imageZoom} placeholder={placeholder} />
         </div>
 
         {/* chegirma doirasi (absolute, o'ng-yuqori) */}

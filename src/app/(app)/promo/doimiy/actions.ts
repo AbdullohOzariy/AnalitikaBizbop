@@ -383,19 +383,22 @@ const saveDesignSchema = z.object({
   designTitleRu: z.string().trim().max(200).nullable().optional(),
   // base64 data URL (client canvas resize qilingan); ~900KB cheklov (server-action 1MB limiti).
   imageData: z.string().max(900_000).regex(/^data:image\/(png|webp);base64,/, "Rasm formati noto'g'ri").nullable().optional(),
+  imageZoom: z.number().int().min(1).max(4).optional(), // rasm yaqinlashtirish (x1..x4)
 });
 
 export async function saveDesignAction(input: {
-  kind: "item" | "group"; id: number; designTitle?: string | null; designTitleRu?: string | null; imageData?: string | null;
+  kind: "item" | "group"; id: number; designTitle?: string | null; designTitleRu?: string | null;
+  imageData?: string | null; imageZoom?: number;
 }): Promise<Result> {
   try {
     await requirePromoEdit();
     const p = saveDesignSchema.parse(input);
-    const data: { designTitle: string | null; designTitleRu: string | null; imageData?: string | null } = {
+    const data: { designTitle: string | null; designTitleRu: string | null; imageData?: string | null; imageZoom?: number } = {
       designTitle: p.designTitle?.trim() || null,
       designTitleRu: p.designTitleRu?.trim() || null,
     };
     if (p.imageData !== undefined) data.imageData = p.imageData; // undefined = rasm o'zgartirilmaydi
+    if (p.imageZoom !== undefined) data.imageZoom = p.imageZoom;
     if (p.kind === "group") await prisma.promoItemGroup.update({ where: { id: p.id }, data });
     else await prisma.promoItem.update({ where: { id: p.id }, data });
     invalidate();
@@ -404,7 +407,7 @@ export async function saveDesignAction(input: {
 }
 
 // Dizayn dialog ochilganda nom + rasm (katta base64) — listItemsAction'ga kirmaydi (yengil).
-export type DesignFields = { designTitle: string | null; designTitleRu: string | null; imageData: string | null };
+export type DesignFields = { designTitle: string | null; designTitleRu: string | null; imageData: string | null; imageZoom: number };
 
 export async function getDesignAction(input: {
   kind: "item" | "group"; id: number;
@@ -413,10 +416,10 @@ export async function getDesignAction(input: {
     await requirePromoView();
     const p = z.object({ kind: z.enum(["item", "group"]), id: idSchema }).parse(input);
     const row = p.kind === "group"
-      ? await prisma.promoItemGroup.findUnique({ where: { id: p.id }, select: { designTitle: true, designTitleRu: true, imageData: true } })
-      : await prisma.promoItem.findUnique({ where: { id: p.id }, select: { designTitle: true, designTitleRu: true, imageData: true } });
+      ? await prisma.promoItemGroup.findUnique({ where: { id: p.id }, select: { designTitle: true, designTitleRu: true, imageData: true, imageZoom: true } })
+      : await prisma.promoItem.findUnique({ where: { id: p.id }, select: { designTitle: true, designTitleRu: true, imageData: true, imageZoom: true } });
     if (!row) return { ok: false, error: "Topilmadi." };
-    return { ok: true, design: { designTitle: row.designTitle, designTitleRu: row.designTitleRu, imageData: row.imageData } };
+    return { ok: true, design: { designTitle: row.designTitle, designTitleRu: row.designTitleRu, imageData: row.imageData, imageZoom: row.imageZoom } };
   } catch (err) { return xato(err); }
 }
 

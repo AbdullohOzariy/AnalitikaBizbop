@@ -1000,6 +1000,7 @@ model PromoItemGroup {
   designTitle   String? // dizayn banner uchun chiroyli nom (uz); null = guruh nomi fallback
   designTitleRu String? // ixtiyoriy ru qator (null = ko'rsatilmaydi)
   imageData     String?  @db.Text // oq/shaffof fonli mahsulot rasmi — "data:image/png;base64,..."
+  imageZoom     Int      @default(1) // dizayn banner rasm yaqinlashtirish (x1..x4) — kattaroq ko'rinish uchun
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -1022,6 +1023,7 @@ model PromoItem {
   designTitle   String? // dizayn banner uchun chiroyli nom (uz; guruhsiz SKU uchun) — null = Product.name fallback
   designTitleRu String? // ixtiyoriy ru qator (null = ko'rsatilmaydi)
   imageData     String?  @db.Text // oq/shaffof fonli mahsulot rasmi — "data:image/png;base64,..."
+  imageZoom     Int      @default(1) // dizayn banner rasm yaqinlashtirish (x1..x4) — kattaroq ko'rinish uchun
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

@@ -901,6 +901,7 @@ function DesignDialog({
   const [title, setTitle] = useState("");
   const [titleRu, setTitleRu] = useState("");
   const [imageData, setImageData] = useState<string | null>(null);
+  const [zoom, setZoom] = useState(1); // rasm yaqinlashtirish (x1..x4)
   const [dirty, setDirty] = useState(false); // saqlanmagan o'zgarish bormi
   const [isPending, startSave] = useTransition();
   const reqId = useRef(0);
@@ -910,8 +911,12 @@ function DesignDialog({
     startLoad(async () => {
       const res = await getDesignAction({ kind, id });
       if (my !== reqId.current) return;
-      if (res.ok) { setTitle(res.design.designTitle ?? ""); setTitleRu(res.design.designTitleRu ?? ""); setImageData(res.design.imageData); }
-      else toast.error(res.error);
+      if (res.ok) {
+        setTitle(res.design.designTitle ?? "");
+        setTitleRu(res.design.designTitleRu ?? "");
+        setImageData(res.design.imageData);
+        setZoom(res.design.imageZoom ?? 1);
+      } else toast.error(res.error);
     });
   }, [kind, id]);
 
@@ -934,6 +939,7 @@ function DesignDialog({
         designTitle: title.trim() || null,
         designTitleRu: titleRu.trim() || null,
         imageData: dirty ? imageData : undefined,
+        imageZoom: zoom,
       });
       if (res.ok) { setDirty(false); toast.success("Dizayn saqlandi."); onSaved?.(); }
       else toast.error(res.error);
@@ -976,10 +982,10 @@ function DesignDialog({
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Mahsulot rasmi (oq/shaffof fonli PNG)</Label>
               {imageData ? (
-                <div className="relative flex items-center justify-center rounded-xl border border-border p-3"
+                <div className="relative flex items-center justify-center overflow-hidden rounded-xl border border-border p-3"
                   style={{ backgroundImage: "repeating-conic-gradient(#eef2f6 0% 25%, #ffffff 0% 50%)", backgroundSize: "20px 20px" }}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={imageData} alt="" className="max-h-44 object-contain" />
+                  <img src={imageData} alt="" className="max-h-44 object-contain" style={{ transform: zoom > 1 ? `scale(${zoom})` : undefined }} />
                   <label className="absolute bottom-2 right-2 inline-flex cursor-pointer items-center gap-1 rounded-lg bg-card/90 px-2 py-1 text-[11px] text-primary shadow hover:bg-card">
                     <Upload className="h-3 w-3" /> Boshqa rasm
                     <input type="file" accept="image/png,image/webp" className="hidden" onChange={onFile} disabled={isPending} />
@@ -995,6 +1001,25 @@ function DesignDialog({
                   PNG yuklash (oq yoki shaffof fon)
                   <input type="file" accept="image/png,image/webp" className="hidden" onChange={onFile} disabled={isPending} />
                 </label>
+              )}
+              {imageData && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground">Yaqinlashtirish:</span>
+                  {[1, 2, 3, 4].map((z) => (
+                    <button
+                      key={z}
+                      type="button"
+                      disabled={isPending}
+                      onClick={() => { setZoom(z); setDirty(true); }}
+                      className={cn(
+                        "rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors",
+                        zoom === z ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground hover:bg-secondary"
+                      )}
+                    >
+                      x{z}
+                    </button>
+                  ))}
+                </div>
               )}
             </div>
           </div>
