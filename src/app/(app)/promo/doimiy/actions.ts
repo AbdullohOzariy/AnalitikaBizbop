@@ -384,11 +384,12 @@ const saveDesignSchema = z.object({
   // base64 data URL (client canvas resize qilingan); ~900KB cheklov (server-action 1MB limiti).
   imageData: z.string().max(900_000).regex(/^data:image\/(png|webp);base64,/, "Rasm formati noto'g'ri").nullable().optional(),
   imageZoom: z.number().min(1).max(2).optional(), // rasm kattalashtirish (x1..x2, kasr: 1.3/1.7)
+  promoLimit: limitSchema, // dizayn dialogidan limit (bannerdagi "limit: Nta"); undefined = tegilmaydi
 });
 
 export async function saveDesignAction(input: {
   kind: "item" | "group"; id: number; designTitle?: string | null; designTitleRu?: string | null;
-  imageData?: string | null; imageZoom?: number;
+  imageData?: string | null; imageZoom?: number; promoLimit?: number | null;
 }): Promise<Result> {
   try {
     await requirePromoEdit();
@@ -399,15 +400,44 @@ export async function saveDesignAction(input: {
     };
     if (p.imageData !== undefined) data.imageData = p.imageData; // undefined = rasm o'zgartirilmaydi
     if (p.imageZoom !== undefined) data.imageZoom = p.imageZoom;
-    if (p.kind === "group") await prisma.promoItemGroup.update({ where: { id: p.id }, data });
-    else await prisma.promoItem.update({ where: { id: p.id }, data });
+    if (p.kind === "group") {
+      await prisma.promoItemGroup.update({ where: { id: p.id }, data });
+      // Limit — guruhdagi BARCHA SKU'larga qo'llanadi (banner limitni item'lardan oladi).
+      if (p.promoLimit !== undefined) {
+        await prisma.promoItem.updateMany({ where: { groupId: p.id }, data: { promoLimit: p.promoLimit ?? null } });
+      }
+    } else {
+      await prisma.promoItem.update({
+        where: { id: p.id },
+        data: p.promoLimit !== undefined ? { ...data, promoLimit: p.promoLimit ?? null } : data,
+      });
+      // Rasm mahsulotda MASTER sifatida saqlanadi — keyingi aksiyaga shu SKU qo'shilganda
+      // avtomatik meros bo'ladi. Faqat rasm/zoom o'zgarganda va item'da rasm mavjud bo'lsa
+      // yoziladi (rasm olib tashlansa master o'chirilmaydi).
+      if (p.imageData !== undefined || p.imageZoom !== undefined) {
+        const it = await prisma.promoItem.findUnique({
+          where: { id: p.id },
+          select: { productId: true, imageData: true, imageZoom: true },
+        });
+        if (it?.imageData) {
+          await prisma.product.update({
+            where: { id: it.productId },
+            data: { imageData: it.imageData, imageZoom: it.imageZoom },
+          });
+        }
+      }
+    }
     invalidate();
     return { ok: true };
   } catch (err) { return xato(err); }
 }
 
 // Dizayn dialog ochilganda nom + rasm (katta base64) — listItemsAction'ga kirmaydi (yengil).
-export type DesignFields = { designTitle: string | null; designTitleRu: string | null; imageData: string | null; imageZoom: number };
+// promoLimit: item — o'z limiti; guruh — barcha SKU'lar bir xil bo'lsa shu qiymat, aks holda null.
+export type DesignFields = {
+  designTitle: string | null; designTitleRu: string | null;
+  imageData: string | null; imageZoom: number; promoLimit: number | null;
+};
 
 export async function getDesignAction(input: {
   kind: "item" | "group"; id: number;
@@ -415,11 +445,35 @@ export async function getDesignAction(input: {
   try {
     await requirePromoView();
     const p = z.object({ kind: z.enum(["item", "group"]), id: idSchema }).parse(input);
-    const row = p.kind === "group"
-      ? await prisma.promoItemGroup.findUnique({ where: { id: p.id }, select: { designTitle: true, designTitleRu: true, imageData: true, imageZoom: true } })
-      : await prisma.promoItem.findUnique({ where: { id: p.id }, select: { designTitle: true, designTitleRu: true, imageData: true, imageZoom: true } });
+    if (p.kind === "group") {
+      const g = await prisma.promoItemGroup.findUnique({
+        where: { id: p.id },
+        select: {
+          designTitle: true, designTitleRu: true, imageData: true, imageZoom: true,
+          items: { select: { promoLimit: true } },
+        },
+      });
+      if (!g) return { ok: false, error: "Topilmadi." };
+      const limits = g.items.map((it) => (it.promoLimit != null ? Number(it.promoLimit) : null));
+      const uniform = limits.length > 0 && limits.every((l) => l === limits[0]) ? limits[0] : null;
+      return {
+        ok: true,
+        design: { designTitle: g.designTitle, designTitleRu: g.designTitleRu, imageData: g.imageData, imageZoom: g.imageZoom, promoLimit: uniform },
+      };
+    }
+    const row = await prisma.promoItem.findUnique({
+      where: { id: p.id },
+      select: { designTitle: true, designTitleRu: true, imageData: true, imageZoom: true, promoLimit: true },
+    });
     if (!row) return { ok: false, error: "Topilmadi." };
-    return { ok: true, design: { designTitle: row.designTitle, designTitleRu: row.designTitleRu, imageData: row.imageData, imageZoom: row.imageZoom } };
+    return {
+      ok: true,
+      design: {
+        designTitle: row.designTitle, designTitleRu: row.designTitleRu,
+        imageData: row.imageData, imageZoom: row.imageZoom,
+        promoLimit: row.promoLimit != null ? Number(row.promoLimit) : null,
+      },
+    };
   } catch (err) { return xato(err); }
 }
 
@@ -467,6 +521,11 @@ export async function addItemAction(input: {
   try {
     await requirePromoEdit();
     const p = addItemSchema.parse(input);
+    // Mahsulotning master dizayn rasmi (avvalgi aksiyada yuklangan) — yangi item'ga meros.
+    const prod = await prisma.product.findUnique({
+      where: { id: p.productId },
+      select: { imageData: true, imageZoom: true },
+    });
     const it = await prisma.promoItem.create({
       data: {
         campaignId: p.campaignId,
@@ -474,6 +533,8 @@ export async function addItemAction(input: {
         regularPrice: p.regularPrice,
         promoPrice: p.promoPrice,
         promoLimit: p.promoLimit ?? null,
+        imageData: prod?.imageData ?? null,
+        imageZoom: prod?.imageZoom ?? 1,
       },
       select: { id: true },
     });

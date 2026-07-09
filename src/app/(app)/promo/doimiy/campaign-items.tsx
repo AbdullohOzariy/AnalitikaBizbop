@@ -1171,6 +1171,10 @@ function DesignDialog({
   const [titleRu, setTitleRu] = useState("");
   const [imageData, setImageData] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1); // rasm yaqinlashtirish (x1..x2, kasr ham)
+  const [limit, setLimit] = useState(""); // bannerdagi limit (dona); guruhda barcha SKU'larga qo'llanadi
+  // Limit faqat foydalanuvchi O'ZGARTIRGANDA yuboriladi — guruhda limitlar har xil bo'lsa
+  // dialog bo'sh ko'rsatadi va tegilmagan holda saqlash ularni o'chirib yubormasligi kerak.
+  const [limitDirty, setLimitDirty] = useState(false);
   const [dirty, setDirty] = useState(false); // saqlanmagan o'zgarish bormi
   const [isPending, startSave] = useTransition();
   const reqId = useRef(0);
@@ -1185,6 +1189,7 @@ function DesignDialog({
         setTitleRu(res.design.designTitleRu ?? "");
         setImageData(res.design.imageData);
         setZoom(res.design.imageZoom ?? 1);
+        setLimit(res.design.promoLimit != null ? String(res.design.promoLimit) : "");
       } else toast.error(res.error);
     });
   }, [kind, id]);
@@ -1202,6 +1207,8 @@ function DesignDialog({
   };
 
   const save = () => {
+    const limitN = limit.trim() === "" ? null : Number(limit);
+    if (limitDirty && limitN != null && !(limitN > 0)) { toast.error("Limit musbat son bo'lishi kerak."); return; }
     startSave(async () => {
       const res = await saveDesignAction({
         kind, id,
@@ -1209,8 +1216,9 @@ function DesignDialog({
         designTitleRu: titleRu.trim() || null,
         imageData: dirty ? imageData : undefined,
         imageZoom: zoom,
+        promoLimit: limitDirty ? limitN : undefined,
       });
-      if (res.ok) { setDirty(false); toast.success("Dizayn saqlandi."); onSaved?.(); }
+      if (res.ok) { setDirty(false); setLimitDirty(false); toast.success("Dizayn saqlandi."); onSaved?.(); }
       else toast.error(res.error);
     });
   };
@@ -1246,6 +1254,16 @@ function DesignDialog({
               <Label className="text-xs text-muted-foreground">Nom (ru, ixtiyoriy)</Label>
               <Input value={titleRu} disabled={isPending} placeholder="Молочный коктейль…"
                 onChange={(e) => { setTitleRu(e.target.value); setDirty(true); }} className="h-9" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">
+                Limit (dona, ixtiyoriy) — bannerda &quot;Barchaga birdek yetishi uchun limit&quot;
+              </Label>
+              <Input value={limit} disabled={isPending} type="number" inputMode="decimal" placeholder="—"
+                onChange={(e) => { setLimit(e.target.value); setLimitDirty(true); setDirty(true); }} className="h-9" />
+              {kind === "group" && (
+                <p className="text-[11px] text-muted-foreground">Guruhdagi barcha SKU&apos;larga qo&apos;llanadi.</p>
+              )}
             </div>
 
             <div className="space-y-1.5">

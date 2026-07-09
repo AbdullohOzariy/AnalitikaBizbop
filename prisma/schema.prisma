@@ -387,6 +387,8 @@ model Product {
   packSize       Decimal?  @db.Decimal(20, 3) // pachkadagi dona soni/hajmi (og'irlik/hajm uchun kasr ham) — buyurtmada eslab qolinadi
   purchasePrice  Decimal?  @db.Decimal(20, 2) // kelishilgan sotib olish narxi (dona) — zakazdan eslab qolinadi
   lastSalePeriod DateTime? @db.Date // so'nggi yuklangan davr (eskini bosib o'tmaslik uchun)
+  imageData      String?   @db.Text // promo dizayn banner master rasmi — item saqlanganda shu yerga ham yoziladi, yangi aksiyada meros
+  imageZoom      Float     @default(1) // master rasm kattalashtirish (x1..x2)
 
   category          Category?            @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   supplier          Supplier?            @relation(fields: [supplierId], references: [id], onDelete: SetNull)

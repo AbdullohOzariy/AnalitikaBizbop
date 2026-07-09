@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Product" ADD COLUMN     "imageData" TEXT,
+ADD COLUMN     "imageZoom" DOUBLE PRECISION NOT NULL DEFAULT 1;
