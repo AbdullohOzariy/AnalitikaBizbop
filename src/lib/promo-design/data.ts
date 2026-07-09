@@ -26,6 +26,7 @@ export type DesignData = {
   promoPrice: number;
   discountPct: number; // butun foiz (regularPrice'dan tejaganini)
   limitN: number | null;
+  limitUnit: string; // limit birligi: dona/ta/kg (dizayn dialogida tanlanadi)
   badgeText: string;
   dateText: string; // "25-iyundan 1-iyulgacha"
   fileTag: string;
@@ -57,7 +58,7 @@ function pickPrice(items: PriceRow[]): { regular: number; promo: number; limit: 
 function build(p: {
   kind: "item" | "group"; id: number;
   titleUz: string; titleRu: string | null; imageData: string | null; imageZoom: number;
-  regular: number; promo: number; limit: number | null;
+  regular: number; promo: number; limit: number | null; limitUnit: string;
   type: PromoType; startDate: Date; endDate: Date | null;
 }): DesignData {
   const discountPct = p.regular > 0 ? Math.round((1 - p.promo / p.regular) * 100) : 0;
@@ -73,6 +74,7 @@ function build(p: {
     promoPrice: p.promo,
     discountPct,
     limitN: p.limit,
+    limitUnit: p.limitUnit,
     badgeText: BADGE[p.type] ?? "AKSIYA",
     dateText: formatPromoDateRange(p.startDate, p.endDate),
     fileTag,
@@ -85,7 +87,7 @@ export async function getDesignData(kind: "item" | "group", id: number): Promise
     const g = await prisma.promoItemGroup.findUnique({
       where: { id },
       select: {
-        name: true, designTitle: true, designTitleRu: true, imageData: true, imageZoom: true,
+        name: true, designTitle: true, designTitleRu: true, imageData: true, imageZoom: true, limitUnit: true,
         campaign: { select: { type: true, startDate: true, endDate: true } },
         items: { select: { regularPrice: true, promoPrice: true, promoLimit: true } },
       },
@@ -103,7 +105,7 @@ export async function getDesignData(kind: "item" | "group", id: number): Promise
       titleRu: g.designTitleRu?.trim() || null,
       imageData: g.imageData,
       imageZoom: g.imageZoom,
-      regular: price.regular, promo: price.promo, limit: price.limit,
+      regular: price.regular, promo: price.promo, limit: price.limit, limitUnit: g.limitUnit,
       type: g.campaign.type, startDate: g.campaign.startDate, endDate: g.campaign.endDate,
     });
   }
@@ -111,7 +113,7 @@ export async function getDesignData(kind: "item" | "group", id: number): Promise
   const it = await prisma.promoItem.findUnique({
     where: { id },
     select: {
-      designTitle: true, designTitleRu: true, imageData: true, imageZoom: true,
+      designTitle: true, designTitleRu: true, imageData: true, imageZoom: true, limitUnit: true,
       regularPrice: true, promoPrice: true, promoLimit: true,
       product: { select: { name: true } },
       campaign: { select: { type: true, startDate: true, endDate: true } },
@@ -127,6 +129,7 @@ export async function getDesignData(kind: "item" | "group", id: number): Promise
     regular: Number(it.regularPrice),
     promo: Number(it.promoPrice),
     limit: it.promoLimit != null ? Number(it.promoLimit) : null,
+    limitUnit: it.limitUnit,
     type: it.campaign.type, startDate: it.campaign.startDate, endDate: it.campaign.endDate,
   });
 }
@@ -147,7 +150,7 @@ export async function getCampaignDesigns(
       itemGroups: {
         orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
         select: {
-          id: true, name: true, designTitle: true, designTitleRu: true, imageData: true, imageZoom: true,
+          id: true, name: true, designTitle: true, designTitleRu: true, imageData: true, imageZoom: true, limitUnit: true,
           items: { select: { regularPrice: true, promoPrice: true, promoLimit: true } },
         },
       },
@@ -155,7 +158,7 @@ export async function getCampaignDesigns(
         where: { groupId: null },
         orderBy: { id: "asc" },
         select: {
-          id: true, designTitle: true, designTitleRu: true, imageData: true, imageZoom: true,
+          id: true, designTitle: true, designTitleRu: true, imageData: true, imageZoom: true, limitUnit: true,
           regularPrice: true, promoPrice: true, promoLimit: true,
           product: { select: { name: true } },
         },
@@ -179,7 +182,7 @@ export async function getCampaignDesigns(
       titleRu: g.designTitleRu?.trim() || null,
       imageData: g.imageData,
       imageZoom: g.imageZoom,
-      regular: price.regular, promo: price.promo, limit: price.limit,
+      regular: price.regular, promo: price.promo, limit: price.limit, limitUnit: g.limitUnit,
       type: c.type, startDate: c.startDate, endDate: c.endDate,
     }));
   }
@@ -194,6 +197,7 @@ export async function getCampaignDesigns(
       regular: Number(it.regularPrice),
       promo: Number(it.promoPrice),
       limit: it.promoLimit != null ? Number(it.promoLimit) : null,
+      limitUnit: it.limitUnit,
       type: c.type, startDate: c.startDate, endDate: c.endDate,
     }));
   }

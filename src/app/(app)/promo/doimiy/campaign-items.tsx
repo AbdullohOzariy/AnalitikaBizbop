@@ -1171,7 +1171,8 @@ function DesignDialog({
   const [titleRu, setTitleRu] = useState("");
   const [imageData, setImageData] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1); // rasm yaqinlashtirish (x1..x2, kasr ham)
-  const [limit, setLimit] = useState(""); // bannerdagi limit (dona); guruhda barcha SKU'larga qo'llanadi
+  const [limit, setLimit] = useState(""); // bannerdagi limit; guruhda barcha SKU'larga qo'llanadi
+  const [limitUnit, setLimitUnit] = useState<"dona" | "ta" | "kg">("dona"); // limit birligi
   // Limit faqat foydalanuvchi O'ZGARTIRGANDA yuboriladi — guruhda limitlar har xil bo'lsa
   // dialog bo'sh ko'rsatadi va tegilmagan holda saqlash ularni o'chirib yubormasligi kerak.
   const [limitDirty, setLimitDirty] = useState(false);
@@ -1190,6 +1191,7 @@ function DesignDialog({
         setImageData(res.design.imageData);
         setZoom(res.design.imageZoom ?? 1);
         setLimit(res.design.promoLimit != null ? String(res.design.promoLimit) : "");
+        setLimitUnit((["dona", "ta", "kg"].includes(res.design.limitUnit) ? res.design.limitUnit : "dona") as "dona" | "ta" | "kg");
       } else toast.error(res.error);
     });
   }, [kind, id]);
@@ -1217,6 +1219,7 @@ function DesignDialog({
         imageData: dirty ? imageData : undefined,
         imageZoom: zoom,
         promoLimit: limitDirty ? limitN : undefined,
+        limitUnit,
       });
       if (res.ok) { setDirty(false); setLimitDirty(false); toast.success("Dizayn saqlandi."); onSaved?.(); }
       else toast.error(res.error);
@@ -1257,10 +1260,26 @@ function DesignDialog({
             </div>
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">
-                Limit (dona, ixtiyoriy) — bannerda &quot;Barchaga birdek yetishi uchun limit&quot;
+                Limit (ixtiyoriy) — bannerda &quot;Barchaga birdek yetishi uchun limit&quot;
               </Label>
-              <Input value={limit} disabled={isPending} type="number" inputMode="decimal" placeholder="—"
-                onChange={(e) => { setLimit(e.target.value); setLimitDirty(true); setDirty(true); }} className="h-9" />
+              <div className="flex items-center gap-1.5">
+                <Input value={limit} disabled={isPending} type="number" inputMode="decimal" placeholder="—"
+                  onChange={(e) => { setLimit(e.target.value); setLimitDirty(true); setDirty(true); }} className="h-9 w-28" />
+                {(["dona", "ta", "kg"] as const).map((u) => (
+                  <button
+                    key={u}
+                    type="button"
+                    disabled={isPending}
+                    onClick={() => { setLimitUnit(u); setDirty(true); }}
+                    className={cn(
+                      "rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors",
+                      limitUnit === u ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground hover:bg-secondary"
+                    )}
+                  >
+                    {u}
+                  </button>
+                ))}
+              </div>
               {kind === "group" && (
                 <p className="text-[11px] text-muted-foreground">Guruhdagi barcha SKU&apos;larga qo&apos;llanadi.</p>
               )}

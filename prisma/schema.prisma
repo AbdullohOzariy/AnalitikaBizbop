@@ -1003,6 +1003,7 @@ model PromoItemGroup {
   designTitleRu String? // ixtiyoriy ru qator (null = ko'rsatilmaydi)
   imageData     String?  @db.Text // oq/shaffof fonli mahsulot rasmi — "data:image/png;base64,..."
   imageZoom     Float    @default(1) // dizayn banner rasm yaqinlashtirish (x1..x2, kasr ham: 1.3/1.7)
+  limitUnit     String   @default("dona") // banner limitining birligi: dona/ta/kg
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -1026,6 +1027,7 @@ model PromoItem {
   designTitleRu String? // ixtiyoriy ru qator (null = ko'rsatilmaydi)
   imageData     String?  @db.Text // oq/shaffof fonli mahsulot rasmi — "data:image/png;base64,..."
   imageZoom     Float    @default(1) // dizayn banner rasm yaqinlashtirish (x1..x2, kasr ham: 1.3/1.7)
+  limitUnit     String   @default("dona") // banner limitining birligi: dona/ta/kg
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

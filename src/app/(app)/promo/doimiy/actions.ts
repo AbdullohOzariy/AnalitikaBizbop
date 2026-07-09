@@ -384,22 +384,24 @@ const saveDesignSchema = z.object({
   // base64 data URL (client canvas resize qilingan); ~900KB cheklov (server-action 1MB limiti).
   imageData: z.string().max(900_000).regex(/^data:image\/(png|webp);base64,/, "Rasm formati noto'g'ri").nullable().optional(),
   imageZoom: z.number().min(1).max(2).optional(), // rasm kattalashtirish (x1..x2, kasr: 1.3/1.7)
-  promoLimit: limitSchema, // dizayn dialogidan limit (bannerdagi "limit: Nta"); undefined = tegilmaydi
+  promoLimit: limitSchema, // dizayn dialogidan limit (bannerdagi "limit: N birlik"); undefined = tegilmaydi
+  limitUnit: z.enum(["dona", "ta", "kg"]).optional(), // limit birligi
 });
 
 export async function saveDesignAction(input: {
   kind: "item" | "group"; id: number; designTitle?: string | null; designTitleRu?: string | null;
-  imageData?: string | null; imageZoom?: number; promoLimit?: number | null;
+  imageData?: string | null; imageZoom?: number; promoLimit?: number | null; limitUnit?: "dona" | "ta" | "kg";
 }): Promise<Result> {
   try {
     await requirePromoEdit();
     const p = saveDesignSchema.parse(input);
-    const data: { designTitle: string | null; designTitleRu: string | null; imageData?: string | null; imageZoom?: number } = {
+    const data: { designTitle: string | null; designTitleRu: string | null; imageData?: string | null; imageZoom?: number; limitUnit?: string } = {
       designTitle: p.designTitle?.trim() || null,
       designTitleRu: p.designTitleRu?.trim() || null,
     };
     if (p.imageData !== undefined) data.imageData = p.imageData; // undefined = rasm o'zgartirilmaydi
     if (p.imageZoom !== undefined) data.imageZoom = p.imageZoom;
+    if (p.limitUnit !== undefined) data.limitUnit = p.limitUnit;
     if (p.kind === "group") {
       await prisma.promoItemGroup.update({ where: { id: p.id }, data });
       // Limit — guruhdagi BARCHA SKU'larga qo'llanadi (banner limitni item'lardan oladi).
@@ -436,7 +438,7 @@ export async function saveDesignAction(input: {
 // promoLimit: item — o'z limiti; guruh — barcha SKU'lar bir xil bo'lsa shu qiymat, aks holda null.
 export type DesignFields = {
   designTitle: string | null; designTitleRu: string | null;
-  imageData: string | null; imageZoom: number; promoLimit: number | null;
+  imageData: string | null; imageZoom: number; promoLimit: number | null; limitUnit: string;
 };
 
 export async function getDesignAction(input: {
@@ -449,7 +451,7 @@ export async function getDesignAction(input: {
       const g = await prisma.promoItemGroup.findUnique({
         where: { id: p.id },
         select: {
-          designTitle: true, designTitleRu: true, imageData: true, imageZoom: true,
+          designTitle: true, designTitleRu: true, imageData: true, imageZoom: true, limitUnit: true,
           items: { select: { promoLimit: true } },
         },
       });
@@ -458,12 +460,12 @@ export async function getDesignAction(input: {
       const uniform = limits.length > 0 && limits.every((l) => l === limits[0]) ? limits[0] : null;
       return {
         ok: true,
-        design: { designTitle: g.designTitle, designTitleRu: g.designTitleRu, imageData: g.imageData, imageZoom: g.imageZoom, promoLimit: uniform },
+        design: { designTitle: g.designTitle, designTitleRu: g.designTitleRu, imageData: g.imageData, imageZoom: g.imageZoom, promoLimit: uniform, limitUnit: g.limitUnit },
       };
     }
     const row = await prisma.promoItem.findUnique({
       where: { id: p.id },
-      select: { designTitle: true, designTitleRu: true, imageData: true, imageZoom: true, promoLimit: true },
+      select: { designTitle: true, designTitleRu: true, imageData: true, imageZoom: true, promoLimit: true, limitUnit: true },
     });
     if (!row) return { ok: false, error: "Topilmadi." };
     return {
@@ -472,6 +474,7 @@ export async function getDesignAction(input: {
         designTitle: row.designTitle, designTitleRu: row.designTitleRu,
         imageData: row.imageData, imageZoom: row.imageZoom,
         promoLimit: row.promoLimit != null ? Number(row.promoLimit) : null,
+        limitUnit: row.limitUnit,
       },
     };
   } catch (err) { return xato(err); }

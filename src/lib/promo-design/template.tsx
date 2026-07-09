@@ -164,7 +164,7 @@ function HaftaBanner({ data, S, logoData }: { data: DesignData; S: HSizes; logoD
           {S.showLimit && data.limitN != null && (
             /* Bitta matn tuguni — tor panelda tabiiy o'raladi (span'lar satori'da inline oqmaydi) */
             <div style={{ display: "flex", fontSize: S.limitSize, color: "#eafff1", fontWeight: 700, marginBottom: 10, lineHeight: 1.3 }}>
-              {`Barchaga birdek yetishi uchun limit: ${fmtLimit(data.limitN)}ta`}
+              {`Barchaga birdek yetishi uchun limit: ${fmtLimit(data.limitN)}\u00A0${data.limitUnit}`}
             </div>
           )}
           <div style={{ display: "flex", fontSize: S.dateSize, color: "#ffffff", fontWeight: 700 }}>{data.dateText}</div>
@@ -240,7 +240,7 @@ function HaftaBanner({ data, S, logoData }: { data: DesignData; S: HSizes; logoD
 // bizbop logo, markazda mahsulot; sana va doira YO'Q; eski narx ham supermarket uslubida,
 // ustidan QIZIL QIYSHIQ chiziq; A4'da yashil/qizil limit qatorlari, Insta'da "Barcha filiallarda".
 
-const ORANGE = "#FA4A0C";
+const ORANGE = "#FC3A05"; // brend rangi (foydalanuvchi bergan kod)
 const RED_STRIKE = "#E02B20";
 const LOGO_RATIO = 3563 / 1165; // public/logo.png nisbatlari
 
@@ -366,10 +366,10 @@ function BizbopBanner({ data, S, logoData }: { data: DesignData; S: BSizes; logo
         {S.showLimit && data.limitN != null && (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
             <div style={{ display: "flex", width: "100%", justifyContent: "center", fontSize: S.limitUz, fontWeight: 700, color: GREEN, textAlign: "center", lineHeight: 1.25 }}>
-              {`Barchaga birdek yetishi uchun limit ${fmtLimit(data.limitN)} dona.`}
+              {`Barchaga birdek yetishi uchun limit ${fmtLimit(data.limitN)}\u00A0${data.limitUnit}.`}
             </div>
             <div style={{ display: "flex", width: "100%", justifyContent: "center", fontSize: S.limitRu, fontWeight: 700, color: RED_STRIKE, textAlign: "center", lineHeight: 1.3, marginTop: 6 }}>
-              {`Чтобы дать возможность каждому приобрести данный товар: ${fmtLimit(data.limitN)} шт в одни руки`}
+              {`Чтобы дать возможность каждому приобрести данный товар: ${fmtLimit(data.limitN)}\u00A0${data.limitUnit === "kg" ? "кг" : "шт"} в одни руки`}
             </div>
           </div>
         )}
@@ -474,7 +474,7 @@ export function DesignBanner({ data, format, logoData }: { data: DesignData; for
             <div style={{ display: "flex", fontSize: S.limitSize, color: GREEN_DARK, fontWeight: 700 }}>
               <span style={{ marginRight: 7 }}>Barchaga birdek yetishi uchun limit:</span>
               <span style={{ fontFamily: "Golos" }}>{fmtLimit(data.limitN)}</span>
-              <span>ta</span>
+              <span style={{ marginLeft: 6 }}>{data.limitUnit}</span>
             </div>
           )}
           {S.brand && (
