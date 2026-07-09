@@ -230,9 +230,10 @@ model Category {
   sales          CategorySales[]
   products       Product[]
   managers       CategoryManager[]
-  salesPlans     SalesPlan[]
-  marginPlans    MarginPlan[]
-  spisaniyaLinks SpisaniyaCategoryLink[]
+  salesPlans        SalesPlan[]
+  marginPlans       MarginPlan[]
+  spisaniyaLinks    SpisaniyaCategoryLink[]
+  botUserCategories BotUserCategory[]
 
   @@index([parentId]) // scope filtrlari (subkat → ota-kategoriya) tezligi uchun
   @@index([groupId])
@@ -334,10 +335,11 @@ model UploadedFile {
   uploadedBy User    @relation(fields: [uploadedById], references: [id])
   branch     Branch? @relation(fields: [branchId], references: [id])
 
-  sales        CategorySales[]
-  productSales ProductSales[]
-  metrics      DailyMetrics[]
-  visits       DailyVisits[]
+  sales         CategorySales[]
+  productSales  ProductSales[]
+  metrics       DailyMetrics[]
+  visits        DailyVisits[]
+  unmatchedRows UnmatchedImportRow[]
 
   @@index([fileType, periodStart, periodEnd])
   @@index([uploadedById])
@@ -624,6 +626,31 @@ model ProductSales {
   @@index([uploadedFileId])
 }
 
+// Moslanmagan import qatorlari — /api/import/kunlik'dan `kod`siz kelgan (yoki nom
+// bo'yicha ham topilmagan) 1C qatorlari yo'qolmasligi uchun xom holda saqlanadi.
+// UI "Moslanmagan" bo'limida ko'rsatiladi; keyin qo'lda Product'ga bog'lanishi mumkin.
+model UnmatchedImportRow {
+  id             Int      @id @default(autoincrement())
+  uploadedFileId Int? // UploadedFile'ga FK (ba'zan fayl yozuvi yaratilmaydi)
+  day            DateTime @db.Date // JSON'dagi sana
+  branchAlias    String // JSON'dagi filial nomi (xom)
+  warehouseCode  String? // JSON'dagi skladKod
+  name           String // mahsulot nomi (xom)
+  artikul        String?
+  stockQty       Decimal? @db.Decimal(20, 3) // Остаток (qoldiq dona)
+  soldQty        Decimal? @db.Decimal(20, 3) // Количество (sotilgan dona)
+  salePrice      Decimal? @db.Decimal(20, 3) // sotuv narxi (dona)
+  costPrice      Decimal? @db.Decimal(20, 3) // tannarx narxi (dona)
+  amount         Decimal? @db.Decimal(20, 2) // savdo summasi
+  costAmount     Decimal? @db.Decimal(20, 2) // tannarx summasi
+  createdAt      DateTime @default(now())
+
+  uploadedFile UploadedFile? @relation(fields: [uploadedFileId], references: [id], onDelete: SetNull)
+
+  @@index([day])
+  @@index([uploadedFileId])
+}
+
 // Oylik sotuv rejasi — subkategoriya × filial × yil/oy
 model SalesPlan {
   id         Int      @id @default(autoincrement())
@@ -653,6 +680,20 @@ model SpisaniyaCategoryLink {
 
   category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
+  @@index([categoryId])
+}
+
+/// Spisaniya bot xodimiga (bizbop bot_ruxsat.telegram_id) biriktirilgan
+/// iyerarxiya kategoriyalari. categoryId OTA kategoriya (parentId=null) bo'lsa —
+/// barcha bolalari ham kiradi; SUBkategoriya bo'lsa — faqat o'zi.
+/// Xodimda yozuv bo'lmasa = cheklov yo'q (to'liq katalog).
+model BotUserCategory {
+  telegramId BigInt
+  categoryId Int
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@id([telegramId, categoryId])
   @@index([categoryId])
 }
 

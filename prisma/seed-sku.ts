@@ -49,6 +49,15 @@ async function main() {
   console.log("📥 Manba:", data.meta);
 
   // ── 1. TOZALASH (FK tartibida) ────────────────────────────────────────────
+  // Bot xodim biriktirmalari (BotUserCategory) Category cascade'ida indamay o'chib,
+  // scope cheklovi fail-open bo'lib qolardi — baland ovozda ogohlantiramiz.
+  const biriktirmaSoni = await prisma.botUserCategory.count();
+  if (biriktirmaSoni > 0) {
+    console.warn(
+      `⚠️  ${biriktirmaSoni} ta bot-xodim kategoriya biriktirmasi o'chadi (BotUserCategory cascade).\n` +
+        "   Qayta qurishdan keyin Sozlamalar › Spisaniya bo'limida xodimlarga kategoriyalarni QAYTA biriktiring!"
+    );
+  }
   console.log("🧹 Eski iyerarxiya va sotuv fakti o'chirilmoqda...");
   await prisma.productSales.deleteMany({});
   await prisma.categorySales.deleteMany({});

@@ -50,6 +50,15 @@ async function loadSubcats(): Promise<SubOpt[]> {
   return data;
 }
 
+/**
+ * SKU katalogdan tanlanganda kategoriya AI'siz, deterministik aniqlanadi:
+ * Product.categoryId → yozuvlar.kategoriya label (AI bilan bir xil formatda).
+ */
+export async function subcatLabelById(categoryId: number): Promise<string | null> {
+  const subs = await loadSubcats();
+  return subs.find((s) => s.id === categoryId)?.label ?? null;
+}
+
 function buildSystem(subs: SubOpt[]): string {
   const list = subs.map((s) => `${s.id}. ${s.group} › ${s.cat} › ${s.name}`).join("\n");
   return (

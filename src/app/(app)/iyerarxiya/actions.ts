@@ -402,13 +402,20 @@ export async function deleteCategoryAction(id: number): Promise<Result> {
     await requireAdmin();
     const cat = await prisma.category.findUnique({
       where: { id },
-      include: { _count: { select: { sales: true, children: true } } },
+      include: { _count: { select: { sales: true, children: true, botUserCategories: true } } },
     });
     if (!cat) return { ok: false, error: "Topilmadi." };
     const c = cat._count;
     if (c.children > 0) return { ok: false, error: `${c.children} ta subkategoriyasi bor — avval ularni o'chiring.` };
     if (c.sales > 0) {
       return { ok: false, error: `Bog'langan ma'lumot bor (sotuv: ${c.sales}) — o'chirib bo'lmaydi.` };
+    }
+    // Cascade bot xodim biriktirmalarini indamay o'chirib, cheklovni bekor qilardi (fail-open)
+    if (c.botUserCategories > 0) {
+      return {
+        ok: false,
+        error: `${c.botUserCategories} ta bot xodimiga biriktirilgan — avval Sozlamalar › Spisaniya bo'limida biriktirmani oling.`,
+      };
     }
     await prisma.category.delete({ where: { id } });
     revalidatePath("/iyerarxiya");

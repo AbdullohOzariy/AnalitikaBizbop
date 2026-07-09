@@ -237,6 +237,7 @@ export type YozuvKirim = {
   xodim_id: number | string;
   rasm_file_id?: string | null;
   qr_file_id?: string | null; // QR kod rasmi (ixtiyoriy)
+  sku_kod?: number | null; // 1C/Prisma Product.code (miniapp katalogdan tanlansa)
 };
 
 /**
@@ -274,14 +275,14 @@ export async function insertYozuv(d: YozuvKirim): Promise<number> {
     const { rows } = await client.query(
       `INSERT INTO yozuvlar
         (tur, tovar, miqdor, birlik, summa, sabab, filial,
-         firma, kafe_nomi, xodim_ism, xodim_username, xodim_id, rasm_file_id, qr_file_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+         firma, kafe_nomi, xodim_ism, xodim_username, xodim_id, rasm_file_id, qr_file_id, sku_kod)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
        RETURNING id`,
       [
         d.tur, d.tovar, d.miqdor, d.birlik || "kg", d.summa,
         d.sabab || null, d.filial, d.firma || null, d.kafe_nomi || null,
         d.xodim_ism, d.xodim_username || null, d.xodim_id, d.rasm_file_id || null,
-        d.qr_file_id || null,
+        d.qr_file_id || null, d.sku_kod ?? null,
       ]
     );
     const yozuvId = rows[0].id as number;
@@ -417,6 +418,8 @@ export async function ensureSozlamalarSchema(): Promise<void> {
   await p.query(`ALTER TABLE filialar ADD COLUMN IF NOT EXISTS topic_id BIGINT`).catch(() => {});
   // QR kod rasmi — ixtiyoriy (QR kodli tovarlar uchun xodim joylaydi)
   await p.query(`ALTER TABLE yozuvlar ADD COLUMN IF NOT EXISTS qr_file_id VARCHAR(500)`).catch(() => {});
+  // 1C/Prisma Product.code (SKU tanlangan bo'lsa) — miniapp katalogdan biriktiradi
+  await p.query(`ALTER TABLE yozuvlar ADD COLUMN IF NOT EXISTS sku_kod INTEGER`).catch(() => {});
   // yozuvlar.tur CHECK — 'ichki_sotuv' qo'shamiz. DROP+ADD bitta DO-blokda (atomik):
   // ADD muvaffaqiyatsiz bo'lsa DROP ham qaytariladi, jadval constraintsiz qolmaydi.
   await p.query(`
@@ -461,6 +464,8 @@ export async function ensureSozlamalarSchema(): Promise<void> {
     vaqt              TIMESTAMP DEFAULT NOW(),
     yangilangan       TIMESTAMPTZ DEFAULT NOW()
   )`).catch(() => {});
+  // 1C/Prisma Product.code (SKU tanlangan bo'lsa) — miniapp katalogdan biriktiradi
+  await p.query(`ALTER TABLE vozvratlar ADD COLUMN IF NOT EXISTS sku_kod INTEGER`).catch(() => {});
   _schemaReady = true;
 }
 
@@ -480,6 +485,7 @@ export type VozvratKirim = {
   xodim_id: number | string;
   status?: string;
   qaytarilmadi_sabab?: string | null;
+  sku_kod?: number | null; // 1C/Prisma Product.code (miniapp katalogdan tanlansa)
 };
 
 export type VozvratYozuv = {
@@ -513,14 +519,15 @@ export async function vozvratYarat(d: VozvratKirim): Promise<number> {
   const { rows } = await p.query(
     `INSERT INTO vozvratlar
        (tovar, miqdor, birlik, summa, sabab, filial, yonalish, taminotchi,
-        rasm_file_id, xodim_ism, xodim_username, xodim_id, status, qaytarilmadi_sabab)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+        rasm_file_id, xodim_ism, xodim_username, xodim_id, status, qaytarilmadi_sabab, sku_kod)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
      RETURNING id`,
     [
       d.tovar, d.miqdor, d.birlik || "dona", d.summa, d.sabab || null, d.filial,
       yonalish, yonalish === "taminotchi" ? d.taminotchi || null : null,
       d.rasm_file_id || null, d.xodim_ism, d.xodim_username || null, d.xodim_id,
       status, status === "qaytarilmadi" ? d.qaytarilmadi_sabab || null : null,
+      d.sku_kod ?? null,
     ]
   );
   return rows[0].id as number;
@@ -686,13 +693,13 @@ export async function vozvratChiqimgaOtkaz(
     const { rows: yz } = await client.query(
       `INSERT INTO yozuvlar
          (tur, tovar, miqdor, birlik, summa, sabab, filial,
-          xodim_ism, xodim_username, xodim_id, rasm_file_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+          xodim_ism, xodim_username, xodim_id, rasm_file_id, sku_kod)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
        RETURNING id`,
       [
         tur, v.tovar, v.miqdor, v.birlik, v.summa,
         sabab || v.qaytarilmadi_sabab || v.sabab || null, v.filial,
-        v.xodim_ism, v.xodim_username, v.xodim_id || 0, v.rasm_file_id,
+        v.xodim_ism, v.xodim_username, v.xodim_id || 0, v.rasm_file_id, v.sku_kod ?? null,
       ]
     );
     const yozuvId = yz[0].id as number;

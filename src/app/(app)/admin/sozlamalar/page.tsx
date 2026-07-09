@@ -10,6 +10,7 @@ import {
   guruhChatIdOl,
   ruxsatList,
 } from "@/lib/spisaniya/db";
+import { adminKategoriyaDaraxt, botUserBiriktirmalar } from "@/lib/spisaniya/sku-scope";
 import { getSverkaGroupChatId } from "@/lib/sverka/sozlama";
 import { Settings, WifiOff, Building2, MessageSquare, Users, Link2 } from "lucide-react";
 import { PageHeader, SectionCard, EmptyState } from "@/components/common/page";
@@ -209,12 +210,14 @@ async function SpisaniyaTab() {
       />
     );
   }
-  const [filialar, chatId, ruxsatlar, branches, bizbopFilials] = await Promise.all([
+  const [filialar, chatId, ruxsatlar, branches, bizbopFilials, katDaraxt, biriktirmalar] = await Promise.all([
     filialarToliq(),
     guruhChatIdOl(),
     ruxsatList(),
     prisma.branch.findMany({ orderBy: { sortOrder: "asc" }, select: { id: true, name: true, chiqimFilial: true } }),
     chiqimFilials(),
+    adminKategoriyaDaraxt(),
+    botUserBiriktirmalar(),
   ]);
 
   return (
@@ -224,7 +227,7 @@ async function SpisaniyaTab() {
         description={`${ruxsatlar.length} ta · faqat ruxsat berilganlar botdan foydalanadi`}
         actions={<Users className="h-4 w-4 text-muted-foreground" />}
       >
-        <RuxsatEditor ruxsatlar={ruxsatlar} />
+        <RuxsatEditor ruxsatlar={ruxsatlar} daraxt={katDaraxt} biriktirmalar={biriktirmalar} />
       </SectionCard>
 
       <SectionCard

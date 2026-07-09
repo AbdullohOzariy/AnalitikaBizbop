@@ -4,10 +4,12 @@
  */
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { prisma } from "@/lib/prisma";
 import { vozvratYarat, ruxsatBormi } from "@/lib/spisaniya/db";
 import { vozvratGuruhgaYuborish } from "@/lib/spisaniya/notify";
 import { verifyInitData } from "@/lib/spisaniya/telegram-auth";
 import { rateLimit } from "@/lib/spisaniya/rate-limit";
+import { getBotUserScope } from "@/lib/spisaniya/sku-scope";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,6 +27,8 @@ const schema = z.object({
   status: z.string().trim().optional(),
   qaytarilmadi_sabab: z.string().trim().max(500).optional().nullable(),
   rasm_file_id: z.string().max(500).optional().nullable(),
+  // SKU katalogdan tanlangan bo'lsa — Product.code (1C kod)
+  sku_kod: z.number().int().positive().optional().nullable(),
 });
 
 export async function POST(req: Request) {
@@ -48,9 +52,29 @@ export async function POST(req: Request) {
     return NextResponse.json({ xato: "Ma'lumotlar noto'g'ri yoki to'liq emas." }, { status: 400 });
   }
 
+  // SKU tanlangan bo'lsa — nom haqiqat manbai katalog. Yaroqsiz (yo'q/arxiv/scope'dan
+  // tashqari) sku_kod JIMGINA e'tiborsiz qoldiriladi (200): 400 farqi mavjudlik-probing
+  // oracle bo'lardi. Yozuvning o'zi scope'siz — xodim qo'lda ham istalgan matn yoza olardi.
+  let tovar = parsed.data.tovar;
+  let skuKod: number | null = parsed.data.sku_kod ?? null;
+  if (skuKod != null) {
+    const prod = await prisma.product.findUnique({
+      where: { code: skuKod },
+      select: { name: true, categoryId: true, archivedAt: true },
+    });
+    const scope = prod && !prod.archivedAt ? await getBotUserScope(user.id) : null;
+    const scopeOk =
+      !!prod && !prod.archivedAt &&
+      (scope === null || (prod.categoryId != null && scope.has(prod.categoryId)));
+    if (scopeOk && prod) tovar = prod.name.slice(0, 255);
+    else skuKod = null;
+  }
+
   // Xodimni imzodan olamiz (soxtalashtirilmasin).
   const d = {
     ...parsed.data,
+    tovar,
+    sku_kod: skuKod,
     xodim_id: user.id,
     xodim_ism: [user.first_name, user.last_name].filter(Boolean).join(" ") || "Noma'lum",
     xodim_username: user.username ?? null,

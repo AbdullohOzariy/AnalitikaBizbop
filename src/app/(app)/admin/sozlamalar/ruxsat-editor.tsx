@@ -9,18 +9,27 @@ import { Pill } from "@/components/common/page";
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
-import { UserPlus, Trash2, Loader2, UserCheck } from "lucide-react";
+import { UserPlus, Trash2, Loader2, UserCheck, FolderTree } from "lucide-react";
 import { toast } from "sonner";
 import type { BotRuxsat } from "@/lib/spisaniya/db";
+import type { AdminKatGroup } from "@/lib/spisaniya/sku-scope";
 import { ruxsatQoshishAction, ruxsatToggleAction, ruxsatOchirAction } from "./actions";
+import { KategoriyaBiriktirishDialog } from "./kategoriya-biriktirish";
 
-export function RuxsatEditor({ ruxsatlar }: { ruxsatlar: BotRuxsat[] }) {
+export function RuxsatEditor({
+  ruxsatlar, daraxt, biriktirmalar,
+}: {
+  ruxsatlar: BotRuxsat[];
+  daraxt: AdminKatGroup[];
+  biriktirmalar: Record<string, number[]>;
+}) {
   const router = useRouter();
   const [isPending, start] = useTransition();
   const [qoshish, setQoshish] = useState(false);
   const [tgId, setTgId] = useState("");
   const [ism, setIsm] = useState("");
   const [ochir, setOchir] = useState<null | BotRuxsat>(null);
+  const [katXodim, setKatXodim] = useState<null | BotRuxsat>(null);
 
   const run = (fn: () => Promise<{ ok: boolean; error?: string }>, ok: string, done?: () => void) =>
     start(async () => {
@@ -56,6 +65,14 @@ export function RuxsatEditor({ ruxsatlar }: { ruxsatlar: BotRuxsat[] }) {
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-1.5">
+                <Button variant="outline" size="sm" className="h-7 gap-1 rounded-lg px-2 text-xs"
+                  disabled={isPending} onClick={() => setKatXodim(r)}
+                  title="Miniapp'da ko'rinadigan kategoriyalarni cheklash">
+                  <FolderTree className="h-3 w-3" />
+                  {(biriktirmalar[r.telegram_id]?.length ?? 0) > 0
+                    ? `${biriktirmalar[r.telegram_id].length} kat.`
+                    : "Hammasi"}
+                </Button>
                 <button onClick={() => run(() => ruxsatToggleAction(r.telegram_id, !r.aktiv), r.aktiv ? "Bloklandi." : "Faollashtirildi.")}
                   disabled={isPending} title="Holatni almashtirish">
                   <Pill tone={r.aktiv ? "green" : "muted"}>{r.aktiv ? "Faol" : "Bloklangan"}</Pill>
@@ -105,6 +122,16 @@ export function RuxsatEditor({ ruxsatlar }: { ruxsatlar: BotRuxsat[] }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {katXodim && (
+        <KategoriyaBiriktirishDialog
+          telegramId={katXodim.telegram_id}
+          ism={katXodim.ism}
+          daraxt={daraxt}
+          boshlangich={biriktirmalar[katXodim.telegram_id] ?? []}
+          onClose={() => setKatXodim(null)}
+        />
+      )}
 
       <Dialog open={!!ochir} onOpenChange={(o) => !o && setOchir(null)}>
         <DialogContent className="sm:max-w-sm">

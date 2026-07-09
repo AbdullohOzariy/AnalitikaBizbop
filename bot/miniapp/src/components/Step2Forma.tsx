@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Package, Hash, DollarSign, MapPin, Building2, ChevronDown, AlignLeft } from 'lucide-react'
+import { Package, Hash, DollarSign, MapPin, Building2, ChevronDown, ChevronRight, AlignLeft, X } from 'lucide-react'
 import { cn, formatSum } from '../lib/utils'
 import { useFilialar } from '../hooks/useFilialar'
 import PhotoUpload from './PhotoUpload'
 import StepHeader from './StepHeader'
+import SkuPicker, { type SkuTanlov } from './SkuPicker'
 import { Button } from './ui/Button'
 
 type Tur = 'vozvrat' | 'kafe' | 'ovqatlanish' | 'spisaniya' | 'ichki_sotuv' | 'qaytarish'
@@ -20,10 +21,14 @@ export interface FormData {
   qrPhotoBase64: string | null
   qrPhotoSize: number
   tovarNomi: string
+  // SKU katalogdan tanlangan bo'lsa — Product.code (1C kod); qo'lda kiritilsa null
+  skuKod: number | null
   miqdor: string
   birlik: 'kg' | 'dona' | 'litr'
   summa: string
-  sabab: string
+  // Sabab — ro'yxatdan tanlanadi; "Boshqa" bo'lsa sababMatn to'ldiriladi
+  sababTanlov: string
+  sababMatn: string
   filial: string
   firmaNomi: string
   kafeNomi: string
@@ -32,6 +37,17 @@ export interface FormData {
   vozvratStatus: VozvratHolat
   qaytarilmadiSabab: string
 }
+
+const SABABLAR = [
+  'Buyurtma ortiqcha',
+  'FEFO ishlamagan',
+  'Narx xato',
+  'Marketing qilinmagan',
+  'Yetkazib beruvchi srogi kam olib kelgan',
+  'Merchen qoidasi buzilgan',
+  'Saqlash qoidasi buzilgan',
+  'Boshqa',
+] as const
 
 const VOZVRAT_HOLAT: { value: VozvratHolat; label: string }[] = [
   { value: 'xabar_berildi',    label: 'Xabar berildi' },
@@ -79,16 +95,29 @@ export default function Step2Forma({ tur, onBack, onNext }: Props) {
   const filialar = useFilialar()
   const [photoLoading, setPhotoLoading] = useState(false)
   const [filialOpen, setFilialOpen] = useState(false)
+  const [pickerOchiq, setPickerOchiq] = useState(false)
+  const [qolda, setQolda] = useState(false) // tovar qo'lda kiritish rejimi
   const [form, setForm] = useState<FormData>({
     photo: null, photoBase64: null, photoSize: 0,
     qrPhoto: null, qrPhotoBase64: null, qrPhotoSize: 0,
-    tovarNomi: '', miqdor: '', birlik: 'dona', summa: '', sabab: '',
+    tovarNomi: '', skuKod: null, miqdor: '', birlik: 'dona', summa: '',
+    sababTanlov: '', sababMatn: '',
     filial: '', firmaNomi: '', kafeNomi: '',
     yonalish: 'asosiy_filial', taminotchi: '', vozvratStatus: 'xabar_berildi', qaytarilmadiSabab: '',
   })
 
   function set<K extends keyof FormData>(k: K, v: FormData[K]) {
     setForm(f => ({ ...f, [k]: v }))
+  }
+
+  function skuTanlandi(t: SkuTanlov) {
+    setForm(f => ({ ...f, tovarNomi: t.nomi, skuKod: t.kod }))
+    setPickerOchiq(false)
+    setQolda(false)
+  }
+
+  function skuTozala() {
+    setForm(f => ({ ...f, tovarNomi: '', skuKod: null }))
   }
 
   function handleFile(file: File, base64: string) {
@@ -108,12 +137,16 @@ export default function Step2Forma({ tur, onBack, onNext }: Props) {
     tur !== 'qaytarish' ||
     (form.vozvratStatus !== 'qaytarilmadi' || form.qaytarilmadiSabab.trim().length > 0)
 
+  const sababOk = Boolean(
+    form.sababTanlov && (form.sababTanlov !== 'Boshqa' || form.sababMatn.trim())
+  )
+
   const isValid = Boolean(
     form.photoBase64 &&
     form.tovarNomi.trim() &&
     form.miqdor.trim() &&
     form.summa.trim() &&
-    form.sabab.trim() &&
+    sababOk &&
     form.filial &&
     vozvratOk
   )
@@ -158,15 +191,42 @@ export default function Step2Forma({ tur, onBack, onNext }: Props) {
           </motion.div>
         )}
 
-        {/* Tovar nomi */}
-        <Field label="Tovar nomi" icon={<Package className="w-3.5 h-3.5" />} delay={0.06} required>
-          <input
-            type="text"
-            value={form.tovarNomi}
-            onChange={e => set('tovarNomi', e.target.value)}
-            placeholder="Masalan: Lipton choy 100g"
-            className="w-full bg-transparent text-[15px] text-tg-text placeholder:text-tg-hint/60 outline-none"
-          />
+        {/* Tovar — SKU katalogdan tanlanadi (fallback: qo'lda kiritish) */}
+        <Field label="Tovar" icon={<Package className="w-3.5 h-3.5" />} delay={0.06} required>
+          {form.skuKod !== null ? (
+            <div className="flex items-center gap-2">
+              <span className="flex-1 min-w-0 text-[15px] font-medium text-tg-text leading-snug">
+                {form.tovarNomi}
+              </span>
+              <span className="flex-shrink-0 px-2 py-0.5 rounded-lg bg-tg-bg border border-line text-[11px] font-mono font-semibold text-tg-hint">
+                {form.skuKod}
+              </span>
+              <button onClick={skuTozala} aria-label="Tovarni tozalash"
+                className="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-tg-hint active:bg-black/[.05]">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          ) : qolda ? (
+            <>
+              <input
+                type="text"
+                value={form.tovarNomi}
+                onChange={e => set('tovarNomi', e.target.value)}
+                placeholder="Masalan: Lipton choy 100g"
+                className="w-full bg-transparent text-[15px] text-tg-text placeholder:text-tg-hint/60 outline-none"
+              />
+              <button onClick={() => { setQolda(false); setPickerOchiq(true) }}
+                className="mt-2 text-[12px] font-semibold text-tg-btn active:opacity-70">
+                Katalogdan tanlash
+              </button>
+            </>
+          ) : (
+            <button onClick={() => setPickerOchiq(true)}
+              className="w-full flex items-center justify-between text-left active:opacity-70">
+              <span className="text-[15px] text-tg-hint/60">Katalogdan tanlang</span>
+              <ChevronRight className="w-4 h-4 text-tg-hint" />
+            </button>
+          )}
         </Field>
 
         {/* Miqdor + birlik */}
@@ -237,15 +297,33 @@ export default function Step2Forma({ tur, onBack, onNext }: Props) {
           )}
         </motion.div>
 
-        {/* Sabab */}
+        {/* Sabab — ro'yxatdan tanlanadi */}
         <Field label="Sabab" icon={<AlignLeft className="w-3.5 h-3.5" />} delay={0.18} required>
-          <input
-            type="text"
-            value={form.sabab}
-            onChange={e => set('sabab', e.target.value)}
-            placeholder="Masalan: Muddati o'tgan"
-            className="w-full bg-transparent text-[15px] text-tg-text placeholder:text-tg-hint/60 outline-none"
-          />
+          <div className="flex flex-wrap gap-1.5">
+            {SABABLAR.map(sb => (
+              <button
+                key={sb}
+                onClick={() => set('sababTanlov', form.sababTanlov === sb ? '' : sb)}
+                className={cn(
+                  'px-3 py-1.5 rounded-xl text-[12px] font-semibold transition-all duration-150 active:scale-95',
+                  form.sababTanlov === sb
+                    ? 'bg-gradient-to-b from-brand-400 to-brand-600 text-white shadow-sm'
+                    : 'bg-tg-bg text-tg-hint border border-line'
+                )}
+              >
+                {sb}
+              </button>
+            ))}
+          </div>
+          {form.sababTanlov === 'Boshqa' && (
+            <input
+              type="text"
+              value={form.sababMatn}
+              onChange={e => set('sababMatn', e.target.value)}
+              placeholder="Sababni yozing..."
+              className="w-full bg-transparent text-[15px] text-tg-text placeholder:text-tg-hint/60 outline-none mt-2.5 pt-2.5 border-t border-line"
+            />
+          )}
         </Field>
 
         {/* Filial dropdown */}
@@ -393,6 +471,17 @@ export default function Step2Forma({ tur, onBack, onNext }: Props) {
           Davom etish
         </Button>
       </div>
+
+      {/* SKU katalogi sheet */}
+      <AnimatePresence>
+        {pickerOchiq && (
+          <SkuPicker
+            onPick={skuTanlandi}
+            onQolda={() => { setPickerOchiq(false); setQolda(true) }}
+            onClose={() => setPickerOchiq(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }

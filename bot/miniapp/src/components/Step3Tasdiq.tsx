@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Send, Loader2, ImageIcon, Package, Hash, DollarSign, MapPin, Building2, AlignLeft, Tag } from 'lucide-react'
+import { Send, Loader2, ImageIcon, Package, Hash, DollarSign, MapPin, Building2, AlignLeft, Tag, Barcode } from 'lucide-react'
 import { formatSum } from '../lib/utils'
 import { useTelegram } from '../hooks/useTelegram'
 import StepHeader from './StepHeader'
@@ -46,6 +46,11 @@ export default function Step3Tasdiq({ tur, form, onBack, onDone }: Props) {
   const { tg, haptic, initData } = useTelegram()
   const [loading, setLoading] = useState(false)
   const [xato, setXato] = useState<string | null>(null)
+
+  // Yakuniy sabab matni — tanlov o'zi yoki "Boshqa: <matn>"
+  const sabab = form.sababTanlov === 'Boshqa'
+    ? `Boshqa: ${form.sababMatn.trim()}`
+    : form.sababTanlov
 
   async function handleYuborish() {
     haptic?.impactOccurred('medium')
@@ -96,10 +101,11 @@ export default function Step3Tasdiq({ tur, form, onBack, onDone }: Props) {
         endpoint = '/api/vozvrat'
         payload = {
           tovar: form.tovarNomi,
+          sku_kod: form.skuKod ?? undefined,
           miqdor,
           birlik: form.birlik,
           summa,
-          sabab: form.sabab,
+          sabab,
           filial: form.filial,
           yonalish: form.yonalish,
           taminotchi: form.yonalish === 'taminotchi' ? (form.taminotchi || null) : null,
@@ -111,10 +117,11 @@ export default function Step3Tasdiq({ tur, form, onBack, onDone }: Props) {
         payload = {
           tur,
           tovar: form.tovarNomi,
+          sku_kod: form.skuKod ?? undefined,
           miqdor,
           birlik: form.birlik,
           summa,
-          sabab: form.sabab,
+          sabab,
           filial: form.filial,
           rasm_file_id: fileId,
           qr_file_id: qrFileId,
@@ -150,9 +157,12 @@ export default function Step3Tasdiq({ tur, form, onBack, onDone }: Props) {
   const rows: { icon: React.ReactNode; label: string; value: string }[] = [
     { icon: <Tag className="w-3.5 h-3.5" />,        label: 'Tur',    value: TUR_LABELS[tur] },
     { icon: <Package className="w-3.5 h-3.5" />,    label: 'Tovar',  value: form.tovarNomi },
+    ...(form.skuKod !== null
+      ? [{ icon: <Barcode className="w-3.5 h-3.5" />, label: 'Kod', value: String(form.skuKod) }]
+      : []),
     { icon: <Hash className="w-3.5 h-3.5" />,       label: 'Miqdor', value: `${form.miqdor} ${form.birlik}` },
     { icon: <DollarSign className="w-3.5 h-3.5" />, label: 'Summa',  value: form.summa ? formatSum(Number(form.summa)) : '—' },
-    { icon: <AlignLeft className="w-3.5 h-3.5" />,  label: 'Sabab',  value: form.sabab },
+    { icon: <AlignLeft className="w-3.5 h-3.5" />,  label: 'Sabab',  value: sabab },
     { icon: <MapPin className="w-3.5 h-3.5" />,     label: 'Filial', value: form.filial },
     ...(form.qrPhotoBase64
       ? [{ icon: <ImageIcon className="w-3.5 h-3.5" />, label: 'QR kod', value: '✓ biriktirildi' }]

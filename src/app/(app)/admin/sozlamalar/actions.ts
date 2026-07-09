@@ -144,6 +144,35 @@ export async function ruxsatOchirAction(telegramId: string): Promise<Result> {
   } catch (err) { return xato(err); }
 }
 
+// ─── Bot xodimiga Iyerarxiya kategoriyalarini biriktirish (BotUserCategory) ────
+// OTA kategoriya id'si → barcha bolalari; SUB id → faqat o'zi. Bo'sh ro'yxat =
+// cheklovsiz (to'liq katalog). To'plam har safar to'liq almashtiriladi.
+const katIdsSchema = z.array(z.number().int().positive()).max(200);
+
+export async function botUserKategoriyaSaqlaAction(
+  telegramId: string,
+  categoryIds: number[]
+): Promise<Result> {
+  try {
+    await requireAdmin();
+    const tgId = BigInt(tgIdSchema.parse(telegramId));
+    const ids = [...new Set(katIdsSchema.parse(categoryIds))];
+    const { prisma } = await import("@/lib/prisma");
+    if (ids.length) {
+      const bor = await prisma.category.count({ where: { id: { in: ids } } });
+      if (bor !== ids.length) return { ok: false, error: "Kategoriya topilmadi — sahifani yangilang." };
+    }
+    await prisma.$transaction([
+      prisma.botUserCategory.deleteMany({ where: { telegramId: tgId } }),
+      ...(ids.length
+        ? [prisma.botUserCategory.createMany({ data: ids.map((categoryId) => ({ telegramId: tgId, categoryId })) })]
+        : []),
+    ]);
+    revalidatePath(RP);
+    return { ok: true };
+  } catch (err) { return xato(err); }
+}
+
 
 /** Sverka guruh chat ID'sini saqlash (asosiy baza, AppSetting). */
 export async function sverkaGuruhSaqlaAction(chatId: string): Promise<Result> {
