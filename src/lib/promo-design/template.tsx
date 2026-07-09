@@ -244,12 +244,18 @@ const ORANGE = "#FC3A05"; // brend rangi (foydalanuvchi bergan kod)
 const RED_STRIKE = "#E02B20";
 const LOGO_RATIO = 3563 / 1165; // public/logo.png nisbatlari
 
+// "BIZBOP NARX" badge shakli — dizaynerning "Asset 1.svg" fayli (barg motivi:
+// yuqori-chap va pastki-o'ng burchaklar katta egri, qolganlari o'tkir), fill #FF3700.
+const BADGE_PATH = "M24.43,0C10.94,0,0,14.83,0,33.13v5.68h147.99c13.49,0,24.43-14.83,24.43-33.13V0H24.43Z";
+const BADGE_VIEWBOX = "0 0 172.42 38.81";
+const BADGE_FILL = "#FF3700";
+
 type BSizes = {
   W: number; H: number; leftPct: string; rightPct: string; pad: number; radius: number;
   smallSize: number; titleSize: number; ruSize: number;
   oldMain: number; oldSup: number; oldSom: number;
   newMain: number; newSup: number; newSom: number;
-  badgeSize: number; logoH: number; imgW: number; imgH: number;
+  badgeSize: number; badgeW: number; badgeH: number; logoH: number; imgW: number; imgH: number;
   limitUz: number; limitRu: number; branchSize: number;
   showLimit: boolean; // limit qatorlari faqat A4 (chop) formatida
 };
@@ -259,7 +265,7 @@ const B_A4: BSizes = {
   smallSize: 26, titleSize: 62, ruSize: 30,
   oldMain: 64, oldSup: 34, oldSom: 26,
   newMain: 160, newSup: 74, newSom: 50,
-  badgeSize: 30, logoH: 44, imgW: 470, imgH: 560,
+  badgeSize: 30, badgeW: 252, badgeH: 57, logoH: 44, imgW: 470, imgH: 560,
   limitUz: 22, limitRu: 13, branchSize: 30, showLimit: true,
 };
 const B_INSTA: BSizes = {
@@ -267,7 +273,7 @@ const B_INSTA: BSizes = {
   smallSize: 24, titleSize: 50, ruSize: 28,
   oldMain: 76, oldSup: 40, oldSom: 30,
   newMain: 185, newSup: 84, newSom: 58,
-  badgeSize: 26, logoH: 36, imgW: 420, imgH: 680,
+  badgeSize: 26, badgeW: 222, badgeH: 50, logoH: 36, imgW: 420, imgH: 680,
   limitUz: 24, limitRu: 17, branchSize: 30, showLimit: false,
 };
 
@@ -343,15 +349,13 @@ function BizbopBanner({ data, S, logoData }: { data: DesignData; S: BSizes; logo
           borderTopLeftRadius: S.radius, borderBottomLeftRadius: S.radius,
         }}
       >
-        {/* badge + logo */}
+        {/* badge (Asset 1.svg shakli) + logo */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div
-            style={{
-              display: "flex", backgroundColor: ORANGE, color: "#ffffff", fontSize: S.badgeSize,
-              fontWeight: 700, padding: "10px 26px", borderRadius: 14,
-            }}
-          >
-            {data.badgeText}
+          <div style={{ display: "flex", position: "relative", width: S.badgeW, height: S.badgeH, alignItems: "center", justifyContent: "center" }}>
+            <svg width={S.badgeW} height={S.badgeH} viewBox={BADGE_VIEWBOX} style={{ position: "absolute", top: 0, left: 0 }}>
+              <path fill={BADGE_FILL} d={BADGE_PATH} />
+            </svg>
+            <div style={{ display: "flex", fontSize: S.badgeSize, fontWeight: 700, color: "#ffffff" }}>{data.badgeText}</div>
           </div>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={logoData} width={Math.round(S.logoH * LOGO_RATIO)} height={S.logoH} alt="" />
