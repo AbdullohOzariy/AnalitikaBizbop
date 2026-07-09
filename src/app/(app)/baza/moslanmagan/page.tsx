@@ -4,9 +4,14 @@ import { unstable_cache } from "next/cache";
 import { auth } from "@/auth";
 import { isAdminTier } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
+import { decimalToNumber } from "@/lib/format";
 import { PackageSearch } from "lucide-react";
 import { PageHeader } from "@/components/common/page";
-import { MoslanmaganClient, type UnmatchedProduct, type SubOption, type NameMismatch } from "./moslanmagan-client";
+import { MoslanmaganClient, type UnmatchedProduct, type SubOption, type NameMismatch, type UnmatchedImportRowView } from "./moslanmagan-client";
+
+// JSON importdan kod'siz/nom bo'yicha moslanmagan qatorlar — ko'p bo'lishi mumkin,
+// shuning uchun oxirgi 500 tasi (eng yangi kunlar) ko'rsatiladi, pagination shart emas.
+const UNMATCHED_ROWS_LIMIT = 500;
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +39,7 @@ export default async function MoslanmaganPage({
   const sp = await searchParams;
   const page = Math.max(1, parseInt(sp.page ?? "1") || 1);
 
-  const [total, rows, subRows, nameRows, nameTotal] = await Promise.all([
+  const [total, rows, subRows, nameRows, nameTotal, unmatchedRows, unmatchedTotal] = await Promise.all([
     prisma.product.count({ where: { categoryId: null } }),
     prisma.product.findMany({
       where: { categoryId: null },
@@ -50,6 +55,15 @@ export default async function MoslanmaganPage({
       take: 500,
     }),
     prisma.productNameMismatch.count(),
+    prisma.unmatchedImportRow.findMany({
+      select: {
+        id: true, day: true, branchAlias: true, warehouseCode: true, name: true, artikul: true,
+        soldQty: true, amount: true, stockQty: true, createdAt: true,
+      },
+      orderBy: [{ day: "desc" }, { createdAt: "desc" }],
+      take: UNMATCHED_ROWS_LIMIT,
+    }),
+    prisma.unmatchedImportRow.count(),
   ]);
 
   const products: UnmatchedProduct[] = rows.map((p) => ({
@@ -70,13 +84,26 @@ export default async function MoslanmaganPage({
     masterName: m.product.name,
     fileName: m.fileName,
   }));
+  // Decimal'lar client komponentga borishdan oldin number'ga (yoki null) o'giriladi.
+  const unmatched: UnmatchedImportRowView[] = unmatchedRows.map((r) => ({
+    id: r.id,
+    day: r.day.toISOString().slice(0, 10),
+    branchAlias: r.branchAlias,
+    warehouseCode: r.warehouseCode,
+    name: r.name,
+    artikul: r.artikul,
+    soldQty: r.soldQty != null ? decimalToNumber(r.soldQty) : null,
+    amount: r.amount != null ? decimalToNumber(r.amount) : null,
+    stockQty: r.stockQty != null ? decimalToNumber(r.stockQty) : null,
+    createdAt: r.createdAt.toISOString(),
+  }));
 
   return (
     <div className="space-y-4">
       <PageHeader
         icon={PackageSearch}
         title="Moslanmagan"
-        description="Kategoriyasiz SKU va nom farqlarini ko'rib chiqib tuzating"
+        description="Kategoriyasiz SKU, nom farqlari va kodsiz import qatorlarini ko'rib chiqib tuzating"
       />
       <MoslanmaganClient
         products={products}
@@ -86,6 +113,8 @@ export default async function MoslanmaganPage({
         pageSize={PAGE_SIZE}
         mismatches={mismatches}
         nameTotal={nameTotal}
+        unmatchedRows={unmatched}
+        unmatchedTotal={unmatchedTotal}
       />
     </div>
   );

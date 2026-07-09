@@ -26,10 +26,18 @@ export const maxDuration = 300;
  *   }
  *   summa/tansumma ixtiyoriy (bo'lmasa soni×narx / soni×tannarx); sklad ixtiyoriy.
  *
- *   Javob: { ok: true, fileId, summary, sklad? } yoki { ok: false, error }.
+ *   `kod` IXTIYORIY (yo'q / null / "" / 0 → kodsiz). Kodsiz qator BUTUN importni
+ *   yiqitmaydi: nomi normallashtirilib (trim, kichik harf, ketma-ket bo'shliq → bitta)
+ *   Product'da qidiriladi — AYNAN BITTA moslik (aktivlar ustuvor) bo'lsa o'sha kod bilan
+ *   quvurga kiradi; topilmasa yoki bir nechta mos kelsa — UnmatchedImportRow'ga (xom holda)
+ *   yoziladi va "Moslanmagan" ro'yxatida qo'lda bog'lanadi.
+ *
+ *   Javob: { ok: true, fileId, summary, sklad?,
+ *            kodsiz?: { jami, nomBoyichaMoslandi, moslanmagan } } yoki { ok: false, error }.
  *   HTTP: 200 muvaffaqiyat, 401 token, 403 IP, 409 dublikat, 400/500 xato.
  *
- * Bir xil body ikki marta kelsa hash bo'yicha dublikat (409) — qayta yuborish xavfsiz.
+ * Bir xil body ikki marta kelsa hash bo'yicha dublikat (409) — qayta yuborish xavfsiz
+ * (moslanmagan qatorlar ham ikkilanmaydi).
  */
 export async function POST(req: NextRequest) {
   const ip = clientIp(req);

@@ -41,6 +41,7 @@ import {
   Zap,
   BarChart2,
   ScanSearch,
+  Boxes,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -161,6 +162,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Baza",
     items: [
       { href: "/baza/sotuv",         label: "Sotuv",             icon: Database,      roles: [SA, A] },
+      { href: "/baza/qoldiq",        label: "Qoldiq",            icon: Boxes,         roles: [SA, A] },
       { href: "/baza/tashrif",       label: "Tashriflar",        icon: Footprints,    roles: [SA, A] },
       { href: "/iyerarxiya",         label: "Iyerarxiya",        icon: Tag,           roles: [SA, A] },
       { href: "/baza/taminotchilar", label: "Yetkazib beruvchilar",    icon: Truck,         roles: [SA, A, "SUPPLYCHAIN", "HEAD_CAT_MANAGER", "CAT_MANAGER"] },

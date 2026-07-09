@@ -6,8 +6,17 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { EmptyState } from "@/components/common/page";
 import { SubcatTreePicker } from "@/components/common/subcat-tree-picker";
+import { formatDateUZ, formatDateTimeUZ, formatUZS } from "@/lib/format";
 import { Search, X, Loader2, Pencil, Check, Truck, CheckCircle2 } from "lucide-react";
 import { BazaPagination } from "../baza-pagination";
 import { assignProductSubcatAction, renameProductAction, applyNameAction, dismissNameAction } from "./actions";
@@ -15,9 +24,23 @@ import { assignProductSubcatAction, renameProductAction, applyNameAction, dismis
 export type UnmatchedProduct = { id: number; code: number; name: string; supplier: string | null };
 export type SubOption = { id: number; name: string; cat: string; group: string | null };
 export type NameMismatch = { productId: number; code: number; masterName: string; fileName: string };
+// JSON importdan kod'siz/nom bo'yicha moslanmagan qator (UnmatchedImportRow) — Decimal'lar
+// server komponentda number'ga o'girilgan (decimalToNumber), Date'lar ISO string.
+export type UnmatchedImportRowView = {
+  id: number;
+  day: string; // ISO YYYY-MM-DD
+  branchAlias: string;
+  warehouseCode: string | null;
+  name: string;
+  artikul: string | null;
+  soldQty: number | null;
+  amount: number | null;
+  stockQty: number | null;
+  createdAt: string; // ISO datetime
+};
 
 export function MoslanmaganClient({
-  products, subs, total, page, pageSize, mismatches, nameTotal,
+  products, subs, total, page, pageSize, mismatches, nameTotal, unmatchedRows, unmatchedTotal,
 }: {
   products: UnmatchedProduct[];
   subs: SubOption[];
@@ -26,22 +49,25 @@ export function MoslanmaganClient({
   pageSize: number;
   mismatches: NameMismatch[];
   nameTotal: number;
+  unmatchedRows: UnmatchedImportRowView[];
+  unmatchedTotal: number;
 }) {
-  if (total === 0 && nameTotal === 0) {
+  if (total === 0 && nameTotal === 0 && unmatchedTotal === 0) {
     return (
       <EmptyState
         icon={CheckCircle2}
         title="Hammasi moslangan"
-        description="Kategoriyasiz SKU va nom farqi yo'q. Yangi sotuv yuklanganda muammoli SKU'lar shu yerda paydo bo'ladi."
+        description="Kategoriyasiz SKU, nom farqi va kodsiz qator yo'q. Yangi sotuv yuklanganda muammoli qatorlar shu yerda paydo bo'ladi."
       />
     );
   }
 
   return (
-    <Tabs defaultValue={total > 0 ? "cat" : "name"} className="w-full">
+    <Tabs defaultValue={total > 0 ? "cat" : nameTotal > 0 ? "name" : "unmatched"} className="w-full">
       <TabsList>
         <TabsTrigger value="cat">Kategoriyasiz · {total.toLocaleString("uz-UZ")}</TabsTrigger>
         <TabsTrigger value="name">Nom farqi · {nameTotal.toLocaleString("uz-UZ")}</TabsTrigger>
+        <TabsTrigger value="unmatched">Kodsiz qatorlar · {unmatchedTotal.toLocaleString("uz-UZ")}</TabsTrigger>
       </TabsList>
 
       <TabsContent value="cat" className="pt-3">
@@ -50,6 +76,10 @@ export function MoslanmaganClient({
 
       <TabsContent value="name" className="pt-3">
         <NameMismatchTab mismatches={mismatches} nameTotal={nameTotal} />
+      </TabsContent>
+
+      <TabsContent value="unmatched" className="pt-3">
+        <UnmatchedRowsTab rows={unmatchedRows} total={unmatchedTotal} />
       </TabsContent>
     </Tabs>
   );
@@ -235,6 +265,92 @@ function NameMismatchRow({ m }: { m: NameMismatch }) {
           Master&apos;ni saqlash
         </Button>
       </div>
+    </div>
+  );
+}
+
+// ─── Tab 3: JSON importdan kod'siz/nom bo'yicha moslanmagan qatorlar ───────────
+function fmtQty(n: number | null): string {
+  if (n == null || !Number.isFinite(n) || n === 0) return "—";
+  return n.toLocaleString("uz-UZ", { maximumFractionDigits: 2 });
+}
+
+function UnmatchedRowsTab({ rows, total }: { rows: UnmatchedImportRowView[]; total: number }) {
+  const [query, setQuery] = useState("");
+  const q = query.trim().toUpperCase();
+  const filtered = useMemo(
+    () => (q
+      ? rows.filter((r) =>
+          r.name.toUpperCase().includes(q) ||
+          (r.artikul ?? "").toUpperCase().includes(q) ||
+          r.branchAlias.toUpperCase().includes(q))
+      : rows),
+    [rows, q]
+  );
+
+  if (total === 0) {
+    return (
+      <EmptyState
+        icon={CheckCircle2}
+        title="Kodsiz qator yo'q"
+        description="JSON importdan kod yoki nom bo'yicha moslanmagan qator kelmagan."
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="relative">
+        <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+        <Input value={query} onChange={(e) => setQuery(e.target.value)}
+          placeholder="Qidirish — nom, artikul yoki filial..." className="h-9 pl-8 pr-8" />
+        {query && (
+          <button onClick={() => setQuery("")} aria-label="Tozalash"
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+      {total > rows.length && (
+        <p className="text-[11px] text-muted-foreground">Ko&apos;rsatilgan {rows.length} / jami {total.toLocaleString("uz-UZ")}.</p>
+      )}
+      {filtered.length === 0 ? (
+        <EmptyState icon={Search} title="Bu ro'yxatda topilmadi" description="Boshqa nom, artikul yoki filial kiriting." />
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-border">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/40 hover:bg-muted/40">
+                <TableHead className="w-[100px]">Sana</TableHead>
+                <TableHead>Filial</TableHead>
+                <TableHead>Nom</TableHead>
+                <TableHead>Artikul</TableHead>
+                <TableHead className="text-right w-[90px]">Soni</TableHead>
+                <TableHead className="text-right w-[130px]">Summa</TableHead>
+                <TableHead className="text-right w-[90px]">Qoldiq</TableHead>
+                <TableHead className="w-[140px]">Kelgan vaqti</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.map((r) => (
+                <TableRow key={r.id} className="text-sm">
+                  <TableCell className="whitespace-nowrap text-xs text-muted-foreground">{formatDateUZ(r.day)}</TableCell>
+                  <TableCell className="text-xs">
+                    {r.branchAlias}
+                    {r.warehouseCode && <span className="ml-1 text-muted-foreground">({r.warehouseCode})</span>}
+                  </TableCell>
+                  <TableCell className="max-w-[220px]"><span className="line-clamp-2 text-xs leading-snug">{r.name}</span></TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{r.artikul ?? "—"}</TableCell>
+                  <TableCell className="text-right tabular-nums text-xs">{fmtQty(r.soldQty)}</TableCell>
+                  <TableCell className="text-right tabular-nums text-xs font-medium">{r.amount != null ? `${formatUZS(r.amount)} so'm` : "—"}</TableCell>
+                  <TableCell className="text-right tabular-nums text-xs">{fmtQty(r.stockQty)}</TableCell>
+                  <TableCell className="whitespace-nowrap text-xs text-muted-foreground">{formatDateTimeUZ(r.createdAt)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
     </div>
   );
 }
