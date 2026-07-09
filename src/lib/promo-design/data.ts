@@ -29,9 +29,10 @@ export type DesignData = {
   badgeText: string;
   dateText: string; // "25-iyundan 1-iyulgacha"
   fileTag: string;
-  // Banner ko'rinishi: HAFTA_CHEGIRMA — dizayner maketi (katta narx + "Barakali xarid" +
-  // ijtimoiy CTA; eski narx/chegirma % ko'rsatilmaydi), qolgan turlar — klassik.
-  variant: "hafta" | "classic";
+  // Banner ko'rinishi: HAFTA_CHEGIRMA — yashil dizayner maketi (katta narx + doira + CTA);
+  // BIZBOP_NARX — to'q-sariq maket (eski narx qizil qiyshiq chiziq bilan, sana/doirasiz);
+  // qolgan turlar — klassik.
+  variant: "hafta" | "bizbop" | "classic";
 };
 
 type PriceRow = { regularPrice: number; promoPrice: number; promoLimit: number | null };
@@ -75,7 +76,7 @@ function build(p: {
     badgeText: BADGE[p.type] ?? "AKSIYA",
     dateText: formatPromoDateRange(p.startDate, p.endDate),
     fileTag,
-    variant: p.type === "HAFTA_CHEGIRMA" ? "hafta" : "classic",
+    variant: p.type === "HAFTA_CHEGIRMA" ? "hafta" : p.type === "BIZBOP_NARX" ? "bizbop" : "classic",
   };
 }
 

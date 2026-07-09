@@ -235,9 +235,155 @@ function HaftaBanner({ data, S, logoData }: { data: DesignData; S: HSizes; logoD
   );
 }
 
+// ─── BIZBOP NARX varianti (to'q-sariq maket) ───────────────────────────────────
+// Farqlar: to'q-sariq fon, o'ngda oq panel (chap burchaklari yumaloq) — tepasida badge +
+// bizbop logo, markazda mahsulot; sana va doira YO'Q; eski narx ham supermarket uslubida,
+// ustidan QIZIL QIYSHIQ chiziq; A4'da yashil/qizil limit qatorlari, Insta'da "Barcha filiallarda".
+
+const ORANGE = "#FA4A0C";
+const RED_STRIKE = "#E02B20";
+const LOGO_RATIO = 3563 / 1165; // public/logo.png nisbatlari
+
+type BSizes = {
+  W: number; H: number; leftPct: string; rightPct: string; pad: number; radius: number;
+  smallSize: number; titleSize: number; ruSize: number;
+  oldMain: number; oldSup: number; oldSom: number;
+  newMain: number; newSup: number; newSom: number;
+  badgeSize: number; logoH: number; imgW: number; imgH: number;
+  limitUz: number; limitRu: number; branchSize: number;
+  showLimit: boolean; // limit qatorlari faqat A4 (chop) formatida
+};
+
+const B_A4: BSizes = {
+  W: 1414, H: 1000, leftPct: "53%", rightPct: "47%", pad: 60, radius: 80,
+  smallSize: 26, titleSize: 62, ruSize: 30,
+  oldMain: 64, oldSup: 34, oldSom: 26,
+  newMain: 160, newSup: 74, newSom: 50,
+  badgeSize: 30, logoH: 44, imgW: 470, imgH: 560,
+  limitUz: 22, limitRu: 13, branchSize: 30, showLimit: true,
+};
+const B_INSTA: BSizes = {
+  W: 1080, H: 1350, leftPct: "50%", rightPct: "50%", pad: 52, radius: 70,
+  smallSize: 24, titleSize: 50, ruSize: 28,
+  oldMain: 76, oldSup: 40, oldSom: 30,
+  newMain: 185, newSup: 84, newSom: 58,
+  badgeSize: 26, logoH: 36, imgW: 420, imgH: 680,
+  limitUz: 24, limitRu: 17, branchSize: 30, showLimit: false,
+};
+
+/** Supermarket uslubidagi narx bloki (katta ming qism + ko'tarilgan 3 raqam + so'm). */
+function SupPrice({ value, main, sup, som }: { value: number; main: number; sup: number; som: number }) {
+  const p = splitPrice(value);
+  return (
+    <div style={{ display: "flex", alignItems: "flex-start", color: "#ffffff" }}>
+      <div style={{ display: "flex", fontSize: main, fontWeight: 700, fontFamily: "Golos", lineHeight: 0.8 }}>{p.main}</div>
+      {p.sup ? (
+        <div style={{ display: "flex", flexDirection: "column", marginLeft: 8 }}>
+          <div style={{ display: "flex", fontSize: sup, fontWeight: 700, fontFamily: "Golos", lineHeight: 0.9 }}>{p.sup}</div>
+          <div style={{ display: "flex", fontSize: som, fontWeight: 700, lineHeight: 1, marginTop: -3 }}>so&apos;m</div>
+        </div>
+      ) : (
+        <div style={{ display: "flex", fontSize: som, fontWeight: 700, marginLeft: 10, alignSelf: "flex-end" }}>so&apos;m</div>
+      )}
+    </div>
+  );
+}
+
+function BizbopBanner({ data, S, logoData }: { data: DesignData; S: BSizes; logoData: string }) {
+  const img = data.imageData ?? logoData;
+  const placeholder = !data.imageData;
+
+  return (
+    <div style={{ display: "flex", width: S.W, height: S.H, fontFamily: "VelaSans", backgroundColor: ORANGE }}>
+      {/* ── CHAP: to'q-sariq panel ── */}
+      <div style={{ display: "flex", flexDirection: "column", width: S.leftPct, height: "100%", padding: S.pad }}>
+        <div style={{ display: "flex", fontSize: S.smallSize, fontWeight: 700, color: "#ffffff" }}>
+          Mahsulotlar miqdori cheklangan.
+        </div>
+
+        {/* nom */}
+        <div style={{ display: "flex", flexDirection: "column", marginTop: Math.round(S.pad * 0.9) }}>
+          <div style={{ display: "flex", fontSize: S.titleSize, fontWeight: 700, color: "#ffffff", lineHeight: 1.08 }}>
+            {data.titleUz}
+          </div>
+          {data.titleRu && (
+            <div style={{ display: "flex", fontSize: S.ruSize, color: "#ffe9df", marginTop: 16 }}>{data.titleRu}</div>
+          )}
+        </div>
+
+        {/* narxlar — pastga yopishgan */}
+        <div style={{ display: "flex", flexGrow: 1, flexDirection: "column", justifyContent: "flex-end" }}>
+          {data.regularPrice > data.promoPrice && (
+            <div style={{ display: "flex", position: "relative", alignSelf: "flex-start", marginBottom: 18 }}>
+              <SupPrice value={data.regularPrice} main={S.oldMain} sup={S.oldSup} som={S.oldSom} />
+              {/* qizil qiyshiq ustma chiziq (o'ngga pastga qiya, maketdagidek) — butun blok bo'ylab */}
+              <div
+                style={{
+                  position: "absolute", left: "-7%", right: "-7%", top: "46%",
+                  height: Math.max(5, Math.round(S.oldMain * 0.1)),
+                  backgroundColor: RED_STRIKE, transform: "rotate(7deg)",
+                }}
+              />
+            </div>
+          )}
+          <SupPrice value={data.promoPrice} main={S.newMain} sup={S.newSup} som={S.newSom} />
+          {!S.showLimit && (
+            <div style={{ display: "flex", fontSize: S.branchSize, fontWeight: 700, color: "#ffffff", marginTop: Math.round(S.pad * 1.1) }}>
+              Barcha filiallarda
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── O'NG: oq panel (chap burchaklari yumaloq) ── */}
+      <div
+        style={{
+          display: "flex", flexDirection: "column", width: S.rightPct, height: "100%",
+          backgroundColor: "#ffffff", padding: S.pad,
+          borderTopLeftRadius: S.radius, borderBottomLeftRadius: S.radius,
+        }}
+      >
+        {/* badge + logo */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div
+            style={{
+              display: "flex", backgroundColor: ORANGE, color: "#ffffff", fontSize: S.badgeSize,
+              fontWeight: 700, padding: "10px 26px", borderRadius: 14,
+            }}
+          >
+            {data.badgeText}
+          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={logoData} width={Math.round(S.logoH * LOGO_RATIO)} height={S.logoH} alt="" />
+        </div>
+
+        {/* mahsulot rasmi (markaz) */}
+        <div style={{ display: "flex", flexGrow: 1, alignItems: "center", justifyContent: "center" }}>
+          <ProductImage src={img} w={S.imgW} h={S.imgH} zoom={data.imageZoom} placeholder={placeholder} />
+        </div>
+
+        {/* limit — faqat A4 (chop): yashil uz + qizil ru qatorlar */}
+        {S.showLimit && data.limitN != null && (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+            <div style={{ display: "flex", width: "100%", justifyContent: "center", fontSize: S.limitUz, fontWeight: 700, color: GREEN, textAlign: "center", lineHeight: 1.25 }}>
+              {`Barchaga birdek yetishi uchun limit ${fmtLimit(data.limitN)} dona.`}
+            </div>
+            <div style={{ display: "flex", width: "100%", justifyContent: "center", fontSize: S.limitRu, fontWeight: 700, color: RED_STRIKE, textAlign: "center", lineHeight: 1.3, marginTop: 6 }}>
+              {`Чтобы дать возможность каждому приобрести данный товар: ${fmtLimit(data.limitN)} шт в одни руки`}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function DesignBanner({ data, format, logoData }: { data: DesignData; format: Format; logoData: string }) {
   if (data.variant === "hafta") {
     return <HaftaBanner data={data} S={format === "a4" ? H_A4 : H_INSTA} logoData={logoData} />;
+  }
+  if (data.variant === "bizbop") {
+    return <BizbopBanner data={data} S={format === "a4" ? B_A4 : B_INSTA} logoData={logoData} />;
   }
   const S = format === "a4" ? A4 : INSTA;
   const img = data.imageData ?? logoData;
