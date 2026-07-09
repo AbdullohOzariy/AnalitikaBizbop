@@ -27,7 +27,7 @@ import {
   dailyPlanByGroup,
 } from "@/lib/analytics-v2";
 import { dailyForecastSeries } from "@/lib/forecast";
-import { computeAbcXyz } from "@/lib/abc-xyz";
+import { computeAbcXyz, abcDefaultStart } from "@/lib/abc-xyz";
 import { oosKpi, oosTreeAgg, stockdayKpi, stockdayTreeAgg } from "@/lib/snapshot-reports";
 import { isoDay } from "@/lib/date";
 
@@ -58,8 +58,8 @@ export async function warmAnalyticsCaches(reason: string): Promise<void> {
     const def = await getDefaultRange();
     const startStr = isoDay(def.start);
     const endStr = isoDay(def.end);
-    // ABC/XYZ default davri — sahifadagi bilan bir xil: oxirgi 3 oy
-    const abcStart = isoDay(new Date(Date.UTC(def.end.getUTCFullYear(), def.end.getUTCMonth() - 2, 1)));
+    // ABC/XYZ default davri — sahifadagi bilan bir manba (abcDefaultStart): oxirgi 3 oy
+    const abcStart = isoDay(abcDefaultStart(def.end));
     const snap = { startStr, endStr, q: "" };
     const todayStr = isoDay(new Date());
 

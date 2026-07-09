@@ -7,11 +7,11 @@ import { prisma } from "@/lib/prisma";
 import { getDefaultRange } from "@/lib/analytics";
 import { parseDateParam, isoDay } from "@/lib/date";
 import {
-  computeAbcXyz, buildAnalizTree, buildMatrix, stripSkus,
-  ABC_A_LIMIT, ABC_B_LIMIT, XYZ_X_LIMIT, XYZ_Y_LIMIT,
+  computeAbcXyz, buildAnalizTree, buildMatrix, stripSkus, abcDefaultStart,
+  ABC_A_LIMIT, ABC_B_LIMIT, XYZ_X_LIMIT, XYZ_Y_LIMIT, CELL_STRATEGY,
   type AbcClass, type XyzClass,
 } from "@/lib/abc-xyz";
-import { LayoutGrid, BarChart3, Activity, Layers, AlertTriangle, CalendarRange } from "lucide-react";
+import { LayoutGrid, BarChart3, Activity, Layers, AlertTriangle, CalendarRange, Download } from "lucide-react";
 import { PageHeader, StatCard, EmptyState, Pill } from "@/components/common/page";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -38,24 +38,6 @@ function pct(v: number, digits = 1): string {
 // Matritsa katagi ranglari — markazlashgan (SKU qator/badge ranglari bilan bir manba)
 // src/lib/sku-rang.ts dagi MATRIX_CELL_CLS ishlatiladi.
 
-const CELL_HINT: Record<AbcClass, Record<XyzClass, string>> = {
-  A: {
-    X: "Oltin fond — doimo zaxirada, avtomatik buyurtma",
-    Y: "Yuqori daromad, o'zgaruvchan — bufer zaxira bilan",
-    Z: "Yuqori daromad, notekis — qo'lda nazorat, aksiya tahlili",
-  },
-  B: {
-    X: "Barqaror o'rtacha — avtomatik buyurtma",
-    Y: "Standart nazorat",
-    Z: "Notekis o'rtacha — buyurtmani ehtiyotkor rejalashtirish",
-  },
-  C: {
-    X: "Kam, lekin barqaror — minimal zaxira",
-    Y: "Kam va o'zgaruvchan — minimal e'tibor",
-    Z: "Assortimentdan chiqarish nomzodi",
-  },
-};
-
 export default async function AbcXyzPage({
   searchParams,
 }: {
@@ -72,8 +54,7 @@ export default async function AbcXyzPage({
 
   // Default davr: ma'lumotli oxirgi oy + undan oldingi 2 oy (XYZ uchun tarix kerak)
   const def = await getDefaultRange();
-  const defStart = new Date(Date.UTC(def.end.getUTCFullYear(), def.end.getUTCMonth() - 2, 1));
-  const startDate = parseDateParam(sp.start) ?? defStart;
+  const startDate = parseDateParam(sp.start) ?? abcDefaultStart(def.end);
   const endDate = parseDateParam(sp.end) ?? def.end;
   const startStr = isoDay(startDate);
   const endStr = isoDay(endDate);
@@ -152,6 +133,11 @@ async function AbcData({
     p.set("tab", t);
     return `/abc-xyz?${p.toString()}`;
   };
+  // Eksport havolasi — hal qilingan davr/filtrni aniq uzatadi (ko'rinish bilan bir xil bo'lsin)
+  const exportParams = new URLSearchParams({ start: startStr, end: endStr });
+  if (branchId) exportParams.set("branchId", String(branchId));
+  const exportHref = `/api/abc-xyz/export?${exportParams.toString()}`;
+
   // Katak havolasi — bosilganda tanlanadi, qayta bosilsa bekor (toggle)
   const cellHref = (c: string) => {
     const p = new URLSearchParams();
@@ -186,25 +172,33 @@ async function AbcData({
         </div>
       )}
 
-      {/* Tabs */}
-      <div role="tablist" className="flex flex-wrap gap-2">
-        {(Object.keys(TAB_META) as Tab[]).map((t) => {
-          const m = TAB_META[t];
-          const active = t === tab;
-          const Icon = m.icon;
-          return (
-            <Link key={t} href={tabHref(t)} scroll={false}
-              aria-current={active ? "page" : undefined}
-              className={cn(
-                "inline-flex items-center gap-2 rounded-xl border px-3.5 py-2 text-sm font-medium transition-colors",
-                active ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                       : "border-border bg-card text-muted-foreground hover:text-foreground hover:bg-secondary"
-              )}>
-              <Icon className="h-4 w-4" />
-              {m.label}
-            </Link>
-          );
-        })}
+      {/* Tabs + eksport */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div role="tablist" className="flex flex-wrap gap-2">
+          {(Object.keys(TAB_META) as Tab[]).map((t) => {
+            const m = TAB_META[t];
+            const active = t === tab;
+            const Icon = m.icon;
+            return (
+              <Link key={t} href={tabHref(t)} scroll={false}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-xl border px-3.5 py-2 text-sm font-medium transition-colors",
+                  active ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                         : "border-border bg-card text-muted-foreground hover:text-foreground hover:bg-secondary"
+                )}>
+                <Icon className="h-4 w-4" />
+                {m.label}
+              </Link>
+            );
+          })}
+        </div>
+        {result.rows.length > 0 && (
+          <a href={exportHref} download
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border border-border bg-card px-3.5 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-secondary">
+            <Download className="h-4 w-4" /> Excel eksport
+          </a>
+        )}
       </div>
 
       <Card className="overflow-hidden">
@@ -238,7 +232,7 @@ async function AbcData({
                           key={xc}
                           href={cellHref(k)}
                           scroll={false}
-                          title={`${CELL_HINT[ac][xc]} — tarkibini ko'rish uchun bosing`}
+                          title={`${CELL_STRATEGY[ac][xc]} — tarkibini ko'rish uchun bosing`}
                           className={cn(
                             "block rounded-xl border p-3 text-center transition-all hover:shadow-md",
                             MATRIX_CELL_CLS[k],

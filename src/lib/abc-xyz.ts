@@ -24,6 +24,15 @@ export const ABC_B_LIMIT = 0.95;
 export const XYZ_X_LIMIT = 0.25;
 export const XYZ_Y_LIMIT = 0.5;
 
+/**
+ * Default ABC/XYZ oynasining boshlanishi: tugash oyidan 2 oy oldingi oyning 1-kuni
+ * (jami ~3 oy — XYZ uchun tarix kerak). Bir manba: sahifa, eksport route,
+ * kesh isitish va Product sinf denormalizatsiyasi shu funksiyadan oladi.
+ */
+export function abcDefaultStart(end: Date): Date {
+  return new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth() - 2, 1));
+}
+
 export type SkuAnaliz = {
   id: number;
   code: number;
@@ -223,9 +232,7 @@ export async function updateProductMatrixClasses(): Promise<void> {
   try {
     const def = await getDefaultRange();
     const endStr = isoDay(def.end);
-    const startStr = new Date(Date.UTC(def.end.getUTCFullYear(), def.end.getUTCMonth() - 2, 1))
-      .toISOString()
-      .slice(0, 10);
+    const startStr = isoDay(abcDefaultStart(def.end));
     const { rows } = await computeAbcXyz(startStr, endStr);
 
     const BATCH = 1000;
@@ -274,6 +281,25 @@ export function stripSkus(groups: AnalizGroup[]): AnalizGroupLite[] {
 }
 
 // ─── ABC×XYZ matritsa ──────────────────────────────────────────────────────────
+
+// Har katak strategiyasi — sahifa tooltip'i va Excel eksporti bir manbadan oladi.
+export const CELL_STRATEGY: Record<AbcClass, Record<XyzClass, string>> = {
+  A: {
+    X: "Oltin fond — doimo zaxirada, avtomatik buyurtma",
+    Y: "Yuqori daromad, o'zgaruvchan — bufer zaxira bilan",
+    Z: "Yuqori daromad, notekis — qo'lda nazorat, aksiya tahlili",
+  },
+  B: {
+    X: "Barqaror o'rtacha — avtomatik buyurtma",
+    Y: "Standart nazorat",
+    Z: "Notekis o'rtacha — buyurtmani ehtiyotkor rejalashtirish",
+  },
+  C: {
+    X: "Kam, lekin barqaror — minimal zaxira",
+    Y: "Kam va o'zgaruvchan — minimal e'tibor",
+    Z: "Assortimentdan chiqarish nomzodi",
+  },
+};
 
 export type MatrixCell = { count: number; total: number; share: number };
 export type Matrix = Record<AbcClass, Record<XyzClass, MatrixCell>>;
