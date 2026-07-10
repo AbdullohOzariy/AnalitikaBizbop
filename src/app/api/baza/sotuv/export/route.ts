@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { decimalToNumber } from "@/lib/format";
 import * as XLSX from "xlsx";
 import { auth } from "@/auth";
-import { isAdminTier } from "@/lib/roles";
+import { canSeeBazaSotuv } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { getDefaultRange } from "@/lib/analytics";
@@ -30,7 +30,7 @@ type Row = {
 async function handleGET(req: NextRequest) {
   const session = await auth();
   if (!session?.user) return new Response("Unauthorized", { status: 401 });
-  if (!isAdminTier(session.user.roles)) return new Response("Forbidden", { status: 403 });
+  if (!canSeeBazaSotuv(session.user.roles)) return new Response("Forbidden", { status: 403 });
 
   const sp = req.nextUrl.searchParams;
   const def = await getDefaultRange();

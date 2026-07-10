@@ -161,7 +161,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "Baza",
     items: [
-      { href: "/baza/sotuv",         label: "Sotuv",             icon: Database,      roles: [SA, A] },
+      { href: "/baza/sotuv",         label: "Sotuv",             icon: Database,      roles: [SA, A, "INVENTORY"] },
       { href: "/baza/qoldiq",        label: "Qoldiq",            icon: Boxes,         roles: [SA, A] },
       { href: "/baza/tashrif",       label: "Tashriflar",        icon: Footprints,    roles: [SA, A] },
       { href: "/iyerarxiya",         label: "Iyerarxiya",        icon: Tag,           roles: [SA, A] },

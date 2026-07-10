@@ -42,6 +42,14 @@ function getPool(): Pool | null {
       idleTimeoutMillis: 600_000,
       keepAlive: true,
     });
+    // KRITIK (prisma.ts'dagi bilan bir xil gotcha): server idle ulanishni uzsa
+    // ("Connection terminated unexpectedly"), pg pool'da 'error' hodisasi chiqadi.
+    // Ishlovchi bo'lmasa — uncaughtException bo'lib jarayonni qulatadi (miniapp
+    // rasm yuklash va boshqa so'rovlar ham yiqiladi). Yutamiz, faqat loglaymiz —
+    // pg uzilgan ulanishni tashlab, keyingi so'rovda yangisini ochadi.
+    globalForBotPool.botPool.on("error", (err) => {
+      console.error("[bot pool] idle client xatosi (yutildi):", err instanceof Error ? err.message : err);
+    });
   }
   return globalForBotPool.botPool;
 }

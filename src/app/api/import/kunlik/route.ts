@@ -26,14 +26,19 @@ export const maxDuration = 300;
  *   }
  *   summa/tansumma ixtiyoriy (bo'lmasa soni×narx / soni×tannarx); sklad ixtiyoriy.
  *
- *   `kod` IXTIYORIY (yo'q / null / "" / 0 → kodsiz). Kodsiz qator BUTUN importni
- *   yiqitmaydi: nomi normallashtirilib (trim, kichik harf, ketma-ket bo'shliq → bitta)
- *   Product'da qidiriladi — AYNAN BITTA moslik (aktivlar ustuvor) bo'lsa o'sha kod bilan
- *   quvurga kiradi; topilmasa yoki bir nechta mos kelsa — UnmatchedImportRow'ga (xom holda)
- *   yoziladi va "Moslanmagan" ro'yxatida qo'lda bog'lanadi.
+ *   `kod` va `nom` IXTIYORIY — bitta chala qator BUTUN importni yiqitmaydi:
+ *     • `kod` yo'q / null / "" / 0 → kodsiz. Nomi normallashtirilib (trim, kichik harf,
+ *       ketma-ket bo'shliq → bitta) Product'da qidiriladi — AYNAN BITTA moslik (aktivlar
+ *       ustuvor) → o'sha kod bilan quvurga; topilmasa/ko'p bo'lsa — UnmatchedImportRow'ga.
+ *     • `nom` yo'q / null / bo'sh → nomsiz (300+ belgi kesiladi). Kod BOR va Product'da
+ *       mavjud → master nom bilan quvurga (bo'sh-nomli yangi mahsulot YARATILMAYDI);
+ *       kod yo'q yoki master'da topilmasa — UnmatchedImportRow'ga.
+ *   Markaziy sklad qatorida kod bo'lsa nom shart emas (WarehouseStock faqat kod bilan).
+ *   Moslanmaganlar xom holda saqlanadi va "Moslanmagan" ro'yxatida qo'lda bog'lanadi.
  *
  *   Javob: { ok: true, fileId, summary, sklad?,
- *            kodsiz?: { jami, nomBoyichaMoslandi, moslanmagan } } yoki { ok: false, error }.
+ *            kodsiz?: { jami, nomBoyichaMoslandi, moslanmagan },
+ *            nomsiz?: { jami, kodBilanOtdi, moslanmagan } } yoki { ok: false, error }.
  *   HTTP: 200 muvaffaqiyat, 401 token, 403 IP, 409 dublikat, 400/500 xato.
  *
  * Bir xil body ikki marta kelsa hash bo'yicha dublikat (409) — qayta yuborish xavfsiz

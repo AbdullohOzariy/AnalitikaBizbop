@@ -73,7 +73,9 @@ export const authConfig = {
           const allowed: string[] = [];
           if (roles.includes("MERCHANDISER")) allowed.push("/promo", "/api/promo");
           if (roles.includes("OPERATOR")) allowed.push("/chiqim", "/sverka", "/api/chiqim", "/api/sverka");
-          if (roles.includes("INVENTORY")) allowed.push("/sotuv-dashboard", "/inventarizatsiya");
+          // INVENTORY qo'shimcha Baza→Sotuv'ni to'liq ko'radi (read-only sahifa + Excel eksport).
+          // Faqat "/baza/sotuv" — Baza'ning boshqa bo'limlari (qoldiq/tashrif/...) yopiq qoladi.
+          if (roles.includes("INVENTORY")) allowed.push("/sotuv-dashboard", "/inventarizatsiya", "/baza/sotuv", "/api/baza/sotuv");
           const ok = allowed.some((p) => pathname === p || pathname.startsWith(p + "/"));
           if (!ok) {
             const dest = roles.includes("MERCHANDISER")

@@ -407,11 +407,23 @@ const jsonCode = z
   }, z.coerce.number().int().positive().nullable())
   .optional();
 
+// `nom` ham IXTIYORIY va chidamli: yo'q / null / bo'sh → "" (bitta bo'sh-nomli qator butun
+// importni yiqitmasin). 300+ belgili nom KESILADI (yiqilmaydi). Bo'sh nom keyingi bosqichda
+// hal qilinadi (kod bor → master nom; nom bo'yicha moslash imkonsiz → moslanmagan).
+// .default("") — yetishmayotgan kalit ham "" beradi (preprocess yolg'iz o'zi buni qopqamaydi).
+const jsonName = z
+  .preprocess((v) => {
+    if (v == null) return "";
+    const s = String(v).trim();
+    return s.length > 300 ? s.slice(0, 300) : s;
+  }, z.string())
+  .default("");
+
 const jsonRowSchema = z.object({
   filial: z.string().trim().min(1).max(150),
   skladKod: z.string().trim().max(100).nullish(), // filial qisqa kodi (GoldMart, MEGA...) — moslashda ustuvor
   kod: jsonCode,
-  nom: z.string().trim().min(1).max(300),
+  nom: jsonName,
   artikul: z.string().trim().max(200).nullish(), // 1C artikul — hozircha saqlanmaydi (qabul qilinadi)
   qoldiq: jsonNum(-1_000_000_000, 1_000_000_000),
   soni: jsonNum(-1_000_000_000, 1_000_000_000),
@@ -580,8 +592,10 @@ export async function importSalesJsonViaToken(input: {
 }): Promise<
   UploadResult & {
     sklad?: { updated: number; unknownCodes: number[] };
-    // Kodsiz qatorlar diagnostikasi: jami kelgan kodsiz, nom bo'yicha moslangan, moslanmagan.
+    // Kodsiz (kod yo'q, nom bor) qatorlar diagnostikasi: jami, nom bo'yicha moslangan, moslanmagan.
     kodsiz?: { jami: number; nomBoyichaMoslandi: number; moslanmagan: number };
+    // Nomsiz (nom bo'sh) qatorlar diagnostikasi: jami, kod master'da topilib o'tgan, moslanmagan.
+    nomsiz?: { jami: number; kodBilanOtdi: number; moslanmagan: number };
   }
 > {
   try {
@@ -613,10 +627,12 @@ export async function importSalesJsonViaToken(input: {
     const filialRows = p.sotuv.filter((r) => !isMarkaziySklad(r));
     const markaziyRows = p.sotuv.filter(isMarkaziySklad);
 
-    // Kodsiz qatorlar — nom bo'yicha Product'ga moslashtiriladi. Faqat kodsiz qator bo'lsa
-    // indeks yuklanadi (aks holda ortiqcha so'rov qilinmaydi).
+    const isEmptyName = (s: string): boolean => s.trim().length === 0;
+
+    // Kodsiz + NOMLI qatorlar — nom bo'yicha Product'ga moslashtiriladi (bo'sh nom moslay olmaydi).
+    // Faqat shundaylar bo'lsa indeks yuklanadi (aks holda ortiqcha so'rov qilinmaydi).
     const codelessNames = [...filialRows, ...markaziyRows]
-      .filter((r) => r.kod == null)
+      .filter((r) => r.kod == null && !isEmptyName(r.nom))
       .map((r) => r.nom);
     const nameToCode = codelessNames.length > 0 ? await resolveNamesToCode(codelessNames) : null;
     const resolveCode = (name: string): number | null => {
@@ -624,13 +640,33 @@ export async function importSalesJsonViaToken(input: {
       return typeof c === "number" ? c : null;
     };
 
-    // Kodsiz statistikasi + moslanmaganlar (kodsiz + nom bo'yicha ham topilmagan).
+    // Kod BOR, nom BO'SH filial qatorlari uchun master nomni oldindan olamiz — bo'sh nom bilan
+    // yangi Product yaratilmasin va ProductNameMismatch hisobotiga bo'sh nom tushmasin
+    // (mavjud kod → master nomi productName sifatida beriladi, uploadV3 uni "farqsiz" ko'radi).
+    const emptyNameFilialCodes = filialRows
+      .filter((r) => r.kod != null && isEmptyName(r.nom))
+      .map((r) => r.kod!) as number[];
+    const masterNameByCode =
+      emptyNameFilialCodes.length > 0
+        ? new Map(
+            (
+              await prisma.product.findMany({
+                where: { code: { in: emptyNameFilialCodes } },
+                select: { code: true, name: true },
+              })
+            ).map((x) => [x.code, x.name] as const)
+          )
+        : new Map<number, string>();
+
+    // Kodsiz (nom bor, kod yo'q) va Nomsiz (nom bo'sh) statistikasi + moslanmaganlar.
     let kodsizJami = 0;
     let kodsizMatched = 0;
+    let nomsizJami = 0;
+    let nomsizKodBilan = 0; // nom bo'sh, lekin kod master'da bor → master nom bilan o'tdi
     const unmatched: JsonRow[] = [];
 
-    // JSON qatori (kodi ma'lum) → v3 parse natijasi shakli (mavjud quvur bilan bir xil semantika).
-    const toProductRow = (r: JsonRow, code: number): ParsedProductRow => {
+    // JSON qatori (kod + nom ma'lum) → v3 parse natijasi shakli (mavjud quvur bilan bir xil semantika).
+    const toProductRow = (r: JsonRow, code: number, name: string): ParsedProductRow => {
       const soni = r.soni ?? null;
       const narx = r.narx ?? null;
       const tannarx = r.tannarx ?? null;
@@ -640,7 +676,7 @@ export async function importSalesJsonViaToken(input: {
         // Moslashda skladKod (qisqa, barqaror) ustuvor; bo'lmasa to'liq nom
         branchAlias: r.skladKod?.trim() || r.filial,
         productCode: code,
-        productName: r.nom,
+        productName: name,
         parentCategoryCode: null, // kategoriya master (iyerarxiya) dan olinadi
         stockQty: r.qoldiq ?? null,
         soldQty: soni,
@@ -651,28 +687,49 @@ export async function importSalesJsonViaToken(input: {
       };
     };
 
-    // Filial sotuv qatorlari: kodlilar to'g'ridan-to'g'ri; kodsizlar nom bo'yicha.
+    // Filial sotuv qatorlari. Har qator AYNAN BITTA bo'limga tushadi (ikki marta sanalmaydi):
+    //   nom bo'sh → NOMSIZ (kod master'da bor → master nom bilan o'tadi; aks holda moslanmagan);
+    //   nom bor, kod bor → avvalgidek; nom bor, kod yo'q → KODSIZ (nom bo'yicha moslash).
     const productRows: ParsedProductRow[] = [];
     for (const r of filialRows) {
-      if (r.kod != null) {
-        productRows.push(toProductRow(r, r.kod));
+      if (isEmptyName(r.nom)) {
+        nomsizJami++;
+        const masterName = r.kod != null ? masterNameByCode.get(r.kod) : undefined;
+        if (r.kod != null && masterName != null) {
+          nomsizKodBilan++;
+          productRows.push(toProductRow(r, r.kod, masterName));
+        } else {
+          // kod yo'q, YOKI kod master'da yo'q — bo'sh-nomli yangi mahsulot yaratmaymiz.
+          unmatched.push(r);
+        }
         continue;
       }
+      if (r.kod != null) {
+        productRows.push(toProductRow(r, r.kod, r.nom));
+        continue;
+      }
+      // nom bor, kod yo'q → nom bo'yicha
       kodsizJami++;
       const code = resolveCode(r.nom);
       if (code != null) {
         kodsizMatched++;
-        productRows.push(toProductRow(r, code));
+        productRows.push(toProductRow(r, code, r.nom));
       } else {
         unmatched.push(r);
       }
     }
 
-    // Markaziy sklad qatorlari: kodlilar → skladInput; kodsizlar nom bo'yicha, topilmasa moslanmagan.
+    // Markaziy sklad qatorlari: kod bo'lsa nom SHART EMAS (WarehouseStock faqat kod bilan).
+    //   kod bor → skladInput; kod yo'q, nom bor → nom bo'yicha; kod yo'q, nom bo'sh → moslanmagan.
     const markaziyResolved: { kod: number; qoldiq: number | null }[] = [];
     for (const r of markaziyRows) {
       if (r.kod != null) {
         markaziyResolved.push({ kod: r.kod, qoldiq: r.qoldiq ?? null });
+        continue;
+      }
+      if (isEmptyName(r.nom)) {
+        nomsizJami++;
+        unmatched.push(r); // kod ham nom ham yo'q — moslash imkonsiz
         continue;
       }
       kodsizJami++;
@@ -748,21 +805,30 @@ export async function importSalesJsonViaToken(input: {
       await insertUnmatchedRows(unmatched, day, fileIdForUnmatched);
     }
 
+    // moslanmagan — har bo'lim ichida ayirma (unmatched[] ikkala turni saqlaydi, umumiy son emas).
     const kodsiz =
       kodsizJami > 0
-        ? { jami: kodsizJami, nomBoyichaMoslandi: kodsizMatched, moslanmagan: unmatched.length }
+        ? { jami: kodsizJami, nomBoyichaMoslandi: kodsizMatched, moslanmagan: kodsizJami - kodsizMatched }
+        : undefined;
+    const nomsiz =
+      nomsizJami > 0
+        ? { jami: nomsizJami, kodBilanOtdi: nomsizKodBilan, moslanmagan: nomsizJami - nomsizKodBilan }
         : undefined;
 
-    // Summary matniga ham kodsiz statistikasi (1C/admin inson o'qiydigan javob ko'radi).
+    // Summary matniga ham kodsiz/nomsiz statistikasi (1C/admin inson o'qiydigan javob ko'radi).
     const kodsizNote = kodsiz
       ? ` Kodsiz: ${kodsiz.jami} (nom bo'yicha ${kodsiz.nomBoyichaMoslandi} moslandi, ${kodsiz.moslanmagan} moslanmagan).`
+      : "";
+    const nomsizNote = nomsiz
+      ? ` Nomsiz: ${nomsiz.jami} (kod bilan ${nomsiz.kodBilanOtdi} o'tdi, ${nomsiz.moslanmagan} moslanmagan).`
       : "";
 
     return {
       ...upload,
-      ...(upload.ok ? { summary: upload.summary + kodsizNote } : {}),
+      ...(upload.ok ? { summary: upload.summary + kodsizNote + nomsizNote } : {}),
       sklad,
       kodsiz,
+      nomsiz,
     };
   } catch (err) {
     return actionError(err, "import-json");

@@ -133,3 +133,9 @@ export const canDoInventory = (r: Roles): boolean =>
 /** Belgilangan SKU ro'yxatini BOSHQARA oladiganlar (qo'shish/o'chirish) — SA va CEO. */
 export const canManageInventoryItems = (r: Roles): boolean =>
   hasRole(r, "SYSTEM_ADMIN", "CEO");
+
+/** Baza → Sotuv bo'limi (SKU×filial×davr sotuv bazasi) — FAQAT o'qish + Excel eksport.
+ *  Admin-tier (SA/ADMIN) + Inventar xodimi (INVENTORY) — scope/filial cheklovisiz to'liq ko'radi.
+ *  DIQQAT: bu sof KO'RISH/eksport gate'i; hech qanday mutatsiya bunga bog'lanmasin (INVENTORY read-only). */
+export const canSeeBazaSotuv = (r: Roles): boolean =>
+  hasRole(r, "SYSTEM_ADMIN", "ADMIN", "INVENTORY");

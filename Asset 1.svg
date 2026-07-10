@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_2" data-name="Layer 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 172.42 38.81">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #ff3700;
+      }
+
+      .cls-2 {
+        isolation: isolate;
+        opacity: .97;
+      }
+    </style>
+  </defs>
+  <g id="_Прямоугольник_3" data-name="Прямоугольник 3" class="cls-2">
+    <g id="_Прямоугольник_3-2" data-name="Прямоугольник 3">
+      <path class="cls-1" d="M24.43,0C10.94,0,0,14.83,0,33.13v5.68h147.99c13.49,0,24.43-14.83,24.43-33.13V0H24.43Z"/>
+    </g>
+  </g>
+</svg>
