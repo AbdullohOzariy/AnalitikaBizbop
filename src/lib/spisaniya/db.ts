@@ -1041,6 +1041,73 @@ export async function chiqimByKategoriyaTovar(
 }
 
 /**
+ * Sabab bo'yicha agregatsiya — davr + ixtiyoriy filial filtri.
+ * "Boshqa: <matn>" ko'rinishlari 'Boshqa'ga yig'iladi (miniapp chip formati);
+ * eski erkin-matn sabablar o'z nomi bilan qoladi. NULL/bo'sh → '—'.
+ */
+export async function chiqimBySabab(
+  range: ChiqimRange,
+  filial?: string
+): Promise<{ sabab: string; count: number; summa: number }[]> {
+  const p = getPool();
+  if (!p) return [];
+  try {
+    const params: unknown[] = [...dayParams(range)];
+    const cond = ["vaqt::date >= $1::date", "vaqt::date <= $2::date"];
+    if (filial) { params.push(filial); cond.push(`filial = $${params.length}`); }
+    const { rows } = await p.query(
+      `SELECT CASE
+                WHEN sabab IS NULL OR sabab = '' THEN '—'
+                WHEN sabab LIKE 'Boshqa:%' THEN 'Boshqa'
+                ELSE sabab
+              END AS sabab,
+              count(*)::int AS count,
+              COALESCE(sum(summa), 0)::float8 AS summa
+       FROM yozuvlar
+       WHERE ${cond.join(" AND ")}
+       GROUP BY 1 ORDER BY summa DESC`,
+      params
+    );
+    return rows as { sabab: string; count: number; summa: number }[];
+  } catch (err) {
+    logDbXato(err);
+    return [];
+  }
+}
+
+/**
+ * Eng katta summali tovarlar (kunlik hisobot "eng xavfli SKU" uchun) — davr bo'yicha top N.
+ * Tovar nomi bo'yicha guruhlanadi (SKU tanlangan yozuvlarda nom kanonik); sku_kod bo'lsa
+ * MAX bilan olinadi (eski qo'lda yozilgan yozuvlarda null).
+ */
+export async function chiqimTopTovarlar(
+  range: ChiqimRange,
+  limit: number
+): Promise<{ tovar: string; sku_kod: number | null; count: number; summa: number; miqdor: number }[]> {
+  const p = getPool();
+  if (!p) return [];
+  try {
+    await ensureSozlamalarSchema(); // sku_kod ustuni tayyor bo'lsin (yangi bazalarda)
+    const [start, end] = dayParams(range);
+    const { rows } = await p.query(
+      `SELECT COALESCE(NULLIF(tovar, ''), '—') AS tovar,
+              MAX(sku_kod)::int AS sku_kod,
+              count(*)::int AS count,
+              COALESCE(sum(summa), 0)::float8 AS summa,
+              COALESCE(sum(miqdor), 0)::float8 AS miqdor
+       FROM yozuvlar
+       WHERE vaqt::date >= $1::date AND vaqt::date <= $2::date
+       GROUP BY 1 ORDER BY summa DESC LIMIT $3`,
+      [start, end, limit]
+    );
+    return rows as { tovar: string; sku_kod: number | null; count: number; summa: number; miqdor: number }[];
+  } catch (err) {
+    logDbXato(err);
+    return [];
+  }
+}
+
+/**
  * Excel eksport uchun yozuvlar (sahifalashsiz, LIMIT 50000).
  * tur va filial optional filtrlar.
  */

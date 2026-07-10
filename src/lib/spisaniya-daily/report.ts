@@ -1,6 +1,6 @@
 import { Telegram } from "telegraf";
 import { getSpisaniyaDailyConfig } from "./sozlama";
-import { chiqimByBranch, chiqimByKategoriya, type ChiqimRange } from "@/lib/spisaniya/db";
+import { chiqimByBranch, chiqimTopTovarlar, type ChiqimRange } from "@/lib/spisaniya/db";
 import { isoDay, todayTashkentISO } from "@/lib/date";
 
 /** HTML parse_mode uchun maxsus belgilarni eskeyplash (kategoriya/filial nomlari xom keladi). */
@@ -19,22 +19,21 @@ function yesterdayRange(): { range: ChiqimRange; label: string } {
 }
 
 /**
- * Kechagi kun bo'yicha indikatorli matn — jami + eng xavfli subkategoriya va
+ * Kechagi kun bo'yicha indikatorli matn — jami + eng xavfli 3 ta SKU (tovar) va
  * eng xavfli filial (summa bo'yicha tartib, chiqim soni indikator sifatida).
  * Ma'lumot bo'lmasa null.
  */
 export async function buildSpisaniyaDailyText(): Promise<{ text: string; total: number; label: string } | null> {
   const { range, label } = yesterdayRange();
-  const [byBranch, byKat] = await Promise.all([
-    chiqimByBranch(range),       // ORDER BY summa DESC → [0] eng xavfli filial
-    chiqimByKategoriya(range),   // ORDER BY summa DESC → [0] eng xavfli subkategoriya
+  const [byBranch, topTovarlar] = await Promise.all([
+    chiqimByBranch(range),        // ORDER BY summa DESC → [0] eng xavfli filial
+    chiqimTopTovarlar(range, 3),  // summa bo'yicha top 3 tovar (SKU)
   ]);
   const total = byBranch.reduce((s, r) => s + r.summa, 0);
   const totalCount = byBranch.reduce((s, r) => s + r.count, 0);
   if (total === 0 && totalCount === 0) return null;
 
   const pct = (n: number) => (total > 0 ? Math.round((n / total) * 100) : 0);
-  const topKat = byKat[0];
   const topBranch = byBranch[0];
 
   const lines: string[] = [
@@ -44,12 +43,15 @@ export async function buildSpisaniyaDailyText(): Promise<{ text: string; total: 
     `Jami chiqim: <b>${money(total)}</b> so'm · ${totalCount} ta yozuv`,
     "",
   ];
-  if (topKat) {
-    lines.push(
-      "🔴 <b>Eng xavfli subkategoriya</b>",
-      `   ${esc(topKat.kategoriya)} — <b>${money(topKat.summa)}</b> so'm · ${topKat.count} ta (jami ${pct(topKat.summa)}%)`,
-      ""
-    );
+  if (topTovarlar.length > 0) {
+    lines.push("🔴 <b>Eng xavfli 3 ta SKU</b>");
+    topTovarlar.forEach((t, i) => {
+      const kod = t.sku_kod ? ` <code>#${t.sku_kod}</code>` : "";
+      lines.push(
+        `   ${i + 1}. ${esc(t.tovar)}${kod} — <b>${money(t.summa)}</b> so'm · ${t.count} ta (jami ${pct(t.summa)}%)`
+      );
+    });
+    lines.push("");
   }
   if (topBranch) {
     lines.push(

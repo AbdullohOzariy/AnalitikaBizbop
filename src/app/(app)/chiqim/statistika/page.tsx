@@ -7,6 +7,7 @@ import {
   chiqimSummary,
   chiqimByBranch,
   chiqimByKategoriya,
+  chiqimBySabab,
   chiqimFilials,
   TUR_LABEL,
 } from "@/lib/spisaniya/db";
@@ -22,6 +23,7 @@ import {
   WifiOff,
   ChartPie,
   Layers,
+  AlignLeft,
 } from "lucide-react";
 import { ChiqimExportButton } from "../chiqim-export-button";
 import {
@@ -77,16 +79,32 @@ export default async function ChiqimStatistikaPage({
   const range = { start: startDate, end: endDate };
   const filialFilter = sp.filial || undefined;
 
-  const [summary, byBranch, byKategoriya, filials] = await Promise.all([
+  const [summary, byBranch, byKategoriya, bySabab, filials] = await Promise.all([
     chiqimSummary(range, filialFilter),
     chiqimByBranch(range, filialFilter),
     chiqimByKategoriya(range, filialFilter),
+    chiqimBySabab(range, filialFilter),
     chiqimFilials(),
   ]);
 
   const totalSumma = summary.reduce((acc, r) => acc + r.summa, 0);
   const totalCount = summary.reduce((acc, r) => acc + r.count, 0);
   const branchTotal = byBranch.reduce((acc, r) => acc + r.summa, 0);
+
+  // Sabab breakdown — top 10 alohida, qolgan (eski erkin-matn) sabablar bitta qatorga yig'iladi
+  const SABAB_TOP = 10;
+  const sababTotal = bySabab.reduce((acc, r) => acc + r.summa, 0);
+  const sababRest = bySabab.slice(SABAB_TOP);
+  const sababRows = [
+    ...bySabab.slice(0, SABAB_TOP),
+    ...(sababRest.length
+      ? [{
+          sabab: `Boshqa sabablar (${sababRest.length} ta)`,
+          count: sababRest.reduce((acc, r) => acc + r.count, 0),
+          summa: sababRest.reduce((acc, r) => acc + r.summa, 0),
+        }]
+      : []),
+  ];
 
   // Kategoriya breakdown — summa bo'yicha kamayish tartibida
   const katSorted = [...byKategoriya].sort((a, b) => b.summa - a.summa);
@@ -196,6 +214,46 @@ export default async function ChiqimStatistikaPage({
                   <Building2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                   <span className="w-44 shrink-0 truncate text-xs font-medium" title={row.filial}>
                     {row.filial}
+                  </span>
+                  <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="absolute inset-y-0 left-0 rounded-full bg-primary/60"
+                      style={{ width: `${Math.min(pct, 100)}%` }}
+                    />
+                  </div>
+                  <span className="w-28 shrink-0 text-right tabular-nums text-xs">
+                    {formatUZS(row.summa, { compact: true })}
+                  </span>
+                  <span className="w-10 shrink-0 text-right tabular-nums text-xs text-muted-foreground">
+                    {pct.toFixed(1)}%
+                  </span>
+                  <span className="w-14 shrink-0 text-right tabular-nums text-xs text-muted-foreground">
+                    {row.count.toLocaleString("uz-UZ")} ta
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </SectionCard>
+      )}
+
+      {/* Sabab bo'yicha */}
+      {sababRows.length > 0 && (
+        <SectionCard
+          title="Sabab bo'yicha"
+          description="Hisobdan chiqarish sabablari kesimida summa va ulushi"
+          actions={
+            <span className="text-xs text-muted-foreground">{bySabab.length} ta sabab</span>
+          }
+        >
+          <div className="space-y-2.5">
+            {sababRows.map((row) => {
+              const pct = sababTotal > 0 ? (row.summa / sababTotal) * 100 : 0;
+              return (
+                <div key={row.sabab} className="flex items-center gap-3">
+                  <AlignLeft className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <span className="w-56 shrink-0 truncate text-xs font-medium" title={row.sabab}>
+                    {row.sabab}
                   </span>
                   <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-muted">
                     <div
