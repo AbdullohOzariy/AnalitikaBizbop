@@ -67,6 +67,17 @@ export async function POST(req: NextRequest) {
   let body: unknown;
   try {
     const raw = Buffer.from(await req.arrayBuffer());
+    // Proxy buferi chegarasi (next.config proxyClientMaxBodySize bilan sinxron) —
+    // undan katta body JIM KESILADI (xato bermaydi), parse esa chalg'ituvchi
+    // "JSON emas" derdi. Kesilgan bo'lsa aniq 413: gzip yuborilsin.
+    const LIMIT = 25 * 1024 * 1024;
+    const declared = Number(req.headers.get("content-length") || 0);
+    if (raw.byteLength >= LIMIT || declared > LIMIT) {
+      return NextResponse.json(
+        { ok: false, error: "Body 25MB dan katta — Content-Encoding: gzip bilan yuboring (siqilgan ~1-2MB bo'ladi)." },
+        { status: 413 }
+      );
+    }
     const enc = (req.headers.get("content-encoding") || "").toLowerCase();
     const text = enc.includes("gzip")
       ? zlib.gunzipSync(raw).toString("utf8")

@@ -18,6 +18,11 @@ const nextConfig: NextConfig = {
       // (1C kunlik JSON kirill bilan katta bo'ladi — gzip ham qo'llab-quvvatlanadi).
       bodySizeLimit: "60mb",
     },
+    // Proxy (middleware) bo'lganda Next route-handler body'sini ham buferlaydi —
+    // default 10MB. 1C kunlik JSON gzip'siz kelsa ~16MB bo'lib kesilardi
+    // ("Request body exceeded 10MB" → JSON.parse yiqiladi). 25MB yetarli zaxira;
+    // gzip yuborilsa baribir ~1-2MB. /api/import/kunlik'dagi 413 tekshiruvi bilan sinxron.
+    proxyClientMaxBodySize: "25mb",
   },
   async redirects() {
     return [
