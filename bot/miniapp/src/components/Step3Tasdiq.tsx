@@ -47,10 +47,7 @@ export default function Step3Tasdiq({ tur, form, onBack, onDone }: Props) {
   const [loading, setLoading] = useState(false)
   const [xato, setXato] = useState<string | null>(null)
 
-  // Yakuniy sabab matni — tanlov o'zi yoki "Boshqa: <matn>"
-  const sabab = form.sababTanlov === 'Boshqa'
-    ? `Boshqa: ${form.sababMatn.trim()}`
-    : form.sababTanlov
+  const sabab = form.sababTanlov
 
   async function handleYuborish() {
     haptic?.impactOccurred('medium')

@@ -26,9 +26,8 @@ export interface FormData {
   miqdor: string
   birlik: 'kg' | 'dona' | 'litr'
   summa: string
-  // Sabab — ro'yxatdan tanlanadi; "Boshqa" bo'lsa sababMatn to'ldiriladi
+  // Sabab — faqat ro'yxatdan tanlanadi (erkin matn yo'q)
   sababTanlov: string
-  sababMatn: string
   filial: string
   firmaNomi: string
   kafeNomi: string
@@ -46,7 +45,6 @@ const SABABLAR = [
   'Yetkazib beruvchi srogi kam olib kelgan',
   'Merchen qoidasi buzilgan',
   'Saqlash qoidasi buzilgan',
-  'Boshqa',
 ] as const
 
 const VOZVRAT_HOLAT: { value: VozvratHolat; label: string }[] = [
@@ -101,7 +99,7 @@ export default function Step2Forma({ tur, onBack, onNext }: Props) {
     photo: null, photoBase64: null, photoSize: 0,
     qrPhoto: null, qrPhotoBase64: null, qrPhotoSize: 0,
     tovarNomi: '', skuKod: null, miqdor: '', birlik: 'dona', summa: '',
-    sababTanlov: '', sababMatn: '',
+    sababTanlov: '',
     filial: '', firmaNomi: '', kafeNomi: '',
     yonalish: 'asosiy_filial', taminotchi: '', vozvratStatus: 'xabar_berildi', qaytarilmadiSabab: '',
   })
@@ -137,9 +135,7 @@ export default function Step2Forma({ tur, onBack, onNext }: Props) {
     tur !== 'qaytarish' ||
     (form.vozvratStatus !== 'qaytarilmadi' || form.qaytarilmadiSabab.trim().length > 0)
 
-  const sababOk = Boolean(
-    form.sababTanlov && (form.sababTanlov !== 'Boshqa' || form.sababMatn.trim())
-  )
+  const sababOk = Boolean(form.sababTanlov)
 
   const isValid = Boolean(
     form.photoBase64 &&
@@ -315,15 +311,6 @@ export default function Step2Forma({ tur, onBack, onNext }: Props) {
               </button>
             ))}
           </div>
-          {form.sababTanlov === 'Boshqa' && (
-            <input
-              type="text"
-              value={form.sababMatn}
-              onChange={e => set('sababMatn', e.target.value)}
-              placeholder="Sababni yozing..."
-              className="w-full bg-transparent text-[15px] text-tg-text placeholder:text-tg-hint/60 outline-none mt-2.5 pt-2.5 border-t border-line"
-            />
-          )}
         </Field>
 
         {/* Filial dropdown */}
