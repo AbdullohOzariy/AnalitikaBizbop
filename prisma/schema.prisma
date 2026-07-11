@@ -1061,8 +1061,12 @@ model PromoItem {
   productId     Int
   groupId       Int? // aksiya ichidagi SKU guruhi (ixtiyoriy; null = guruhsiz)
   regularPrice  Decimal  @db.Decimal(20, 2) // sotilish (oddiy) narxi
-  promoPrice    Decimal  @db.Decimal(20, 2) // aksiya narxi
+  promoPrice    Decimal  @db.Decimal(20, 2) // aksiya narxi (N+M mexanikada = regularPrice — dona narxi o'zgarmaydi)
   promoLimit    Decimal? @db.Decimal(20, 3) // aksiya limiti (dona, kasr ham bo'lishi mumkin)
+  // N+M ("N dona ol, M dona tekin": 1+1, 2+1, 3+2...) mexanikasi — ikkisi ham to'lsa faol,
+  // ikkisi ham null = oddiy narx-chegirma. Effektiv chegirma = freeQty/(buyQty+freeQty) (hosila).
+  buyQty        Int? // N — to'liq narxda olinadigan dona
+  freeQty       Int? // M — tekin beriladigan dona
   priceReturned Boolean? // aksiya tugagach narx asliga qaytdimi (hisobot to'ldiradi)
   designTitle   String? // dizayn banner uchun chiroyli nom (uz; guruhsiz SKU uchun) — null = Product.name fallback
   designTitleRu String? // ixtiyoriy ru qator (null = ko'rsatilmaydi)

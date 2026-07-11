@@ -33,6 +33,8 @@ export type ReportItem = {
   code: number;
   regularPrice: number;
   promoPrice: number;
+  // N+M mexanika ("N ol, M tekin") — null bo'lmasa narx-chegirma emas (dona narxi o'zgarmagan).
+  nPlusM: { buy: number; free: number } | null;
   // Aksiya davri vs oldingi (baseline) davr
   promoQty: number;
   promoAmount: number;
@@ -88,7 +90,7 @@ export async function promoReportAction(input: { campaignId: number }): Promise<
       select: {
         id: true, title: true, type: true, status: true, startDate: true, endDate: true, branchId: true,
         branch: { select: { name: true } },
-        items: { select: { productId: true, regularPrice: true, promoPrice: true, product: { select: { name: true, code: true } } } },
+        items: { select: { productId: true, regularPrice: true, promoPrice: true, buyQty: true, freeQty: true, product: { select: { name: true, code: true } } } },
       },
     });
     if (!c) return { ok: false, error: "Aksiya topilmadi." };
@@ -144,9 +146,11 @@ export async function promoReportAction(input: { campaignId: number }): Promise<
       const afterQty = r ? r.after_qty : 0;
       const afterAmount = r ? r.after_amt : 0;
       const afterAvg = hasAfter && afterQty > 0 ? afterAmount / afterQty : null;
-      // Narx asliga qaytdimi? after o'rtacha narx regularga yaqin (±5%) → qaytdi; promoga yaqin → qoldi
+      const isNM = it.buyQty != null && it.freeQty != null;
+      // Narx asliga qaytdimi? after o'rtacha narx regularga yaqin (±5%) → qaytdi; promoga yaqin → qoldi.
+      // N+M da dona narxi tushmaydi (promo=reg) — narx-qaytish tekshiruvi ma'nosiz, "unknown" qoladi.
       let priceStatus: ReportItem["priceStatus"] = "unknown";
-      if (afterAvg != null && reg > 0) {
+      if (!isNM && afterAvg != null && reg > 0) {
         const dReg = Math.abs(afterAvg - reg) / reg;
         const dPromo = promo > 0 ? Math.abs(afterAvg - promo) / promo : Infinity;
         priceStatus = dReg <= 0.05 ? "returned" : dPromo <= 0.05 ? "stuck" : afterAvg >= reg * 0.95 ? "returned" : "stuck";
@@ -154,6 +158,7 @@ export async function promoReportAction(input: { campaignId: number }): Promise<
       return {
         productId: it.productId, name: it.product.name, code: it.product.code,
         regularPrice: reg, promoPrice: promo,
+        nPlusM: isNM ? { buy: it.buyQty!, free: it.freeQty! } : null,
         promoQty, promoAmount, baseQty, baseAmount,
         growthQtyPct: pct(promoQty, baseQty), growthAmountPct: pct(promoAmount, baseAmount),
         afterAvgPrice: afterAvg, priceStatus,

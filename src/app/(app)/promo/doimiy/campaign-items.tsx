@@ -60,25 +60,48 @@ function diffBadgeClass(pct: number) {
     : "bg-muted text-muted-foreground";
 }
 
-/** Bitta SKU narx/limit tahriri — ItemRow (desktop) va ItemCardMobile ikkalasi ham shu hook'dan foydalanadi. */
+/** Bitta SKU narx/limit tahriri — ItemRow (desktop) va ItemCardMobile ikkalasi ham shu hook'dan foydalanadi.
+ *  N+M mexanikali qatorda promoPrice o'rniga buyQty/freeQty tahrirlanadi (mexanika inline o'zgarmaydi —
+ *  boshqa mexanikaga o'tkazish uchun SKU qayta qo'shiladi). */
 function useItemEditor(row: PromoItemRow, onChanged: () => void) {
+  const isNM = row.buyQty != null && row.freeQty != null;
   const [reg, setReg] = useState(String(row.regularPrice));
   const [promo, setPromo] = useState(String(row.promoPrice));
+  const [buy, setBuy] = useState(row.buyQty != null ? String(row.buyQty) : "");
+  const [free, setFree] = useState(row.freeQty != null ? String(row.freeQty) : "");
   const [limit, setLimit] = useState(row.promoLimit != null ? String(row.promoLimit) : "");
   const [isPending, start] = useTransition();
   const [saved, setSaved] = useState(false);
 
-  // Live derive (render — effekt EMAS)
+  // Live derive (render — effekt EMAS). N+M da % = effektiv chegirma (M dona N+M donadan tekin).
   const regN = Number(reg) || 0;
   const promoN = Number(promo) || 0;
+  const buyN = Number(buy) || 0;
+  const freeN = Number(free) || 0;
   const diff = regN - promoN;
-  const pct = regN > 0 ? (diff / regN) * 100 : 0;
+  const pct = isNM
+    ? (buyN + freeN > 0 ? (freeN / (buyN + freeN)) * 100 : 0)
+    : (regN > 0 ? (diff / regN) * 100 : 0);
 
   const save = () => {
-    const r = Number(reg), p = Number(promo);
+    const r = Number(reg);
     const l = limit.trim() === "" ? null : Number(limit);
-    if (!(r > 0) || !(p > 0)) { toast.error("Narxlar musbat bo'lishi kerak."); return; }
+    if (!(r > 0)) { toast.error("Sotilish narxi musbat bo'lishi kerak."); return; }
     if (l != null && !(l > 0)) { toast.error("Limit musbat bo'lishi kerak."); return; }
+    if (isNM) {
+      const b = Number(buy), f = Number(free);
+      if (!Number.isInteger(b) || !Number.isInteger(f) || !(b > 0) || !(f > 0)) { toast.error("N va M butun musbat son bo'lishi kerak."); return; }
+      const changed = r !== row.regularPrice || b !== row.buyQty || f !== row.freeQty || l !== row.promoLimit;
+      if (!changed) return;
+      start(async () => {
+        const res = await updateItemAction({ id: row.id, regularPrice: r, buyQty: b, freeQty: f, promoLimit: l });
+        if (res.ok) { setSaved(true); onChanged(); setTimeout(() => setSaved(false), 1200); }
+        else toast.error(res.error);
+      });
+      return;
+    }
+    const p = Number(promo);
+    if (!(p > 0)) { toast.error("Aksiya narxi musbat bo'lishi kerak."); return; }
     const changed = r !== row.regularPrice || p !== row.promoPrice || l !== row.promoLimit;
     if (!changed) return;
     start(async () => {
@@ -96,7 +119,7 @@ function useItemEditor(row: PromoItemRow, onChanged: () => void) {
     });
   };
 
-  return { reg, setReg, promo, setPromo, limit, setLimit, isPending, saved, diff, pct, save, del };
+  return { isNM, reg, setReg, promo, setPromo, buy, setBuy, free, setFree, limit, setLimit, isPending, saved, diff, pct, save, del };
 }
 
 /** Guruh nomi tahriri/o'chirish — GroupBlock (desktop) va GroupCardMobile ikkalasi ham shu hook'dan foydalanadi. */
@@ -556,8 +579,9 @@ function ItemRow({ row, canEdit, onChanged, grouped, onDragStartItem, onDragEndI
   row: PromoItemRow; canEdit: boolean; onChanged: () => void; grouped?: boolean;
   onDragStartItem?: (e: React.DragEvent) => void; onDragEndItem?: () => void; onDesign?: () => void;
 }) {
-  const { reg, setReg, promo, setPromo, limit, setLimit, isPending, saved, diff, pct, save, del } = useItemEditor(row, onChanged);
+  const { isNM, reg, setReg, promo, setPromo, buy, setBuy, free, setFree, limit, setLimit, isPending, saved, diff, pct, save, del } = useItemEditor(row, onChanged);
   const numInput = "h-8 w-28 rounded-lg text-right tabular-nums";
+  const nmInput = "h-8 w-12 rounded-lg text-center tabular-nums";
   return (
     <tr className="border-b border-border/40 last:border-0 hover:bg-muted/20">
       <td className={cn("px-3 py-1.5", grouped && "pl-9")}>
@@ -575,7 +599,14 @@ function ItemRow({ row, canEdit, onChanged, grouped, onDragStartItem, onDragEndI
           )}
           <div className="min-w-0">
             <div className="max-w-[340px] leading-snug" title={row.name}>{row.name}</div>
-            <div className="font-mono text-[11px] text-muted-foreground">{row.code}</div>
+            <div className="flex items-center gap-1.5">
+              <span className="font-mono text-[11px] text-muted-foreground">{row.code}</span>
+              {isNM && (
+                <span className="rounded-md bg-violet-500/10 px-1.5 py-px text-[10px] font-bold text-violet-600 dark:text-violet-400">
+                  {row.buyQty}+{row.freeQty} tekin
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </td>
@@ -586,10 +617,22 @@ function ItemRow({ row, canEdit, onChanged, grouped, onDragStartItem, onDragEndI
           : <span className="tabular-nums">{fmtMoney(row.regularPrice)}</span>}
       </td>
       <td className="px-2 py-1.5 text-right">
-        {canEdit
-          ? <Input value={promo} disabled={isPending} type="number" inputMode="decimal" className={numInput}
-              onChange={(e) => setPromo(e.target.value)} onBlur={save} onKeyDown={(e) => e.key === "Enter" && save()} />
-          : <span className="tabular-nums">{fmtMoney(row.promoPrice)}</span>}
+        {isNM ? (
+          canEdit ? (
+            <div className="flex items-center justify-end gap-1">
+              <Input value={buy} disabled={isPending} type="number" inputMode="numeric" className={nmInput} aria-label="Nechta olsa (N)"
+                onChange={(e) => setBuy(e.target.value)} onBlur={save} onKeyDown={(e) => e.key === "Enter" && save()} />
+              <span className="text-muted-foreground">+</span>
+              <Input value={free} disabled={isPending} type="number" inputMode="numeric" className={nmInput} aria-label="Nechta tekin (M)"
+                onChange={(e) => setFree(e.target.value)} onBlur={save} onKeyDown={(e) => e.key === "Enter" && save()} />
+            </div>
+          ) : <span className="tabular-nums">{row.buyQty}+{row.freeQty}</span>
+        ) : (
+          canEdit
+            ? <Input value={promo} disabled={isPending} type="number" inputMode="decimal" className={numInput}
+                onChange={(e) => setPromo(e.target.value)} onBlur={save} onKeyDown={(e) => e.key === "Enter" && save()} />
+            : <span className="tabular-nums">{fmtMoney(row.promoPrice)}</span>
+        )}
       </td>
       <td className="px-2 py-1.5 text-right">
         {canEdit
@@ -597,7 +640,7 @@ function ItemRow({ row, canEdit, onChanged, grouped, onDragStartItem, onDragEndI
               onChange={(e) => setLimit(e.target.value)} onBlur={save} onKeyDown={(e) => e.key === "Enter" && save()} />
           : <span className="tabular-nums text-muted-foreground">{row.promoLimit != null ? fmtMoney(row.promoLimit) : "—"}</span>}
       </td>
-      <td className="px-2 py-1.5 text-right tabular-nums font-medium">{diff > 0 ? `−${fmtMoney(diff)}` : diff < 0 ? `+${fmtMoney(-diff)}` : "—"}</td>
+      <td className="px-2 py-1.5 text-right tabular-nums font-medium">{isNM ? "—" : diff > 0 ? `−${fmtMoney(diff)}` : diff < 0 ? `+${fmtMoney(-diff)}` : "—"}</td>
       <td className={cn("px-2 py-1.5 text-right tabular-nums font-semibold", diffPctClass(pct))}>{pct ? `${pct.toFixed(1)}%` : "—"}</td>
       {canEdit && (
         <td className="px-1 py-1.5">
@@ -759,8 +802,9 @@ function ItemCardMobile({
   onMove?: () => void;
   onDesign?: () => void;
 }) {
-  const { reg, setReg, promo, setPromo, limit, setLimit, isPending, saved, diff, pct, save, del } = useItemEditor(row, onChanged);
+  const { isNM, reg, setReg, promo, setPromo, buy, setBuy, free, setFree, limit, setLimit, isPending, saved, diff, pct, save, del } = useItemEditor(row, onChanged);
   const numInput = "h-9 rounded-lg text-right text-sm tabular-nums";
+  const nmInput = "h-9 rounded-lg text-center text-sm tabular-nums";
   const roInput = "flex h-9 items-center justify-end rounded-lg bg-muted/30 px-2 text-sm tabular-nums";
   const actionBtn = "inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground";
 
@@ -769,7 +813,14 @@ function ItemCardMobile({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="text-sm font-medium leading-snug">{row.name}</div>
-          <div className="font-mono text-[11px] text-muted-foreground">{row.code}</div>
+          <div className="flex items-center gap-1.5">
+            <span className="font-mono text-[11px] text-muted-foreground">{row.code}</span>
+            {isNM && (
+              <span className="rounded-md bg-violet-500/10 px-1.5 py-px text-[10px] font-bold text-violet-600 dark:text-violet-400">
+                {row.buyQty}+{row.freeQty} tekin
+              </span>
+            )}
+          </div>
         </div>
         <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums", diffBadgeClass(pct))}>
           {pct ? `${pct.toFixed(1)}%` : "—"}
@@ -785,11 +836,23 @@ function ItemCardMobile({
             : <div className={roInput}>{fmtMoney(row.regularPrice)}</div>}
         </div>
         <div className="space-y-1">
-          <Label className="text-[11px] text-muted-foreground">Aksiya narxi</Label>
-          {canEdit
-            ? <Input value={promo} disabled={isPending} type="number" inputMode="decimal" className={numInput}
-                onChange={(e) => setPromo(e.target.value)} onBlur={save} onKeyDown={(e) => e.key === "Enter" && save()} />
-            : <div className={roInput}>{fmtMoney(row.promoPrice)}</div>}
+          <Label className="text-[11px] text-muted-foreground">{isNM ? "N + M (tekin)" : "Aksiya narxi"}</Label>
+          {isNM ? (
+            canEdit ? (
+              <div className="flex items-center gap-1">
+                <Input value={buy} disabled={isPending} type="number" inputMode="numeric" className={nmInput} aria-label="Nechta olsa (N)"
+                  onChange={(e) => setBuy(e.target.value)} onBlur={save} onKeyDown={(e) => e.key === "Enter" && save()} />
+                <span className="text-muted-foreground">+</span>
+                <Input value={free} disabled={isPending} type="number" inputMode="numeric" className={nmInput} aria-label="Nechta tekin (M)"
+                  onChange={(e) => setFree(e.target.value)} onBlur={save} onKeyDown={(e) => e.key === "Enter" && save()} />
+              </div>
+            ) : <div className={roInput}>{row.buyQty}+{row.freeQty}</div>
+          ) : (
+            canEdit
+              ? <Input value={promo} disabled={isPending} type="number" inputMode="decimal" className={numInput}
+                  onChange={(e) => setPromo(e.target.value)} onBlur={save} onKeyDown={(e) => e.key === "Enter" && save()} />
+              : <div className={roInput}>{fmtMoney(row.promoPrice)}</div>
+          )}
         </div>
         <div className="space-y-1">
           <Label className="text-[11px] text-muted-foreground">Limit</Label>
@@ -801,7 +864,9 @@ function ItemCardMobile({
       </div>
 
       <div className="mt-2 text-xs text-muted-foreground">
-        Farqi: <b className="text-foreground tabular-nums">{diff > 0 ? `−${fmtMoney(diff)}` : diff < 0 ? `+${fmtMoney(-diff)}` : "—"}</b>
+        {isNM
+          ? <>Taklif: <b className="text-foreground">{row.buyQty} ol + {row.freeQty} tekin</b></>
+          : <>Farqi: <b className="text-foreground tabular-nums">{diff > 0 ? `−${fmtMoney(diff)}` : diff < 0 ? `+${fmtMoney(-diff)}` : "—"}</b></>}
       </div>
 
       {canEdit && (
@@ -848,8 +913,11 @@ function AddItemDialog({
   const [results, setResults] = useState<ProductSearchRow[]>([]);
   const [searching, startSearch] = useTransition();
   const [picked, setPicked] = useState<ProductSearchRow | null>(null);
+  const [mechanic, setMechanic] = useState<"price" | "nm">("price");
   const [reg, setReg] = useState("");
   const [promo, setPromo] = useState("");
+  const [buy, setBuy] = useState("1");
+  const [free, setFree] = useState("1");
   const [limit, setLimit] = useState("");
   const [isPending, start] = useTransition();
   const debounce = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -881,10 +949,25 @@ function AddItemDialog({
 
   const submit = () => {
     if (!picked) { toast.error("SKU tanlang."); return; }
-    const r = Number(reg), pr = Number(promo);
+    const r = Number(reg);
     const l = limit.trim() === "" ? null : Number(limit);
-    if (!(r > 0) || !(pr > 0)) { toast.error("Sotilish va aksiya narxini kiriting."); return; }
+    if (!(r > 0)) { toast.error("Sotilish narxini kiriting."); return; }
     if (l != null && !(l > 0)) { toast.error("Limit musbat bo'lishi kerak."); return; }
+    if (mechanic === "nm") {
+      const b = Number(buy), f = Number(free);
+      if (!Number.isInteger(b) || !Number.isInteger(f) || !(b > 0) || !(f > 0)) {
+        toast.error("N va M ni butun son kiriting (masalan 1 va 1)."); return;
+      }
+      start(async () => {
+        // promoPrice = regularPrice (server N+M'da dona narxini tushirmaydi, majburiy maydon uchun yuboriladi).
+        const res = await addItemAction({ campaignId, productId: picked.id, regularPrice: r, promoPrice: r, promoLimit: l, buyQty: b, freeQty: f });
+        if (res.ok) { toast.success("SKU qo'shildi."); onAdded(); }
+        else toast.error(res.error);
+      });
+      return;
+    }
+    const pr = Number(promo);
+    if (!(pr > 0)) { toast.error("Aksiya narxini kiriting."); return; }
     start(async () => {
       const res = await addItemAction({ campaignId, productId: picked.id, regularPrice: r, promoPrice: pr, promoLimit: l });
       if (res.ok) { toast.success("SKU qo'shildi."); onAdded(); }
@@ -941,34 +1024,86 @@ function AddItemDialog({
             <div className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
               <div className="text-sm font-medium">{picked.name}</div>
               <div className="font-mono text-[11px] text-muted-foreground">{picked.code}</div>
-              <button onClick={() => { setPicked(null); setReg(""); setPromo(""); setLimit(""); }}
+              <button onClick={() => { setPicked(null); setReg(""); setPromo(""); setLimit(""); setMechanic("price"); setBuy("1"); setFree("1"); }}
                 className="mt-1 text-[11px] text-primary underline underline-offset-2">boshqa SKU tanlash</button>
             </div>
             {dup && <p className="text-xs text-amber-600">Bu SKU allaqachon qo&apos;shilgan.</p>}
+
+            {/* Mexanika tanlash: oddiy narx-chegirma yoki N+M ("N ol, M tekin") */}
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Aksiya turi</Label>
+              <div className="grid grid-cols-2 gap-1.5">
+                <button type="button" disabled={isPending} onClick={() => setMechanic("price")}
+                  className={cn(
+                    "h-9 rounded-lg border text-xs font-semibold transition-colors",
+                    mechanic === "price" ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-muted/50"
+                  )}>
+                  Narx chegirma
+                </button>
+                <button type="button" disabled={isPending} onClick={() => setMechanic("nm")}
+                  className={cn(
+                    "h-9 rounded-lg border text-xs font-semibold transition-colors",
+                    mechanic === "nm" ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-muted/50"
+                  )}>
+                  N + M (tekin)
+                </button>
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">Sotilish narxi *</Label>
                 <Input value={reg} disabled={isPending} type="number" inputMode="decimal" className="h-9"
                   placeholder="auto-taklif" onChange={(e) => setReg(e.target.value)} />
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Aksiya narxi *</Label>
-                <Input value={promo} disabled={isPending} type="number" inputMode="decimal" className="h-9"
-                  autoFocus onChange={(e) => setPromo(e.target.value)} />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Aksiya limiti</Label>
-                <Input value={limit} disabled={isPending} type="number" inputMode="decimal" className="h-9"
-                  placeholder="ixtiyoriy" onChange={(e) => setLimit(e.target.value)} />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Farqi</Label>
-                <div className="flex h-9 items-center rounded-lg border border-border/60 bg-muted/20 px-3 text-sm tabular-nums">
-                  {Number(reg) > 0 && Number(promo) > 0
-                    ? `−${fmtMoney(Number(reg) - Number(promo))} (${(((Number(reg) - Number(promo)) / Number(reg)) * 100).toFixed(1)}%)`
-                    : "—"}
-                </div>
-              </div>
+              {mechanic === "price" ? (
+                <>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Aksiya narxi *</Label>
+                    <Input value={promo} disabled={isPending} type="number" inputMode="decimal" className="h-9"
+                      autoFocus onChange={(e) => setPromo(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Aksiya limiti</Label>
+                    <Input value={limit} disabled={isPending} type="number" inputMode="decimal" className="h-9"
+                      placeholder="ixtiyoriy" onChange={(e) => setLimit(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Farqi</Label>
+                    <div className="flex h-9 items-center rounded-lg border border-border/60 bg-muted/20 px-3 text-sm tabular-nums">
+                      {Number(reg) > 0 && Number(promo) > 0
+                        ? `−${fmtMoney(Number(reg) - Number(promo))} (${(((Number(reg) - Number(promo)) / Number(reg)) * 100).toFixed(1)}%)`
+                        : "—"}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Nechta olsa (N) *</Label>
+                    <Input value={buy} disabled={isPending} type="number" inputMode="numeric" min={1} className="h-9 text-center"
+                      autoFocus onChange={(e) => setBuy(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Nechta tekin (M) *</Label>
+                    <Input value={free} disabled={isPending} type="number" inputMode="numeric" min={1} className="h-9 text-center"
+                      onChange={(e) => setFree(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Aksiya limiti</Label>
+                    <Input value={limit} disabled={isPending} type="number" inputMode="decimal" className="h-9"
+                      placeholder="ixtiyoriy" onChange={(e) => setLimit(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Taklif</Label>
+                    <div className="flex h-9 items-center rounded-lg border border-border/60 bg-muted/20 px-3 text-sm">
+                      {Number(buy) > 0 && Number(free) > 0
+                        ? `${buy}+${free} — ${((Number(free) / (Number(buy) + Number(free))) * 100).toFixed(0)}% tejam`
+                        : "—"}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}

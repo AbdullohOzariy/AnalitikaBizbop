@@ -123,7 +123,7 @@ function HaftaBanner({ data, S, logoData }: { data: DesignData; S: HSizes; logoD
 
         {/* narx — supermarket uslubi, pastga surilgan (maket bo'yicha); tepasida eski narx */}
         <div style={{ display: "flex", flexGrow: 1, flexDirection: "column", justifyContent: "flex-end" }}>
-          {data.regularPrice > data.promoPrice && (
+          {!data.nPlusM && data.regularPrice > data.promoPrice && (
             /* Yaxlit ustma chiziq: text-decoration span'lar orasida uzilib, balandligi
                farq qilardi (Golos va VelaSans metrikalari har xil) — o'rniga bitta
                absolute chiziq butun blok bo'ylab, vertikal o'rtadan. */
@@ -199,7 +199,16 @@ function HaftaBanner({ data, S, logoData }: { data: DesignData; S: HSizes; logoD
           }}
         >
           {/* Fragment EMAS — satori fragment bolalarini row qilib yotqizadi; column div shart */}
-          {data.discountPct > 0 ? (
+          {data.nPlusM ? (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+              <div style={{ display: "flex", fontSize: S.circlePct, fontWeight: 700, color: "#ffffff", lineHeight: 1, fontFamily: "Golos" }}>
+                {data.nPlusM.buy}+{data.nPlusM.free}
+              </div>
+              <div style={{ display: "flex", fontSize: Math.round(S.circlePct * 0.4), fontWeight: 700, color: "#ffffff", marginTop: 5 }}>
+                TEKIN
+              </div>
+            </div>
+          ) : data.discountPct > 0 ? (
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
               <div style={{ display: "flex", fontSize: S.circlePct, fontWeight: 700, color: "#ffffff", lineHeight: 1, fontFamily: "Golos" }}>
                 -{data.discountPct}%
@@ -319,7 +328,20 @@ function BizbopBanner({ data, S, logoData }: { data: DesignData; S: BSizes; logo
 
         {/* narxlar — pastga yopishgan */}
         <div style={{ display: "flex", flexGrow: 1, flexDirection: "column", justifyContent: "flex-end" }}>
-          {data.regularPrice > data.promoPrice && (
+          {/* N+M beyji (doira yo'q variant — taklif chap panelda ko'rsatiladi) */}
+          {data.nPlusM && (
+            <div style={{ display: "flex", alignSelf: "flex-start", marginBottom: 20 }}>
+              <div style={{ display: "flex", alignItems: "center", backgroundColor: "#ffffff", borderRadius: 9999, padding: "10px 28px" }}>
+                <div style={{ display: "flex", fontSize: Math.round(S.newMain * 0.5), fontWeight: 700, color: ORANGE, fontFamily: "Golos", lineHeight: 1 }}>
+                  {data.nPlusM.buy}+{data.nPlusM.free}
+                </div>
+                <div style={{ display: "flex", fontSize: S.smallSize, fontWeight: 700, color: ORANGE, marginLeft: 14 }}>
+                  TEKIN
+                </div>
+              </div>
+            </div>
+          )}
+          {!data.nPlusM && data.regularPrice > data.promoPrice && (
             <div style={{ display: "flex", position: "relative", alignSelf: "flex-start", marginBottom: 18 }}>
               <SupPrice value={data.regularPrice} main={S.oldMain} sup={S.oldSup} som={S.oldSom} />
               {/* qizil qiyshiq ustma chiziq (o'ngga pastga qiya, maketdagidek) — butun blok bo'ylab */}
@@ -416,10 +438,12 @@ export function DesignBanner({ data, format, logoData }: { data: DesignData; for
         {/* narxlar — pastga yopishgan (sana ustida ozgina tepada) */}
         <div style={{ display: "flex", flexGrow: 1, alignItems: "flex-end" }}>
           <div style={{ display: "flex", flexDirection: "column" }}>
-            <div style={{ display: "flex", alignItems: "baseline", fontSize: S.oldSize, color: "#dcfce7" }}>
-              <span style={{ fontFamily: "Golos", textDecoration: "line-through" }}>{money(data.regularPrice)}</span>
-              <span style={{ marginLeft: 12, textDecoration: "line-through" }}>so&apos;m</span>
-            </div>
+            {!data.nPlusM && data.regularPrice > data.promoPrice && (
+              <div style={{ display: "flex", alignItems: "baseline", fontSize: S.oldSize, color: "#dcfce7" }}>
+                <span style={{ fontFamily: "Golos", textDecoration: "line-through" }}>{money(data.regularPrice)}</span>
+                <span style={{ marginLeft: 12, textDecoration: "line-through" }}>so&apos;m</span>
+              </div>
+            )}
             <div style={{ display: "flex", flexDirection: "column", marginTop: 6 }}>
               <div style={{ display: "flex", fontSize: S.newSize, fontWeight: 700, color: "#ffffff", lineHeight: 0.95, fontFamily: "Golos" }}>
                 {money(data.promoPrice)}
@@ -454,8 +478,8 @@ export function DesignBanner({ data, format, logoData }: { data: DesignData; for
           <ProductImage src={img} w={S.imgW} h={S.imgH} zoom={data.imageZoom} placeholder={placeholder} />
         </div>
 
-        {/* chegirma doirasi (absolute, o'ng-yuqori) */}
-        {data.discountPct > 0 && (
+        {/* chegirma/N+M doirasi (absolute, o'ng-yuqori) */}
+        {(data.nPlusM || data.discountPct > 0) && (
           <div
             style={{
               display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
@@ -464,10 +488,10 @@ export function DesignBanner({ data, format, logoData }: { data: DesignData; for
             }}
           >
             <div style={{ display: "flex", fontSize: S.circlePct, fontWeight: 700, color: "#ffffff", lineHeight: 1, fontFamily: "Golos" }}>
-              -{data.discountPct}%
+              {data.nPlusM ? `${data.nPlusM.buy}+${data.nPlusM.free}` : `-${data.discountPct}%`}
             </div>
             <div style={{ display: "flex", fontSize: Math.round(S.circlePct * 0.34), fontWeight: 700, color: "#ffffff", marginTop: 4 }}>
-              TEJANG
+              {data.nPlusM ? "TEKIN" : "TEJANG"}
             </div>
           </div>
         )}

@@ -57,10 +57,13 @@ export type PromoItemRow = {
   name: string;
   code: number; // 1C kod
   regularPrice: number; // sotilish narxi
-  promoPrice: number; // aksiya narxi
+  promoPrice: number; // aksiya narxi (N+M da = regularPrice)
   promoLimit: number | null; // aksiya limiti (dona)
+  // N+M mexanika: ikkisi ham to'lsa "N ol, M tekin"; ikkisi ham null = oddiy narx-chegirma.
+  buyQty: number | null;
+  freeQty: number | null;
   priceDiff: number; // = regularPrice − promoPrice (auto)
-  pctDiff: number; // = diff / regularPrice * 100 (auto)
+  pctDiff: number; // = diff / regularPrice * 100 (auto). N+M da = freeQty/(buyQty+freeQty)*100
   hasImage: boolean; // dizayn rasmi yuklanganmi (qatorda to'g'ridan-to'g'ri yuklab olish uchun)
 };
 
@@ -79,6 +82,10 @@ const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Sana YYYY-MM-DD ko'r
 const idSchema = z.coerce.number().int().positive();
 const priceSchema = z.coerce.number().positive("Narx musbat bo'lishi kerak").max(1e12);
 const limitSchema = z.coerce.number().positive("Limit musbat bo'lishi kerak").max(1e9).nullable().optional();
+// N+M dona soni — musbat butun (1+1, 2+1, 3+2...). Ikkisi birga to'ldiriladi (aks holda ikkisi ham null).
+const qtySchema = z.coerce.number().int().positive("Dona soni musbat butun bo'lishi kerak").max(999).nullable().optional();
+// N+M effektiv chegirma foizi (banner/hisobot uchun hosila): M dona N+M donadan tekin.
+const nmPct = (buy: number, free: number): number => (free / (buy + free)) * 100;
 
 // ─── Aksiya (PromoCampaign) ─────────────────────────────────────────────────────
 
@@ -206,6 +213,7 @@ export async function listItemsAction(
         orderBy: { id: "asc" },
         select: {
           id: true, productId: true, groupId: true, regularPrice: true, promoPrice: true, promoLimit: true,
+          buyQty: true, freeQty: true,
           product: { select: { name: true, code: true } },
         },
       }),
@@ -226,6 +234,7 @@ export async function listItemsAction(
         // Decimal → number (Prisma Decimal client'ga uzatib bo'lmaydi). Farq/% saqlanmaydi — hisoblanadi.
         const reg = Number(it.regularPrice);
         const promo = Number(it.promoPrice);
+        const isNM = it.buyQty != null && it.freeQty != null;
         const diff = reg - promo;
         return {
           id: it.id,
@@ -236,8 +245,11 @@ export async function listItemsAction(
           regularPrice: reg,
           promoPrice: promo,
           promoLimit: it.promoLimit != null ? Number(it.promoLimit) : null,
+          buyQty: it.buyQty,
+          freeQty: it.freeQty,
           priceDiff: diff,
-          pctDiff: reg > 0 ? (diff / reg) * 100 : 0,
+          // N+M da narx tushmaydi (promo=reg) — % o'rniga effektiv chegirma ko'rsatiladi.
+          pctDiff: isNM ? nmPct(it.buyQty!, it.freeQty!) : reg > 0 ? (diff / reg) * 100 : 0,
           hasImage: iImgIds.has(it.id),
         };
       }),
@@ -516,10 +528,16 @@ const addItemSchema = z.object({
   regularPrice: priceSchema,
   promoPrice: priceSchema,
   promoLimit: limitSchema,
+  buyQty: qtySchema,
+  freeQty: qtySchema,
+}).refine((v) => (v.buyQty == null) === (v.freeQty == null), {
+  message: "N va M birga to'ldirilishi kerak.",
+  path: ["freeQty"],
 });
 
 export async function addItemAction(input: {
-  campaignId: number; productId: number; regularPrice: number; promoPrice: number; promoLimit?: number | null;
+  campaignId: number; productId: number; regularPrice: number; promoPrice: number;
+  promoLimit?: number | null; buyQty?: number | null; freeQty?: number | null;
 }): Promise<{ ok: true; id: number } | Err> {
   try {
     await requirePromoEdit();
@@ -529,13 +547,17 @@ export async function addItemAction(input: {
       where: { id: p.productId },
       select: { imageData: true, imageZoom: true },
     });
+    // N+M da dona narxi tushmaydi — promoPrice = regularPrice (kelgan promoPrice e'tiborsiz).
+    const isNM = p.buyQty != null && p.freeQty != null;
     const it = await prisma.promoItem.create({
       data: {
         campaignId: p.campaignId,
         productId: p.productId,
         regularPrice: p.regularPrice,
-        promoPrice: p.promoPrice,
+        promoPrice: isNM ? p.regularPrice : p.promoPrice,
         promoLimit: p.promoLimit ?? null,
+        buyQty: p.buyQty ?? null,
+        freeQty: p.freeQty ?? null,
         imageData: prod?.imageData ?? null,
         imageZoom: prod?.imageZoom ?? 1,
       },
@@ -551,10 +573,16 @@ const updateItemSchema = z.object({
   regularPrice: priceSchema.optional(),
   promoPrice: priceSchema.optional(),
   promoLimit: limitSchema,
+  buyQty: qtySchema,
+  freeQty: qtySchema,
+}).refine((v) => (v.buyQty == null) === (v.freeQty == null), {
+  message: "N va M birga to'ldirilishi kerak.",
+  path: ["freeQty"],
 });
 
 export async function updateItemAction(input: {
   id: number; regularPrice?: number; promoPrice?: number; promoLimit?: number | null;
+  buyQty?: number | null; freeQty?: number | null;
 }): Promise<Result> {
   try {
     await requirePromoEdit();
@@ -563,6 +591,17 @@ export async function updateItemAction(input: {
     if (p.regularPrice !== undefined) data.regularPrice = p.regularPrice;
     if (p.promoPrice !== undefined) data.promoPrice = p.promoPrice;
     if (p.promoLimit !== undefined) data.promoLimit = p.promoLimit ?? null;
+    if (p.buyQty !== undefined) data.buyQty = p.buyQty ?? null;
+    if (p.freeQty !== undefined) data.freeQty = p.freeQty ?? null;
+    // N+M o'rnatilsa dona narxi tushmaydi — promoPrice=regularPrice majburlanadi.
+    if (p.buyQty != null && p.freeQty != null) {
+      if (p.regularPrice !== undefined) {
+        data.promoPrice = p.regularPrice;
+      } else {
+        const cur = await prisma.promoItem.findUnique({ where: { id: p.id }, select: { regularPrice: true } });
+        if (cur) data.promoPrice = cur.regularPrice;
+      }
+    }
     await prisma.promoItem.update({ where: { id: p.id }, data });
     invalidate();
     return { ok: true };

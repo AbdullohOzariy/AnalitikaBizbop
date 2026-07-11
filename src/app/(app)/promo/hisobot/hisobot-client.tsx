@@ -146,7 +146,15 @@ function ItemRow({ it, hasAfter }: { it: ReportItem; hasAfter: boolean }) {
         <div className="max-w-[240px] truncate" title={it.name}>{it.name}</div>
         <div className="font-mono text-[11px] text-muted-foreground">{it.code}</div>
       </td>
-      <td className="px-2 py-1.5 text-right tabular-nums">{money(it.promoPrice)}<div className="text-[11px] text-muted-foreground">asl: {money(it.regularPrice)}</div></td>
+      <td className="px-2 py-1.5 text-right tabular-nums">
+        {it.nPlusM ? (
+          <span className="inline-block rounded-md bg-violet-500/10 px-1.5 py-0.5 text-xs font-bold text-violet-600 dark:text-violet-400">
+            {it.nPlusM.buy}+{it.nPlusM.free} tekin
+          </span>
+        ) : (
+          <>{money(it.promoPrice)}<div className="text-[11px] text-muted-foreground">asl: {money(it.regularPrice)}</div></>
+        )}
+      </td>
       <td className="px-2 py-1.5 text-right tabular-nums">{money(it.promoAmount)}<div className="text-[11px] text-muted-foreground">{money(it.promoQty)} dona</div></td>
       <td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground">{money(it.baseAmount)}<div className="text-[11px]">{money(it.baseQty)} dona</div></td>
       <td className={cn("px-2 py-1.5 text-right tabular-nums font-semibold", growthClass(it.growthAmountPct))}>

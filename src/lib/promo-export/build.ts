@@ -43,8 +43,10 @@ export type PromoExportItem = {
   groupName: string | null; // aksiya ichidagi SKU guruhi (null = guruhsiz)
   regularPrice: number;
   promoPrice: number;
-  diff: number; // regularPrice − promoPrice
-  pct: number; // diff / regularPrice × 100
+  diff: number; // regularPrice − promoPrice (N+M da 0 — dona narxi o'zgarmaydi)
+  pct: number; // diff / regularPrice × 100. N+M da = freeQty/(buyQty+freeQty)*100 (effektiv)
+  // N+M ("N ol, M tekin") — null bo'lmasa "Aksiya narxi" o'rniga "N+M tekin" ko'rsatiladi.
+  nPlusM: { buy: number; free: number } | null;
   limit: number | null;
 };
 
@@ -71,7 +73,7 @@ export async function getCampaignExport(campaignId: number): Promise<PromoExport
       items: {
         orderBy: { id: "asc" },
         select: {
-          groupId: true, regularPrice: true, promoPrice: true, promoLimit: true,
+          groupId: true, regularPrice: true, promoPrice: true, promoLimit: true, buyQty: true, freeQty: true,
           product: { select: { code: true, name: true } },
         },
       },
@@ -94,6 +96,7 @@ export async function getCampaignExport(campaignId: number): Promise<PromoExport
     const reg = Number(it.regularPrice);
     const promo = Number(it.promoPrice);
     const diff = reg - promo;
+    const isNM = it.buyQty != null && it.freeQty != null;
     return {
       n: i + 1,
       code: it.product.code,
@@ -102,7 +105,9 @@ export async function getCampaignExport(campaignId: number): Promise<PromoExport
       regularPrice: reg,
       promoPrice: promo,
       diff,
-      pct: reg > 0 ? (diff / reg) * 100 : 0,
+      // N+M da narx tushmaydi (promo=reg) — % o'rniga effektiv chegirma.
+      pct: isNM ? (it.freeQty! / (it.buyQty! + it.freeQty!)) * 100 : reg > 0 ? (diff / reg) * 100 : 0,
+      nPlusM: isNM ? { buy: it.buyQty!, free: it.freeQty! } : null,
       limit: it.promoLimit != null ? Number(it.promoLimit) : null,
     };
   });
@@ -153,8 +158,8 @@ export function buildPromoExcel(d: PromoExportData): Buffer {
       it.code,
       it.name,
       it.regularPrice,
-      it.promoPrice,
-      it.diff,
+      it.nPlusM ? `${it.nPlusM.buy}+${it.nPlusM.free} tekin` : it.promoPrice,
+      it.nPlusM ? "" : it.diff,
       Number(it.pct.toFixed(2)),
       it.limit ?? "",
     ]);
@@ -249,8 +254,8 @@ export async function buildPromoPdf(d: PromoExportData): Promise<Buffer> {
     doc.text(String(r.code), cols[1].x + 3, y + 4, { width: cols[1].w - 6, align: "left" });
     doc.text(r.name, cols[2].x + 3, y + 4, { width: cols[2].w - 6, align: "left" });
     doc.text(money(r.regularPrice), cols[3].x + 3, y + 4, { width: cols[3].w - 6, align: "right" });
-    doc.font(FONT_BOLD).fillColor("#15803D").text(money(r.promoPrice), cols[4].x + 3, y + 4, { width: cols[4].w - 6, align: "right" });
-    doc.font(FONT).fillColor("#222").text(money(r.diff), cols[5].x + 3, y + 4, { width: cols[5].w - 6, align: "right" });
+    doc.font(FONT_BOLD).fillColor("#15803D").text(r.nPlusM ? `${r.nPlusM.buy}+${r.nPlusM.free} tekin` : money(r.promoPrice), cols[4].x + 3, y + 4, { width: cols[4].w - 6, align: "right" });
+    doc.font(FONT).fillColor("#222").text(r.nPlusM ? "—" : money(r.diff), cols[5].x + 3, y + 4, { width: cols[5].w - 6, align: "right" });
     doc.text(`${r.pct.toFixed(1)}%`, cols[6].x + 3, y + 4, { width: cols[6].w - 6, align: "right" });
     doc.text(fmtLimit(r.limit), cols[7].x + 3, y + 4, { width: cols[7].w - 6, align: "right" });
     y += rowH;
