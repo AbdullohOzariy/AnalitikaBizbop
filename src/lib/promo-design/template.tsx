@@ -200,13 +200,8 @@ function HaftaBanner({ data, S, logoData }: { data: DesignData; S: HSizes; logoD
         >
           {/* Fragment EMAS — satori fragment bolalarini row qilib yotqizadi; column div shart */}
           {data.nPlusM ? (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-              <div style={{ display: "flex", fontSize: S.circlePct, fontWeight: 700, color: "#ffffff", lineHeight: 1, fontFamily: "Golos" }}>
-                {data.nPlusM.buy}+{data.nPlusM.free}
-              </div>
-              <div style={{ display: "flex", fontSize: Math.round(S.circlePct * 0.4), fontWeight: 700, color: "#ffffff", marginTop: 5 }}>
-                TEKIN
-              </div>
+            <div style={{ display: "flex", fontSize: Math.round(S.circlePct * 1.15), fontWeight: 700, color: "#ffffff", lineHeight: 1, fontFamily: "Golos" }}>
+              {data.nPlusM.buy}+{data.nPlusM.free}
             </div>
           ) : data.discountPct > 0 ? (
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
@@ -328,15 +323,18 @@ function BizbopBanner({ data, S, logoData }: { data: DesignData; S: BSizes; logo
 
         {/* narxlar — pastga yopishgan */}
         <div style={{ display: "flex", flexGrow: 1, flexDirection: "column", justifyContent: "flex-end" }}>
-          {/* N+M beyji (doira yo'q variant — taklif chap panelda ko'rsatiladi) */}
+          {/* N+M ko'k doira badge (boshqa variantlardagi aksiya-foizi doirasi uslubida) */}
           {data.nPlusM && (
-            <div style={{ display: "flex", alignSelf: "flex-start", marginBottom: 20 }}>
-              <div style={{ display: "flex", alignItems: "center", backgroundColor: "#ffffff", borderRadius: 9999, padding: "10px 28px" }}>
-                <div style={{ display: "flex", fontSize: Math.round(S.newMain * 0.5), fontWeight: 700, color: ORANGE, fontFamily: "Golos", lineHeight: 1 }}>
+            <div style={{ display: "flex", alignSelf: "flex-start", marginBottom: 22 }}>
+              <div
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  width: Math.round(S.newMain * 0.92), height: Math.round(S.newMain * 0.92),
+                  borderRadius: 9999, backgroundColor: BLUE,
+                }}
+              >
+                <div style={{ display: "flex", fontSize: Math.round(S.newMain * 0.42), fontWeight: 700, color: "#ffffff", fontFamily: "Golos", lineHeight: 1 }}>
                   {data.nPlusM.buy}+{data.nPlusM.free}
-                </div>
-                <div style={{ display: "flex", fontSize: S.smallSize, fontWeight: 700, color: ORANGE, marginLeft: 14 }}>
-                  TEKIN
                 </div>
               </div>
             </div>
@@ -487,12 +485,20 @@ export function DesignBanner({ data, format, logoData }: { data: DesignData; for
               width: S.circleSize, height: S.circleSize, borderRadius: 9999, backgroundColor: BLUE,
             }}
           >
-            <div style={{ display: "flex", fontSize: S.circlePct, fontWeight: 700, color: "#ffffff", lineHeight: 1, fontFamily: "Golos" }}>
-              {data.nPlusM ? `${data.nPlusM.buy}+${data.nPlusM.free}` : `-${data.discountPct}%`}
-            </div>
-            <div style={{ display: "flex", fontSize: Math.round(S.circlePct * 0.34), fontWeight: 700, color: "#ffffff", marginTop: 4 }}>
-              {data.nPlusM ? "TEKIN" : "TEJANG"}
-            </div>
+            {data.nPlusM ? (
+              <div style={{ display: "flex", fontSize: Math.round(S.circlePct * 1.15), fontWeight: 700, color: "#ffffff", lineHeight: 1, fontFamily: "Golos" }}>
+                {data.nPlusM.buy}+{data.nPlusM.free}
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                <div style={{ display: "flex", fontSize: S.circlePct, fontWeight: 700, color: "#ffffff", lineHeight: 1, fontFamily: "Golos" }}>
+                  -{data.discountPct}%
+                </div>
+                <div style={{ display: "flex", fontSize: Math.round(S.circlePct * 0.34), fontWeight: 700, color: "#ffffff", marginTop: 4 }}>
+                  TEJANG
+                </div>
+              </div>
+            )}
           </div>
         )}
 
