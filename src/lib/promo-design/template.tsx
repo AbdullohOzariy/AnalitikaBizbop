@@ -261,6 +261,8 @@ type BSizes = {
   newMain: number; newSup: number; newSom: number;
   badgeSize: number; badgeW: number; badgeH: number; logoH: number; imgW: number; imgH: number;
   limitUz: number; limitRu: number; branchSize: number;
+  // N+M ko'k doira badge (mahsulot rasmi ustida) — o'ng oq panelda absolute joylashadi
+  circleSize: number; circleTop: number; circleRight: number;
   showLimit: boolean; // limit qatorlari faqat A4 (chop) formatida
 };
 
@@ -270,7 +272,8 @@ const B_A4: BSizes = {
   oldMain: 64, oldSup: 34, oldSom: 26,
   newMain: 160, newSup: 74, newSom: 50,
   badgeSize: 30, badgeW: 252, badgeH: 57, logoH: 44, imgW: 470, imgH: 560,
-  limitUz: 22, limitRu: 13, branchSize: 30, showLimit: true,
+  limitUz: 22, limitRu: 13, branchSize: 30,
+  circleSize: 172, circleTop: 200, circleRight: 66, showLimit: true,
 };
 const B_INSTA: BSizes = {
   W: 1080, H: 1350, leftPct: "50%", rightPct: "50%", pad: 52, radius: 70,
@@ -278,7 +281,8 @@ const B_INSTA: BSizes = {
   oldMain: 76, oldSup: 40, oldSom: 30,
   newMain: 185, newSup: 84, newSom: 58,
   badgeSize: 26, badgeW: 222, badgeH: 50, logoH: 36, imgW: 420, imgH: 680,
-  limitUz: 24, limitRu: 17, branchSize: 30, showLimit: false,
+  limitUz: 24, limitRu: 17, branchSize: 30,
+  circleSize: 166, circleTop: 330, circleRight: 56, showLimit: false,
 };
 
 /** Supermarket uslubidagi narx bloki (katta ming qism + ko'tarilgan 3 raqam + so'm). */
@@ -323,22 +327,6 @@ function BizbopBanner({ data, S, logoData }: { data: DesignData; S: BSizes; logo
 
         {/* narxlar — pastga yopishgan */}
         <div style={{ display: "flex", flexGrow: 1, flexDirection: "column", justifyContent: "flex-end" }}>
-          {/* N+M ko'k doira badge (boshqa variantlardagi aksiya-foizi doirasi uslubida) */}
-          {data.nPlusM && (
-            <div style={{ display: "flex", alignSelf: "flex-start", marginBottom: 22 }}>
-              <div
-                style={{
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  width: Math.round(S.newMain * 0.92), height: Math.round(S.newMain * 0.92),
-                  borderRadius: 9999, backgroundColor: BLUE,
-                }}
-              >
-                <div style={{ display: "flex", fontSize: Math.round(S.newMain * 0.42), fontWeight: 700, color: "#ffffff", fontFamily: "Golos", lineHeight: 1 }}>
-                  {data.nPlusM.buy}+{data.nPlusM.free}
-                </div>
-              </div>
-            </div>
-          )}
           {!data.nPlusM && data.regularPrice > data.promoPrice && (
             <div style={{ display: "flex", position: "relative", alignSelf: "flex-start", marginBottom: 18 }}>
               <SupPrice value={data.regularPrice} main={S.oldMain} sup={S.oldSup} som={S.oldSom} />
@@ -365,7 +353,7 @@ function BizbopBanner({ data, S, logoData }: { data: DesignData; S: BSizes; logo
       <div
         style={{
           display: "flex", flexDirection: "column", width: S.rightPct, height: "100%",
-          backgroundColor: "#ffffff", padding: S.pad,
+          backgroundColor: "#ffffff", padding: S.pad, position: "relative",
           borderTopLeftRadius: S.radius, borderBottomLeftRadius: S.radius,
         }}
       >
@@ -385,6 +373,21 @@ function BizbopBanner({ data, S, logoData }: { data: DesignData; S: BSizes; logo
         <div style={{ display: "flex", flexGrow: 1, alignItems: "center", justifyContent: "center" }}>
           <ProductImage src={img} w={S.imgW} h={S.imgH} zoom={data.imageZoom} placeholder={placeholder} />
         </div>
+
+        {/* N+M ko'k doira badge — mahsulot rasmi ustida (absolute; rasmdan KEYIN — ustiga chiziladi) */}
+        {data.nPlusM && (
+          <div
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center",
+              position: "absolute", top: S.circleTop, right: S.circleRight,
+              width: S.circleSize, height: S.circleSize, borderRadius: 9999, backgroundColor: BLUE,
+            }}
+          >
+            <div style={{ display: "flex", fontSize: Math.round(S.circleSize * 0.42), fontWeight: 700, color: "#ffffff", fontFamily: "Golos", lineHeight: 1 }}>
+              {data.nPlusM.buy}+{data.nPlusM.free}
+            </div>
+          </div>
+        )}
 
         {/* limit — faqat A4 (chop): yashil uz + qizil ru qatorlar */}
         {S.showLimit && data.limitN != null && (
