@@ -20,6 +20,17 @@ const LOGO = path.join(process.cwd(), "public/logo.png");
 
 const NF = new Intl.NumberFormat("uz-UZ");
 const money = (n: number) => NF.format(Math.round(n));
+// Blok = butun yashiklar + qoldiq dona. Kasr blokni "4,167 bl" deb yozsak uz-UZ o'nlik
+// verguli sababli 4167 blok deb o'qiladi — nakladnoyda bu xato zakazga olib keladi.
+// Shuning uchun "4 bl + 1" ko'rinishi: 4 to'liq yashik va 1 dona alohida.
+const blokParts = (qty: number, packSize: number | null): { full: number; rem: number } | null => {
+  if (!packSize || packSize <= 0 || qty <= 0) return null;
+  const full = Math.floor(qty / packSize);
+  if (full <= 0) return null; // to'liq blok yo'q — faqat dona ma'noli ("0 bl + 3" shovqin)
+  return { full, rem: Math.round((qty - full * packSize) * 1000) / 1000 };
+};
+const blokLabel = (full: number, rem: number) =>
+  rem > 0 ? `${NF.format(full)} bl + ${NF.format(rem)}` : `${NF.format(full)} bl`;
 
 export type ZakazPdfVariant = "total" | "withBranch";
 
@@ -76,6 +87,7 @@ export async function buildZakazPdf(orderId: number, variant: ZakazPdfVariant = 
     code: String(i.product.code),
     name: i.product.name,
     pack: i.packCount != null && i.packSize != null ? `${Number(i.packCount)} × ${Number(i.packSize)}` : "",
+    packSize: i.packSize != null && Number(i.packSize) > 0 ? Number(i.packSize) : null,
     qty: Number(i.quantity),
     price: Number(i.price),
     sum: Number(i.quantity) * Number(i.price),
@@ -100,7 +112,7 @@ export async function buildZakazPdf(orderId: number, variant: ZakazPdfVariant = 
   doc.font(FONT_BOLD).fontSize(16).fillColor("#111")
     .text(`BUYURTMA (NAKLADNOY) № ${order.id}`, M, 42, { width: W - 2 * M, align: "right" });
   doc.font(FONT).fontSize(9).fillColor("#555")
-    .text(`Sana: ${sana} · Holat: ${ORDER_STATUS_LABEL[order.status] ?? order.status}${withBranch ? " · Filiallar bo'yicha" : ""}`, M, 64, {
+    .text(`Sana: ${sana} · Holat: ${ORDER_STATUS_LABEL[order.status] ?? order.status}${withBranch ? " · Filiallar bo'yicha (katakda: yuqorida blok, pastda dona)" : ""}`, M, 64, {
       width: W - 2 * M, align: "right",
     });
 
@@ -132,13 +144,14 @@ export async function buildZakazPdf(orderId: number, variant: ZakazPdfVariant = 
   let cx = M;
   const push = (w: number, label: string, align: "left" | "right", key: string) => { cols.push({ x: cx, w, label, align, key }); cx += w; };
   if (withBranch) {
-    const nameW = 168;
-    const jamiW = 48, narxW = 60, sumW = 78;
-    const branchArea = usable - 24 - 44 - nameW - jamiW - narxW - sumW;
-    const bw = Math.max(36, Math.floor(branchArea / branchCols.length));
+    const nameW = 150;
+    const packW = 30, jamiW = 48, narxW = 60, sumW = 78;
+    const branchArea = usable - 24 - 44 - nameW - packW - jamiW - narxW - sumW;
+    const bw = Math.max(40, Math.floor(branchArea / branchCols.length));
     push(24, "№", "left", "n");
     push(44, "Kod", "left", "code");
     push(nameW, "Mahsulot", "left", "name");
+    push(packW, "Pach.", "right", "packsize"); // bir blokdagi dona — blok sonini tekshirish uchun
     for (const b of branchCols) push(bw, b.name, "right", `b:${b.id}`);
     // Summa eng o'ngga yopishsin — Jami/Narx undan oldin
     push(jamiW, "Jami", "right", "qty");
@@ -160,6 +173,7 @@ export async function buildZakazPdf(orderId: number, variant: ZakazPdfVariant = 
       case "code": return r.code;
       case "name": return r.name;
       case "pack": return r.pack;
+      case "packsize": return r.packSize != null ? NF.format(r.packSize) : "—";
       case "qty": return NF.format(r.qty);
       case "price": return money(r.price);
       case "sum": return money(r.sum);
@@ -172,6 +186,29 @@ export async function buildZakazPdf(orderId: number, variant: ZakazPdfVariant = 
 
   const nameCol = cols.find((c) => c.key === "name")!;
   const headFont = withBranch ? 7 : 8;
+  const bodyFont = withBranch ? 7.5 : 8;
+
+  // Filial va Jami kataklari (faqat filial variantida) ikki qatorli: yuqorida blok (qalin),
+  // pastda dona (xira). Pachkasi yo'q SKU'da blok hisoblab bo'lmaydi — faqat dona chiqadi.
+  const dualCell = (c: Col, yy: number, qty: number, packSize: number | null, bold = false) => {
+    if (qty <= 0) {
+      doc.font(FONT).fontSize(bodyFont).fillColor("#222")
+        .text("—", c.x + 3, yy + 4, { width: c.w - 6, align: c.align, lineBreak: false });
+      return;
+    }
+    const p = blokParts(qty, packSize);
+    if (p == null) {
+      doc.font(bold ? FONT_BOLD : FONT).fontSize(bodyFont).fillColor("#222")
+        .text(NF.format(qty), c.x + 3, yy + 4, { width: c.w - 6, align: c.align, lineBreak: false, ellipsis: true });
+      return;
+    }
+    doc.font(FONT_BOLD).fontSize(bodyFont).fillColor("#111")
+      .text(blokLabel(p.full, p.rem), c.x + 3, yy + 2, { width: c.w - 6, align: c.align, lineBreak: false, ellipsis: true });
+    doc.font(FONT).fontSize(bodyFont - 1).fillColor("#666")
+      .text(NF.format(qty), c.x + 3, yy + 10.5, { width: c.w - 6, align: c.align, lineBreak: false, ellipsis: true });
+  };
+  const isDual = (key: string) => withBranch && (key === "qty" || key.startsWith("b:"));
+
   const drawHead = () => {
     doc.rect(M, y, W - 2 * M, 18).fillColor(EMERALD).fill();
     doc.font(FONT_BOLD).fontSize(headFont).fillColor("#fff");
@@ -180,22 +217,25 @@ export async function buildZakazPdf(orderId: number, variant: ZakazPdfVariant = 
   };
   drawHead();
 
-  const bodyFont = withBranch ? 7.5 : 8;
   doc.font(FONT).fontSize(bodyFont);
   rows.forEach((r, i) => {
     const nameH = doc.heightOfString(r.name, { width: nameCol.w - 6 });
-    const rowH = Math.max(16, nameH + 7);
+    const rowH = Math.max(withBranch ? 19 : 16, nameH + 7); // ikki qatorli katak balandroq joy so'raydi
     if (y + rowH > doc.page.height - 90) {
       doc.addPage();
       y = M;
       drawHead();
-      doc.font(FONT).fontSize(bodyFont);
     }
     if (i % 2 === 1) doc.rect(M, y, W - 2 * M, rowH).fillColor("#F3F7F4").fill();
-    doc.fillColor("#222");
     for (const c of cols) {
+      if (isDual(c.key)) {
+        const qty = c.key === "qty" ? r.qty : (r.branchQty.get(Number(c.key.slice(2))) ?? 0);
+        dualCell(c, y, qty, r.packSize, c.key === "qty");
+        continue;
+      }
       const wrap = c.key === "name";
-      doc.text(cellVal(r, c.key), c.x + 3, y + 4, { width: c.w - 6, align: c.align, lineBreak: wrap, ellipsis: !wrap });
+      doc.font(FONT).fontSize(bodyFont).fillColor("#222")
+        .text(cellVal(r, c.key), c.x + 3, y + 4, { width: c.w - 6, align: c.align, lineBreak: wrap, ellipsis: !wrap });
     }
     y += rowH;
   });
@@ -203,21 +243,49 @@ export async function buildZakazPdf(orderId: number, variant: ZakazPdfVariant = 
   // ── Jami qatori ──
   doc.moveTo(M, y).lineTo(W - M, y).lineWidth(0.8).strokeColor("#bbb").stroke();
   if (withBranch) {
-    // Filial bo'yicha jami miqdorlar + umumiy jami (bir qatorda)
+    // Filial bo'yicha jami miqdorlar + umumiy jami (bir qatorda), blok ustida / dona ostida.
+    // Jami blok — har SKU blokining yig'indisi (ombor uchun: "shu filialga nechta yashik").
+    // Pachkasi kiritilmagan SKU dona'ga qo'shiladi, blokka esa qo'shilmaydi.
     y += 4;
-    doc.rect(M, y, W - 2 * M, 16).fillColor("#EAF5EE").fill();
-    doc.font(FONT_BOLD).fontSize(7.5).fillColor("#111");
-    const branchTotals = new Map<number, number>();
-    for (const r of rows) for (const [bid, q] of r.branchQty) branchTotals.set(bid, (branchTotals.get(bid) ?? 0) + q);
-    for (const c of cols) {
-      let v = "";
-      if (c.key === "name") v = "JAMI";
-      else if (c.key === "qty") v = NF.format(rows.reduce((s, r) => s + r.qty, 0));
-      else if (c.key === "sum") v = money(total);
-      else if (c.key.startsWith("b:")) { const q = branchTotals.get(Number(c.key.slice(2))) ?? 0; v = q > 0 ? NF.format(q) : "—"; }
-      if (v) doc.text(v, c.x + 3, y + 4, { width: c.w - 6, align: c.align, lineBreak: false, ellipsis: true });
+    const totH = 20;
+    doc.rect(M, y, W - 2 * M, totH).fillColor("#EAF5EE").fill();
+    const bT = new Map<number, { qty: number; full: number; rem: number }>();
+    let totQty = 0, totFull = 0, totRem = 0;
+    for (const r of rows) {
+      totQty += r.qty;
+      const p = blokParts(r.qty, r.packSize);
+      if (p) { totFull += p.full; totRem += p.rem; }
+      for (const [bid, q] of r.branchQty) {
+        const cur = bT.get(bid) ?? { qty: 0, full: 0, rem: 0 };
+        const bp = blokParts(q, r.packSize);
+        bT.set(bid, { qty: cur.qty + q, full: cur.full + (bp?.full ?? 0), rem: cur.rem + (bp?.rem ?? 0) });
+      }
     }
-    y += 22;
+    const totalCell = (c: Col, qty: number, full: number, rem: number) => {
+      if (qty <= 0) {
+        doc.font(FONT_BOLD).fontSize(7.5).fillColor("#111")
+          .text("—", c.x + 3, y + 6, { width: c.w - 6, align: c.align, lineBreak: false });
+        return;
+      }
+      if (full <= 0) {
+        doc.font(FONT_BOLD).fontSize(7.5).fillColor("#111")
+          .text(NF.format(qty), c.x + 3, y + 6, { width: c.w - 6, align: c.align, lineBreak: false, ellipsis: true });
+        return;
+      }
+      doc.font(FONT_BOLD).fontSize(7.5).fillColor("#111")
+        .text(blokLabel(full, Math.round(rem * 1000) / 1000), c.x + 3, y + 2, { width: c.w - 6, align: c.align, lineBreak: false, ellipsis: true });
+      doc.font(FONT).fontSize(6.5).fillColor("#555")
+        .text(NF.format(qty), c.x + 3, y + 11, { width: c.w - 6, align: c.align, lineBreak: false, ellipsis: true });
+    };
+    for (const c of cols) {
+      if (c.key === "qty") totalCell(c, totQty, totFull, totRem);
+      else if (c.key.startsWith("b:")) { const t = bT.get(Number(c.key.slice(2))) ?? { qty: 0, full: 0, rem: 0 }; totalCell(c, t.qty, t.full, t.rem); }
+      else if (c.key === "name" || c.key === "sum") {
+        doc.font(FONT_BOLD).fontSize(7.5).fillColor("#111")
+          .text(c.key === "name" ? "JAMI" : money(total), c.x + 3, y + 6, { width: c.w - 6, align: c.align, lineBreak: false, ellipsis: true });
+      }
+    }
+    y += totH + 6;
   } else {
     y += 6;
     doc.font(FONT_BOLD).fontSize(10).fillColor("#111");
