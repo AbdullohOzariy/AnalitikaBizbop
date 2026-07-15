@@ -127,16 +127,19 @@ export function OrderDetail({ order, roles, isOwner }: { order: OrderData; roles
         const price = Number(l.price) || 0;
         const leadN = Number(l.lead);
         const lead = l.lead.trim() !== "" && Number.isInteger(leadN) && leadN >= 0 ? leadN : null;
+        const pack = Number(l.pack) > 0 ? Number(l.pack) : null;
         if (perBranch) {
           const branches = order.branches
             .map((b) => ({ branchId: b.id, quantity: Number(l.bq[b.id]) || 0 }))
             .filter((x) => x.quantity > 0);
           const quantity = branches.reduce((s, b) => s + b.quantity, 0);
-          // packCount/packSize per-filial rejimda tahrirlanmaydi — saqlangan qiymat yo'qolmasin.
-          return { productId: i.productId, quantity, price, packCount: i.packCount, packSize: i.packSize, leadTimeDays: lead, branches };
+          return {
+            productId: i.productId, quantity, price,
+            packCount: pack ? Math.round((quantity / pack) * 1000) / 1000 : null, // jami blok = dona ÷ pachka
+            packSize: pack, leadTimeDays: lead, branches,
+          };
         }
         const qty = Number(l.qty) || 0;
-        const pack = Number(l.pack) > 0 ? Number(l.pack) : null;
         return {
           productId: i.productId, quantity: qty, price,
           packCount: qty === i.quantity && pack === i.packSize ? i.packCount : null,
@@ -280,18 +283,16 @@ export function OrderDetail({ order, roles, isOwner }: { order: OrderData; roles
                 <TableHead>SKU</TableHead>
                 <TableHead className="w-[140px]">Subkategoriya</TableHead>
                 <TableHead className="w-[70px]" title="Lead time (kun) — zakazdan kelguncha; SKU'ga saqlanadi">Lead</TableHead>
+                <TableHead className="w-[80px]" title="Pachkadagi dona soni — SKU'ga saqlanadi">Pachka</TableHead>
                 {perBranch ? (
                   <>
                     {order.branches.map((b) => (
-                      <TableHead key={b.id} className="w-[90px] text-right" title={`${b.name} — shu filialga miqdor`}>{b.name}</TableHead>
+                      <TableHead key={b.id} className="w-[90px] text-right" title={`${b.name} — shu filialga miqdor (dona)`}>{b.name}</TableHead>
                     ))}
                     <TableHead className="w-[90px] text-right border-l border-border/60" title="Jami = filiallar yig'indisi">Jami</TableHead>
                   </>
                 ) : (
-                  <>
-                    <TableHead className="w-[80px]" title="Pachkadagi dona soni — SKU'ga saqlanadi">Pachka</TableHead>
-                    <TableHead className="w-[110px]">Miqdor</TableHead>
-                  </>
+                  <TableHead className="w-[110px]">Miqdor</TableHead>
                 )}
                 <TableHead className="w-[120px]">Narx</TableHead>
                 <TableHead className="text-right w-[120px]">Summa</TableHead>
@@ -303,6 +304,8 @@ export function OrderDetail({ order, roles, isOwner }: { order: OrderData; roles
               {items.map((i) => {
                 const l = lines.get(i.productId) ?? { qty: "", price: "", lead: "", pack: "", bq: {} };
                 const qty = lineQty(l);
+                // Effektiv pachka: kiritilgan yoki SKU'da eslab qolingan (katak tozalansa ham blok ko'rinsin)
+                const pack = Number(l.pack) > 0 ? Number(l.pack) : (i.packSize ?? 0);
                 const sum = qty * (Number(l.price) || 0);
                 return (
                   <TableRow key={i.productId} className="text-sm">
@@ -315,35 +318,38 @@ export function OrderDetail({ order, roles, isOwner }: { order: OrderData; roles
                         onChange={(e) => setLine(i.productId, { lead: e.target.value })}
                         className="h-8 w-16 text-xs tabular-nums" title="Lead time (kun) — SKU'ga saqlanadi" aria-label="Lead time (kun)" />
                     </TableCell>
+                    <TableCell>
+                      <Input type="number" inputMode="decimal" value={l.pack} disabled={!editable || busy}
+                        placeholder={i.packSize != null ? String(i.packSize) : ""}
+                        onChange={(e) => setLine(i.productId, { pack: e.target.value })}
+                        className="h-8 w-16 text-xs tabular-nums" title="Pachkadagi dona soni — SKU'ga saqlanadi" aria-label="Pachkadagi dona soni" />
+                    </TableCell>
                     {perBranch ? (
                       <>
                         {order.branches.map((b) => (
                           <TableCell key={b.id} className="px-2">
                             <Input type="number" inputMode="decimal" value={l.bq[b.id] ?? ""} disabled={!editable || busy}
                               onChange={(e) => setBranchQty(i.productId, b.id, e.target.value)}
-                              className="h-8 w-16 px-1.5 text-right text-xs tabular-nums" aria-label={`${b.name} miqdor`} />
+                              className="h-8 w-16 px-1.5 text-right text-xs tabular-nums" aria-label={`${b.name} miqdor (dona)`} />
                           </TableCell>
                         ))}
                         <TableCell className="text-right tabular-nums text-xs font-semibold border-l border-border/60">
                           {qty > 0 ? qty.toLocaleString("uz-UZ") : "—"}
-                        </TableCell>
-                      </>
-                    ) : (
-                      <>
-                        <TableCell>
-                          <Input type="number" inputMode="decimal" value={l.pack} disabled={!editable || busy}
-                            placeholder={i.packSize != null ? String(i.packSize) : ""}
-                            onChange={(e) => setLine(i.productId, { pack: e.target.value })}
-                            className="h-8 w-16 text-xs tabular-nums" title="Pachkadagi dona soni — SKU'ga saqlanadi" aria-label="Pachkadagi dona soni" />
-                        </TableCell>
-                        <TableCell>
-                          <Input type="number" inputMode="decimal" value={l.qty} disabled={!editable || busy}
-                            onChange={(e) => setLine(i.productId, { qty: e.target.value })} className="h-8 w-24 text-xs" />
-                          {i.packCount != null && i.packSize != null && Number(l.qty) === i.quantity && (
-                            <p className="mt-0.5 text-[10px] text-muted-foreground">{i.packCount} blok × {i.packSize} dona</p>
+                          {pack > 0 && qty > 0 && (
+                            <p className="mt-0.5 text-[10px] font-normal text-muted-foreground">
+                              {(Math.round((qty / pack) * 1000) / 1000).toLocaleString("uz-UZ")} blok
+                            </p>
                           )}
                         </TableCell>
                       </>
+                    ) : (
+                      <TableCell>
+                        <Input type="number" inputMode="decimal" value={l.qty} disabled={!editable || busy}
+                          onChange={(e) => setLine(i.productId, { qty: e.target.value })} className="h-8 w-24 text-xs" />
+                        {i.packCount != null && i.packSize != null && Number(l.qty) === i.quantity && (
+                          <p className="mt-0.5 text-[10px] text-muted-foreground">{i.packCount} blok × {i.packSize} dona</p>
+                        )}
+                      </TableCell>
                     )}
                     <TableCell>
                       <Input type="number" inputMode="decimal" value={l.price} disabled={!editable || busy}

@@ -24,12 +24,25 @@ import {
 } from "../actions";
 import { hisobMinStock, hisobMaxStock } from "../order-status";
 
-// Bitta SKU qatori holati: narx + lead + pachka (SKU darajasi) + filial bo'yicha DONA (bid→dona).
-// Filialga FAQAT dona kiritiladi; Jami'da blok (= jami dona ÷ pachka) ham, dona ham ko'rinadi.
-type Line = { price: string; lead: string; pack: string; bq: Record<number, string> };
+// Bitta SKU qatori holati: narx + lead + pachka (SKU darajasi) + filial bo'yicha BLOK (bb) va DONA (bq).
+// Filialga blok ham, dona ham kiritiladi — biri kiritilsa ikkinchisi pachka orqali qayta hisoblanadi.
+// Kanonik qiymat — `bq` (dona): zakaz shundan yig'iladi, `bb` faqat kiritish qulayligi uchun.
+// Ikkalasi ham XOM matn (raw) sifatida saqlanadi — "0." kabi chala kiritishda kursor sakramasin.
+type Line = { price: string; lead: string; pack: string; bq: Record<number, string>; bb: Record<number, string> };
+
+const emptyLine = (): Line => ({ price: "", lead: "", pack: "", bq: {}, bb: {} });
 
 // Effektiv pachka (bir blokdagi dona): kiritilgan yoki SKU'da eslab qolingan.
 const packOf = (l: Pick<Line, "pack">, it: BuilderItem) => (Number(l.pack) > 0 ? Number(l.pack) : (it.packSize ?? 0));
+
+// Kasr blok (2.5 blok) ham bo'lishi mumkin — 3 xonagacha yaxlitlaymiz (server ham Decimal(20,3)).
+const round3 = (n: number) => Math.round(n * 1000) / 1000;
+// Xom matn musbat songa aylanadimi? ("" / "0." / "abc" — yo'q)
+const numOf = (raw: string): number | null => {
+  if (raw.trim() === "") return null;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+};
 
 // Iyerarxiya daraxti tugunlari (guruh → kategoriya → subkategoriya → SKU)
 type SubNode = { id: number; name: string; sort: number; items: BuilderItem[] };
@@ -48,8 +61,10 @@ function branchAvto(cell: BranchCell, orderGap: number, lead: number | null, xyz
 // (ilgari har klaviatura bosishida BARCHA ochiq qatorlar qayta render bo'lardi). Handlerlar
 // (h) stabil identifikatorli — quyida stable-ref pattern bilan beriladi.
 type RowHandlers = {
-  setLine: (pid: number, patch: Partial<Omit<Line, "bq">>) => void;
-  setBranchQty: (pid: number, bid: number, val: string) => void;
+  // skuPack — SKU'da eslab qolingan pachka (fallback): Pachka o'zgarganda bloklarni qayta hisoblash uchun.
+  setLine: (pid: number, patch: Partial<Omit<Line, "bq" | "bb">>, skuPack?: number) => void;
+  // pack — shu qatorning effektiv pachkasi (qator o'zi biladi, parent qayta hisoblamasin).
+  setBranchCell: (pid: number, bid: number, field: "blok" | "dona", val: string, pack: number) => void;
   regRef: (pid: number, field: string) => (el: HTMLInputElement | null) => void;
   onEnterNext: (pid: number, field: string) => (e: React.KeyboardEvent<HTMLInputElement>) => void;
 };
@@ -63,7 +78,7 @@ const SkuRow = memo(function SkuRow({
   orderGap: number;
   h: RowHandlers;
 }) {
-  const l = line ?? { price: "", lead: "", pack: "", bq: {} };
+  const l = line ?? emptyLine();
   const effLead = l.lead.trim() !== "" && Number(l.lead) >= 0 ? Number(l.lead) : it.lead;
   const pack = packOf(l, it);
   const cellByB = new Map(it.branches.map((c) => [c.branchId, c]));
@@ -104,10 +119,14 @@ const SkuRow = memo(function SkuRow({
       <TableCell className="px-2">
         <Input ref={h.regRef(it.productId, "pack")} type="number" inputMode="decimal" value={l.pack}
           placeholder={it.packSize != null ? String(it.packSize) : ""}
-          onChange={(e) => h.setLine(it.productId, { pack: e.target.value })}
+          onChange={(e) => h.setLine(it.productId, { pack: e.target.value }, it.packSize ?? 0)}
           onKeyDown={h.onEnterNext(it.productId, "pack")}
-          className="h-7 w-14 px-1.5 text-right text-xs tabular-nums"
-          title="Pachka — bir blokdagi dona soni (SKU'ga saqlanadi). Jami blok = jami dona ÷ pachka" aria-label="Pachka (dona/blok)" />
+          className={cn("h-7 w-14 px-1.5 text-right text-xs tabular-nums",
+            pack <= 0 && "border-amber-500/60 bg-amber-500/10")}
+          title={pack > 0
+            ? "Pachka — bir blokdagi dona soni (SKU'ga saqlanadi). Blok = dona ÷ pachka"
+            : "Pachka kiritilmagan — blok kataklari ishlamaydi. Kiriting: SKU'ga saqlanadi."}
+          aria-label="Pachka (dona/blok)" />
       </TableCell>
       {branches.map((b) => {
         const cell = cellByB.get(b.id);
@@ -128,12 +147,24 @@ const SkuRow = memo(function SkuRow({
                 : <span className="text-muted-foreground/40">—</span>}
             </TableCell>
             <TableCell className="bg-primary/[0.03] px-1.5">
+              <Input ref={h.regRef(it.productId, `k${b.id}`)} type="number" inputMode="decimal" value={l.bb[b.id] ?? ""}
+                disabled={pack <= 0}
+                placeholder={pack > 0 && avto > 0 ? String(round3(avto / pack)) : ""}
+                onChange={(e) => h.setBranchCell(it.productId, b.id, "blok", e.target.value, pack)}
+                onKeyDown={h.onEnterNext(it.productId, `k${b.id}`)}
+                className="h-7 w-14 px-1.5 text-right text-xs tabular-nums disabled:cursor-not-allowed"
+                title={pack > 0
+                  ? `Shu filialga blok soni — dona avto hisoblanadi (× ${pack})`
+                  : "Avval Pachka ustuniga blokdagi dona sonini kiriting"}
+                aria-label={`${b.name} blok soni`} />
+            </TableCell>
+            <TableCell className="bg-primary/[0.03] px-1.5">
               <Input ref={h.regRef(it.productId, `z${b.id}`)} type="number" inputMode="decimal" value={l.bq[b.id] ?? ""}
                 placeholder={avto > 0 ? String(avto) : ""}
-                onChange={(e) => h.setBranchQty(it.productId, b.id, e.target.value)}
+                onChange={(e) => h.setBranchCell(it.productId, b.id, "dona", e.target.value, pack)}
                 onKeyDown={h.onEnterNext(it.productId, `z${b.id}`)}
                 className="h-7 w-16 px-1.5 text-right text-xs tabular-nums"
-                title="Shu filialga buyurtma miqdori (dona)" aria-label={`${b.name} miqdor (dona)`} />
+                title="Shu filialga buyurtma miqdori (dona) — blok avto hisoblanadi" aria-label={`${b.name} miqdor (dona)`} />
             </TableCell>
           </Fragment>
         );
@@ -237,18 +268,37 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
     // eslint-disable-next-line react-hooks/exhaustive-deps -- faqat mount'da
   }, []);
 
-  const setLine = (pid: number, patch: Partial<Omit<Line, "bq">>) =>
+  const setLine = (pid: number, patch: Partial<Omit<Line, "bq" | "bb">>, skuPack = 0) =>
     setLines((prev) => {
       const n = new Map(prev);
-      const cur = n.get(pid) ?? { price: "", lead: "", pack: "", bq: {} };
-      n.set(pid, { ...cur, ...patch });
+      const cur = n.get(pid) ?? emptyLine();
+      const next: Line = { ...cur, ...patch };
+      // Pachka o'zgardi: dona kanonik bo'lib qoladi, bloklar yangi pachkaga qarab qayta hisoblanadi
+      // (effekt emas — shu yerda, chunki repo'da set-state-in-effect taqiqlangan).
+      if (patch.pack !== undefined) {
+        const pack = Number(next.pack) > 0 ? Number(next.pack) : skuPack;
+        const bb: Record<number, string> = {};
+        for (const [bid, raw] of Object.entries(next.bq)) {
+          const qty = numOf(raw);
+          bb[Number(bid)] = qty != null && pack > 0 ? String(round3(qty / pack)) : "";
+        }
+        next.bb = bb;
+      }
+      n.set(pid, next);
       return n;
     });
-  const setBranchQty = (pid: number, bid: number, val: string) =>
+  // Filial katagi: blok yoki dona kiritiladi — kiritilgani xom holicha saqlanadi, ikkinchisi
+  // pachka orqali qayta yoziladi. Shu sababli ikkovi hech qachon bir-biridan uzoqlashmaydi.
+  const setBranchCell = (pid: number, bid: number, field: "blok" | "dona", val: string, pack: number) =>
     setLines((prev) => {
       const n = new Map(prev);
-      const cur = n.get(pid) ?? { price: "", lead: "", pack: "", bq: {} };
-      n.set(pid, { ...cur, bq: { ...cur.bq, [bid]: val } });
+      const cur = n.get(pid) ?? emptyLine();
+      const num = numOf(val);
+      const paired = num != null && pack > 0;
+      const next: Line = field === "dona"
+        ? { ...cur, bq: { ...cur.bq, [bid]: val }, bb: { ...cur.bb, [bid]: paired ? String(round3(num / pack)) : "" } }
+        : { ...cur, bb: { ...cur.bb, [bid]: val }, bq: { ...cur.bq, [bid]: paired ? String(round3(num * pack)) : "" } };
+      n.set(pid, next);
       return n;
     });
 
@@ -392,16 +442,22 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
     const m = new Map(lines);
     let filled = 0;
     for (const it of items) {
-      const cur = m.get(it.productId) ?? { price: "", lead: "", pack: "", bq: {} };
+      const cur = m.get(it.productId) ?? emptyLine();
       const effLead = cur.lead.trim() !== "" && Number(cur.lead) >= 0 ? Number(cur.lead) : it.lead;
+      const pack = packOf(cur, it);
       const bq = { ...cur.bq };
+      const bb = { ...cur.bb };
       let touched = false;
       for (const cell of it.branches) {
         if (Number(bq[cell.branchId]) > 0) continue; // qo'lda kiritilgan — tegmaymiz
         const avto = branchAvto(cell, orderGap, effLead, it.xyz); // dona
-        if (avto > 0) { bq[cell.branchId] = String(avto); touched = true; }
+        if (avto > 0) {
+          bq[cell.branchId] = String(avto);
+          bb[cell.branchId] = pack > 0 ? String(round3(avto / pack)) : "";
+          touched = true;
+        }
       }
-      if (touched) { m.set(it.productId, { ...cur, bq }); filled++; }
+      if (touched) { m.set(it.productId, { ...cur, bq, bb }); filled++; }
     }
     setLines(m);
     if (filled > 0) toast.success(`${filled} ta SKU avto to'ldirildi (filial avto-zakaz).`);
@@ -410,16 +466,16 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
 
   const clearAll = () => setLines(new Map());
 
-  const colCount = 4 + branches.length * 4 + 4; // Kod·SKU·Lead·Pachka + (4×filial) + Jami(Blok·Dona·Narx·Summa)
+  const colCount = 4 + branches.length * 5 + 4; // Kod·SKU·Lead·Pachka + (5×filial) + Jami(Blok·Dona·Narx·Summa)
 
   // Bitta SKU qatori
   // SkuRow (memo) ga beriladigan stabil handlerlar: identifikator o'zgarmaydi, lekin
   // doim eng so'nggi closure'ga (orderedPids, lines...) yo'naltiradi (stale closure yo'q).
-  const rowHRef = useRef<RowHandlers>({ setLine, setBranchQty, regRef, onEnterNext });
-  useEffect(() => { rowHRef.current = { setLine, setBranchQty, regRef, onEnterNext }; });
+  const rowHRef = useRef<RowHandlers>({ setLine, setBranchCell, regRef, onEnterNext });
+  useEffect(() => { rowHRef.current = { setLine, setBranchCell, regRef, onEnterNext }; });
   const rowH = useMemo<RowHandlers>(() => ({
-    setLine: (pid, patch) => rowHRef.current.setLine(pid, patch),
-    setBranchQty: (pid, bid, val) => rowHRef.current.setBranchQty(pid, bid, val),
+    setLine: (pid, patch, skuPack) => rowHRef.current.setLine(pid, patch, skuPack),
+    setBranchCell: (pid, bid, field, val, pack) => rowHRef.current.setBranchCell(pid, bid, field, val, pack),
     regRef: (pid, field) => rowHRef.current.regRef(pid, field),
     onEnterNext: (pid, field) => rowHRef.current.onEnterNext(pid, field),
   }), []);
@@ -502,10 +558,12 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
 
       {items.length > 0 && (
         <p className="text-[11px] text-muted-foreground">
-          Har filial uchun <b>Qoldiq · Kunlik · Avto-zakaz · Zakaz</b> ustunlari; filialga FAQAT <b>dona</b> kiritiladi. Oxirida <b>Jami</b>:
-          <b>Blok</b> (= jami dona ÷ pachka) va <b>Dona</b> (filiallar yig&apos;indisi) — ikkalasi ham ko&apos;rinadi. <b>Pachka</b> SKU&apos;dan avto chiqadi (tahrirlasa bo&apos;ladi).
-          Masalan pachka 12, filiallar yig&apos;indisi 60 dona → Jami: 5 blok · 60 dona. Avto-zakaz = kunlik × (zakaz oralig&apos;i + lead) × XYZ buferi (dona); qizil — qoldiq min&apos;dan past.
-          &quot;Avto to&apos;ldirish&quot; bo&apos;sh kataklarni avto-zakaz (dona) bilan to&apos;ldiradi. Faqat to&apos;ldirilgan (filialga) SKU zakazga kiradi. Lead/Pachka — SKU&apos;ga saqlanadi. Enter — keyingi qatorga.
+          Har filial uchun <b>Qoldiq · Kunlik · Avto-zakaz · Blok · Dona</b> ustunlari — <b>Blok</b>ka ham, <b>Dona</b>ga ham
+          kiritsa bo&apos;ladi: birini yozsangiz ikkinchisi pachka orqali o&apos;zi hisoblanadi (blok × pachka = dona).
+          <b>Pachka</b> (bir blokdagi dona) SKU&apos;dan avto chiqadi, tahrirlansa SKU&apos;ga saqlanadi; sariq katak — pachka
+          kiritilmagan, unda blok kataklari ishlamaydi (faqat dona). Masalan pachka 12 → filialga 2 blok yozsangiz 24 dona bo&apos;ladi.
+          Avto-zakaz = kunlik × (zakaz oralig&apos;i + lead) × XYZ buferi (dona); qizil — qoldiq min&apos;dan past.
+          &quot;Avto to&apos;ldirish&quot; bo&apos;sh kataklarni avto-zakaz bilan to&apos;ldiradi. Faqat to&apos;ldirilgan SKU zakazga kiradi. Enter — keyingi qatorga.
         </p>
       )}
 
@@ -529,7 +587,7 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
                     <TableHead rowSpan={2} className="w-[64px] align-bottom" title="Lead time (kun) — zakazdan kelguncha; SKU'ga saqlanadi">Lead</TableHead>
                     <TableHead rowSpan={2} className="w-[60px] align-bottom" title="Pachka — bir blokdagi dona soni. Filial miqdori = blok × pachka">Pachka</TableHead>
                     {branches.map((b) => (
-                      <TableHead key={b.id} colSpan={4} className="border-l border-border/60 text-center font-semibold" title={b.name}>{b.name}</TableHead>
+                      <TableHead key={b.id} colSpan={5} className="border-l border-border/60 text-center font-semibold" title={b.name}>{b.name}</TableHead>
                     ))}
                     <TableHead colSpan={4} className="border-l border-border/60 bg-primary/[0.04] text-center font-semibold">Jami</TableHead>
                   </TableRow>
@@ -539,7 +597,8 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
                         <TableHead className="w-[56px] border-l border-border/60 text-right text-[10px]" title="Qoldiq (shu filial)">Qold.</TableHead>
                         <TableHead className="w-[52px] text-right text-[10px]" title="Kunlik o'rtacha sotuv (shu filial)">Kun.</TableHead>
                         <TableHead className="w-[52px] text-right text-[10px]" title="Avto-zakaz taklifi (shu filial, dona)">Avto</TableHead>
-                        <TableHead className="w-[64px] bg-primary/[0.03] text-[10px]" title="Shu filialga buyurtma miqdori (dona)">Zakaz</TableHead>
+                        <TableHead className="w-[60px] bg-primary/[0.03] text-[10px]" title="Shu filialga blok soni — dona avto hisoblanadi (pachka kerak)">Blok</TableHead>
+                        <TableHead className="w-[64px] bg-primary/[0.03] text-[10px]" title="Shu filialga buyurtma miqdori (dona) — blok avto hisoblanadi">Dona</TableHead>
                       </Fragment>
                     ))}
                     <TableHead className="w-[56px] border-l border-border/60 text-right text-[10px]" title="Jami blok = jami dona ÷ pachka">Blok</TableHead>
