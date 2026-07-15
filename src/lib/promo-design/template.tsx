@@ -6,18 +6,19 @@
  */
 import type { DesignData } from "./data";
 
-const NF = new Intl.NumberFormat("uz-UZ");
-const money = (n: number) => NF.format(Math.round(n));
+// Katalog banneri (catalog.tsx) shu yordamchilarni qayta ishlatadi — nusxa ko'paymasin.
+export const NF = new Intl.NumberFormat("uz-UZ");
+export const money = (n: number) => NF.format(Math.round(n));
 const fmtLimit = (n: number) => (n % 1 === 0 ? String(n) : n.toLocaleString("uz-UZ", { maximumFractionDigits: 3 }));
 
 // Supermarket narx uslubi: 99 990 → katta "99" + ko'tarilgan "990" (ostida "so'm").
-const splitPrice = (n: number): { main: string; sup: string | null } => {
+export const splitPrice = (n: number): { main: string; sup: string | null } => {
   const v = Math.round(n);
   if (v < 1000) return { main: String(v), sup: null };
   return { main: NF.format(Math.floor(v / 1000)), sup: String(v % 1000).padStart(3, "0") };
 };
 
-const GREEN = "#22C55E";
+export const GREEN = "#22C55E";
 const GREEN_DARK = "#15803D";
 const BLUE = "#2563EB";
 
@@ -25,7 +26,7 @@ const BLUE = "#2563EB";
  *  QIRQILMAYDI: quti (w×h) layout'da o'z o'lchamida qoladi, rasm elementi esa zoom
  *  marta katta chiziladi (overflow ko'rinadi) — mahsulot PNG atrofi shaffof/oq
  *  bo'lgani uchun shunchaki yirikroq ko'rinadi. Placeholder'da zoom yo'q. */
-function ProductImage({ src, w, h, zoom, placeholder }: { src: string; w: number; h: number; zoom: number; placeholder: boolean }) {
+export function ProductImage({ src, w, h, zoom, placeholder }: { src: string; w: number; h: number; zoom: number; placeholder: boolean }) {
   const z = placeholder ? 1 : Math.min(2, Math.max(1, zoom || 1));
   return (
     <div style={{ display: "flex", width: w, height: h, alignItems: "center", justifyContent: "center" }}>
@@ -245,7 +246,7 @@ function HaftaBanner({ data, S, logoData }: { data: DesignData; S: HSizes; logoD
 // ustidan QIZIL QIYSHIQ chiziq; A4'da yashil/qizil limit qatorlari, Insta'da "Barcha filiallarda".
 
 const ORANGE = "#FC3A05"; // brend rangi (foydalanuvchi bergan kod)
-const RED_STRIKE = "#E02B20";
+export const RED_STRIKE = "#E02B20";
 const LOGO_RATIO = 3563 / 1165; // public/logo.png nisbatlari
 
 // "BIZBOP NARX" badge shakli — dizaynerning "Asset 1.svg" fayli (barg motivi:

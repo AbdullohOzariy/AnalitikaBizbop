@@ -1,15 +1,18 @@
 "use client";
 
-import { FileSpreadsheet, FileText, ImageIcon } from "lucide-react";
+import { FileSpreadsheet, FileText, ImageIcon, LayoutGrid } from "lucide-react";
 import { downloadFile } from "./download";
 
 /**
- * Aksiya ro'yxatini yuklab olish tugmalari (Excel + PDF + Dizaynlar ZIP).
+ * Aksiya ro'yxatini yuklab olish tugmalari (Excel + PDF + Dizaynlar ZIP + Katalog).
  * fetch orqali — server xato qaytarsa toast (fayl emas). Bo'sh aksiya (0 SKU) uchun ko'rsatilmaydi.
  * Dizaynlar — barcha rasm yuklangan dizayn bannerlari (A4 + Instagram) bitta ZIP'da;
  * rasm yuklanmagan bo'lsa server aniq xabar qaytaradi (toast'da ko'rinadi).
+ * Katalog — butun aksiya bitta A3 rasmda; faqat Hafta chegirmasida (`showCatalog`).
  */
-export function PromoExportButtons({ campaignId, itemsCount }: { campaignId: number; itemsCount: number }) {
+export function PromoExportButtons({
+  campaignId, itemsCount, showCatalog = false,
+}: { campaignId: number; itemsCount: number; showCatalog?: boolean }) {
   if (itemsCount === 0) return null;
   const base = `/api/promo/${campaignId}/export`;
   const cls =
@@ -33,6 +36,17 @@ export function PromoExportButtons({ campaignId, itemsCount }: { campaignId: num
         <ImageIcon className="h-3.5 w-3.5 text-blue-600" />
         Dizaynlar
       </button>
+      {showCatalog && (
+        <button
+          type="button"
+          onClick={() => downloadFile(`/api/promo/${campaignId}/catalog`, `aksiya-${campaignId}-katalog.png`, "Katalog rasmi tayyorlanmoqda…")}
+          className={cls}
+          title="Butun aksiya bitta rasmda — A3 portret (chop uchun)"
+        >
+          <LayoutGrid className="h-3.5 w-3.5 text-orange-600" />
+          Katalog
+        </button>
+      )}
     </span>
   );
 }

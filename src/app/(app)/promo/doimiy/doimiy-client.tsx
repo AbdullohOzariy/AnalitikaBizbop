@@ -128,7 +128,7 @@ function TypePanel({ type, branches, canEdit }: { type: DoimiyPromoType; branche
                   <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                     <Boxes className="h-3.5 w-3.5 shrink-0" />{c.itemsCount} SKU
                   </span>
-                  <PromoExportButtons campaignId={c.id} itemsCount={c.itemsCount} />
+                  <PromoExportButtons campaignId={c.id} itemsCount={c.itemsCount} showCatalog={type === "HAFTA_CHEGIRMA"} />
                   {canEdit && (
                     <span className="ml-auto flex items-center gap-0.5 md:ml-0">
                       <Button size="icon" variant="ghost" className="h-9 w-9 md:h-7 md:w-7" onClick={() => setForm({ mode: "edit", row: c })} aria-label="Tahrirlash">
