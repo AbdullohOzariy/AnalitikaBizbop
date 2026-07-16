@@ -18,6 +18,27 @@ export const splitPrice = (n: number): { main: string; sup: string | null } => {
   return { main: NF.format(Math.floor(v / 1000)), sup: String(v % 1000).padStart(3, "0") };
 };
 
+// ── Matn eni (taxminiy) ──────────────────────────────────────────────────────
+// Satori matnni panelga sig'dirish uchun SIQMAYDI — sig'masa ustma-ust chizadi.
+// Shuning uchun shriftni oldindan o'lchab kichraytiramiz. Koeffitsiyentlar chizilgan
+// bannerdan o'lchab olingan: Golos raqami ≈ 0.6em, bo'sh joy ≈ 0.26em, VelaSans ≈ 0.5em.
+export const golosWidth = (s: string, size: number) =>
+  size * [...s].reduce((a, ch) => a + (ch === " " ? 0.26 : 0.6), 0);
+const SOM_WIDTH = (size: number) => size * 4 * 0.5; // "so'm" — VelaSans, 4 belgi
+
+/**
+ * Ko'tarilgan narx bloki ("249" + ko'tarilgan "990" + ostida "so'm") berilgan enga
+ * sig'masa — uchala shriftni bir xil nisbatda kichraytirish koeffitsiyenti (≤1).
+ * 6 xonali narx Instagram formatida "990" ni "249" ustiga chizib yuborardi.
+ */
+export function splitPriceScale(
+  main: string, sup: string | null, mainSize: number, supSize: number, somSize: number, avail: number
+): number {
+  const supW = Math.max(sup ? golosWidth(sup, supSize) : 0, SOM_WIDTH(somSize));
+  const total = golosWidth(main, mainSize) + 10 + supW;
+  return total <= avail ? 1 : avail / total;
+}
+
 export const GREEN = "#22C55E";
 const GREEN_DARK = "#15803D";
 const BLUE = "#2563EB";
@@ -101,6 +122,12 @@ function HaftaBanner({ data, S, logoData }: { data: DesignData; S: HSizes; logoD
   const img = data.imageData ?? logoData;
   const placeholder = !data.imageData;
   const price = splitPrice(data.promoPrice);
+  // Narx chap panelga sig'masa kichrayadi (padding ikki tomondan ayriladi).
+  const availW = Math.round((parseFloat(S.leftPct) / 100) * S.W) - S.pad * 2;
+  const k = splitPriceScale(price.main, price.sup, S.priceMain, S.priceSup, S.priceSom, availW);
+  const pMain = Math.round(S.priceMain * k);
+  const pSup = Math.round(S.priceSup * k);
+  const pSom = Math.round(S.priceSom * k);
 
   return (
     <div style={{ display: "flex", width: S.W, height: S.H, fontFamily: "VelaSans", backgroundColor: "#ffffff" }}>
@@ -140,20 +167,20 @@ function HaftaBanner({ data, S, logoData }: { data: DesignData; S: HSizes; logoD
             </div>
           )}
           <div style={{ display: "flex", alignItems: "flex-start", color: "#ffffff" }}>
-            <div style={{ display: "flex", fontSize: S.priceMain, fontWeight: 700, fontFamily: "Golos", lineHeight: 0.8 }}>
+            <div style={{ display: "flex", fontSize: pMain, fontWeight: 700, fontFamily: "Golos", lineHeight: 0.8 }}>
               {price.main}
             </div>
             {price.sup ? (
               <div style={{ display: "flex", flexDirection: "column", marginLeft: 10 }}>
-                <div style={{ display: "flex", fontSize: S.priceSup, fontWeight: 700, fontFamily: "Golos", lineHeight: 0.9 }}>
+                <div style={{ display: "flex", fontSize: pSup, fontWeight: 700, fontFamily: "Golos", lineHeight: 0.9 }}>
                   {price.sup}
                 </div>
-                <div style={{ display: "flex", fontSize: S.priceSom, fontWeight: 700, lineHeight: 1, marginTop: -4 }}>
+                <div style={{ display: "flex", fontSize: pSom, fontWeight: 700, lineHeight: 1, marginTop: -4 }}>
                   so&apos;m
                 </div>
               </div>
             ) : (
-              <div style={{ display: "flex", fontSize: S.priceSom, fontWeight: 700, marginLeft: 12, alignSelf: "flex-end" }}>
+              <div style={{ display: "flex", fontSize: pSom, fontWeight: 700, marginLeft: 12, alignSelf: "flex-end" }}>
                 so&apos;m
               </div>
             )}
@@ -286,19 +313,24 @@ const B_INSTA: BSizes = {
   circleSize: 166, circleTop: 330, circleRight: 56, showLimit: false,
 };
 
-/** Supermarket uslubidagi narx bloki (katta ming qism + ko'tarilgan 3 raqam + so'm). */
-function SupPrice({ value, main, sup, som }: { value: number; main: number; sup: number; som: number }) {
+/** Supermarket uslubidagi narx bloki (katta ming qism + ko'tarilgan 3 raqam + so'm).
+ *  `avail` — panelda mavjud en: narx sig'masa shriftlar shu yerda kichrayadi. */
+function SupPrice({ value, main, sup, som, avail }: { value: number; main: number; sup: number; som: number; avail: number }) {
   const p = splitPrice(value);
+  const k = splitPriceScale(p.main, p.sup, main, sup, som, avail);
+  const mS = Math.round(main * k);
+  const sS = Math.round(sup * k);
+  const soS = Math.round(som * k);
   return (
     <div style={{ display: "flex", alignItems: "flex-start", color: "#ffffff" }}>
-      <div style={{ display: "flex", fontSize: main, fontWeight: 700, fontFamily: "Golos", lineHeight: 0.8 }}>{p.main}</div>
+      <div style={{ display: "flex", fontSize: mS, fontWeight: 700, fontFamily: "Golos", lineHeight: 0.8 }}>{p.main}</div>
       {p.sup ? (
         <div style={{ display: "flex", flexDirection: "column", marginLeft: 8 }}>
-          <div style={{ display: "flex", fontSize: sup, fontWeight: 700, fontFamily: "Golos", lineHeight: 0.9 }}>{p.sup}</div>
-          <div style={{ display: "flex", fontSize: som, fontWeight: 700, lineHeight: 1, marginTop: -3 }}>so&apos;m</div>
+          <div style={{ display: "flex", fontSize: sS, fontWeight: 700, fontFamily: "Golos", lineHeight: 0.9 }}>{p.sup}</div>
+          <div style={{ display: "flex", fontSize: soS, fontWeight: 700, lineHeight: 1, marginTop: -3 }}>so&apos;m</div>
         </div>
       ) : (
-        <div style={{ display: "flex", fontSize: som, fontWeight: 700, marginLeft: 10, alignSelf: "flex-end" }}>so&apos;m</div>
+        <div style={{ display: "flex", fontSize: soS, fontWeight: 700, marginLeft: 10, alignSelf: "flex-end" }}>so&apos;m</div>
       )}
     </div>
   );
@@ -307,6 +339,8 @@ function SupPrice({ value, main, sup, som }: { value: number; main: number; sup:
 function BizbopBanner({ data, S, logoData }: { data: DesignData; S: BSizes; logoData: string }) {
   const img = data.imageData ?? logoData;
   const placeholder = !data.imageData;
+  // Narxlar chap to'q-sariq panelga sig'sin (6 xonali narx ustma-ust tushib qolardi).
+  const availW = Math.round((parseFloat(S.leftPct) / 100) * S.W) - S.pad * 2;
 
   return (
     <div style={{ display: "flex", width: S.W, height: S.H, fontFamily: "VelaSans", backgroundColor: ORANGE }}>
@@ -330,7 +364,7 @@ function BizbopBanner({ data, S, logoData }: { data: DesignData; S: BSizes; logo
         <div style={{ display: "flex", flexGrow: 1, flexDirection: "column", justifyContent: "flex-end" }}>
           {!data.nPlusM && data.regularPrice > data.promoPrice && (
             <div style={{ display: "flex", position: "relative", alignSelf: "flex-start", marginBottom: 18 }}>
-              <SupPrice value={data.regularPrice} main={S.oldMain} sup={S.oldSup} som={S.oldSom} />
+              <SupPrice value={data.regularPrice} main={S.oldMain} sup={S.oldSup} som={S.oldSom} avail={availW} />
               {/* qizil qiyshiq ustma chiziq (o'ngga pastga qiya, maketdagidek) — butun blok bo'ylab */}
               <div
                 style={{
@@ -341,7 +375,7 @@ function BizbopBanner({ data, S, logoData }: { data: DesignData; S: BSizes; logo
               />
             </div>
           )}
-          <SupPrice value={data.promoPrice} main={S.newMain} sup={S.newSup} som={S.newSom} />
+          <SupPrice value={data.promoPrice} main={S.newMain} sup={S.newSup} som={S.newSom} avail={availW} />
           {!S.showLimit && (
             <div style={{ display: "flex", fontSize: S.branchSize, fontWeight: 700, color: "#ffffff", marginTop: Math.round(S.pad * 1.1) }}>
               Barcha filiallarda

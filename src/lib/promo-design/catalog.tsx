@@ -7,7 +7,7 @@
  * <div> ga display:"flex" SHART; Fragment ishlatilmaydi; ranglar inline hex.
  */
 import type { DesignData } from "./data";
-import { ProductImage, money, splitPrice, GREEN, RED_STRIKE } from "./template";
+import { ProductImage, money, splitPrice, golosWidth, GREEN, RED_STRIKE } from "./template";
 
 // A3 portret 150dpi — maket nisbati (1:1.414) bilan bir xil.
 const W = 1754;
@@ -53,13 +53,23 @@ function Card({ d, w, h }: { d: DesignData; w: number; h: number }) {
   const base = Math.min(w, h);
   const nameSize = Math.round(base * 0.048);
   const oldSize = Math.round(base * 0.055);
-  const newSize = Math.round(base * 0.125);
   const badgeW = Math.round(w * 0.28);
   const badgeH = Math.round(base * 0.135);
   const inset = Math.max(6, Math.round(base * 0.017));
   const pad = Math.round(base * 0.05);
   const price = splitPrice(d.promoPrice);
   const showOld = !d.nPlusM && d.regularPrice > d.promoPrice;
+
+  // Narx nom ustiga chiqmasin: 6 xonali narx ("249 990") qat'iy o'lchamda nomga
+  // yopishib qolardi. Nomga ajratilgan endan qolganiga sig'adigan shrift tanlanadi.
+  const contentW = w - inset * 2 - pad * 2;
+  const nameW = Math.round(contentW * 0.44);
+  const colGap = Math.round(base * 0.03);
+  const priceText = price.main + (price.sup ? ` ${price.sup}` : "");
+  const newSize = Math.min(
+    Math.round(base * 0.125),
+    Math.floor((contentW - nameW - colGap) / golosWidth(priceText, 1))
+  );
 
   return (
     <div
@@ -91,8 +101,8 @@ function Card({ d, w, h }: { d: DesignData; w: number; h: number }) {
         <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
           <div
             style={{
-              display: "flex", width: "44%", fontSize: nameSize, color: NAME_COLOR,
-              fontWeight: 700, lineHeight: 1.25,
+              display: "flex", width: nameW, marginRight: colGap, fontSize: nameSize,
+              color: NAME_COLOR, fontWeight: 700, lineHeight: 1.25,
             }}
           >
             {d.titleUz}
