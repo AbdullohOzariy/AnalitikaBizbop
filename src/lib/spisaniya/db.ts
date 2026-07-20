@@ -1147,14 +1147,23 @@ export async function chiqimExportRows(
 }
 
 // ─── SABABLAR (spisaniya sabablari — miniapp bilan UMUMIY jadval) ─────────────
-// BotBizBopSPS (spisaniya-bot mini app) ham shu `sabablar` jadvalini o'qiydi —
-// sxema AYNAN moslashishi SHART (o'zgartirmang). Seed FAQAT jadval bo'sh bo'lganda
-// (admin qo'lda o'chirgan sababni qayta tiklamaslik uchun).
+// Bu jadvalni `bot/miniapp` (build → public/miniapp) ham `/api/sabablar` orqali
+// o'qiydi: chip tugmalar shu ro'yxatdan chiziladi. Admin /chiqim/sabablar tabida
+// boshqaradi. Seed FAQAT jadval bo'sh bo'lganda (admin o'chirgan sabab tiklanmasin).
 
 export type Sabab = { id: number; nomi: string; tartib: number; faol: boolean };
 
 // Boshlang'ich sabablar — shu tartibda (faqat bo'sh jadvalga qo'shiladi).
+// 1-7: miniapp'da ilgari hardcode bo'lgan ro'yxat (o'zgarmasin — mavjud yozuvlar
+// shu matnlar bilan yozilgan). 8-13: keyin qo'shilgan sabablar.
 const SABABLAR_SEED = [
+  "Buyurtma ortiqcha",
+  "FEFO ishlamagan",
+  "Narx xato",
+  "Marketing qilinmagan",
+  "Yetkazib beruvchi srogi kam olib kelgan",
+  "Merchen qoidasi buzilgan",
+  "Saqlash qoidasi buzilgan",
   "Tozalash-saralash chiqindisi",
   "Xaridor tomonidan shikast yetkazilgan",
   "Yangi tovar (sinov uchun olingandi)",
@@ -1199,6 +1208,25 @@ export async function sabablarRoyxat(): Promise<Sabab[]> {
       `SELECT id, nomi, tartib, faol FROM sabablar ORDER BY tartib, nomi`
     );
     return rows as Sabab[];
+  } catch (err) {
+    logDbXato(err);
+    return [];
+  }
+}
+
+/**
+ * Miniapp chiplari uchun — FAQAT faol sabablar nomi, tartib bo'yicha.
+ * Xatoda bo'sh qaytadi (miniapp formasi ishlashda davom etsin).
+ */
+export async function sabablarFaol(): Promise<string[]> {
+  const p = getPool();
+  if (!p) return [];
+  try {
+    await ensureSabablarSchema();
+    const { rows } = await p.query(
+      `SELECT nomi FROM sabablar WHERE faol ORDER BY tartib, nomi`
+    );
+    return rows.map((r) => r.nomi as string);
   } catch (err) {
     logDbXato(err);
     return [];

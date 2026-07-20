@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Package, Hash, DollarSign, MapPin, Building2, ChevronDown, ChevronRight, AlignLeft, X } from 'lucide-react'
 import { cn, formatSum } from '../lib/utils'
 import { useFilialar } from '../hooks/useFilialar'
+import { useSabablar } from '../hooks/useSabablar'
 import PhotoUpload from './PhotoUpload'
 import StepHeader from './StepHeader'
 import SkuPicker, { type SkuTanlov } from './SkuPicker'
@@ -37,15 +38,8 @@ export interface FormData {
   qaytarilmadiSabab: string
 }
 
-const SABABLAR = [
-  'Buyurtma ortiqcha',
-  'FEFO ishlamagan',
-  'Narx xato',
-  'Marketing qilinmagan',
-  'Yetkazib beruvchi srogi kam olib kelgan',
-  'Merchen qoidasi buzilgan',
-  'Saqlash qoidasi buzilgan',
-] as const
+// Sabablar endi hardcode emas — /api/sabablar orqali `sabablar` jadvalidan keladi
+// (admin /chiqim/sabablar tabida boshqaradi). Qarang: hooks/useSabablar.ts
 
 const VOZVRAT_HOLAT: { value: VozvratHolat; label: string }[] = [
   { value: 'xabar_berildi',    label: 'Xabar berildi' },
@@ -91,6 +85,7 @@ interface Props {
 
 export default function Step2Forma({ tur, onBack, onNext }: Props) {
   const filialar = useFilialar()
+  const SABABLAR = useSabablar()
   const [photoLoading, setPhotoLoading] = useState(false)
   const [filialOpen, setFilialOpen] = useState(false)
   const [pickerOchiq, setPickerOchiq] = useState(false)
