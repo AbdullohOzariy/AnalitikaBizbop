@@ -18,6 +18,16 @@ export function formatNumber(n: number): string {
   return n.toLocaleString("uz-UZ", { maximumFractionDigits: 0 });
 }
 
+/**
+ * Miqdor (dona/kg/litr) — 3 kasrgacha. formatNumber'dan farqi: 12.5 ni "13" ga
+ * yaxlitlamaydi, aks holda inventarizatsiyada soxta kamomad/ortiqcha chiqadi.
+ * Platforma konvensiyasi (inventarizatsiya/items-client.tsx) ham 3 kasr.
+ */
+export function formatQty(n: number): string {
+  if (!Number.isFinite(n)) return "—";
+  return n.toLocaleString("uz-UZ", { maximumFractionDigits: 3 });
+}
+
 /** Prisma Decimal (yoki har qanday qiymat) → number; NaN/parse xatosi → 0. */
 export function decimalToNumber(n: unknown): number {
   const v = typeof n === "object" && n !== null && "toNumber" in n

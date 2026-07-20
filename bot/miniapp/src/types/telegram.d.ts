@@ -9,7 +9,11 @@ interface TelegramWebAppUser {
 interface TelegramWebApp {
   initData: string
   initDataUnsafe: { user?: TelegramWebAppUser }
+  ready(): void
   expand(): void
+  // Bot API 7.7+ — eski mijozlarda yo'q, shuning uchun ixtiyoriy
+  disableVerticalSwipes?(): void
+  isVersionAtLeast?(version: string): boolean
   close(): void
   enableClosingConfirmation(): void
   disableClosingConfirmation(): void

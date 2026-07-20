@@ -122,6 +122,9 @@ export function KirishApp() {
       )}
 
       <style>{`
+        /* Fon EKRAN BO'YLAB (body'da ham) — .wrap 440px ga cheklangani uchun
+           keng viewport'da (Telegram Desktop) yon tomonlar bo'sh qolmasin. */
+        body { background: var(--tg-theme-bg-color, #F2F3F7); }
         .wrap { min-height: 100dvh; max-width: 440px; margin: 0 auto; padding: 0 16px 24px;
           font-family: -apple-system, system-ui, sans-serif;
           background: var(--tg-theme-bg-color, #F2F3F7); color: var(--tg-theme-text-color, #0B0B0F);

@@ -11,6 +11,7 @@
  */
 import { prisma } from "@/lib/prisma";
 import { TASHKENT_OFFSET_MS } from "@/lib/date";
+import type { LoadLevel } from "@/generated/prisma/enums";
 import { getLogistikaGroup } from "./sozlama";
 
 /** parse_mode:"HTML" uchun eskeyplash — nuqta/mashina nomlaridagi `<`/`&` xabarni buzmasin. */
@@ -18,10 +19,14 @@ function esc(s: string | null | undefined): string {
   return (s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-const LOAD_LABEL: Record<string, string> = {
+// Record<LoadLevel, ...> — ATAYLAB: enum'ga yangi daraja qo'shilsa shu yerda
+// kompilyatsiya yiqiladi. Ilgari Record<string,...> edi va THREE_QUARTER
+// qo'shilganda xabarda xom "THREE_QUARTER" chiqib ketgan.
+const LOAD_LABEL: Record<LoadLevel, string> = {
   EMPTY: "bo'sh",
   QUARTER: "¼",
   HALF: "½",
+  THREE_QUARTER: "¾",
   FULL: "to'la",
 };
 

@@ -16,6 +16,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { LoadLevel } from "@/generated/prisma/enums";
 import { reysXabarYubor } from "@/lib/logistika/notify";
 import {
   authDriver,
@@ -39,7 +40,9 @@ const schema = z.object({
   vehicleId: z.number().int().positive(),
   fromPointId: z.number().int().positive(),
   toPointId: z.number().int().positive(),
-  load: z.enum(["EMPTY", "QUARTER", "HALF", "FULL"]),
+  // Prisma enum'dan — qo'lda yozilgan ro'yxat enum kengayganda ortda qolib,
+  // yangi qiymatni 400 bilan rad etardi (THREE_QUARTER shu sabab ishlamagan).
+  load: z.enum(LoadLevel),
   ...gpsSchema,
 });
 

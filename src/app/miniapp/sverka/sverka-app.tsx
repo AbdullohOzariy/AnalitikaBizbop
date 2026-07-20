@@ -15,6 +15,11 @@ type TgWebApp = {
   ready: () => void;
   expand: () => void;
   onEvent?: (event: string, cb: () => void) => void;
+  /** Bot API 7.7+ — mavjudligi isVersionAtLeast bilan tekshirilsin. */
+  isVersionAtLeast?: (v: string) => boolean;
+  disableVerticalSwipes?: () => void;
+  enableClosingConfirmation?: () => void;
+  disableClosingConfirmation?: () => void;
   HapticFeedback?: {
     notificationOccurred: (t: "success" | "error" | "warning") => void;
     selectionChanged?: () => void;
@@ -81,6 +86,8 @@ export function SverkaApp() {
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
     tg?.ready(); tg?.expand();
+    // Ro'yxat tepasida over-scroll → sheet yopiladi → kiritilgan maydonlar yo'qoladi
+    if (tg?.isVersionAtLeast?.("7.7")) tg.disableVerticalSwipes?.();
     (async () => {
       try {
         const r = await api<{ allowed: boolean }>("/api/sverka/ruxsat", { method: "POST" });

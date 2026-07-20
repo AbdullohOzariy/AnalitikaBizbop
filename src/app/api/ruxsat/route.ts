@@ -25,11 +25,20 @@ export async function POST(req: Request) {
       { status: 200 }
     );
   }
-  const [allowed, sverka, driver] = await Promise.all([
-    ruxsatBormi(user.id),
-    sverkaRuxsatBormi(user.id).catch(() => false),
-    driverRuxsatBormi(user.id).catch(() => false),
-  ]);
+  // DB xatosini "ruxsat yo'q" ga AYLANTIRMAYMIZ. Ilgari uchala tekshiruv ham
+  // .catch(() => false) bilan yutilardi — Neon idle uzilishida xodim "Ruxsat
+  // yo'q — ID'ni adminga yuboring" terminal ekraniga tushardi va u yerdan
+  // chiqa olmasdi. 503 esa miniappda "Ulanib bo'lmadi + Qayta urinish" beradi.
+  let allowed: boolean, sverka: boolean, driver: boolean;
+  try {
+    [allowed, sverka, driver] = await Promise.all([
+      ruxsatBormi(user.id),
+      sverkaRuxsatBormi(user.id),
+      driverRuxsatBormi(user.id),
+    ]);
+  } catch {
+    return NextResponse.json({ xato: "Ulanib bo'lmadi" }, { status: 503 });
+  }
   const ism = [user.first_name, user.last_name].filter(Boolean).join(" ") || null;
   return NextResponse.json({ allowed, sverka, driver, user: { id: user.id, ism } });
 }

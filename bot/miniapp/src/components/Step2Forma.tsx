@@ -41,6 +41,9 @@ export interface FormData {
   qaytarilmadiSabab: string
 }
 
+// Forma holatining egasi — App (Step3 → "Orqaga" da bu komponent unmount bo'ladi, holat
+// esa qolishi kerak). Bo'sh forma fabrikasi: lib/forma.ts (react-refresh talabi).
+
 // Sabablar endi hardcode emas — /api/sabablar orqali `sabablar` jadvalidan keladi
 // (admin /chiqim/sabablar tabida boshqaradi). Qarang: hooks/useSabablar.ts
 
@@ -82,28 +85,27 @@ function Field({ label, icon, delay, required, children }: FieldProps) {
 
 interface Props {
   tur: Tur
+  // Forma holati App'da yashaydi — komponent to'liq controlled
+  form: FormData
+  setForm: React.Dispatch<React.SetStateAction<FormData>>
   onBack: () => void
-  onNext: (data: FormData) => void
+  onNext: () => void
 }
 
-export default function Step2Forma({ tur, onBack, onNext }: Props) {
+export default function Step2Forma({ tur, form, setForm, onBack, onNext }: Props) {
   const filialar = useFilialar()
   const SABABLAR = useSabablar()
   const [photoLoading, setPhotoLoading] = useState(false)
   const [filialOpen, setFilialOpen] = useState(false)
   const [pickerOchiq, setPickerOchiq] = useState(false)
-  const [qolda, setQolda] = useState(false) // tovar qo'lda kiritish rejimi
+  // Qo'lda kiritish rejimlari — lokal UI holati, lekin qaytib kelganda (Step3 → Orqaga,
+  // yoki qoralamadan tiklanganda) qo'lda kiritilgan matn ko'rinmay qolmasligi uchun
+  // mavjud formadan derive qilinadi.
+  const [qolda, setQolda] = useState(() => form.skuKod === null && form.tovarNomi.trim().length > 0)
   const [taminotchiPickerOchiq, setTaminotchiPickerOchiq] = useState(false)
-  const [taminotchiQolda, setTaminotchiQolda] = useState(false) // ta'minotchi qo'lda kiritish rejimi
-  const [form, setForm] = useState<FormData>({
-    photo: null, photoBase64: null, photoSize: 0,
-    qrPhoto: null, qrPhotoBase64: null, qrPhotoSize: 0,
-    tovarNomi: '', skuKod: null, miqdor: '', birlik: 'dona', summa: '',
-    sababTanlov: '',
-    filial: '', firmaNomi: '', kafeNomi: '',
-    yonalish: 'asosiy_filial', taminotchi: '', taminotchiId: null,
-    vozvratStatus: 'xabar_berildi', qaytarilmadiSabab: '',
-  })
+  const [taminotchiQolda, setTaminotchiQolda] = useState(
+    () => form.taminotchiId === null && form.taminotchi.trim().length > 0,
+  )
 
   function set<K extends keyof FormData>(k: K, v: FormData[K]) {
     setForm(f => ({ ...f, [k]: v }))
@@ -489,7 +491,7 @@ export default function Step2Forma({ tur, onBack, onNext }: Props) {
 
       {/* Footer */}
       <div className="flex-shrink-0 px-4 py-3 pb-[max(12px,env(safe-area-inset-bottom))] bg-tg-bg border-t border-line">
-        <Button disabled={!isValid} onClick={() => isValid && onNext(form)}>
+        <Button disabled={!isValid} onClick={() => isValid && onNext()}>
           Davom etish
         </Button>
       </div>

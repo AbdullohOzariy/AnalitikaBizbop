@@ -10,7 +10,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { isoDay, todayTashkentISO } from "@/lib/date";
-import { formatUZS, formatNumber, formatDateUZ } from "@/lib/format";
+import { formatUZS, formatNumber, formatQty, formatDateUZ } from "@/lib/format";
 
 type MeUser = {
   name: string;
@@ -121,6 +121,8 @@ export function SotuvApp() {
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
     tg?.ready(); tg?.expand();
+    // Ro'yxat tepasida over-scroll → sheet yopiladi → sanalgan SKU'lar yo'qoladi
+    if (tg?.isVersionAtLeast?.("7.7")) tg.disableVerticalSwipes?.();
     // Tema Telegram'dan (prefers-color-scheme emas — custom temalar mos kelmaydi)
     tg?.onEvent?.("themeChanged", () => setTheme(tg?.colorScheme ?? "light"));
     (async () => {
@@ -178,16 +180,24 @@ export function SotuvApp() {
         <b>{tab === "hisobot" ? "BizbopSotuv" : "Inventar"}</b>
         <span className="who"><span className="avatar">{initials(me.name)}</span>{me.name}</span>
       </div>
-      {tab === "hisobot" ? <HisobotTab me={me} /> : <InventarTab me={me} />}
+      {/* Ikkala tab ham MOUNT holda qoladi: ternary bilan almashganda InventarTab
+          unmount bo'lib, sanalgan miqdorlarni (faqat React state'da) jimgina
+          o'chirar edi. Yashirish — CSS (.pane.off) orqali. */}
+      <div className={tab === "hisobot" ? "pane" : "pane off"}><HisobotTab me={me} /></div>
+      {me.canInventory && (
+        <div className={tab === "inventar" ? "pane" : "pane off"}><InventarTab me={me} /></div>
+      )}
       {me.canInventory && (
         <div className="tabbar">
-          <div className="tabnav" data-active={tab}>
-            <button className="tabbtn" aria-pressed={tab === "hisobot"} onClick={() => switchTab("hisobot")}>
-              <IconChart /> Hisobot
-            </button>
-            <button className="tabbtn" aria-pressed={tab === "inventar"} onClick={() => switchTab("inventar")}>
-              <IconBox /> Inventar
-            </button>
+          <div className="barcol">
+            <div className="tabnav" data-active={tab}>
+              <button className="tabbtn" aria-pressed={tab === "hisobot"} onClick={() => switchTab("hisobot")}>
+                <IconChart /> Hisobot
+              </button>
+              <button className="tabbtn" aria-pressed={tab === "inventar"} onClick={() => switchTab("inventar")}>
+                <IconBox /> Inventar
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -202,6 +212,9 @@ function HisobotTab({ me }: { me: MeUser }) {
   const [davr, setDavr] = useState<Davr>("bugun");
   const [branchId, setBranchId] = useState<number>(single ? me.branches[0].id : 0);
   const [res, setRes] = useState<{ key: string; data: DashData | null; err: string } | null>(null);
+  /* Oxirgi MA'LUM kun — alohida holatda: `data` yuklanish paytida null bo'lgani
+     uchun status qatori har davr/filial almashuvida yo'qolib-paydo bo'lardi. */
+  const [oxirgiKun, setOxirgiKun] = useState<string | null>(null);
   const key = `${davr}|${branchId}`;
   const loading = res?.key !== key;
   const data = loading ? null : res?.data ?? null;
@@ -216,7 +229,7 @@ function HisobotTab({ me }: { me: MeUser }) {
         const q = new URLSearchParams({ start, end });
         if (branchId > 0) q.set("branchId", String(branchId));
         const r = await api<{ ok: true } & DashData>(`/api/miniapp-sotuv/dashboard?${q}`);
-        if (!cancelled) setRes({ key: k, data: r, err: "" });
+        if (!cancelled) { setRes({ key: k, data: r, err: "" }); setOxirgiKun(r.lastDataDay); }
       } catch (e) {
         if (!cancelled) setRes({ key: k, data: null, err: e instanceof Error ? e.message : "Xatolik yuz berdi" });
       }
@@ -229,9 +242,19 @@ function HisobotTab({ me }: { me: MeUser }) {
   const isZero = !!data && data.kpi.sales === 0 && data.kpi.receipts === 0;
   const sorted = data ? [...data.branches].sort((a, b) => b.sales - a.sales) : [];
   const maxBranch = Math.max(1, ...sorted.map((b) => b.sales));
+  /* lastDataDay — ProductSales'ning GLOBAL oxirgi kuni (filial filtri yo'q, kun
+     chegarasi — soat emas). 1C kechikkanda yig'indi to'liq ko'rinib qolmasin.
+     `data` emas, `oxirgiKun` dan: yuklanish paytida ham qator joyida qoladi. */
+  const eskiKun = oxirgiKun && oxirgiKun < todayTashkentISO() ? oxirgiKun : null;
 
   return (
     <>
+      {eskiKun && (
+        <p className="datastat">
+          <span className="dot" />Savdo ma&apos;lumoti {formatDateUZ(eskiKun)} gacha
+        </p>
+      )}
+
       <div className="seg">
         {DAVRLAR.map((d) => (
           <button key={d.key} className={davr === d.key ? "on" : ""} onClick={() => setDavrH(d.key)}>{d.label}</button>
@@ -255,9 +278,10 @@ function HisobotTab({ me }: { me: MeUser }) {
           <div className="hero zero">
             <div className="ic">☀️</div>
             <div className="t">{davr === "bugun" ? "Bugun savdo hali boshlanmadi" : "Bu davrda savdo topilmadi"}</div>
+            {/* Sanani takrorlamaymiz — u yuqoridagi doimiy `.datastat` qatorida turadi */}
             <div className="s">
               {data.lastDataDay
-                ? <>Ma&apos;lumot {formatDateUZ(data.lastDataDay)} gacha mavjud. {davr === "bugun" ? "7 kun yoki Oy'ni tanlang." : ""}</>
+                ? (davr === "bugun" ? "7 kun yoki Oy'ni tanlang." : "Boshqa davrni tanlang.")
                 : "Ma'lumot 1C'dan yangilanadi."}
             </div>
           </div>
@@ -375,6 +399,29 @@ function Gauge({ percent }: { percent: number }) {
 
 type EditVal = { qty: string; note: string };
 
+/* Qoralama: sanoqlar faqat React state'da bo'lgani uchun sheet yopilishi/qayta
+   yuklanish oxirgi saqlashdan keyingi kiritishlarni yo'q qilardi. Kalitga kun
+   kiritilgan — ertangi sanoq kechagi qoralamani tiklab olmasin. */
+const DRAFT_PREFIX = "inv:";
+const draftKey = (branchId: number) => `${DRAFT_PREFIX}${branchId}:${todayTashkentISO()}`;
+
+const ls = {
+  get(k: string): string | null { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k: string, v: string) { try { localStorage.setItem(k, v); } catch { /* private mode */ } },
+  del(k: string) { try { localStorage.removeItem(k); } catch { /* private mode */ } },
+};
+
+/** Boshqa kunlarning qoralamalari — localStorage cheksiz o'smasin. */
+function eskiQoralamalarniTozala() {
+  const bugun = `:${todayTashkentISO()}`;
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k?.startsWith(DRAFT_PREFIX) && !k.endsWith(bugun)) localStorage.removeItem(k);
+    }
+  } catch { /* private mode */ }
+}
+
 function InventarTab({ me }: { me: MeUser }) {
   const [branchId, setBranchId] = useState<number>(me.branches[0]?.id ?? 0);
   const [res, setRes] = useState<{ branchId: number; items: InvItem[]; err: string } | null>(null);
@@ -382,10 +429,20 @@ function InventarTab({ me }: { me: MeUser }) {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
   const [savedMsg, setSavedMsg] = useState("");
+  const [dirty, setDirty] = useState(false);      // saqlanmagan kiritish bormi
+  const [restored, setRestored] = useState(false); // qoralama tiklandimi
+  /* `vals` QAYSI filialning sanoqlari (null — hech qaysi/yuklanmoqda). Kalitsiz
+     yozuv xavfli: productId'lar filiallar aro umumiy (katalog bitta), shuning
+     uchun A ning sanoqlari B ning qoralamasiga tushib, soxta sanoq saqlanardi. */
+  const valsBranch = useRef<number | null>(null);
+  /* Tahrir hisoblagichi — save() ketayotganda kiritilgan qiymat o'chib qolmasin. */
+  const editSeq = useRef(0);
 
   const loading = res?.branchId !== branchId;
   const items = loading ? [] : res?.items ?? [];
   const loadErr = loading ? "" : res?.err ?? "";
+
+  useEffect(() => { eskiQoralamalarniTozala(); }, []);
 
   useEffect(() => {
     if (!branchId) return;
@@ -398,21 +455,65 @@ function InventarTab({ me }: { me: MeUser }) {
         for (const it of r.items) {
           v[it.productId] = { qty: it.countedQty == null ? "" : String(it.countedQty), note: it.note ?? "" };
         }
+        // Qoralama serverdan ustun: unda oxirgi saqlashdan keyingi kiritishlar bor
+        const kalit = draftKey(branchId);
+        const xom = ls.get(kalit);
+        let tiklandi = false;
+        if (xom) {
+          try {
+            const d = JSON.parse(xom) as Record<string, EditVal>;
+            for (const [id, ev] of Object.entries(d)) {
+              const serverdagi = v[Number(id)];
+              if (!serverdagi || !ev || typeof ev.qty !== "string" || typeof ev.note !== "string") continue;
+              // "Tiklandi" faqat serverdagidan FARQ qilganda: bir xil bo'lsa
+              // (saqlangan qator) banner ham, `dirty` ham keraksiz yonardi.
+              if (ev.qty !== serverdagi.qty || ev.note !== serverdagi.note) tiklandi = true;
+              v[Number(id)] = ev;
+            }
+          } catch { ls.del(kalit); }
+        }
+        valsBranch.current = branchId; // endi `vals` shu filialniki — yozish mumkin
         setVals(v);
+        setRestored(tiklandi); setDirty(tiklandi);
         setErr(""); setSavedMsg("");
         setRes({ branchId, items: r.items, err: "" });
       } catch (e) {
-        if (!cancelled) setRes({ branchId, items: [], err: e instanceof Error ? e.message : "Xatolik yuz berdi" });
+        if (cancelled) return;
+        valsBranch.current = null; // yuklanmadi — hech narsa yozilmasin
+        setRes({ branchId, items: [], err: e instanceof Error ? e.message : "Xatolik yuz berdi" });
       }
     })();
     return () => { cancelled = true; };
   }, [branchId]);
+
+  /* Qoralamani yozish (300ms debounce) — faqat saqlanmagan o'zgarish bo'lganda VA
+     `vals` haqiqatan shu filialniki bo'lsa. Egalik tekshiruvisiz filial almashuvi
+     paytida (fetch hali tugamagan) eski sanoqlar yangi kalitga yozilardi. */
+  useEffect(() => {
+    if (!branchId || !dirty || valsBranch.current !== branchId) return;
+    const t = setTimeout(() => ls.set(draftKey(branchId), JSON.stringify(vals)), 300);
+    return () => clearTimeout(t);
+  }, [vals, dirty, branchId]);
+
+  /** Filial almashuvi: eski sanoqlarni O'Z kalitiga yozib, holatni tozalaymiz. */
+  const filialAlmashtir = (yangi: number) => {
+    if (yangi === branchId) return;
+    // Debounce taymeri effekt cleanup'ida o'chadi — oxirgi kiritishni shu yerda
+    // darhol yozib qo'yamiz, aks holda 300ms ichida almashsa yo'qolardi.
+    if (dirty && valsBranch.current === branchId) ls.set(draftKey(branchId), JSON.stringify(vals));
+    valsBranch.current = null;
+    setVals({}); setDirty(false); setRestored(false);
+    setErr(""); setSavedMsg("");
+    setBranchId(yangi);
+  };
 
   const setVal = (productId: number, patch: Partial<EditVal>) => {
     setVals((v) => {
       const cur = v[productId] ?? { qty: "", note: "" };
       return { ...v, [productId]: { ...cur, ...patch } };
     });
+    editSeq.current += 1;
+    setDirty(true);
     setSavedMsg("");
   };
 
@@ -428,22 +529,65 @@ function InventarTab({ me }: { me: MeUser }) {
     return q.trim() !== "" && Number.isFinite(Number(q)) && Number(q) >= 0;
   });
 
+  /* Saqlanmagan sanoq bo'lsa Telegram yopishdan oldin tasdiq so'raydi.
+     `items` emas, `vals` ustidan: (a) yuklanish paytida items [] bo'ladi,
+     (b) "12." kabi vaqtincha yaroqsiz matn va izoh-only qatorlar ham
+     saqlanmagan mehnat — ular `filled` ga tushmaydi. */
+  const unsaved = dirty && Object.values(vals).some((v) => v.qty.trim() !== "" || v.note.trim() !== "");
+  useEffect(() => {
+    const tg = window.Telegram?.WebApp;
+    if (unsaved) tg?.enableClosingConfirmation?.();
+    else tg?.disableClosingConfirmation?.();
+    return () => { window.Telegram?.WebApp?.disableClosingConfirmation?.(); };
+  }, [unsaved]);
+
   const save = async () => {
     if (saving || filled.length === 0) return;
     setSaving(true); setErr(""); setSavedMsg("");
+    const seq = editSeq.current;      // save davomida kiritilganini aniqlash uchun
+    const saqlangan = branchId;       // javob kelguncha filial almashishi mumkin
     try {
-      const body = {
-        branchId,
-        items: filled.map((it) => {
-          const v = vals[it.productId];
-          return { productId: it.productId, countedQty: Number(v.qty), ...(v.note.trim() ? { note: v.note.trim() } : {}) };
-        }),
-      };
+      const yuborilgan = filled.map((it) => {
+        const v = vals[it.productId];
+        return { productId: it.productId, countedQty: Number(v.qty), ...(v.note.trim() ? { note: v.note.trim() } : {}) };
+      });
       const r = await api<{ ok: true; saved: number }>("/api/miniapp-sotuv/inventar", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ branchId: saqlangan, items: yuborilgan }),
       });
       haptic.ok();
-      setSavedMsg(`✓ ${r.saved} ta SKU saqlandi`);
+      /* Qoralamani BUTUNLAY o'chirmaymiz — serverga faqat `filled` ketdi. Izoh
+         yozilgan-u qty bo'sh qator, yoki "-"/"1.2.3" kabi songa aylanmaydigan
+         matn `filled` ga tushmaydi; o'chirilsa ular jimgina yo'qolardi.
+         save davomida yangi qiymat kiritilgan bo'lsa (editSeq o'zgargan) umuman
+         tegmaymiz: yangi `vals` ni debounce effekti to'liq yozib qo'yadi. */
+      let bor = false;
+      let qoldiqSoni = 0;
+      if (editSeq.current === seq) {
+        const ketdi = new Set(yuborilgan.map((i) => i.productId));
+        const qoldiq: Record<string, EditVal> = {};
+        for (const [id, ev] of Object.entries(vals)) {
+          if (ketdi.has(Number(id))) continue;
+          if (ev.qty.trim() !== "" || ev.note.trim() !== "") qoldiq[id] = ev;
+        }
+        qoldiqSoni = Object.keys(qoldiq).length;
+        bor = qoldiqSoni > 0;
+        if (bor) ls.set(draftKey(saqlangan), JSON.stringify(qoldiq));
+        else ls.del(draftKey(saqlangan));
+      }
+      // Javob kelguncha filial almashgan bo'lsa holat endi BOSHQA filialniki —
+      // uning `dirty`/banneriga tegmaymiz (qoralama yuqorida o'z kalitiga yozildi).
+      if (valsBranch.current === saqlangan) {
+        // Qoldiq borligini AYTAMIZ. Aks holda qator abadiy "saqlanmagan" holatda
+        // qotib qolardi (yopish tasdig'i doim yoqiq, banner doim yonadi) va xodim
+        // nima yuborilmaganini bilmasdi — miqdorsiz qatorni server qabul qilmaydi.
+        setSavedMsg(
+          qoldiqSoni > 0
+            ? `✓ ${r.saved} ta SKU saqlandi · ${qoldiqSoni} ta qatorda miqdor yo'q — saqlanmadi`
+            : `✓ ${r.saved} ta SKU saqlandi`
+        );
+        setRestored(false);
+        if (editSeq.current === seq) setDirty(bor);
+      }
     } catch (e) {
       haptic.err();
       setErr(e instanceof Error ? e.message : "Xatolik — qayta urinib ko'ring.");
@@ -460,7 +604,7 @@ function InventarTab({ me }: { me: MeUser }) {
     <>
       {me.branches.length > 1 ? (
         <div className="selrow">
-          <select className="sel" value={branchId} onChange={(e) => setBranchId(Number(e.target.value))}>
+          <select className="sel" value={branchId} onChange={(e) => filialAlmashtir(Number(e.target.value))}>
             {me.branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
         </div>
@@ -479,6 +623,7 @@ function InventarTab({ me }: { me: MeUser }) {
       )}
 
       {(loadErr || err) && <p className="err">{loadErr || err}</p>}
+      {restored && <p className="draft">↺ Saqlanmagan qoralama tiklandi</p>}
       {savedMsg && <p className="saved">{savedMsg}</p>}
       {loading && <div className="skwrap"><div className="sk inv" /><div className="sk inv" /><div className="sk inv" /></div>}
 
@@ -502,7 +647,7 @@ function InventarTab({ me }: { me: MeUser }) {
             <div className="invtop">
               <div className="invtitle">
                 <div className="invname">{it.name}</div>
-                <div className="invmeta">Kod {it.code} · Tizim: <b>{formatNumber(it.systemQty)}</b></div>
+                <div className="invmeta">Kod {it.code} · Tizim: <b>{formatQty(it.systemQty)}</b></div>
               </div>
               <span key={pillText} className={`pill ${state}`}>{pillText}</span>
             </div>
@@ -526,9 +671,11 @@ function InventarTab({ me }: { me: MeUser }) {
 
       {!loading && items.length > 0 && (
         <div className="savebar">
-          <button className="savebtn" disabled={saving || filled.length === 0} onClick={save}>
-            {saving ? "Saqlanmoqda…" : <>✅ Saqlash <span className="cnt">{filled.length} ta</span></>}
-          </button>
+          <div className="barcol">
+            <button className="savebtn" disabled={saving || filled.length === 0} onClick={save}>
+              {saving ? "Saqlanmoqda…" : <>✅ Saqlash <span className="cnt">{filled.length} ta</span></>}
+            </button>
+          </div>
         </div>
       )}
     </>
@@ -540,10 +687,13 @@ function InventarTab({ me }: { me: MeUser }) {
 function Shell({ theme, children }: { theme: "light" | "dark"; children: React.ReactNode }) {
   return (
     <div className="wrap" data-theme={theme}>
-      {children}
+      <div className="col">{children}</div>
       <style>{`
-        .wrap { max-width: 460px; margin: 0 auto; padding: 8px 15px 96px;
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+        /* Fon EKRAN BO'YLAB (.wrap), 460px cheklov ICHKARIDA (.col). Aks holda
+           keng viewport'da (Telegram Desktop) yon tomonlarda sahifaning global
+           foni ko'rinib, kontent "qirqilgan"dek chiqadi. */
+        body { background: var(--tg-theme-bg-color, #F4F7F5); }
+        .wrap { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
           -webkit-font-smoothing: antialiased; min-height: 100dvh;
           background: var(--bg); color: var(--ink-1);
 
@@ -580,6 +730,11 @@ function Shell({ theme, children }: { theme: "light" | "dark"; children: React.R
           --shadow: inset 0 1px 0 rgba(255,255,255,.04), 0 14px 32px -18px rgba(0,0,0,.65);
           --brand-soft: color-mix(in srgb, var(--brand) 22%, transparent); }
 
+        /* Kontent ustuni; pastki padding tab-bar (67px) + saqlash paneli (72px) ni qoplaydi */
+        .col { max-width: 460px; margin: 0 auto; padding: 8px 15px 152px; }
+        /* Qotirilgan panellar: fon/chegara ekran bo'ylab, kontent markazda */
+        .barcol { max-width: 460px; margin: 0 auto; }
+
         .brandbar { display: flex; align-items: center; gap: 9px; padding: 14px 2px 12px; }
         .branddot { width: 9px; height: 9px; border-radius: 50%; background: var(--brand); box-shadow: 0 0 0 4px var(--brand-soft); }
         .brandbar b { font-size: 16px; font-weight: 700; letter-spacing: -.3px; }
@@ -592,6 +747,15 @@ function Shell({ theme, children }: { theme: "light" | "dark"; children: React.R
         .small { font-size: 12px; margin-top: 6px; }
         .center { text-align: center; padding: 26px 16px; }
         .statline { color: var(--ink-2); font-size: 12.5px; font-weight: 600; margin: 0 2px 10px; }
+
+        /* Yashirilgan tab — unmount EMAS (holat saqlanadi), faqat ko'rinmaydi */
+        .pane.off { display: none; }
+
+        /* Ma'lumot eskirganligi — doimiy status qatori */
+        .datastat { display: flex; align-items: center; gap: 8px; margin: 0 2px 10px;
+          font-size: 12px; font-weight: 600; color: var(--ink-2); }
+        .datastat .dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto;
+          background: var(--ortiqcha); box-shadow: 0 0 0 3px var(--ortiqcha-soft); }
 
         .seg { display: flex; padding: 3px; gap: 2px; background: var(--card-2); border: 1px solid var(--line); border-radius: 14px; margin-bottom: 11px; }
         .seg button { flex: 1; border: 0; background: transparent; color: var(--ink-2); font-size: 13px; font-weight: 600; padding: 9px 0; border-radius: 11px;
@@ -708,7 +872,7 @@ function Shell({ theme, children }: { theme: "light" | "dark"; children: React.R
         .empty { text-align: center; padding: 34px 20px; }
 
         /* Tab-bar — sliding segmented */
-        .tabbar { position: fixed; left: 0; right: 0; bottom: 0; max-width: 460px; margin: 0 auto;
+        .tabbar { position: fixed; left: 0; right: 0; bottom: 0;
           padding: 8px 15px calc(10px + env(safe-area-inset-bottom));
           background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(16px); border-top: 1px solid var(--line); z-index: 30; }
         .tabnav { position: relative; display: grid; grid-template-columns: 1fr 1fr; background: var(--card-2); border: 1px solid var(--line);
@@ -721,9 +885,12 @@ function Shell({ theme, children }: { theme: "light" | "dark"; children: React.R
         .tabbtn[aria-pressed="true"] { color: #fff; }
         .tabbtn svg { width: 17px; height: 17px; }
 
-        .savebar { position: fixed; left: 0; right: 0; bottom: 0; max-width: 460px; margin: 0 auto;
-          padding: 11px 15px calc(13px + env(safe-area-inset-bottom));
-          background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(16px); border-top: 1px solid var(--line); z-index: 30; }
+        /* Tab-bar USTIDA turadi: ikkalasi ham bottom:0 / z-index:30 bo'lganda
+           savebar DOM'da oldin kelgani uchun tab-bar uni yopib qo'yardi va
+           Saqlash tugmasi bosilmasdi. Endi tab-bar balandligicha ko'tarilgan. */
+        .savebar { position: fixed; left: 0; right: 0; bottom: calc(67px + env(safe-area-inset-bottom));
+          padding: 11px 15px 13px;
+          background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(16px); border-top: 1px solid var(--line); z-index: 31; }
         .savebtn { width: 100%; border: 0; border-radius: 15px; padding: 15px; font-size: 15px; font-weight: 800; letter-spacing: -.2px; color: #fff;
           background: var(--hero-grad); box-shadow: var(--lift); display: flex; align-items: center; justify-content: center; gap: 8px; transition: transform .12s; }
         .savebtn:active { transform: scale(.98); }
@@ -735,6 +902,8 @@ function Shell({ theme, children }: { theme: "light" | "dark"; children: React.R
         .saved { color: var(--brand-deep); font-size: 13px; font-weight: 700; margin: 6px 2px 10px; background: var(--mos-soft);
           border: 1px solid var(--mos-soft); border-radius: 12px; padding: 10px 13px; }
         .wrap[data-theme="dark"] .saved { color: var(--brand); }
+        .draft { color: var(--ortiqcha); font-size: 12.5px; font-weight: 700; margin: 6px 2px 10px;
+          background: var(--ortiqcha-soft); border: 1px solid var(--ortiqcha-soft); border-radius: 12px; padding: 10px 13px; }
 
         .locked { text-align: center; padding: 44px 20px; }
         .lockic { width: 62px; height: 62px; margin: 0 auto 14px; display: grid; place-items: center; font-size: 26px; border-radius: 20px;

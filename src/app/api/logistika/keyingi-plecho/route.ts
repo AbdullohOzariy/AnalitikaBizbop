@@ -9,6 +9,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { LoadLevel } from "@/generated/prisma/enums";
 import { reysXabarYangila } from "@/lib/logistika/notify";
 import {
   authDriver,
@@ -30,7 +31,8 @@ const schema = z.object({
   clientEventId,
   tripId: z.number().int().positive(),
   toPointId: z.number().int().positive(),
-  load: z.enum(["EMPTY", "QUARTER", "HALF", "FULL"]),
+  // Prisma enum'dan (yolga-chiqdim bilan bir xil sabab — izohni o'sha yerda ko'ring)
+  load: z.enum(LoadLevel),
   ...gpsSchema,
 });
 

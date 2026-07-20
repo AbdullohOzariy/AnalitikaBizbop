@@ -664,12 +664,14 @@ function Yolda({ reys, pending, onYetibBor, onYakunla }: {
       </div>
 
       <div className="bar">
-        <button className="big" disabled={pending} onClick={onYetibBor}>
-          {pending ? "Yuborilmoqda…" : "✅ Yetib bordim"}
-        </button>
-        <button className="link" disabled={pending} onClick={onYakunla}>
-          Reysni yakunlash
-        </button>
+        <div className="barcol">
+          <button className="big" disabled={pending} onClick={onYetibBor}>
+            {pending ? "Yuborilmoqda…" : "✅ Yetib bordim"}
+          </button>
+          <button className="link" disabled={pending} onClick={onYakunla}>
+            Reysni yakunlash
+          </button>
+        </div>
       </div>
     </>
   );
@@ -755,18 +757,20 @@ function YukPanel({ sarlavha, pending, onYuk, onBekor }: {
 }) {
   return (
     <div className="yukbar">
-      <div className="yhead">
-        <b>{sarlavha}</b>
-        <button className="ybek" onClick={onBekor} aria-label="Bekor qilish">✕</button>
-      </div>
-      <div className="yhint">{pending ? "Yuborilmoqda…" : "Yukni bosing — shu zahoti jo'natiladi"}</div>
-      <div className="ychips">
-        {YUKLAR.map((y) => (
-          <button key={y.key} className="ychip" disabled={pending} onClick={() => onYuk(y.key)}>
-            <span className="ybar"><i style={{ height: `${y.fill}%` }} /></span>
-            <span className="ylbl">{y.label}</span>
-          </button>
-        ))}
+      <div className="barcol">
+        <div className="yhead">
+          <b>{sarlavha}</b>
+          <button className="ybek" onClick={onBekor} aria-label="Bekor qilish">✕</button>
+        </div>
+        <div className="yhint">{pending ? "Yuborilmoqda…" : "Yukni bosing — shu zahoti jo'natiladi"}</div>
+        <div className="ychips">
+          {YUKLAR.map((y) => (
+            <button key={y.key} className="ychip" disabled={pending} onClick={() => onYuk(y.key)}>
+              <span className="ybar"><i style={{ height: `${y.fill}%` }} /></span>
+              <span className="ylbl">{y.label}</span>
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -777,9 +781,14 @@ function YukPanel({ sarlavha, pending, onYuk, onBekor }: {
 function Qobiq({ theme, children }: { theme: "light" | "dark"; children: React.ReactNode }) {
   return (
     <div className="wrap" data-theme={theme}>
-      {children}
+      <div className="col">{children}</div>
       <style>{`
-        .wrap { max-width: 460px; margin: 0 auto; padding: 4px 15px 210px; min-height: 100dvh;
+        /* .wrap — butun ekran foni (460px cheklov ICHKARIDA, .col da). Aks holda
+           viewport 460px dan keng bo'lsa (Telegram Desktop) yon tomonlarda
+           sahifaning global foni ko'rinib, kontent "qirqilgan"dek chiqadi.
+           body ham bo'yaladi — iOS overscroll paytida seam chiqmasin. */
+        body { background: var(--tg-theme-bg-color, #F4F7F5); }
+        .wrap { min-height: 100dvh;
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
           -webkit-font-smoothing: antialiased; background: var(--bg); color: var(--ink-1);
 
@@ -810,6 +819,8 @@ function Qobiq({ theme, children }: { theme: "light" | "dark"; children: React.R
           --line: color-mix(in srgb, var(--tg-hint) 32%, transparent);
           --shadow: inset 0 1px 0 rgba(255,255,255,.04), 0 14px 32px -18px rgba(0,0,0,.65);
           --brand-soft: color-mix(in srgb, var(--brand) 22%, transparent); }
+
+        .col { max-width: 460px; margin: 0 auto; padding: 4px 15px 210px; }
 
         button { font-family: inherit; cursor: pointer; }
 
@@ -885,7 +896,10 @@ function Qobiq({ theme, children }: { theme: "light" | "dark"; children: React.R
         .tchip { font-size: 12.5px; font-weight: 700; background: rgba(255,255,255,.18); border-radius: 10px; padding: 6px 11px; }
 
         /* Ekran B — pastdagi asosiy tugma */
-        .bar { position: fixed; left: 0; right: 0; bottom: 0; max-width: 460px; margin: 0 auto;
+        /* Qotirilgan panellar: fon va chegara EKRAN BO'YLAB, kontent .barcol ichida
+           markazda — 460px da uzilgan border-top ko'rinmasin. */
+        .barcol { max-width: 460px; margin: 0 auto; }
+        .bar { position: fixed; left: 0; right: 0; bottom: 0;
           padding: 12px 15px calc(12px + env(safe-area-inset-bottom));
           background: color-mix(in srgb, var(--bg) 86%, transparent); backdrop-filter: blur(16px);
           border-top: 1px solid var(--line); z-index: 30; }
@@ -910,7 +924,7 @@ function Qobiq({ theme, children }: { theme: "light" | "dark"; children: React.R
         .link.ghost { color: var(--ink-3); }
 
         /* Yuk paneli — chipning o'zi jo'natadi */
-        .yukbar { position: fixed; left: 0; right: 0; bottom: 0; max-width: 460px; margin: 0 auto;
+        .yukbar { position: fixed; left: 0; right: 0; bottom: 0;
           padding: 12px 15px calc(12px + env(safe-area-inset-bottom));
           background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(18px);
           border-top: 1px solid var(--line); border-radius: 22px 22px 0 0; z-index: 30;
@@ -922,7 +936,8 @@ function Qobiq({ theme, children }: { theme: "light" | "dark"; children: React.R
         .ybek { width: 34px; height: 34px; flex: 0 0 auto; border: 1px solid var(--line); background: var(--card-2);
           color: var(--ink-2); border-radius: 11px; font-size: 15px; font-weight: 700; }
         .yhint { font-size: 12px; font-weight: 600; color: var(--ink-3); margin: 4px 0 10px; }
-        .ychips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+        /* 5 daraja: bo'sh · ¼ · ½ · ¾ · to'la — YUKLAR bilan bir xil bo'lsin */
+        .ychips { display: grid; grid-template-columns: repeat(5, 1fr); gap: 7px; }
         .ychip { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px;
           min-height: 76px; border: 1.5px solid var(--line); background: var(--card); color: inherit; border-radius: 17px;
           padding: 10px 4px; box-shadow: var(--shadow); transition: transform .12s, border-color .15s; }
