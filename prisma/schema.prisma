@@ -134,6 +134,7 @@ model User {
   promoCampaigns    PromoCampaign[] // yaratgan promo aksiyalari (createdBy)
   inventoryItems    InventoryItem[] // inventarizatsiya ro'yxatiga qo'shgan SKU'lari (createdBy)
   inventoryCounts   InventoryCount[] // kiritgan sanashlari (countedBy)
+  actedTrips        Trip[] // fors-major holatda haydovchi nomidan kiritgan reyslari
 }
 
 // Foydalanuvchi ↔ filial (ko'p-ko'p): miniapp'da dashboard/inventar shu filiallar bilan
@@ -1165,30 +1166,32 @@ model LogisticsPoint {
   name      String    @unique
   kind      PointKind @default(OTHER)
   branchId  Int? // savdo filiali bo'lsa — Branch bilan bog'lanadi
-  isHub     Boolean   @default(false) // RC / markaziy sklad
+  isHub     Boolean   @default(false) // RC / markaziy sklad — bu yerga yetib kelish reysni yopadi
   isActive  Boolean   @default(true)
   sortOrder Int       @default(0)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
 
-  branch  Branch?               @relation(fields: [branchId], references: [id], onDelete: SetNull)
-  aliases LogisticsPointAlias[]
+  // Geofence (miniapp LocationManager, Bot API 8.0) — "yo'lga chiqdim"/"yetib bordim"
+  // bosilgan paytdagi koordinata shu nuqtaga solishtiriladi. Bloklamaydi, faqat
+  // nazoratchi taxtasida belgi qo'yadi. Null = tekshiruv o'tkazilmaydi.
+  lat Decimal? @db.Decimal(9, 6)
+  lng Decimal? @db.Decimal(9, 6)
+
+  // Uzoq yo'nalish (Samarqand/Toshkent/Buxoro) — qulfni avtomatik bo'shatish
+  // ostonasi shu nuqta uchun uzaytiriladi, aks holda tungi reys yolg'on STALE bo'ladi.
+  isLongHaul Boolean @default(false)
+  staleHours Int? // null = global ostona
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branch    Branch?    @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  legsFrom  TripLeg[]  @relation("LegFrom")
+  legsTo    TripLeg[]  @relation("LegTo")
+  ratesFrom TripRate[] @relation("RateFrom")
+  ratesTo   TripRate[] @relation("RateTo")
 
   @@index([isActive, sortOrder])
   @@index([branchId])
-}
-
-/// Nom variantlari — qo'lda yuritilgan Excelda bitta nuqta 4 xil yozilgan
-/// ("Маззона"/"Маззон"/"Маззоны"/"Мазона"). Tarixiy import va qidiruv shu orqali
-/// kanonik nuqtaga tushadi. BranchAlias naqshi, lekin RC/bozor Branch emas.
-model LogisticsPointAlias {
-  id      Int    @id @default(autoincrement())
-  pointId Int
-  alias   String @unique
-
-  point LogisticsPoint @relation(fields: [pointId], references: [id], onDelete: Cascade)
-
-  @@index([pointId])
 }
 
 /// Avtomobil profili. Sig'im bitta joyda turadi — qo'lda yuritishda bitta avto
@@ -1208,5 +1211,176 @@ model Vehicle {
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
+  trips Trip[]
+
+  @@index([isActive])
+}
+
+// ─── LOGISTIKA: REYS HUJJATI ──────────────────────────────────────────────────
+// Reys = bitta chiqish-qaytish sikli (RC → Filial → Filial → RC). Reyslar ko'p
+// to'xtashli bo'lgani uchun yassi jadval yaramaydi: Trip (bosh) + TripLeg (plecho).
+//
+// REJA USTUNI YO'Q — faqat FAKT yoziladi. Vaqtni haydovchi miniappda tugma bosib
+// belgilaydi; fors-major holatda nazoratchi haydovchi nomidan kiritadi (kim, kim
+// nomidan va nima sababdan — hammasi yoziladi).
+
+enum TripStatus {
+  OPEN // yo'lda — mashina QULFLANGAN
+  DONE // yakunlandi (odatda hub'ga qaytish bilan)
+  DONE_LATE // haydovchi kech bo'lsa ham HAQIQIY faktni keltirdi (STALE'dan keyin)
+  FORCE_CLOSED // qo'lda yopilgan (haydovchi yoki nazoratchi)
+  STALE // ostona o'tdi, tizim qulfni bo'shatdi — arrivedAt NULL QOLADI
+  CANCELLED
+}
+
+/// Yuk to'ldirilganligi — miniappda chip'ning O'ZI jo'natish tugmasi (bosish
+/// soni oshmaydi). EMPTY alohida: bo'sh yurish eng qimmat ko'rsatkich.
+enum LoadLevel {
+  EMPTY
+  QUARTER
+  HALF
+  FULL
+}
+
+enum ActorKind {
+  DRIVER // haydovchi o'zi (odatiy)
+  CONTROLLER // nazoratchi haydovchi nomidan (fors-major)
+  SYSTEM // cron
+}
+
+/// Haydovchi. ATAYLAB User EMAS: User'da email+passwordHash majburiy va haydovchi
+/// ERP'ga umuman kirmaydi — 10 ta soxta akkaunt admin ro'yxatini ifloslantirardi.
+/// SverkaXodim bilan bir xil naqsh. Role.DRIVER enum qiymati bazada bor, lekin
+/// ISHLATILMAYDI (Postgres enum qiymatini o'chirib bo'lmaydi).
+model Driver {
+  id        Int      @id @default(autoincrement())
+  name      String
+  tgUserId  BigInt   @unique // miniapp shu orqali taniydi (initData.user.id)
+  phone     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  trips Trip[]
+
+  @@index([isActive])
+}
+
+/// Reys — bosh hujjat.
+///
+/// ⚠️ DIQQAT — QULF INVARIANTI: bu jadvalda uchta PARTIAL UNIQUE INDEX bor va ular
+/// migratsiyaga QO'LDA yozilgan (Prisma DSL partial index'ni ifodalay olmaydi):
+///   Trip_open_per_vehicle_uniq  — bitta avtoda bir vaqtda bitta ochiq reys
+///   Trip_open_per_driver_uniq   — bitta haydovchi bir vaqtda bitta mashinada
+///   TripLeg_open_per_trip_uniq  — reys ichida bitta ochiq plecho
+/// Keyingi `prisma migrate dev` ularni "ortiqcha" deb DROP qilishi mumkin —
+/// migratsiya SQL'ini har safar tekshiring. instrumentation.ts da boot-assert bor.
+model Trip {
+  id     Int        @id @default(autoincrement())
+  status TripStatus @default(OPEN)
+
+  vehicleId Int
+  driverId  Int
+
+  startedAt DateTime  @default(now()) // SERVER vaqti — yagona haqiqat
+  endedAt   DateTime?
+  endReason String?
+
+  // Telegram guruh xabari — har reysga BITTA xabar, keyin editMessageText bilan
+  // yangilanadi (aks holda kuniga ~88 bildirishnoma = spam).
+  tgChatId    String?
+  tgMessageId Int?
+
+  // Kim kiritdi. actorName — SNAPSHOT (User o'chsa ham tarix o'qiladi).
+  actorKind           ActorKind @default(DRIVER)
+  actorUserId         Int?
+  actorName           String
+  impersonationReason String? // actorKind != DRIVER bo'lsa MAJBURIY (server tekshiradi)
+
+  payAmount Decimal? @db.Decimal(12, 2) // reysbay haq — TripRate'dan hisoblanadi
+
+  clientEventId String   @unique // idempotentlik: takroriy bosish/qayta yuborish
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  vehicle   Vehicle   @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  driver    Driver    @relation(fields: [driverId], references: [id], onDelete: Restrict)
+  actorUser User?     @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  legs      TripLeg[]
+
+  @@index([status])
+  @@index([driverId, startedAt])
+  @@index([vehicleId, startedAt])
+  @@index([startedAt])
+}
+
+/// Plecho — ikki to'xtash orasidagi bo'lak.
+///
+/// departedAt va arrivedAt ALOHIDA yoziladi (birlashtirilmaydi): shunda nuqtada
+/// turib qolish vaqti = departedAt(N+1) − arrivedAt(N) real o'lchanadi. Rejasiz
+/// tizimda kechikishni bilvosita ko'rsatuvchi yagona metrika shu.
+model TripLeg {
+  id     Int @id @default(autoincrement())
+  tripId Int
+  seq    Int // 1, 2, 3... reys ichidagi tartib
+
+  fromPointId Int
+  toPointId   Int
+
+  // Jo'nash. departedAt — SERVER vaqti (tahlilda faqat u ishlatiladi),
+  // clientDepartedAt — qurilma da'vosi (farq katta bo'lsa xabarga qator qo'shiladi).
+  departedAt       DateTime  @default(now())
+  clientDepartedAt DateTime?
+  departLat        Decimal?  @db.Decimal(9, 6)
+  departLng        Decimal?  @db.Decimal(9, 6)
+
+  // Yetib borish. NULL = plecho ochiq (yo'lda).
+  arrivedAt       DateTime?
+  clientArrivedAt DateTime?
+  arriveLat       Decimal?  @db.Decimal(9, 6)
+  arriveLng       Decimal?  @db.Decimal(9, 6)
+
+  /// STALE'dan keyin kelgan haqiqiy fakt. Qulfni bo'shatish faktni YO'Q QILMAYDI:
+  /// haydovchi kech bo'lsa ham haqiqatni keltirsa — qabul qilinadi va shu bayroq
+  /// qo'yiladi (tahlilda istaganda chiqarib tashlanadi, lekin ma'lumot saqlanadi).
+  lateReport Boolean @default(false)
+
+  load          LoadLevel
+  loadEstimated Boolean   @default(false) // true = nazoratchi taxmin qildi, haydovchi emas
+
+  arrivedActorKind   ActorKind?
+  arrivedActorUserId Int?
+
+  note          String?
+  clientEventId String  @unique
+
+  trip      Trip           @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  fromPoint LogisticsPoint @relation("LegFrom", fields: [fromPointId], references: [id], onDelete: Restrict)
+  toPoint   LogisticsPoint @relation("LegTo", fields: [toPointId], references: [id], onDelete: Restrict)
+
+  @@unique([tripId, seq])
+  @@index([tripId, seq])
+  @@index([arrivedAt])
+  @@index([departedAt])
+}
+
+/// Reysbay haq tarifi (from→to juftligi uchun summa).
+/// Adoptsiyaning yagona kuchli richagi: haq aynan shu yozuvlardan hisoblansa,
+/// haydovchi tizimga O'ZI uchun yozadi. Tarif o'zgarsa yangi qator qo'shiladi —
+/// eski reyslarning hisobi retroaktiv o'zgarmasin.
+model TripRate {
+  id          Int      @id @default(autoincrement())
+  fromPointId Int
+  toPointId   Int
+  amount      Decimal  @db.Decimal(12, 2)
+  km          Decimal? @db.Decimal(6, 2)
+  activeFrom  DateTime @db.Date
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  fromPoint LogisticsPoint @relation("RateFrom", fields: [fromPointId], references: [id], onDelete: Cascade)
+  toPoint   LogisticsPoint @relation("RateTo", fields: [toPointId], references: [id], onDelete: Cascade)
+
+  @@unique([fromPointId, toPointId, activeFrom])
   @@index([isActive])
 }

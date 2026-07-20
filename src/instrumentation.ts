@@ -66,8 +66,48 @@ const JOBS: CronJob[] = [
   },
 ];
 
+/**
+ * Reys qulfi PARTIAL UNIQUE indekslarga tayanadi — ular schema.prisma da
+ * ifodalanmaydi, migratsiyaga qo'lda yozilgan. Keyingi `prisma migrate dev`
+ * ularni "ortiqcha" deb DROP qilishi mumkin va BUNI HECH QANDAY TEST USHLAMAYDI:
+ * ikki haydovchi bitta mashinani bir vaqtda band qila boshlaydi, xato esa faqat
+ * ma'lumot buzilgandan keyin bilinadi. Shuning uchun har deployda tekshiramiz.
+ */
+const QULF_INDEKSLARI = [
+  "Trip_open_per_vehicle_uniq",
+  "Trip_open_per_driver_uniq",
+  "TripLeg_open_per_trip_uniq",
+] as const;
+
+async function reysQulfiniTekshir() {
+  const { prisma } = await import("@/lib/prisma");
+  const rows = await prisma.$queryRaw<{ indexname: string }[]>`
+    SELECT indexname FROM pg_indexes
+    WHERE schemaname = 'public' AND indexname = ANY(${[...QULF_INDEKSLARI]})
+  `;
+  const bor = new Set(rows.map((r) => r.indexname));
+  const yoq = QULF_INDEKSLARI.filter((n) => !bor.has(n));
+  if (yoq.length === 0) return;
+
+  const xabar =
+    `Reys QULF indekslari yo'q: ${yoq.join(", ")}. ` +
+    `Bitta avtoni ikki haydovchi bir vaqtda band qilishi mumkin — migratsiyani tekshiring.`;
+  console.error(`[instrumentation] ⚠️ ${xabar}`);
+  try {
+    const { notifyAdmin } = await import("@/lib/cron");
+    await notifyAdmin(`⚠️ <b>Logistika</b>\n${xabar}`);
+  } catch {
+    /* alert yuborilmasa ham log qoldi */
+  }
+}
+
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
+
+  // Qulf invariantini tekshirish (xatoni ANIQLAYDI, oldini olmaydi) — fonda.
+  void reysQulfiniTekshir().catch((err) =>
+    console.warn("[instrumentation] qulf tekshiruvi:", err instanceof Error ? err.message : err)
+  );
 
   // Deploy/restart'dan keyin fonda: (1) SKU matritsa sinflari (backfill), (2) kesh isitish.
   (async () => {
