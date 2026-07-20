@@ -33,6 +33,7 @@ const LOAD_LABEL = {
   EMPTY: "Bo'sh",
   QUARTER: "Chorak",
   HALF: "Yarim",
+  THREE_QUARTER: "Uchdan uch",
   FULL: "To'la",
 } as const;
 
@@ -41,6 +42,7 @@ const LOAD_TONE = {
   EMPTY: "red",
   QUARTER: "amber",
   HALF: "blue",
+  THREE_QUARTER: "blue",
   FULL: "green",
 } as const;
 

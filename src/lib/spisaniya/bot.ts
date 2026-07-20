@@ -9,6 +9,7 @@ import crypto from "crypto";
 import { Telegraf, Markup } from "telegraf";
 import { ruxsatBormi } from "./db";
 import { sverkaRuxsatBormi } from "@/lib/sverka/ruxsat";
+import { driverRuxsatBormi } from "@/lib/logistika/ruxsat";
 
 /**
  * Telegram webhook `secret_token` — BOT_TOKEN'dan hosil qilingan barqaror qiymat
@@ -33,12 +34,17 @@ function buildBot(): Telegraf | null {
     const ism = ctx.from?.first_name || "Xodim";
     const id = ctx.from?.id;
 
-    // Rollar ID bo'yicha oldindan beriladi: spisaniya (bot bazasi, eski tartib)
-    // va/yoki sverka (asosiy baza, ERP Sverka sahifasida boshqariladi).
-    const [allowed, sverkaAllowed] = id
-      ? await Promise.all([ruxsatBormi(id), sverkaRuxsatBormi(id).catch(() => false)])
-      : [false, false];
-    if (allowed || sverkaAllowed) {
+    // Rollar ID bo'yicha oldindan beriladi: spisaniya (bot bazasi, eski tartib),
+    // sverka (asosiy baza, ERP Sverka sahifasida) va haydovchi (Driver jadvali,
+    // ERP Logistika → Ma'lumotlar → Haydovchilar).
+    const [allowed, sverkaAllowed, driverAllowed] = id
+      ? await Promise.all([
+          ruxsatBormi(id),
+          sverkaRuxsatBormi(id).catch(() => false),
+          driverRuxsatBormi(id).catch(() => false),
+        ])
+      : [false, false, false];
+    if (allowed || sverkaAllowed || driverAllowed) {
       // Bitta kirish nuqtasi — rolga qarab avtomatik yo'naltiradi
       // (ikkala rol bo'lsa app ichida tanlov ekrani chiqadi)
       const base = (process.env.WEBHOOK_URL || "").replace(/\/$/, "");

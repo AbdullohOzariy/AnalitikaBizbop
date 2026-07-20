@@ -1239,6 +1239,7 @@ enum LoadLevel {
   EMPTY
   QUARTER
   HALF
+  THREE_QUARTER
   FULL
 }
 

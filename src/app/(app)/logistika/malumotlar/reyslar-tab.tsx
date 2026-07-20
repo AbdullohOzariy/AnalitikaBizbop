@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 import { formatDateTimeUZ, formatUZS } from "@/lib/format";
 
 type TripStatus = "OPEN" | "DONE" | "DONE_LATE" | "FORCE_CLOSED" | "STALE" | "CANCELLED";
-type LoadLevel = "EMPTY" | "QUARTER" | "HALF" | "FULL";
+type LoadLevel = "EMPTY" | "QUARTER" | "HALF" | "THREE_QUARTER" | "FULL";
 type ActorKind = "DRIVER" | "CONTROLLER" | "SYSTEM";
 
 export type ReysLegRow = {
@@ -57,6 +57,7 @@ const LOAD: Record<LoadLevel, string> = {
   EMPTY: "bo'sh",
   QUARTER: "¼",
   HALF: "½",
+  THREE_QUARTER: "¾",
   FULL: "to'la",
 };
 

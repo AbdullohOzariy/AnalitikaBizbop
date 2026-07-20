@@ -7,6 +7,7 @@ import { NextResponse } from "next/server";
 import { ruxsatBormi } from "@/lib/spisaniya/db";
 import { verifyInitData } from "@/lib/spisaniya/telegram-auth";
 import { sverkaRuxsatBormi } from "@/lib/sverka/ruxsat";
+import { driverRuxsatBormi } from "@/lib/logistika/ruxsat";
 import { rateLimit, clientIp } from "@/lib/spisaniya/rate-limit";
 
 export const runtime = "nodejs";
@@ -19,12 +20,16 @@ export async function POST(req: Request) {
   const initData = req.headers.get("x-telegram-init-data") || "";
   const user = verifyInitData(initData);
   if (!user) {
-    return NextResponse.json({ allowed: false, sverka: false, user: null }, { status: 200 });
+    return NextResponse.json(
+      { allowed: false, sverka: false, driver: false, user: null },
+      { status: 200 }
+    );
   }
-  const [allowed, sverka] = await Promise.all([
+  const [allowed, sverka, driver] = await Promise.all([
     ruxsatBormi(user.id),
     sverkaRuxsatBormi(user.id).catch(() => false),
+    driverRuxsatBormi(user.id).catch(() => false),
   ]);
   const ism = [user.first_name, user.last_name].filter(Boolean).join(" ") || null;
-  return NextResponse.json({ allowed, sverka, user: { id: user.id, ism } });
+  return NextResponse.json({ allowed, sverka, driver, user: { id: user.id, ism } });
 }

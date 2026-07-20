@@ -34,6 +34,16 @@ export const authConfig = {
         "/api/import", // 1C avto sotuv importi — IMPORT_TOKEN bilan himoyalangan (sessiyasiz)
         "/api/miniapp-sotuv", // BizbopSotuv mini app — initData HMAC + User.telegramId bilan himoyalangan
         "/api/sverka", // sverka mini app API'lari — o'zi initData HMAC + SverkaXodim bilan himoyalangan
+
+        // Logistika miniapp (haydovchi) — initData HMAC + Driver jadvali bilan himoyalangan.
+        // ATAYLAB 5 ta ANIQ yo'l, umumiy "/api/logistika" EMAS: nazoratchi/LOGIST
+        // uchun mo'ljallangan qolgan /api/logistika/* yo'llari sessiya talab qilishda qolsin.
+        "/api/logistika/holat",
+        "/api/logistika/yolga-chiqdim",
+        "/api/logistika/yetib-bordim",
+        "/api/logistika/keyingi-plecho",
+        "/api/logistika/reysni-yakunla",
+
         "/miniapp",
         "/anketa", // yetkazib beruvchi anketasi — public forma
       ];

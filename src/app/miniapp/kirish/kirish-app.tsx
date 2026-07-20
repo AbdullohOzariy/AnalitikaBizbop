@@ -11,10 +11,11 @@ import { useEffect, useState } from "react";
 type Holat =
   | { t: "loading" }
   | { t: "denied"; id: number | null }
-  | { t: "choose" };
+  | { t: "choose"; spis: boolean; sverka: boolean; driver: boolean };
 
 const SPISANIYA_URL = "/miniapp/index.html?via=kirish";
 const SVERKA_URL = "/miniapp/sverka";
+const LOGISTIKA_URL = "/miniapp/logistika";
 
 function go(url: string) {
   window.location.replace(url + window.location.hash);
@@ -32,10 +33,18 @@ export function KirishApp() {
           method: "POST",
           headers: { "x-telegram-init-data": tg?.initData ?? "" },
         });
-        const j = (await res.json()) as { allowed: boolean; sverka: boolean; user: { id: number } | null };
+        const j = (await res.json()) as {
+          allowed: boolean; sverka: boolean; driver: boolean; user: { id: number } | null;
+        };
         const spis = !!j.allowed;
         const sverka = !!j.sverka;
-        if (spis && sverka) setSt({ t: "choose" });
+        const driver = !!j.driver;
+        // Haydovchi TEKSHIRUVI birinchi: u kun bo'yi shu ilovada ishlaydi, boshqa
+        // ro'yxatda ham turgan bo'lsa ham to'g'ridan reys ekraniga tushishi kerak.
+        // Bir nechta rol bo'lsagina tanlov ekrani ko'rsatiladi.
+        const rollar = [spis, sverka, driver].filter(Boolean).length;
+        if (rollar > 1) setSt({ t: "choose", spis, sverka, driver });
+        else if (driver) go(LOGISTIKA_URL);
         else if (spis) go(SPISANIYA_URL);
         else if (sverka) go(SVERKA_URL);
         else setSt({ t: "denied", id: j.user?.id ?? null });
@@ -75,25 +84,40 @@ export function KirishApp() {
       {st.t === "choose" && (
         <div className="choose">
           <h2>Bo&apos;limni tanlang</h2>
-          <p className="muted" style={{ marginBottom: 16 }}>Sizda ikkala bo&apos;limga ham ruxsat bor</p>
+          <p className="muted" style={{ marginBottom: 16 }}>Sizda bir nechta bo&apos;limga ruxsat bor</p>
 
-          <button className="tile" onClick={() => go(SPISANIYA_URL)}>
-            <span className="chip" style={{ background: "rgba(239,68,68,.12)" }}>📝</span>
-            <span className="tl">
-              <b>Spisaniya</b>
-              <small>Hisobdan chiqarish yozuvi</small>
-            </span>
-            <span className="arr">›</span>
-          </button>
+          {st.driver && (
+            <button className="tile" onClick={() => go(LOGISTIKA_URL)}>
+              <span className="chip" style={{ background: "rgba(59,130,246,.14)" }}>🚚</span>
+              <span className="tl">
+                <b>Reys</b>
+                <small>Yo&apos;lga chiqish va yetib borishni belgilash</small>
+              </span>
+              <span className="arr">›</span>
+            </button>
+          )}
 
-          <button className="tile" onClick={() => go(SVERKA_URL)}>
-            <span className="chip" style={{ background: "rgba(31,191,92,.14)" }}>📑</span>
-            <span className="tl">
-              <b>Sverka</b>
-              <small>Nakladnoy bilan solishtirish</small>
-            </span>
-            <span className="arr">›</span>
-          </button>
+          {st.spis && (
+            <button className="tile" onClick={() => go(SPISANIYA_URL)}>
+              <span className="chip" style={{ background: "rgba(239,68,68,.12)" }}>📝</span>
+              <span className="tl">
+                <b>Spisaniya</b>
+                <small>Hisobdan chiqarish yozuvi</small>
+              </span>
+              <span className="arr">›</span>
+            </button>
+          )}
+
+          {st.sverka && (
+            <button className="tile" onClick={() => go(SVERKA_URL)}>
+              <span className="chip" style={{ background: "rgba(31,191,92,.14)" }}>📑</span>
+              <span className="tl">
+                <b>Sverka</b>
+                <small>Nakladnoy bilan solishtirish</small>
+              </span>
+              <span className="arr">›</span>
+            </button>
+          )}
         </div>
       )}
 
