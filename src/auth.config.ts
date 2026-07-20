@@ -51,6 +51,8 @@ export const authConfig = {
               ? "/promo/doimiy"
               : role === "OPERATOR"
               ? "/chiqim"
+              : role === "LOGIST"
+              ? "/logistika/hozir"
               : role === "INVENTORY"
               ? "/sotuv-dashboard"
               : role === "CAT_MANAGER" || role === "SUPPLYCHAIN" || role === "HEAD_CAT_MANAGER"
@@ -67,12 +69,14 @@ export const authConfig = {
       if (isLoggedIn) {
         const u = (auth as { user?: { role?: string; roles?: string[] } })?.user;
         const roles = u?.roles ?? (u?.role ? [u.role] : []);
-        const ISOLATED = new Set(["MERCHANDISER", "OPERATOR", "INVENTORY"]);
+        const ISOLATED = new Set(["MERCHANDISER", "OPERATOR", "INVENTORY", "LOGIST"]);
         const allIsolated = roles.length > 0 && roles.every((r) => ISOLATED.has(r));
         if (allIsolated) {
           const allowed: string[] = [];
           if (roles.includes("MERCHANDISER")) allowed.push("/promo", "/api/promo");
           if (roles.includes("OPERATOR")) allowed.push("/chiqim", "/sverka", "/api/chiqim", "/api/sverka");
+          // LOGIST — logistika nazoratchisi: faqat reyslar bo'limi (ma'lumotnoma + fors-major).
+          if (roles.includes("LOGIST")) allowed.push("/logistika", "/api/logistika");
           // INVENTORY qo'shimcha Baza→Sotuv'ni to'liq ko'radi (read-only sahifa + Excel eksport).
           // Faqat "/baza/sotuv" — Baza'ning boshqa bo'limlari (qoldiq/tashrif/...) yopiq qoladi.
           if (roles.includes("INVENTORY")) allowed.push("/sotuv-dashboard", "/inventarizatsiya", "/baza/sotuv", "/api/baza/sotuv");
@@ -82,6 +86,8 @@ export const authConfig = {
               ? "/promo/doimiy"
               : roles.includes("OPERATOR")
               ? "/chiqim"
+              : roles.includes("LOGIST")
+              ? "/logistika/hozir"
               : "/sotuv-dashboard";
             return Response.redirect(new URL(dest, request.nextUrl));
           }

@@ -136,8 +136,17 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/sotuv/bugun",       label: "Bugun",       icon: CalendarCheck, roles: [SA, A, "CAT_MANAGER", "SUPPLYCHAIN", "HEAD_CAT_MANAGER"] },
       { href: "/sotuv/sotib-olish", label: "Sotib olish", icon: ShoppingCart, roles: [SA, A, "CAT_MANAGER", "SUPPLYCHAIN", "HEAD_CAT_MANAGER", "CEO"] },
       { href: "/sverka",            label: "Sverka",      icon: FileCheck2,   roles: [SA, A, "SUPPLYCHAIN", "CEO", "OPERATOR"] },
-      { href: "/logistika",         label: "Logistika",   icon: Gauge,        roles: [SA, A, "SUPPLYCHAIN", "HEAD_CAT_MANAGER"], disabled: true },
       { href: "/sotuv/finans",      label: "Finans",      icon: Wallet,       roles: [SA, A, "CEO"] },
+    ],
+  },
+  {
+    // LOGIST izolatsiyasi: bu rol faqat shu guruh item'larida bor (auth.config unga
+    // /logistika prefiksini ochadi) — boshqa bo'limlar ko'rinmaydi.
+    label: "Logistika",
+    items: [
+      { href: "/logistika/hozir",      label: "Hozir",       icon: Gauge,     roles: [SA, A, "CEO", "SUPPLYCHAIN", "LOGIST"] },
+      { href: "/logistika/statistika", label: "Statistika",  icon: ChartPie,  roles: [SA, A, "CEO", "SUPPLYCHAIN", "LOGIST"] },
+      { href: "/logistika/malumotlar", label: "Ma'lumotlar", icon: Database,  roles: [SA, "SUPPLYCHAIN", "LOGIST"] },
     ],
   },
   {

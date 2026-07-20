@@ -76,6 +76,19 @@ export const canEditPme = (r: Roles): boolean =>
 /** Ombor + taqsimot (logistika operatsiyalari) — qoldiq import, ombor→filial taqsimot. */
 export const canManageWarehouse = (r: Roles): boolean => hasRole(r, "SYSTEM_ADMIN", "SUPPLYCHAIN");
 
+/** Reyslar bo'limini KO'RA oladiganlar (Hozir / Statistika / Ma'lumotlar).
+ *  ADMIN va CEO — read-only kuzatuvchi; LOGIST — izolyatsiyalangan nazoratchi. */
+export const canSeeReys = (r: Roles): boolean =>
+  hasRole(r, "SYSTEM_ADMIN", "ADMIN", "CEO", "SUPPLYCHAIN", "LOGIST");
+
+/** Reys ma'lumotnomasini (nuqta/avto/haydovchi/tarif) tahrirlash va fors-major
+ *  amallar (haydovchi nomidan yo'lga chiqish, majburan yopish). ADMIN — read-only, kirmaydi. */
+export const canManageReys = (r: Roles): boolean =>
+  hasRole(r, "SYSTEM_ADMIN", "SUPPLYCHAIN", "LOGIST");
+
+/** Logistika nazoratchisi (izolyatsiyalangan rol) — faqat /logistika bo'limini ko'radi. */
+export const isLogist = (r: Roles): boolean => hasRole(r, "LOGIST");
+
 /** Analyze (narx sifati: filiallar narx farqi, summa÷soni ≠ narx) bo'limini KO'RA oladiganlar.
  *  Narx anomaliyalarini ko'rsatuvchi tahliliy bo'lim — analitika ko'ruvchilar uchun (read-only ADMIN ham). */
 export const canSeeAnalyze = (r: Roles): boolean =>
