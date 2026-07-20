@@ -11,21 +11,42 @@ import { prisma } from "@/lib/prisma";
 import { ShoppingCart, Plus } from "lucide-react";
 import { PageHeader } from "@/components/common/page";
 import { formatDateUZ } from "@/lib/format";
+import { parseDateParam, TASHKENT_OFFSET_MS } from "@/lib/date";
 import { canManageOrders, ordersScopedToOwn } from "@/lib/roles";
 import { KanbanBoard, type KanbanCard } from "./kanban-board";
+import { KanbanFilter } from "./kanban-filter";
 import type { OrderStatusT } from "./order-status";
 import type { Prisma } from "@/generated/prisma/client";
 
 export const dynamic = "force-dynamic";
 
-export default async function SotibOlishPage() {
+export default async function SotibOlishPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
   const session = await auth();
   if (!session?.user) redirect("/login");
   const roles = session.user.roles;
   const userId = Number(session.user.id);
 
+  const sp = await searchParams;
+  const startDay = parseDateParam(sp.start);
+  const endDay = parseDateParam(sp.end);
+
   const where: Prisma.PurchaseOrderWhereInput = {};
   if (ordersScopedToOwn(roles)) where.createdById = userId;
+
+  // Toshkent kalendar kunini real UTC instantga o'giramiz (Toshkent yarim tuni =
+  // UTC 19:00, kecha). Tugash kuni INKLYUZIV — shuning uchun keyingi kun boshigacha.
+  if (startDay || endDay) {
+    where.createdAt = {
+      ...(startDay ? { gte: new Date(startDay.getTime() - TASHKENT_OFFSET_MS) } : {}),
+      ...(endDay
+        ? { lt: new Date(endDay.getTime() + 86_400_000 - TASHKENT_OFFSET_MS) }
+        : {}),
+    };
+  }
 
   const orders = await prisma.purchaseOrder.findMany({
     where,
@@ -66,6 +87,8 @@ export default async function SotibOlishPage() {
           </Link>
         )}
       </PageHeader>
+
+      <KanbanFilter defaultStart={sp.start ?? ""} defaultEnd={sp.end ?? ""} />
 
       <KanbanBoard cards={cards} roles={roles} />
     </div>

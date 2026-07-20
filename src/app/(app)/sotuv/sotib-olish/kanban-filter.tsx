@@ -5,44 +5,21 @@ import { Suspense, useRef, useState, type ComponentProps } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { X, ChevronLeft, ChevronRight } from "lucide-react";
 import { shiftPeriod } from "@/lib/period";
 
-// bot-db.ts Node.js-only (pg pool) — brauzerda import qilib bo'lmaydi.
-// TUR_LABEL ni bu yerda takrorlaymiz (server prop sifatida ham uzatish mumkin edi,
-// lekin bu turg'un qiymat — prop oqimiga hojat yo'q).
-const TURS: [string, string][] = [
-  ["spisaniya",   "Spisaniya"],
-  ["vozvrat",     "Qayta ishlash"],
-  ["kafe",        "Kafe"],
-  ["ovqatlanish", "Ovqatlanish"],
-  ["ichki_sotuv", "Ichki sotuv"],
-];
-
-function ChiqimFilterInner({
-  filials,
+/**
+ * Kanban davr filtri — zakaz YARATILGAN sanasi bo'yicha. O'qchalar davrni oldinga/
+ * orqaga siljitadi (to'liq oy tanlansa oyma-oy, aks holda davr uzunligiga teng qadam).
+ * ChiqimFilter naqshi: har o'zgarish darhol URL'ga yoziladi, tugma kutilmaydi.
+ */
+function KanbanFilterInner({
   defaultStart,
   defaultEnd,
-  defaultTur,
-  defaultFilial,
-  hideTur,
-  hideFilial,
-  basePath = "/chiqim",
+  basePath = "/sotuv/sotib-olish",
 }: {
-  filials: string[];
   defaultStart: string;
   defaultEnd: string;
-  defaultTur?: string;
-  defaultFilial?: string;
-  hideTur?: boolean;
-  hideFilial?: boolean;
   basePath?: string;
 }) {
   const router = useRouter();
@@ -50,31 +27,24 @@ function ChiqimFilterInner({
 
   const [start, setStart] = useState(defaultStart);
   const [end, setEnd] = useState(defaultEnd);
-  const [tur, setTur] = useState(defaultTur ?? "all");
-  const [filial, setFilial] = useState(defaultFilial ?? "all");
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   // Server yangi default'larni uzatganda (navigatsiyadan keyin) lokal holatni
-  // URL bilan qayta sinxronlaymiz — aks holda inputlar eski qiymatda "qotib" qoladi.
-  const propsKey = `${defaultStart}|${defaultEnd}|${defaultTur ?? ""}|${defaultFilial ?? ""}`;
+  // URL bilan qayta sinxronlaymiz — aks holda inputlar eski qiymatda qotib qoladi.
+  const propsKey = `${defaultStart}|${defaultEnd}`;
   const [seenKey, setSeenKey] = useState(propsKey);
   if (seenKey !== propsKey) {
     setSeenKey(propsKey);
     setStart(defaultStart);
     setEnd(defaultEnd);
-    setTur(defaultTur ?? "all");
-    setFilial(defaultFilial ?? "all");
   }
 
-  // Tanlangan qiymatlarni URL'ga yozadi (darhol fresh server render). Dashboard
-  // PeriodFilter naqshi — har o'zgarish avtomatik qo'llanadi, tugma kutilmaydi.
   const navigate = (changes: Record<string, string | undefined>) => {
     const p = new URLSearchParams(searchParams.toString());
     for (const [k, v] of Object.entries(changes)) {
-      if (!v || v === "all") p.delete(k);
+      if (!v) p.delete(k);
       else p.set(k, v);
     }
-    p.delete("page");
     router.replace(`${basePath}?${p.toString()}`, { scroll: false });
   };
 
@@ -94,8 +64,6 @@ function ChiqimFilterInner({
       navigate({ [key]: value || undefined });
   };
 
-  // Davrni oldinga/orqaga siljitish — to'liq oy tanlansa oyma-oy, aks holda
-  // davr uzunligiga teng qadam (shiftPeriod barcha filtrlar uchun yagona mantiq).
   const shift = (dir: 1 | -1) => {
     const next = shiftPeriod(start, end, dir);
     if (!next) return;
@@ -107,79 +75,19 @@ function ChiqimFilterInner({
 
   // Ikkala sana to'ldirilmagan bo'lsa siljitadigan davr yo'q
   const canShift = Boolean(start && end);
-
-  const onTur = (v: string | null) => {
-    const next = v ?? "all";
-    setTur(next);
-    navigate({ tur: next });
-  };
-
-  const onFilial = (v: string | null) => {
-    const next = v ?? "all";
-    setFilial(next);
-    navigate({ filial: next });
-  };
+  const hasFilters = Boolean(start || end);
 
   const reset = () => {
     clearTimeout(debounceRef.current);
     setStart("");
     setEnd("");
-    setTur("all");
-    setFilial("all");
     router.replace(basePath, { scroll: false });
   };
 
-  const hasFilters =
-    start ||
-    end ||
-    (tur && tur !== "all") ||
-    (filial && filial !== "all");
-
   return (
     <div className="flex flex-wrap items-end gap-3">
-      {/* Tur filtri */}
-      {!hideTur && (
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Tur</Label>
-          <Select value={tur} onValueChange={onTur}>
-            <SelectTrigger className="h-9 w-44">
-              <SelectValue placeholder="Barcha turlar" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Barcha turlar</SelectItem>
-              {TURS.map(([key, label]) => (
-                <SelectItem key={key} value={key}>
-                  {label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-
-      {/* Filial filtri */}
-      {!hideFilial && filials.length > 0 && (
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Filial</Label>
-          <Select value={filial} onValueChange={onFilial}>
-            <SelectTrigger className="h-9 w-44">
-              <SelectValue placeholder="Barcha filiallar" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Barcha filiallar</SelectItem>
-              {filials.map((f) => (
-                <SelectItem key={f} value={f}>
-                  {f}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-
-      {/* Davr: boshlanish – tugash + siljitish o'qchalari */}
       <div className="space-y-1">
-        <Label className="text-xs text-muted-foreground">Davr</Label>
+        <Label className="text-xs text-muted-foreground">Davr (yaratilgan sana)</Label>
         <div className="flex items-center gap-1.5">
           <Button
             size="icon"
@@ -238,12 +146,11 @@ function ChiqimFilterInner({
   );
 }
 
-// useSearchParams Suspense chegarasini talab qiladi (statik prerender'da xato) —
-// wrapper barcha ishlatish joylarini qamraydi.
-export function ChiqimFilter(props: ComponentProps<typeof ChiqimFilterInner>) {
+// useSearchParams Suspense chegarasini talab qiladi (statik prerender'da xato).
+export function KanbanFilter(props: ComponentProps<typeof KanbanFilterInner>) {
   return (
     <Suspense fallback={null}>
-      <ChiqimFilterInner {...props} />
+      <KanbanFilterInner {...props} />
     </Suspense>
   );
 }
