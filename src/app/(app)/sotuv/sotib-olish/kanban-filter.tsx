@@ -5,21 +5,29 @@ import { Suspense, useRef, useState, type ComponentProps } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { X, ChevronLeft, ChevronRight } from "lucide-react";
 import { shiftPeriod } from "@/lib/period";
 
 /**
- * Kanban davr filtri — zakaz YARATILGAN sanasi bo'yicha. O'qchalar davrni oldinga/
- * orqaga siljitadi (to'liq oy tanlansa oyma-oy, aks holda davr uzunligiga teng qadam).
- * ChiqimFilter naqshi: har o'zgarish darhol URL'ga yoziladi, tugma kutilmaydi.
+ * Kanban davr + postavshik filtri — zakaz YARATILGAN sanasi va ta'minotchisi
+ * bo'yicha. O'qchalar davrni oldinga/orqaga siljitadi (to'liq oy tanlansa oyma-oy,
+ * aks holda davr uzunligiga teng qadam). ChiqimFilter naqshi: har o'zgarish darhol
+ * URL'ga yoziladi, tugma kutilmaydi.
  */
 function KanbanFilterInner({
   defaultStart,
   defaultEnd,
+  defaultSupplierId,
+  suppliers,
   basePath = "/sotuv/sotib-olish",
 }: {
   defaultStart: string;
   defaultEnd: string;
+  defaultSupplierId?: string;
+  suppliers?: { id: number; name: string }[];
   basePath?: string;
 }) {
   const router = useRouter();
@@ -27,22 +35,24 @@ function KanbanFilterInner({
 
   const [start, setStart] = useState(defaultStart);
   const [end, setEnd] = useState(defaultEnd);
+  const [supplierId, setSupplierId] = useState(defaultSupplierId ?? "all");
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   // Server yangi default'larni uzatganda (navigatsiyadan keyin) lokal holatni
   // URL bilan qayta sinxronlaymiz — aks holda inputlar eski qiymatda qotib qoladi.
-  const propsKey = `${defaultStart}|${defaultEnd}`;
+  const propsKey = `${defaultStart}|${defaultEnd}|${defaultSupplierId ?? ""}`;
   const [seenKey, setSeenKey] = useState(propsKey);
   if (seenKey !== propsKey) {
     setSeenKey(propsKey);
     setStart(defaultStart);
     setEnd(defaultEnd);
+    setSupplierId(defaultSupplierId ?? "all");
   }
 
   const navigate = (changes: Record<string, string | undefined>) => {
     const p = new URLSearchParams(searchParams.toString());
     for (const [k, v] of Object.entries(changes)) {
-      if (!v) p.delete(k);
+      if (!v || v === "all") p.delete(k);
       else p.set(k, v);
     }
     router.replace(`${basePath}?${p.toString()}`, { scroll: false });
@@ -73,19 +83,42 @@ function KanbanFilterInner({
     navigate({ start: next.start, end: next.end });
   };
 
+  const onSupplier = (v: string | null) => {
+    const next = v ?? "all";
+    setSupplierId(next);
+    navigate({ supplierId: next });
+  };
+
   // Ikkala sana to'ldirilmagan bo'lsa siljitadigan davr yo'q
   const canShift = Boolean(start && end);
-  const hasFilters = Boolean(start || end);
+  const hasFilters = Boolean(start || end || (supplierId && supplierId !== "all"));
 
   const reset = () => {
     clearTimeout(debounceRef.current);
     setStart("");
     setEnd("");
+    setSupplierId("all");
     router.replace(basePath, { scroll: false });
   };
 
   return (
     <div className="flex flex-wrap items-end gap-3">
+      {/* Ta'minotchi filtri */}
+      {suppliers && suppliers.length > 0 && (
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Ta&apos;minotchi</Label>
+          <Select value={supplierId} onValueChange={onSupplier}>
+            <SelectTrigger className="h-9 w-48"><SelectValue placeholder="Barchasi" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Barchasi</SelectItem>
+              {suppliers.map((s) => (
+                <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
       <div className="space-y-1">
         <Label className="text-xs text-muted-foreground">Davr (yaratilgan sana)</Label>
         <div className="flex items-center gap-1.5">

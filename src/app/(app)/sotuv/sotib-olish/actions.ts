@@ -12,6 +12,7 @@ import { actionError } from "@/lib/action-error";
 import { scopeParentIds, scopeProductWhere } from "@/lib/scope";
 import { getDefaultRange } from "@/lib/analytics";
 import { todayTashkentISO, isoDay } from "@/lib/date";
+import { decimalToNumber } from "@/lib/format";
 import { Prisma } from "@/generated/prisma/client";
 
 export type OrderItemInput = {
@@ -684,5 +685,221 @@ export async function saveOrderRatingAction(
     return { ok: true };
   } catch (err) {
     return actionError(err, "saveOrderRating");
+  }
+}
+
+// ─── Qayta zakaz (reorder): eski zakaz tarixi + "urug'lik" ma'lumot ───────────
+// Oqim: postavshik tanlandi → tarixdan eski zakaz tanlanadi → reorderSourceAction
+// uni builder uchun seed'ga aylantiradi. NARX ko'chirilmaydi — builder joriy narxni
+// supplierItemsAction'dan oladi (purchasePrice), faqat miqdor + filial taqsimoti ko'chadi.
+
+/** Postavshik zakazlar tarixining bitta qatori (qayta zakaz oynasi ro'yxati). */
+export type SupplierOrderHistoryRow = {
+  id: number;
+  createdAt: Date;
+  status: OrderStatusT;
+  agentId: number | null;
+  agentName: string | null; // agentsiz zakazda null
+  itemCount: number; // zakazdagi SKU qatorlari soni
+  totalSum: number; // Σ(miqdor × narx) — o'sha paytdagi narxlarda
+  createdByName: string;
+};
+
+const historyOptsSchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(30),
+});
+
+/**
+ * Bitta yetkazib beruvchining zakazlar tarixi (yangi → eski).
+ * ordersScopedToOwn rollarida faqat foydalanuvchining O'Z zakazlari ko'rinadi.
+ */
+export async function supplierOrderHistoryAction(
+  supplierId: number,
+  opts?: { limit?: number }
+): Promise<{ ok: true; orders: SupplierOrderHistoryRow[] } | { ok: false; error: string }> {
+  try {
+    const user = await requireOrderCreator();
+    const sid = z.coerce.number().int().positive().parse(supplierId);
+    const { limit } = historyOptsSchema.parse(opts ?? {});
+    const orders = await prisma.purchaseOrder.findMany({
+      where: {
+        supplierId: sid,
+        ...(ordersScopedToOwn(user.roles) ? { createdById: Number(user.id) } : {}),
+      },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+      select: {
+        id: true,
+        createdAt: true,
+        status: true,
+        agentId: true,
+        agent: { select: { name: true } },
+        createdBy: { select: { name: true } },
+      },
+    });
+    if (orders.length === 0) return { ok: true, orders: [] };
+    // Qator soni va jami summa — DB'da agregatsiya (N+1 ham, minglab item qatorini
+    // tortib olish ham yo'q). Σ(quantity×price) numeric qoladi → decimalToNumber.
+    const ids = orders.map((o) => o.id);
+    const aggRows = await prisma.$queryRaw<{ orderId: number; cnt: number; total: unknown }[]>(Prisma.sql`
+      SELECT i."orderId" AS "orderId",
+             COUNT(*)::int AS cnt,
+             COALESCE(SUM(i.quantity * i.price), 0) AS total
+      FROM "PurchaseOrderItem" i
+      WHERE i."orderId" = ANY(${ids}::int[])
+      GROUP BY i."orderId"
+    `);
+    const aggBy = new Map(aggRows.map((r) => [r.orderId, { cnt: r.cnt, total: decimalToNumber(r.total) }]));
+    return {
+      ok: true,
+      orders: orders.map((o) => {
+        const agg = aggBy.get(o.id);
+        return {
+          id: o.id,
+          createdAt: o.createdAt,
+          status: o.status as OrderStatusT,
+          agentId: o.agentId,
+          agentName: o.agent?.name ?? null,
+          itemCount: agg?.cnt ?? 0,
+          totalSum: agg?.total ?? 0,
+          createdByName: o.createdBy.name,
+        };
+      }),
+    };
+  } catch (err) {
+    return actionError(err, "supplierOrderHistory");
+  }
+}
+
+/** Builder'ga uzatiladigan bitta qator (narxsiz — narx joriy holatdan olinadi). */
+export type ReorderSeedItem = {
+  productId: number;
+  quantity: number; // JAMI (filiallar bo'lsa — ularning yig'indisi)
+  branches: { branchId: number; quantity: number }[]; // bo'sh = taqsimotsiz (faqat jami)
+};
+/** Eski zakazdan olingan "urug'lik" ma'lumot + foydalanuvchiga ogohlantirishlar. */
+export type ReorderSource = {
+  supplierId: number;
+  agentId: number | null;
+  items: ReorderSeedItem[];
+  warnings: string[];
+};
+
+/** Ogohlantirishda nomlarni sanab beradi: 5 tagacha, qolgani "+N ta". */
+function namesHint(names: string[]): string {
+  const head = names.slice(0, 5).join(", ");
+  return names.length > 5 ? `${head} +${names.length - 5} ta` : head;
+}
+
+/**
+ * Eski zakazni yangi builder uchun seed'ga aylantiradi (qayta zakaz).
+ *
+ * Ko'chiriladi: SKU + miqdor + filial taqsimoti. Ko'chirilmaydi: NARX (builder
+ * joriy purchasePrice'ni oladi). Bugun yaroqsiz bo'lib qolgan qatorlar (o'chirilgan/
+ * arxivlangan SKU, boshqa postavshik/agentga o'tgan, qamrovdan tashqari) XATO emas —
+ * filtrlanadi va warnings'da tushuntiriladi.
+ */
+export async function reorderSourceAction(
+  orderId: number
+): Promise<{ ok: true; data: ReorderSource } | { ok: false; error: string }> {
+  try {
+    const user = await requireOrderCreator();
+    const oid = z.coerce.number().int().positive().parse(orderId);
+    const order = await prisma.purchaseOrder.findUnique({
+      where: { id: oid },
+      select: {
+        supplierId: true,
+        agentId: true,
+        createdById: true,
+        items: {
+          orderBy: { productId: "asc" },
+          select: {
+            productId: true,
+            quantity: true,
+            branchQtys: { select: { branchId: true, quantity: true } },
+          },
+        },
+      },
+    });
+    if (!order) return { ok: false, error: "Zakaz topilmadi." };
+    if (ordersScopedToOwn(user.roles) && order.createdById !== Number(user.id)) {
+      return { ok: false, error: "Ruxsat yo'q." };
+    }
+    if (order.items.length === 0) return { ok: false, error: "Bu zakazda qator yo'q — qayta zakaz berib bo'lmaydi." };
+
+    const pids = order.items.map((i) => i.productId);
+    const scope = await scopeParentIds(Number(user.id), user.roles);
+    const [products, inScopeRows, branchRows] = await Promise.all([
+      prisma.product.findMany({
+        where: { id: { in: pids } },
+        select: { id: true, name: true, supplierId: true, agentId: true, archivedAt: true },
+      }),
+      // scopeError bilan AYNI qoida (scopeProductWhere), lekin xato emas — filtr.
+      scope === null
+        ? Promise.resolve(null)
+        : prisma.product.findMany({ where: { id: { in: pids }, ...scopeProductWhere(scope) }, select: { id: true } }),
+      prisma.branch.findMany({ select: { id: true } }),
+    ]);
+    const productById = new Map(products.map((p) => [p.id, p]));
+    const inScope = inScopeRows === null ? null : new Set(inScopeRows.map((p) => p.id));
+    const liveBranches = new Set(branchRows.map((b) => b.id));
+
+    const gone: string[] = []; // SKU o'chirilgan (endi bazada yo'q)
+    const archived: string[] = [];
+    const wrongSupplier: string[] = [];
+    const wrongAgent: string[] = [];
+    const outOfScope: string[] = [];
+    let droppedBranchRows = 0; // o'chirilgan filialga tegishli taqsimot qatorlari
+    let hasBranchData = false; // ko'chirilgan qatorlarda taqsimot bormi
+
+    const items: ReorderSeedItem[] = [];
+    for (const it of order.items) {
+      const p = productById.get(it.productId);
+      if (!p) { gone.push(`#${it.productId}`); continue; }
+      if (p.archivedAt != null) { archived.push(p.name); continue; }
+      // Builder SKU'larni supplier×agent bo'yicha yuklaydi (supplierItemsAction) —
+      // seed ham AYNI shu ro'yxatga tushishi shart, aks holda qator "osilib" qoladi.
+      if (p.supplierId !== order.supplierId) { wrongSupplier.push(p.name); continue; }
+      // Zakaz har agentga ALOHIDA (createOrderAction'dagi mismatch qoidasi):
+      // agentli zakazda SKU shu agentniki, agentsizda — agentga biriktirilmagan bo'lishi kerak.
+      if ((p.agentId ?? null) !== (order.agentId ?? null)) { wrongAgent.push(p.name); continue; }
+      if (inScope !== null && !inScope.has(p.id)) { outOfScope.push(p.name); continue; }
+
+      if (it.branchQtys.length > 0) hasBranchData = true;
+      const branches = it.branchQtys
+        .filter((b) => {
+          const alive = liveBranches.has(b.branchId);
+          if (!alive) droppedBranchRows++;
+          return alive;
+        })
+        .map((b) => ({ branchId: b.branchId, quantity: decimalToNumber(b.quantity) }))
+        .filter((b) => b.quantity > 0);
+      // Invariant (itemScalarData bilan bir xil): taqsimot bo'lsa jami = filiallar yig'indisi.
+      // Barcha filiallari yo'qolgan qatorda miqdor saqlanadi, builder uni "faqat jami" ko'rsatadi.
+      const quantity = branches.length > 0
+        ? branches.reduce((s, b) => s + b.quantity, 0)
+        : decimalToNumber(it.quantity);
+      if (quantity <= 0) continue;
+      items.push({ productId: p.id, quantity, branches });
+    }
+
+    const warnings: string[] = [];
+    if (gone.length) warnings.push(`${gone.length} ta SKU endi mavjud emas, tashlab ketildi (${namesHint(gone)}).`);
+    if (archived.length) warnings.push(`${archived.length} ta SKU arxivlangan, tashlab ketildi (${namesHint(archived)}).`);
+    if (wrongSupplier.length)
+      warnings.push(`${wrongSupplier.length} ta SKU boshqa yetkazib beruvchiga o'tgan, tashlab ketildi (${namesHint(wrongSupplier)}).`);
+    if (wrongAgent.length)
+      warnings.push(`${wrongAgent.length} ta SKU agenti o'zgargan, tashlab ketildi (${namesHint(wrongAgent)}).`);
+    if (outOfScope.length)
+      warnings.push(`${outOfScope.length} ta SKU qamrovingizdan tashqarida, tashlab ketildi (${namesHint(outOfScope)}).`);
+    if (droppedBranchRows > 0)
+      warnings.push(`${droppedBranchRows} ta filial taqsimoti mavjud bo'lmagan filialga tegishli edi — olib tashlandi.`);
+    if (items.length === 0) warnings.push("Bu zakazdan ko'chiriladigan SKU qolmadi — zakazni qo'lda tuzing.");
+    else if (!hasBranchData)
+      warnings.push("Bu zakazda filial taqsimoti yo'q — miqdorni filiallar bo'yicha o'zingiz taqsimlang.");
+
+    return { ok: true, data: { supplierId: order.supplierId, agentId: order.agentId, items, warnings } };
+  } catch (err) {
+    return actionError(err, "reorderSource");
   }
 }

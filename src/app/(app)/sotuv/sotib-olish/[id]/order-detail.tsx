@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +13,7 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { Pill } from "@/components/common/page";
-import { Loader2, Save, Send, PackageCheck, RotateCcw, Trash2, Truck, FileDown, Star } from "lucide-react";
+import { Loader2, Save, Send, PackageCheck, RotateCcw, Trash2, Truck, FileDown, Star, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatUZS, formatDateTimeUZ } from "@/lib/format";
 import {
@@ -217,6 +218,14 @@ export function OrderDetail({ order, roles, isOwner }: { order: OrderData; roles
         >
           {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />} Telegramga yuborish
         </button>
+
+        <Link
+          href={`/sotuv/sotib-olish/yangi?from=${order.id}`}
+          title="Shu zakaz asosida yangi zakaz yaratish (miqdor va filial taqsimoti bilan to'ldiriladi)"
+          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+        >
+          <Copy className="h-3.5 w-3.5" /> Qayta zakaz
+        </Link>
 
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
           {allowedNexts.map((to) => {

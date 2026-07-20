@@ -16,11 +16,12 @@ import { SearchablePicker } from "@/components/common/searchable-picker";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Search, X, Loader2, Save, ChevronRight, ChevronsDownUp, ChevronsUpDown, Wand2, Eraser } from "lucide-react";
+import { Search, X, Loader2, Save, ChevronRight, ChevronsDownUp, ChevronsUpDown, Wand2, Eraser, Copy } from "lucide-react";
 import { formatUZS } from "@/lib/format";
 import {
   suppliersForOrderAction, supplierItemsAction, createOrderAction,
   type SupplierOption, type BuilderItem, type BuilderBranch, type BranchCell, type OrderItemInput,
+  type ReorderSource,
 } from "../actions";
 import { hisobMinStock, hisobMaxStock } from "../order-status";
 
@@ -70,13 +71,16 @@ type RowHandlers = {
 };
 
 const SkuRow = memo(function SkuRow({
-  it, line, branches, orderGap, h,
+  it, line, branches, orderGap, h, pendingQty,
 }: {
   it: BuilderItem;
   line: Line | undefined;
   branches: BuilderBranch[];
   orderGap: number;
   h: RowHandlers;
+  // Qayta zakaz: eski zakazda filial taqsimoti bo'lmagan SKU'ning jami miqdori —
+  // foydalanuvchi hali filiallarga taqsimlamagan (miqdor kiritilgach yashiriladi).
+  pendingQty?: number;
 }) {
   const l = line ?? emptyLine();
   const effLead = l.lead.trim() !== "" && Number(l.lead) >= 0 ? Number(l.lead) : it.lead;
@@ -105,6 +109,12 @@ const SkuRow = memo(function SkuRow({
           {it.arxiv && (
             <span className="shrink-0 rounded border border-border bg-muted px-1.5 py-px text-[9px] font-semibold uppercase text-muted-foreground"
               title="Arxivlangan (no-aktiv) — yana sotila boshlasa avtomatik aktivga qaytadi">no aktiv</span>
+          )}
+          {pendingQty != null && !picked && (
+            <span className="shrink-0 rounded border border-amber-500/60 bg-amber-500/10 px-1.5 py-px text-[9px] font-semibold text-amber-700 dark:text-amber-400"
+              title="Eski zakazda filial taqsimoti bo'lmagan — jami miqdorni filiallarga o'zingiz taqsimlang">
+              eski: {pendingQty.toLocaleString("uz-UZ")} — taqsimlang
+            </span>
           )}
         </span>
       </TableCell>
@@ -191,7 +201,15 @@ const SkuRow = memo(function SkuRow({
   );
 });
 
-export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSupplierId?: number; initialAgentId?: number }) {
+export function OrderBuilder({
+  initialSupplierId, initialAgentId, reorderSeed,
+}: {
+  initialSupplierId?: number;
+  initialAgentId?: number;
+  // Qayta zakaz (?from=<orderId>): eski zakazdan supplier/agent + SKU miqdorlari.
+  // Faqat BIR MARTA (birinchi mos loadItems'da) qo'llanadi — seedRef orqali.
+  reorderSeed?: ReorderSource | null;
+}) {
   const router = useRouter();
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
   const [supplierId, setSupplierId] = useState("");
@@ -210,9 +228,16 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
   const [closedG, setClosedG] = useState<Set<number>>(new Set());
   const [closedC, setClosedC] = useState<Set<string>>(new Set()); // `${groupId}:${catId}` — sintetik -1 kategoriya guruhlar aro to'qnashmasin
   const [closedS, setClosedS] = useState<Set<number>>(new Set());
+  // Qayta zakaz: bir martalik "urug'lik" — qo'llangach null qilinadi, keyingi
+  // loadItems (masalan foydalanuvchi agentni qo'lda almashtirsa) uni qayta yuvmaydi.
+  const seedRef = useRef<ReorderSource | null>(reorderSeed ?? null);
+  const [seedBannerOpen, setSeedBannerOpen] = useState(!!reorderSeed);
+  // Eski zakazda filial taqsimoti bo'lmagan SKU'lar — jami miqdor, foydalanuvchi
+  // o'zi taqsimlashi uchun vizual belgi (SkuRow'da amber chip).
+  const [seedPending, setSeedPending] = useState<Map<number, number>>(new Map());
 
   const resetLists = () => {
-    setItems([]); setLines(new Map()); setQ("");
+    setItems([]); setLines(new Map()); setSeedPending(new Map()); setQ("");
     setClosedG(new Set()); setClosedC(new Set()); setClosedS(new Set());
   };
 
@@ -225,7 +250,39 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
         setOrderGap(res.orderGap);
         // SKU'lar oldindan TANLANMAYDI — faqat menejer miqdor kiritgani zakazga kiradi.
         // Avto-zakaz va eslab qolingan narx esa placeholder (xira) sifatida ko'rinadi.
-        setLines(new Map());
+        // Qayta zakaz seed'i shu supplier/agentga mos bo'lsa — Map shu yerda boshlang'ich
+        // qiymatlar bilan quriladi (reset effektda emas, shu bois lint-safe: set-state-in-effect
+        // qoidasi buzilmaydi, chunki bu allaqachon useTransition callback'i, effekt emas).
+        const seed = seedRef.current;
+        if (seed && seed.supplierId === sid && (seed.agentId ?? null) === aid) {
+          const byPid = new Map(res.items.map((it) => [it.productId, it]));
+          const m = new Map<number, Line>();
+          const pending = new Map<number, number>();
+          for (const s of seed.items) {
+            const it = byPid.get(s.productId);
+            if (!it) continue; // qamrovdan tashqarida — bu ro'yxatda yo'q
+            if (s.branches.length === 0) {
+              // Taqsimotsiz — miqdorni birorta filialga o'zboshimchalik bilan qo'ymaymiz,
+              // faqat "taqsimlang" belgisi bilan ko'rsatamiz (builder faqat filial-qatorli ishlaydi).
+              pending.set(s.productId, s.quantity);
+              continue;
+            }
+            const pack = it.packSize ?? 0;
+            const bq: Record<number, string> = {};
+            const bb: Record<number, string> = {};
+            for (const b of s.branches) {
+              bq[b.branchId] = String(b.quantity);
+              bb[b.branchId] = pack > 0 ? String(round3(b.quantity / pack)) : "";
+            }
+            m.set(s.productId, { price: "", lead: "", pack: "", bq, bb });
+          }
+          setLines(m);
+          setSeedPending(pending);
+          seedRef.current = null; // bir martalik — qo'llandi
+        } else {
+          setLines(new Map());
+          setSeedPending(new Map());
+        }
       } else toast.error(res.error);
     });
   };
@@ -252,14 +309,21 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
       const res = await suppliersForOrderAction();
       if (res.ok) {
         setSuppliers(res.suppliers);
-        // "Bugun" sahifasidan kelganda yetkazib beruvchi (+agent) oldindan tanlanadi
-        const sup = initialSupplierId ? res.suppliers.find((s) => s.id === initialSupplierId) : undefined;
+        // Ustunlik: qayta zakaz seed'i (?from=) > "Bugun" sahifasidan kelgan supplier/agent.
+        const seed = reorderSeed;
+        const seedSupplierId = seed?.supplierId ?? initialSupplierId;
+        const sup = seedSupplierId ? res.suppliers.find((s) => s.id === seedSupplierId) : undefined;
         if (sup) {
           setSupplierId(String(sup.id));
-          if (initialAgentId && sup.agents.some((a) => a.id === initialAgentId)) {
-            setAgentSel(String(initialAgentId));
-            loadItems(sup.id, initialAgentId);
-          } else if (sup.agents.length === 0) {
+          const seedAgentId = seed ? seed.agentId : (initialAgentId ?? null);
+          if (sup.agents.length === 0) {
+            loadItems(sup.id, null);
+          } else if (seedAgentId != null && sup.agents.some((a) => a.id === seedAgentId)) {
+            setAgentSel(String(seedAgentId));
+            loadItems(sup.id, seedAgentId);
+          } else if (seed && seedAgentId == null && sup.agentlessSkuCount > 0) {
+            // Seed aniq "agentsiz" deydi (eski zakaz agentsiz edi) va bu supplier'da agentsiz SKU bor.
+            setAgentSel("none");
             loadItems(sup.id, null);
           }
         }
@@ -482,6 +546,23 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
 
   return (
     <div className="space-y-4">
+      {reorderSeed && seedBannerOpen && (
+        <div className="flex items-start gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-800 dark:text-amber-300">
+          <Copy className="mt-0.5 h-4 w-4 shrink-0" />
+          <div className="flex-1 space-y-1">
+            <p className="font-semibold">Eski zakazdan nusxa</p>
+            {reorderSeed.warnings.length > 0 && (
+              <ul className="list-disc space-y-0.5 pl-4 text-xs">
+                {reorderSeed.warnings.map((w, i) => <li key={i}>{w}</li>)}
+              </ul>
+            )}
+          </div>
+          <button type="button" onClick={() => setSeedBannerOpen(false)} aria-label="Bannerni yopish"
+            className="shrink-0 text-amber-700/70 transition-colors hover:text-amber-900 dark:text-amber-300/70 dark:hover:text-amber-100">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
       <div className="flex flex-wrap items-end gap-3">
         <div className="space-y-1">
           <Label className="text-xs text-muted-foreground">Yetkazib beruvchi</Label>
@@ -642,7 +723,7 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
                                   </span>
                                 </TableCell>
                               </TableRow>
-                              {cOpen && c.direct.map((it) => <SkuRow key={it.productId} it={it} line={lines.get(it.productId)} branches={branches} orderGap={orderGap} h={rowH} />)}
+                              {cOpen && c.direct.map((it) => <SkuRow key={it.productId} it={it} line={lines.get(it.productId)} branches={branches} orderGap={orderGap} h={rowH} pendingQty={seedPending.get(it.productId)} />)}
                               {cOpen && c.subs.map((s) => {
                                 const sOpen = searching || !closedS.has(s.id);
                                 return (
@@ -656,7 +737,7 @@ export function OrderBuilder({ initialSupplierId, initialAgentId }: { initialSup
                                         </span>
                                       </TableCell>
                                     </TableRow>
-                                    {sOpen && s.items.map((it) => <SkuRow key={it.productId} it={it} line={lines.get(it.productId)} branches={branches} orderGap={orderGap} h={rowH} />)}
+                                    {sOpen && s.items.map((it) => <SkuRow key={it.productId} it={it} line={lines.get(it.productId)} branches={branches} orderGap={orderGap} h={rowH} pendingQty={seedPending.get(it.productId)} />)}
                                   </Fragment>
                                 );
                               })}

@@ -33,9 +33,11 @@ export default async function SotibOlishPage({
   const sp = await searchParams;
   const startDay = parseDateParam(sp.start);
   const endDay = parseDateParam(sp.end);
+  const supplierId = Number(sp.supplierId);
 
   const where: Prisma.PurchaseOrderWhereInput = {};
   if (ordersScopedToOwn(roles)) where.createdById = userId;
+  if (Number.isInteger(supplierId) && supplierId > 0) where.supplierId = supplierId;
 
   // Toshkent kalendar kunini real UTC instantga o'giramiz (Toshkent yarim tuni =
   // UTC 19:00, kecha). Tugash kuni INKLYUZIV — shuning uchun keyingi kun boshigacha.
@@ -48,18 +50,21 @@ export default async function SotibOlishPage({
     };
   }
 
-  const orders = await prisma.purchaseOrder.findMany({
-    where,
-    select: {
-      id: true, status: true, createdAt: true, createdById: true,
-      supplier: { select: { name: true } },
-      agent: { select: { name: true } },
-      createdBy: { select: { name: true } },
-      items: { select: { quantity: true, price: true } },
-    },
-    orderBy: { createdAt: "desc" },
-    take: 400,
-  });
+  const [orders, suppliers] = await Promise.all([
+    prisma.purchaseOrder.findMany({
+      where,
+      select: {
+        id: true, status: true, createdAt: true, createdById: true,
+        supplier: { select: { name: true } },
+        agent: { select: { name: true } },
+        createdBy: { select: { name: true } },
+        items: { select: { quantity: true, price: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 400,
+    }),
+    prisma.supplier.findMany({ select: { id: true, name: true }, orderBy: { sortOrder: "asc" } }),
+  ]);
 
   const cards: KanbanCard[] = orders.map((o) => ({
     id: o.id,
@@ -88,7 +93,12 @@ export default async function SotibOlishPage({
         )}
       </PageHeader>
 
-      <KanbanFilter defaultStart={sp.start ?? ""} defaultEnd={sp.end ?? ""} />
+      <KanbanFilter
+        defaultStart={sp.start ?? ""}
+        defaultEnd={sp.end ?? ""}
+        defaultSupplierId={sp.supplierId ?? ""}
+        suppliers={suppliers}
+      />
 
       <KanbanBoard cards={cards} roles={roles} />
     </div>

@@ -10,7 +10,7 @@ import { useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Truck, ArrowRight, Undo2, Loader2 } from "lucide-react";
+import { Truck, ArrowRight, Undo2, Loader2, Copy } from "lucide-react";
 import { Pill } from "@/components/common/page";
 import { cn } from "@/lib/utils";
 import { formatUZS } from "@/lib/format";
@@ -101,30 +101,37 @@ export function KanbanBoard({ cards, roles }: { cards: KanbanCard[]; roles: read
                           <span className="truncate">{c.createdBy}</span> · {c.date}
                         </p>
                       </Link>
-                      {nexts.length > 0 && (
-                        <div className="mt-2 flex flex-wrap gap-1 border-t border-border/50 pt-2">
-                          {nexts.map((to) => {
-                            const back = to === "DRAFT" || to === "PENDING" && c.status === "APPROVED";
-                            const danger = to === "RETURNED";
-                            return (
-                              <button key={to}
-                                onClick={() => move(c, to)}
-                                disabled={isPending}
-                                className={cn(
-                                  "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-semibold transition-colors disabled:opacity-50",
-                                  danger
-                                    ? "border-red-500/40 text-red-600 hover:bg-red-500/10 dark:text-red-400"
-                                    : back
-                                      ? "border-border text-muted-foreground hover:bg-muted/50"
-                                      : "border-emerald-500/50 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-400"
-                                )}>
-                                {isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : back ? <Undo2 className="h-3 w-3" /> : <ArrowRight className="h-3 w-3" />}
-                                {TRANSITION_LABEL[to]}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
+                      <div className="mt-2 flex flex-wrap items-center gap-1 border-t border-border/50 pt-2">
+                        {nexts.map((to) => {
+                          const back = to === "DRAFT" || to === "PENDING" && c.status === "APPROVED";
+                          const danger = to === "RETURNED";
+                          return (
+                            <button key={to}
+                              onClick={() => move(c, to)}
+                              disabled={isPending}
+                              className={cn(
+                                "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-semibold transition-colors disabled:opacity-50",
+                                danger
+                                  ? "border-red-500/40 text-red-600 hover:bg-red-500/10 dark:text-red-400"
+                                  : back
+                                    ? "border-border text-muted-foreground hover:bg-muted/50"
+                                    : "border-emerald-500/50 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-400"
+                              )}>
+                              {isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : back ? <Undo2 className="h-3 w-3" /> : <ArrowRight className="h-3 w-3" />}
+                              {TRANSITION_LABEL[to]}
+                            </button>
+                          );
+                        })}
+                        {/* Eski zakazdan qayta zakaz — miqdor + filial taqsimoti bilan builder'ni to'ldiradi */}
+                        <Link
+                          href={`/sotuv/sotib-olish/yangi?from=${c.id}`}
+                          title="Qayta zakaz berish"
+                          aria-label="Qayta zakaz berish"
+                          className="ml-auto inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        >
+                          <Copy className="h-3 w-3" />
+                        </Link>
+                      </div>
                     </div>
                   );
                 })}

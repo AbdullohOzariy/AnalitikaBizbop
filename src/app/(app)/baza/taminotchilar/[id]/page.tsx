@@ -9,6 +9,8 @@ import { PageHeader, StatCard } from "@/components/common/page";
 import type { ContractRow, AgentRow, SupplierTerms, BranchProfileRow } from "../actions";
 import { ProfilHeader, OrderDaysCalendar, LeadTimeEditor, ContractsSection, AgentsSection, AssignSkusSection, type ProfilSku } from "./profil-client";
 import { SupplierTermsSection, BranchProfilesSection } from "./terms-client";
+import { ZakazTarixiSection, type OrderHistoryRow } from "./zakaz-tarixi";
+import { supplierOrderHistoryAction } from "@/app/(app)/sotuv/sotib-olish/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +29,7 @@ export default async function SupplierProfilePage({
   const supplierId = Number(id);
   if (!Number.isFinite(supplierId)) notFound();
 
-  const [supplier, products, orderCount, ratingAgg, branchList] = await Promise.all([
+  const [supplier, products, orderCount, ratingAgg, branchList, orderHistoryRes] = await Promise.all([
     prisma.supplier.findUnique({
       where: { id: supplierId },
       include: {
@@ -71,6 +73,7 @@ export default async function SupplierProfilePage({
       _count: { rating: true },
     }),
     prisma.branch.findMany({ orderBy: { sortOrder: "asc" }, select: { id: true, name: true } }),
+    supplierOrderHistoryAction(supplierId),
   ]);
   if (!supplier) notFound();
   const avgRating = ratingAgg._avg.rating;
@@ -140,6 +143,19 @@ export default async function SupplierProfilePage({
       forecastYearly: dn(bp?.forecastYearly), forecastMonthly: dn(bp?.forecastMonthly),
     };
   });
+
+  const orderHistory: OrderHistoryRow[] = orderHistoryRes.ok
+    ? orderHistoryRes.orders.map((o) => ({
+        id: o.id,
+        createdAt: o.createdAt.toISOString(),
+        status: o.status,
+        agentName: o.agentName,
+        itemCount: o.itemCount,
+        totalSum: o.totalSum,
+        createdByName: o.createdByName,
+      }))
+    : [];
+  const orderHistoryError = orderHistoryRes.ok ? null : orderHistoryRes.error;
 
   const withLead = skus.filter((s) => s.leadTimeDays != null);
   const avgLead = withLead.length
@@ -211,6 +227,8 @@ export default async function SupplierProfilePage({
         <AssignSkusSection supplierId={supplier.id} canEdit={canEdit} />
         <LeadTimeEditor supplierId={supplier.id} skus={skus} agents={agentOptions} canEdit={canEdit} />
       </div>
+
+      <ZakazTarixiSection orders={orderHistory} error={orderHistoryError} />
     </div>
   );
 }
