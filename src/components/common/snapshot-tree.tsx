@@ -14,7 +14,7 @@ import { ChevronRight, Loader2, ArrowUp, ArrowDown } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Pill } from "@/components/common/page";
 import { cn } from "@/lib/utils";
-import { skuRowBg } from "@/lib/sku-rang";
+import { skuRowBg, skuBadgeCls, skuBadgeLabel, skuBadgeTitle } from "@/lib/sku-rang";
 import type { SnapTreeGroup } from "@/lib/snapshot-reports";
 
 // ─── Ustun spetsifikatsiyasi ──────────────────────────────────────────────────
@@ -75,6 +75,7 @@ export function SnapshotTree({
   loadLeaves,
   pillTone = "muted",
   totalLabel,
+  rateTone = "severity",
 }: {
   groups: SnapTreeGroup[];
   cols: SnapCol[];
@@ -85,6 +86,12 @@ export function SnapshotTree({
   pillTone?: "red" | "amber" | "green" | "blue" | "muted";
   /** Tugun qatoridagi summa izohi: "savdo" | "qoldiq qiymati" */
   totalLabel: string;
+  /**
+   * Tugun nomi oldidagi ulush foizining rangi:
+   *  - "severity" — foiz qancha katta, shuncha yomon (OOS, tugash xavfi, kritik)
+   *  - "neutral"  — yuqori foiz yomon emas (Normal zaxira, o'lik qoldiq)
+   */
+  rateTone?: RateTone;
 }) {
   const [openG, setOpenG] = useState<Set<number>>(new Set());
   const [openC, setOpenC] = useState<Set<string>>(new Set());
@@ -228,16 +235,16 @@ export function SnapshotTree({
             const gOpen = openG.has(g.id);
             return (
               <Fragment key={g.id}>
-                <NodeRow depth={0} open={gOpen} name={g.name} cnt={g.cnt} total={g.total}
-                  totalLabel={totalLabel} colSpan={cols.length}
+                <NodeRow depth={0} open={gOpen} name={g.name} cnt={g.cnt} tot={g.tot} total={g.total}
+                  totalLabel={totalLabel} rateTone={rateTone} colSpan={cols.length}
                   onToggle={() => toggle(openG, g.id, setOpenG)} />
                 {gOpen && g.cats.map((c) => {
                   const cKey = `${g.id}_${c.id}`;
                   const cOpen = openC.has(cKey);
                   return (
                     <Fragment key={cKey}>
-                      <NodeRow depth={1} open={cOpen} name={c.name} cnt={c.cnt} total={c.total}
-                        totalLabel={totalLabel} colSpan={cols.length}
+                      <NodeRow depth={1} open={cOpen} name={c.name} cnt={c.cnt} tot={c.tot} total={c.total}
+                        totalLabel={totalLabel} rateTone={rateTone} colSpan={cols.length}
                         onToggle={() => toggle(openC, cKey, setOpenC)} />
                       {cOpen && c.subs.map((s) => {
                         const sKey = `${cKey}_${s.id}`;
@@ -247,8 +254,8 @@ export function SnapshotTree({
                         const shown = leaf ? applyFilters(leaf.rows) : [];
                         return (
                           <Fragment key={sKey}>
-                            <NodeRow depth={2} open={sOpen} name={s.name} cnt={s.cnt} total={s.total}
-                              totalLabel={totalLabel} colSpan={cols.length} loading={isLoading}
+                            <NodeRow depth={2} open={sOpen} name={s.name} cnt={s.cnt} tot={s.tot} total={s.total}
+                              totalLabel={totalLabel} rateTone={rateTone} colSpan={cols.length} loading={isLoading}
                               onToggle={() => toggleSub(sKey, s.id)} />
                             {sOpen && leaf && (
                               <>
@@ -258,6 +265,11 @@ export function SnapshotTree({
                                     <td className="py-1.5 pl-[5.5rem] pr-3">
                                       <span className="flex items-baseline gap-2">
                                         <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{r.code}</span>
+                                        <span title={skuBadgeTitle(r.abc, r.xyz)}
+                                          className={cn("shrink-0 rounded border px-1 py-px text-[9px] font-bold leading-none",
+                                            skuBadgeCls(r.abc, r.xyz))}>
+                                          {skuBadgeLabel(r.abc, r.xyz)}
+                                        </span>
                                         <span className="line-clamp-2 leading-snug text-foreground/90">{r.pname}</span>
                                       </span>
                                     </td>
@@ -293,12 +305,29 @@ export function SnapshotTree({
 
 // ─── Tugun qatori ─────────────────────────────────────────────────────────────
 
+export type RateTone = "severity" | "neutral";
+
+// Ulush foizi: tugundagi joriy holatdagi qatorlar ÷ tugundagi jami faol qatorlar.
+// "severity"da 20%+ qizil, 10%+ sariq — qaysi bo'lim eng muammoli ekani ko'rinsin.
+function rateBadgeTone(pct: number, mode: RateTone): "red" | "amber" | "muted" {
+  if (mode === "neutral") return "muted";
+  if (pct >= 20) return "red";
+  if (pct >= 10) return "amber";
+  return "muted";
+}
+
+function fmtPct(pct: number): string {
+  if (pct > 0 && pct < 0.1) return "<0,1%";
+  return `${pct.toFixed(1).replace(".", ",")}%`;
+}
+
 function NodeRow({
-  depth, open, name, cnt, total, totalLabel, colSpan, loading, onToggle,
+  depth, open, name, cnt, tot, total, totalLabel, rateTone, colSpan, loading, onToggle,
 }: {
-  depth: 0 | 1 | 2; open: boolean; name: string; cnt: number; total: number;
-  totalLabel: string; colSpan: number; loading?: boolean; onToggle: () => void;
+  depth: 0 | 1 | 2; open: boolean; name: string; cnt: number; tot: number; total: number;
+  totalLabel: string; rateTone: RateTone; colSpan: number; loading?: boolean; onToggle: () => void;
 }) {
+  const pct = tot > 0 ? (cnt / tot) * 100 : null;
   const pad = ["pl-3", "pl-9", "pl-[3.75rem]"][depth];
   const style = [
     "border-b border-border bg-muted/30 font-bold hover:bg-muted/50",
@@ -319,6 +348,13 @@ function NodeRow({
           {loading
             ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground/60" />
             : <ChevronRight className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground/60 transition-transform", open && "rotate-90")} />}
+          {pct != null && (
+            <span className="shrink-0" title={`${NF.format(cnt)} / ${NF.format(tot)} SKU×filial`}>
+              <Pill tone={rateBadgeTone(pct, rateTone)} className="px-1.5 py-0 text-[10px] font-bold tabular-nums">
+                {fmtPct(pct)}
+              </Pill>
+            </span>
+          )}
           <span className="truncate">{name}</span>
           <span className="text-[10px] font-normal text-muted-foreground">{NF.format(cnt)} ta</span>
         </span>

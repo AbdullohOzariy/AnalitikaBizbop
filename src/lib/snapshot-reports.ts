@@ -312,7 +312,8 @@ export type TreeAggRow = {
   gid: number; gname: string;
   cid: number; cname: string;
   sid: number; sname: string;
-  cnt: number;   // SKU×filial qatorlari soni
+  cnt: number;   // joriy view'ga tushgan SKU×filial qatorlari soni
+  tot: number;   // tugundagi JAMI faol qatorlar — foiz maxraji (cnt/tot)
   total: number; // OOS: savdo summasi; Stockday: muzlagan kapital (stock_value)
 };
 
@@ -330,18 +331,18 @@ export const oosTreeAgg = (f: SnapshotFilters, view: OosView) =>
       return prisma.$queryRaw<TreeAggRow[]>(Prisma.sql`
         WITH ${latestCte(f)}
         SELECT ${TREE_GROUPING},
-               count(*)::int AS cnt,
-               COALESCE(SUM(l."amount"), 0)::float8 AS total
+               count(*) FILTER (WHERE ${OOS_VIEW_COND[view]})::int AS cnt,
+               count(*)::int AS tot,
+               COALESCE(SUM(l."amount") FILTER (WHERE ${OOS_VIEW_COND[view]}), 0)::float8 AS total
         FROM latest l
         JOIN oagg a ON a."productId" = l."productId" AND a."branchId" = l."branchId"
         LEFT JOIN "Category" sub ON sub.id = l."categoryId"
         LEFT JOIN "Category" par ON par.id = sub."parentId"
         LEFT JOIN "CategoryGroup" g ON g.id = par."groupId"
-        WHERE ${OOS_VIEW_COND[view]}
         GROUP BY 1, 2, 3, 4, 5, 6
       `);
     },
-    ["oosTree_v1", filterKey(f), view],
+    ["oosTree_v2", filterKey(f), view],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
   )();
 
@@ -351,43 +352,51 @@ export const stockdayTreeAgg = (f: SnapshotFilters, view: StockView, todayStr: s
             return prisma.$queryRaw<TreeAggRow[]>(Prisma.sql`
         WITH ${sdCte(f, todayStr)}
         SELECT ${TREE_GROUPING},
-               count(*)::int AS cnt,
-               COALESCE(SUM(sd.stock_value), 0)::float8 AS total
+               count(*) FILTER (WHERE ${STOCK_VIEW_COND[view]})::int AS cnt,
+               -- Maxraj: zaxira kunlari hisoblangan qatorlar (KPI'dagi "Faol" bilan bir xil baza)
+               count(*) FILTER (WHERE sd.stock_days IS NOT NULL)::int AS tot,
+               COALESCE(SUM(sd.stock_value) FILTER (WHERE ${STOCK_VIEW_COND[view]}), 0)::float8 AS total
         FROM sd
         LEFT JOIN "Category" sub ON sub.id = sd."categoryId"
         LEFT JOIN "Category" par ON par.id = sub."parentId"
         LEFT JOIN "CategoryGroup" g ON g.id = par."groupId"
-        WHERE ${STOCK_VIEW_COND[view]}
         GROUP BY 1, 2, 3, 4, 5, 6
       `);
     },
-    ["stockdayTree_v3", filterKey(f), view, todayStr],
+    ["stockdayTree_v4", filterKey(f), view, todayStr],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
   )();
 
 // ─── Tekis agregatdan nested daraxt ────────────────────────────────────────────
 
-export type SnapTreeSub = { id: number; name: string; cnt: number; total: number };
-export type SnapTreeCat = { id: number; name: string; cnt: number; total: number; subs: SnapTreeSub[] };
-export type SnapTreeGroup = { id: number; name: string; cnt: number; total: number; cats: SnapTreeCat[] };
+export type SnapTreeSub = { id: number; name: string; cnt: number; tot: number; total: number };
+export type SnapTreeCat = { id: number; name: string; cnt: number; tot: number; total: number; subs: SnapTreeSub[] };
+export type SnapTreeGroup = { id: number; name: string; cnt: number; tot: number; total: number; cats: SnapTreeCat[] };
 
+/**
+ * Tekis agregatdan nested daraxt. `tot` (foiz maxraji) tugun bo'yicha to'liq
+ * yig'iladi — shuning uchun agregat bo'sh (cnt = 0) subkat'larni ham qaytaradi;
+ * ular yig'indiga kirgach ko'rinishdan chiqariladi (bo'lim foizi to'g'ri qolsin).
+ */
 export function buildSnapshotTree(rows: TreeAggRow[]): SnapTreeGroup[] {
   const groups = new Map<number, SnapTreeGroup>();
   const cats = new Map<string, SnapTreeCat>();
   for (const r of rows) {
     let g = groups.get(r.gid);
-    if (!g) { g = { id: r.gid, name: r.gname, cnt: 0, total: 0, cats: [] }; groups.set(r.gid, g); }
+    if (!g) { g = { id: r.gid, name: r.gname, cnt: 0, tot: 0, total: 0, cats: [] }; groups.set(r.gid, g); }
     const ck = `${r.gid}_${r.cid}`;
     let c = cats.get(ck);
-    if (!c) { c = { id: r.cid, name: r.cname, cnt: 0, total: 0, subs: [] }; cats.set(ck, c); g.cats.push(c); }
-    c.subs.push({ id: r.sid, name: r.sname, cnt: r.cnt, total: r.total });
-    c.cnt += r.cnt; c.total += r.total;
-    g.cnt += r.cnt; g.total += r.total;
+    if (!c) { c = { id: r.cid, name: r.cname, cnt: 0, tot: 0, total: 0, subs: [] }; cats.set(ck, c); g.cats.push(c); }
+    c.subs.push({ id: r.sid, name: r.sname, cnt: r.cnt, tot: r.tot, total: r.total });
+    c.cnt += r.cnt; c.tot += r.tot; c.total += r.total;
+    g.cnt += r.cnt; g.tot += r.tot; g.total += r.total;
   }
-  const out = [...groups.values()];
+  const out = [...groups.values()].filter((g) => g.cnt > 0);
   for (const g of out) {
-    g.cats.sort((a, b) => b.total - a.total || b.cnt - a.cnt);
-    for (const c of g.cats) c.subs.sort((a, b) => b.total - a.total || b.cnt - a.cnt);
+    g.cats = g.cats.filter((c) => c.cnt > 0).sort((a, b) => b.total - a.total || b.cnt - a.cnt);
+    for (const c of g.cats) {
+      c.subs = c.subs.filter((s) => s.cnt > 0).sort((a, b) => b.total - a.total || b.cnt - a.cnt);
+    }
   }
   out.sort((a, b) => b.total - a.total || b.cnt - a.cnt);
   return out;

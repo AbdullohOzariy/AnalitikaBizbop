@@ -207,6 +207,8 @@ async function OosData({
               ctx={{ startStr: filters.startStr, endStr: filters.endStr, branchId: filters.branchId, q: filters.q, view }}
               loadLeaves={oosLeavesAction as never}
               pillTone={view === "oos" ? "red" : view === "low" ? "amber" : "muted"}
+              // O'lik qoldiqda yuqori ulush "yomon" degani emas — rang bermaymiz
+              rateTone={view === "dead" ? "neutral" : "severity"}
               totalLabel="savdo"
             />
           )}

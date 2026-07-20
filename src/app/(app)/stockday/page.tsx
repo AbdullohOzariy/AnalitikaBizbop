@@ -233,6 +233,8 @@ async function StockdayData({
               ctx={{ startStr: filters.startStr, endStr: filters.endStr, branchId: filters.branchId, q: filters.q, view, todayStr }}
               loadLeaves={stockdayLeavesAction as never}
               pillTone={VIEW_META[view].pill}
+              // Normal zaxirada yuqori ulush yaxshi — faqat kritik/kam/ortiqchada ogohlantiramiz
+              rateTone={view === "normal" ? "neutral" : "severity"}
               totalLabel="qoldiq qiymati"
             />
           )}
