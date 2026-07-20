@@ -28,6 +28,7 @@ import {
 } from "@/lib/analytics-v2";
 import { dailyForecastSeries } from "@/lib/forecast";
 import { computeAbcXyz, abcDefaultStart } from "@/lib/abc-xyz";
+import { computeSupplierAbc } from "@/lib/supplier-abc";
 import { oosKpi, oosTreeAgg, stockdayKpi, stockdayTreeAgg } from "@/lib/snapshot-reports";
 import { isoDay } from "@/lib/date";
 
@@ -86,6 +87,8 @@ export async function warmAnalyticsCaches(reason: string): Promise<void> {
       () => dailyForecastSeries(def),
       // ABC/XYZ (default 3 oy)
       () => computeAbcXyz(abcStart, endStr),
+      // Postavshiklar ABC — SKU tahliliyu bir xil oyna
+      () => computeSupplierAbc(abcStart, endStr),
       // OOS / Stockday — KPI + daraxt agregati (default tab)
       () => oosKpi(snap),
       () => oosTreeAgg(snap, "oos"),

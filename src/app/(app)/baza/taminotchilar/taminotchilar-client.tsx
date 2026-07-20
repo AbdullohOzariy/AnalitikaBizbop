@@ -6,15 +6,29 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Plus, Loader2 as Loader2b, Trash2 } from "lucide-react";
+import { Plus, Loader2 as Loader2b, Trash2, ArrowUpDown } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { StatCard, EmptyState } from "@/components/common/page";
 import { Search, ChevronRight, X, Loader2, Truck, Package, Tags, IdCard } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { formatPercent } from "@/lib/format";
+import { skuBadgeCls, skuBadgeLabel, skuBadgeTitle } from "@/lib/sku-rang";
 import {
   supplierSubcatsAction, supplierSkusAction, createSupplierAction, deleteSupplierAction, type SupSub, type SupSku,
 } from "./actions";
 
-export type SupplierRow = { id: number; name: string; skuCount: number };
+export type SupplierRow = {
+  id: number;
+  name: string;
+  skuCount: number;
+  // Postavshik ABC×XYZ tahlili — savdo tushumi bo'yicha (oxirgi ~3 oy), server'da
+  // hisoblanadi (src/lib/supplier-abc.ts). Savdosi yo'q postavshik uchun hammasi null.
+  abc: "A" | "B" | "C" | null;
+  xyz: "X" | "Y" | "Z" | null;
+  share: number | null; // 0..1 — jami savdodagi ulush
+};
+
+const ABC_CLASSES = ["A", "B", "C"] as const;
 
 type SubState = { subs: SupSub[] } | "loading" | "error";
 type SkuState = { products: SupSku[]; total: number } | "loading" | "error";
@@ -47,12 +61,16 @@ export function TaminotchilarClient({ suppliers, canEdit = false }: { suppliers:
   const [openSub, setOpenSub] = useState<Set<string>>(new Set()); // `${supId}:${subId}`
   const [skuData, setSkuData] = useState<Map<string, SkuState>>(new Map());
   const [, startLoad] = useTransition();
+  const [abcFilter, setAbcFilter] = useState<"" | "A" | "B" | "C">("");
+  const [sortByShare, setSortByShare] = useState(false);
 
   const q = query.trim().toUpperCase();
-  const filtered = useMemo(
-    () => (q ? suppliers.filter((s) => s.name.toUpperCase().includes(q)) : suppliers),
-    [suppliers, q]
-  );
+  const filtered = useMemo(() => {
+    let list = q ? suppliers.filter((s) => s.name.toUpperCase().includes(q)) : suppliers;
+    if (abcFilter) list = list.filter((s) => s.abc === abcFilter);
+    if (sortByShare) list = [...list].sort((a, b) => (b.share ?? -1) - (a.share ?? -1));
+    return list;
+  }, [suppliers, q, abcFilter, sortByShare]);
   const totalSku = useMemo(() => suppliers.reduce((a, s) => a + s.skuCount, 0), [suppliers]);
 
   const toggleSup = (s: SupplierRow) => {
@@ -89,21 +107,56 @@ export function TaminotchilarClient({ suppliers, canEdit = false }: { suppliers:
         <StatCard label="Yetkazib beruvchisiz SKU" value="—" icon={Tags} hint="alohida hisoblanadi" />
       </div>
 
-      {/* Qidiruv */}
-      <div className="relative">
-        <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Yetkazib beruvchi nomi bo'yicha qidirish..."
-          className="h-9 pl-8 pr-8"
-        />
-        {query && (
-          <button onClick={() => setQuery("")} aria-label="Tozalash"
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-            <X className="h-3.5 w-3.5" />
-          </button>
-        )}
+      {/* Qidiruv + ABC filtr/saralash */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative min-w-[200px] flex-1">
+          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Yetkazib beruvchi nomi bo'yicha qidirish..."
+            className="h-9 pl-8 pr-8"
+          />
+          {query && (
+            <button onClick={() => setQuery("")} aria-label="Tozalash"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+        <div className="flex items-center gap-1" role="group" aria-label="ABC sinfi bo'yicha filtr">
+          {ABC_CLASSES.map((cls) => (
+            <button
+              key={cls}
+              type="button"
+              onClick={() => setAbcFilter((f) => (f === cls ? "" : cls))}
+              aria-pressed={abcFilter === cls}
+              title={`Faqat ${cls} sinf postavshiklarni ko'rsatish (savdo ulushi bo'yicha)`}
+              className={cn(
+                "h-9 w-9 rounded-md border text-xs font-bold transition-colors",
+                abcFilter === cls
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border text-muted-foreground hover:bg-secondary hover:text-foreground"
+              )}
+            >
+              {cls}
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={() => setSortByShare((s) => !s)}
+          aria-pressed={sortByShare}
+          title="Savdo ulushi bo'yicha (katta → kichik) saralash"
+          className={cn(
+            "inline-flex h-9 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors",
+            sortByShare
+              ? "border-primary bg-primary/10 text-primary"
+              : "border-border text-muted-foreground hover:bg-secondary hover:text-foreground"
+          )}
+        >
+          <ArrowUpDown className="h-3.5 w-3.5" /> {sortByShare ? "Ulush bo'yicha" : "Nomi bo'yicha"}
+        </button>
       </div>
 
       {canEdit && (
@@ -137,6 +190,19 @@ export function TaminotchilarClient({ suppliers, canEdit = false }: { suppliers:
                     <ChevronRight className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${sOpen ? "rotate-90" : ""}`} />
                     <Truck className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                     <span className="min-w-0 flex-1 truncate text-sm font-medium">{sup.name}</span>
+                    {sup.abc && (
+                      <span
+                        title={skuBadgeTitle(sup.abc, sup.xyz)}
+                        className={cn("shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-bold leading-none", skuBadgeCls(sup.abc, sup.xyz))}
+                      >
+                        {skuBadgeLabel(sup.abc, sup.xyz)}
+                      </span>
+                    )}
+                    {sup.share != null && (
+                      <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground" title="Jami savdo tushumidagi ulushi">
+                        {formatPercent(sup.share * 100)}
+                      </span>
+                    )}
                     <span className="inline-flex items-center gap-1 text-xs text-muted-foreground tabular-nums">
                       <Package className="h-3 w-3" /> {sup.skuCount.toLocaleString("uz-UZ")}
                     </span>

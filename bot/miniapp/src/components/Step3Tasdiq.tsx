@@ -106,6 +106,7 @@ export default function Step3Tasdiq({ tur, form, onBack, onDone }: Props) {
           filial: form.filial,
           yonalish: form.yonalish,
           taminotchi: form.yonalish === 'taminotchi' ? (form.taminotchi || null) : null,
+          taminotchi_id: form.yonalish === 'taminotchi' ? (form.taminotchiId ?? undefined) : undefined,
           status: form.vozvratStatus,
           qaytarilmadi_sabab: form.vozvratStatus === 'qaytarilmadi' ? form.qaytarilmadiSabab : null,
           rasm_file_id: fileId,

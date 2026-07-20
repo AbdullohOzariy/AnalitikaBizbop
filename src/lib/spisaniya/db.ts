@@ -474,6 +474,9 @@ export async function ensureSozlamalarSchema(): Promise<void> {
   )`).catch(() => {});
   // 1C/Prisma Product.code (SKU tanlangan bo'lsa) — miniapp katalogdan biriktiradi
   await p.query(`ALTER TABLE vozvratlar ADD COLUMN IF NOT EXISTS sku_kod INTEGER`).catch(() => {});
+  // Prisma Supplier.id (ta'minotchi picker'dan tanlangan bo'lsa) — cross-DB FK yo'q
+  // (Supplier asosiy Prisma bazada, vozvratlar bizbop bazasida), validatsiya route.ts'da.
+  await p.query(`ALTER TABLE vozvratlar ADD COLUMN IF NOT EXISTS taminotchi_id INTEGER`).catch(() => {});
   _schemaReady = true;
 }
 
@@ -487,6 +490,7 @@ export type VozvratKirim = {
   filial: string;
   yonalish: string;
   taminotchi?: string | null;
+  taminotchi_id?: number | null; // Prisma Supplier.id (miniapp picker'dan tanlansa)
   rasm_file_id?: string | null;
   xodim_ism: string;
   xodim_username?: string | null;
@@ -512,11 +516,15 @@ export type VozvratYozuv = {
   qaytarilmadi_sabab: string | null;
   chiqim_yozuv_id: number | null;
   vaqt: string;
+  /** 1C/Prisma Product.code — miniapp katalogidan tanlanganda to'ladi (Excel importda null). */
+  sku_kod: number | null;
+  /** Prisma Supplier.id — miniapp postavshik pickeridan tanlanganda to'ladi. */
+  taminotchi_id: number | null;
 };
 
 const VOZVRAT_COLS = `id, tovar, miqdor::float8, birlik, summa::float8, sabab, filial,
   yonalish, taminotchi, rasm_file_id, xodim_ism, status, qaytarilmadi_sabab,
-  chiqim_yozuv_id, vaqt::text`;
+  chiqim_yozuv_id, vaqt::text, sku_kod::int, taminotchi_id::int`;
 
 /** Yangi vozvrat yaratadi (status xodim tomonidan tanlanadi). id qaytaradi. */
 export async function vozvratYarat(d: VozvratKirim): Promise<number> {
@@ -526,13 +534,14 @@ export async function vozvratYarat(d: VozvratKirim): Promise<number> {
   const yonalish = d.yonalish === "taminotchi" ? "taminotchi" : "asosiy_filial";
   const { rows } = await p.query(
     `INSERT INTO vozvratlar
-       (tovar, miqdor, birlik, summa, sabab, filial, yonalish, taminotchi,
+       (tovar, miqdor, birlik, summa, sabab, filial, yonalish, taminotchi, taminotchi_id,
         rasm_file_id, xodim_ism, xodim_username, xodim_id, status, qaytarilmadi_sabab, sku_kod)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
      RETURNING id`,
     [
       d.tovar, d.miqdor, d.birlik || "dona", d.summa, d.sabab || null, d.filial,
       yonalish, yonalish === "taminotchi" ? d.taminotchi || null : null,
+      yonalish === "taminotchi" ? d.taminotchi_id ?? null : null,
       d.rasm_file_id || null, d.xodim_ism, d.xodim_username || null, d.xodim_id,
       status, status === "qaytarilmadi" ? d.qaytarilmadi_sabab || null : null,
       d.sku_kod ?? null,
@@ -625,6 +634,33 @@ export async function vozvratKanban(
   }
 }
 
+/**
+ * TARIX uchun: BARCHA vozvratlar (chiqimga o'tkazilganlar HAM) — postavshik profili.
+ *
+ * `vozvratKanban` dan farqi ATAYLAB: bu yerda `chiqim_yozuv_id IS NULL` sharti YO'Q.
+ * Kanban — bajarilishi kerak bo'lgan ochiq ishlar; postavshik profili esa qaytarilgan
+ * tovarlar TARIXINI ko'rsatadi, hisobdan chiqarilganlari ham hisobga kirishi shart.
+ *
+ * Postavshik bo'yicha filtrlash bu yerda MUMKIN EMAS — `vozvratlar` alohida bazada,
+ * Supplier esa Prisma'da; moslik `@/lib/vozvrat-supplier` orqali JS tarafida bo'ladi.
+ * Jonli hajm kichik (~270 qator), shuning uchun hammasi o'qilib keyin filtrlanadi.
+ */
+export async function vozvratlarTarixi(limit = 20_000): Promise<VozvratYozuv[]> {
+  const p = getPool();
+  if (!p) return [];
+  try {
+    await ensureSozlamalarSchema();
+    const { rows } = await p.query(
+      `SELECT ${VOZVRAT_COLS} FROM vozvratlar ORDER BY vaqt DESC LIMIT $1`,
+      [limit]
+    );
+    return rows as VozvratYozuv[];
+  } catch (err) {
+    logDbXato(err);
+    return [];
+  }
+}
+
 /** Yuqori summary: qaytarilgan va qaytarilmagan summa (davr bo'yicha). */
 export async function vozvratSummary(
   range: ChiqimRange,
@@ -666,6 +702,7 @@ export async function vozvratHolatYangila(
 ): Promise<VozvratYozuv | null> {
   if (!VOZVRAT_HOLATLAR.includes(status as VozvratHolat)) throw new Error("Noto'g'ri status");
   const p = requirePool();
+  await ensureSozlamalarSchema(); // VOZVRAT_COLS ichidagi sku_kod ustuni tayyor bo'lsin
   const { rows } = await p.query(
     `UPDATE vozvratlar
        SET status=$1::text,
@@ -745,6 +782,7 @@ export async function vozvratYangila(
   if (patch.status !== undefined && !VOZVRAT_HOLATLAR.includes(patch.status as VozvratHolat))
     throw new Error("Noto'g'ri status");
   const p = requirePool();
+  await ensureSozlamalarSchema(); // VOZVRAT_COLS ichidagi sku_kod ustuni tayyor bo'lsin
   const sets: string[] = [];
   const vals: unknown[] = [];
   let i = 1;

@@ -1,15 +1,22 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { isoDay } from "@/lib/date";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { canSeeSuppliers, canEditSuppliers } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
-import { Truck, ArrowLeft, Layers, Clock, FileText, ShoppingCart, Users, Star } from "lucide-react";
+import { Truck, ArrowLeft, Layers, Clock, FileText, ShoppingCart, Users, Star, PieChart } from "lucide-react";
 import { PageHeader, StatCard } from "@/components/common/page";
+import { Skeleton } from "@/components/ui/skeleton";
+import { formatUZS, formatPercent } from "@/lib/format";
+import { computeSupplierAbc, supplierAbcMap, abcDefaultStart } from "@/lib/supplier-abc";
+import { skuBadgeCls, skuBadgeLabel, skuBadgeTitle } from "@/lib/sku-rang";
 import type { ContractRow, AgentRow, SupplierTerms, BranchProfileRow } from "../actions";
+import { supplierVozvratlarAction } from "../actions";
 import { ProfilHeader, OrderDaysCalendar, LeadTimeEditor, ContractsSection, AgentsSection, AssignSkusSection, type ProfilSku } from "./profil-client";
 import { SupplierTermsSection, BranchProfilesSection } from "./terms-client";
 import { ZakazTarixiSection, type OrderHistoryRow } from "./zakaz-tarixi";
+import { VozvratTarixiSection } from "./vozvrat-tarixi";
 import { supplierOrderHistoryAction } from "@/app/(app)/sotuv/sotib-olish/actions";
 
 export const dynamic = "force-dynamic";
@@ -29,7 +36,7 @@ export default async function SupplierProfilePage({
   const supplierId = Number(id);
   if (!Number.isFinite(supplierId)) notFound();
 
-  const [supplier, products, orderCount, ratingAgg, branchList, orderHistoryRes] = await Promise.all([
+  const [supplier, products, orderCount, ratingAgg, branchList, orderHistoryRes, vozvratRes] = await Promise.all([
     prisma.supplier.findUnique({
       where: { id: supplierId },
       include: {
@@ -74,6 +81,7 @@ export default async function SupplierProfilePage({
     }),
     prisma.branch.findMany({ orderBy: { sortOrder: "asc" }, select: { id: true, name: true } }),
     supplierOrderHistoryAction(supplierId),
+    supplierVozvratlarAction(supplierId),
   ]);
   if (!supplier) notFound();
   const avgRating = ratingAgg._avg.rating;
@@ -195,6 +203,16 @@ export default async function SupplierProfilePage({
           hint="shu yetkazib beruvchiga berilgan" />
       </div>
 
+      {/* ABC sinfi — og'ir hisob (sovuq yuklashda ~3s), Suspense'da alohida oqib keladi;
+          sahifaning qolgan qismi shu bilan bog'liq bo'lmasdan darhol ko'rinadi. */}
+      <Suspense fallback={
+        <div className="grid gap-3 sm:grid-cols-3">
+          {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-[92px] w-full rounded-2xl" />)}
+        </div>
+      }>
+        <SupplierAbcStat supplierId={supplier.id} />
+      </Suspense>
+
       {/* Baho + kontakt */}
       <ProfilHeader
         canEdit={canEdit}
@@ -229,6 +247,48 @@ export default async function SupplierProfilePage({
       </div>
 
       <ZakazTarixiSection orders={orderHistory} error={orderHistoryError} />
+      <VozvratTarixiSection data={vozvratRes.ok ? vozvratRes.data : null} error={vozvratRes.ok ? null : vozvratRes.error} />
+    </div>
+  );
+}
+
+// Og'ir qism — postavshik ABC×XYZ tahlili (jamlangan hisob, keshlangan; sovuq
+// yuklashda ~3s). Suspense ichida alohida oqib keladi, qolgan sahifa kutmaydi.
+async function SupplierAbcStat({ supplierId }: { supplierId: number }) {
+  const end = new Date();
+  const startStr = isoDay(abcDefaultStart(end));
+  const endStr = isoDay(end);
+  const result = await computeSupplierAbc(startStr, endStr);
+  const row = supplierAbcMap(result).get(supplierId);
+
+  return (
+    <div className="grid gap-3 sm:grid-cols-3">
+      <StatCard
+        label="ABC×XYZ sinfi"
+        value={
+          row ? (
+            <span
+              title={skuBadgeTitle(row.abc, row.xyz)}
+              className={`rounded border px-2 py-0.5 text-lg font-bold leading-none ${skuBadgeCls(row.abc, row.xyz)}`}
+            >
+              {skuBadgeLabel(row.abc, row.xyz)}
+            </span>
+          ) : "—"
+        }
+        icon={PieChart}
+        tone={row ? (row.abc === "A" ? "green" : row.abc === "B" ? "orange" : "red") : "default"}
+        hint={row ? skuBadgeTitle(row.abc, row.xyz) : `${startStr} – ${endStr} davrida savdo yo'q`}
+      />
+      <StatCard
+        label="Savdo ulushi"
+        value={row ? formatPercent(row.share * 100) : "—"}
+        hint={row ? `${startStr} – ${endStr} davri uchun (butun savdoga nisbatan)` : undefined}
+      />
+      <StatCard
+        label="Savdo summasi"
+        value={row ? formatUZS(row.total, { compact: true }) : "—"}
+        hint={row ? `${row.qty.toLocaleString("uz-UZ")} dona · ${row.skuCount} SKU` : undefined}
+      />
     </div>
   );
 }

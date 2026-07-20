@@ -9,6 +9,9 @@ import { Prisma } from "@/generated/prisma/client";
 import { ANALYTICS_CACHE_TAG } from "@/lib/analytics";
 import { auth } from "@/auth";
 import { canSeeSuppliers, canEditSuppliers } from "@/lib/roles";
+import { botConfigured, vozvratlarTarixi } from "@/lib/spisaniya/db";
+import { buildSupplierMatcher, type VozvratMatchConfidence } from "@/lib/vozvrat-supplier";
+import { decimalToNumber } from "@/lib/format";
 
 // Yetkazib beruvchilar bo'limi guard'lari: ko'rish — admin darajasi + SUPPLYCHAIN;
 // tahrir — SYSTEM_ADMIN + SUPPLYCHAIN (read-only ADMIN tahrir qila olmaydi).
@@ -777,5 +780,183 @@ export async function updateSupplierBranchProfileAction(input: z.input<typeof br
     return { ok: true };
   } catch (err) {
     return actionError(err, "supplierBranchProfile");
+  }
+}
+
+// ─── Postavshik vozvratlari (bizbop bazasidan, JS tarafida moslashtiriladi) ───
+// `vozvratlar` ALOHIDA bazada (BOT_DATABASE_URL) — Prisma bilan JOIN mumkin emas.
+// Shuning uchun: barcha vozvratlar o'qiladi → `@/lib/vozvrat-supplier` matcher'i
+// bilan Supplier'ga bog'lanadi → shu postavshiknikilar ajratiladi.
+
+export type VozvratQator = {
+  id: number;
+  vaqt: string; // "2026-01-05T10:23:11" — naive (bizbop TIMESTAMP), UI shu formatni kutadi
+  tovar: string;
+  miqdor: number;
+  birlik: string;
+  summa: number;
+  sabab: string | null;
+  filial: string;
+  status: string;
+  taminotchiMatn: string | null; // xom matn — nega shu postavshikka biriktirilgani ko'rinsin
+  skuKod: number | null;
+  confidence: VozvratMatchConfidence;
+};
+
+export type VozvratTopSku = { tovar: string; skuKod: number | null; soni: number; summa: number };
+
+export type SupplierVozvratlar = {
+  rows: VozvratQator[];
+  jamiSoni: number;
+  jamiSumma: number;
+  topSkular: VozvratTopSku[];
+  /** Butun bazadagi moslik qamrovi — "81% biriktirilgan" izohi uchun. */
+  qamrov: { biriktirilgan: number; jami: number };
+  /** vozvrat summa ÷ shu davrdagi savdo summa. Maxraj 0/yo'q → null. */
+  vozvratUlushi: number | null;
+  /** Nisbat hisoblangan davr (barcha vozvratlar qamrovi), YYYY-MM-DD. */
+  davr: { start: string; end: string } | null;
+  /** Maxraj — shu davrda postavshik SKU'lari bo'yicha savdo (ProductSales.amount). */
+  savdoSumma: number | null;
+};
+
+const vozvratOptsSchema = z.object({
+  supplierId: z.coerce.number().int().positive(),
+  limit: z.coerce.number().int().min(1).max(2000).default(300),
+});
+
+/** "2026-01-05 10:23:11" → "2026-01-05T10:23:11" (mavjud vozvrat UI'lari shu formatda). */
+function toIsoish(vaqt: string): string {
+  return vaqt.replace(" ", "T");
+}
+
+/** `vaqt` matnidan kun (YYYY-MM-DD). */
+const kun = (vaqt: string) => vaqt.slice(0, 10);
+
+/**
+ * Yetkazib beruvchining vozvrat tarixi + moslik qamrovi + vozvrat ulushi.
+ *
+ * DIQQAT: qatorlarning bir qismi TAXMINIY biriktirilgan (erkin matnli `taminotchi`
+ * imlo xatolari bilan) — har qatorda `confidence` qaytadi, UI shuni ko'rsatsin.
+ */
+export async function supplierVozvratlarAction(
+  supplierId: number,
+  opts?: { limit?: number }
+): Promise<{ ok: true; data: SupplierVozvratlar } | { ok: false; error: string }> {
+  try {
+    await requireSupplierViewer();
+    const p = vozvratOptsSchema.parse({ supplierId, limit: opts?.limit ?? 300 });
+
+    if (!botConfigured()) {
+      return { ok: false, error: "Hisobdan chiqarish (bot) bazasi ulanmagan — vozvratlar ko'rsatilmaydi." };
+    }
+
+    const [hammasi, suppliers] = await Promise.all([
+      vozvratlarTarixi(),
+      prisma.supplier.findMany({ select: { id: true, name: true } }),
+    ]);
+    if (hammasi.length === 0) {
+      return {
+        ok: true,
+        data: {
+          rows: [], jamiSoni: 0, jamiSumma: 0, topSkular: [],
+          qamrov: { biriktirilgan: 0, jami: 0 },
+          vozvratUlushi: null, davr: null, savdoSumma: null,
+        },
+      };
+    }
+
+    // sku_kod → supplierId (faqat uchraydigan kodlar so'raladi, butun katalog emas)
+    const kodlar = [...new Set(hammasi.map((r) => r.sku_kod).filter((c): c is number => c != null))];
+    const products = kodlar.length
+      ? await prisma.product.findMany({
+          where: { code: { in: kodlar } },
+          select: { code: true, supplierId: true },
+        })
+      : [];
+    const kodBoyicha = new Map(products.map((pr) => [pr.code, pr.supplierId]));
+
+    // Moslik jadvali BIR MARTA quriladi, keyin 268 qator bo'yicha ishlatiladi.
+    const matcher = buildSupplierMatcher(suppliers, kodBoyicha);
+
+    let biriktirilgan = 0;
+    const meniki: VozvratQator[] = [];
+    for (const r of hammasi) {
+      const m = matcher.match({
+        taminotchiId: r.taminotchi_id,
+        skuKod: r.sku_kod,
+        taminotchi: r.taminotchi,
+      });
+      if (m.supplierId != null) biriktirilgan++;
+      if (m.supplierId !== p.supplierId) continue;
+      meniki.push({
+        id: r.id,
+        vaqt: toIsoish(r.vaqt),
+        tovar: r.tovar,
+        miqdor: r.miqdor,
+        birlik: r.birlik,
+        summa: r.summa,
+        sabab: r.sabab,
+        filial: r.filial,
+        status: r.status,
+        taminotchiMatn: r.taminotchi,
+        skuKod: r.sku_kod,
+        confidence: m.confidence,
+      });
+    }
+
+    const jamiSumma = meniki.reduce((s, r) => s + r.summa, 0);
+
+    // Top-10 SKU — tovar nomi bo'yicha (sku_kod ko'p qatorda null, nom kanonikroq).
+    const yigma = new Map<string, VozvratTopSku>();
+    for (const r of meniki) {
+      const kalit = r.tovar || "—";
+      const bor = yigma.get(kalit);
+      if (bor) {
+        bor.soni += 1;
+        bor.summa += r.summa;
+        if (bor.skuKod == null) bor.skuKod = r.skuKod;
+      } else {
+        yigma.set(kalit, { tovar: kalit, skuKod: r.skuKod, soni: 1, summa: r.summa });
+      }
+    }
+    const topSkular = [...yigma.values()].sort((a, b) => b.summa - a.summa).slice(0, 10);
+
+    // Vozvrat ulushi — BARCHA vozvratlar davri bo'yicha (postavshikning o'z davri emas:
+    // bitta haftalik vozvrat oylik sotuv davriga bo'linsa nisbat sun'iy kichrayadi;
+    // umumiy oyna esa postavshiklarni bir-biriga solishtirsa bo'ladigan qiladi).
+    const kunlar = hammasi.map((r) => kun(r.vaqt)).filter(Boolean).sort();
+    const davr = kunlar.length ? { start: kunlar[0], end: kunlar[kunlar.length - 1] } : null;
+
+    let savdoSumma: number | null = null;
+    if (davr) {
+      const agg = await prisma.productSales.aggregate({
+        _sum: { amount: true },
+        where: {
+          product: { supplierId: p.supplierId },
+          // davr-overlap: sotuv davri vozvrat oynasiga tegib o'tsa hisobga olinadi
+          periodStart: { lte: new Date(davr.end + "T00:00:00.000Z") },
+          periodEnd: { gte: new Date(davr.start + "T00:00:00.000Z") },
+        },
+      });
+      savdoSumma = decimalToNumber(agg._sum.amount);
+    }
+    const vozvratUlushi = savdoSumma && savdoSumma > 0 ? jamiSumma / savdoSumma : null;
+
+    return {
+      ok: true,
+      data: {
+        rows: meniki.slice(0, p.limit),
+        jamiSoni: meniki.length,
+        jamiSumma,
+        topSkular,
+        qamrov: { biriktirilgan, jami: hammasi.length },
+        vozvratUlushi,
+        davr,
+        savdoSumma,
+      },
+    };
+  } catch (err) {
+    return actionError(err, "supplierVozvratlar");
   }
 }

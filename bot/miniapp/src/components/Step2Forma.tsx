@@ -7,6 +7,7 @@ import { useSabablar } from '../hooks/useSabablar'
 import PhotoUpload from './PhotoUpload'
 import StepHeader from './StepHeader'
 import SkuPicker, { type SkuTanlov } from './SkuPicker'
+import SupplierPicker, { type TaminotchiTanlov } from './SupplierPicker'
 import { Button } from './ui/Button'
 
 type Tur = 'vozvrat' | 'kafe' | 'ovqatlanish' | 'spisaniya' | 'ichki_sotuv' | 'qaytarish'
@@ -34,6 +35,8 @@ export interface FormData {
   kafeNomi: string
   yonalish: Yonalish
   taminotchi: string
+  // Ta'minotchi picker'dan tanlangan bo'lsa — Prisma Supplier.id; qo'lda kiritilsa null
+  taminotchiId: number | null
   vozvratStatus: VozvratHolat
   qaytarilmadiSabab: string
 }
@@ -90,13 +93,16 @@ export default function Step2Forma({ tur, onBack, onNext }: Props) {
   const [filialOpen, setFilialOpen] = useState(false)
   const [pickerOchiq, setPickerOchiq] = useState(false)
   const [qolda, setQolda] = useState(false) // tovar qo'lda kiritish rejimi
+  const [taminotchiPickerOchiq, setTaminotchiPickerOchiq] = useState(false)
+  const [taminotchiQolda, setTaminotchiQolda] = useState(false) // ta'minotchi qo'lda kiritish rejimi
   const [form, setForm] = useState<FormData>({
     photo: null, photoBase64: null, photoSize: 0,
     qrPhoto: null, qrPhotoBase64: null, qrPhotoSize: 0,
     tovarNomi: '', skuKod: null, miqdor: '', birlik: 'dona', summa: '',
     sababTanlov: '',
     filial: '', firmaNomi: '', kafeNomi: '',
-    yonalish: 'asosiy_filial', taminotchi: '', vozvratStatus: 'xabar_berildi', qaytarilmadiSabab: '',
+    yonalish: 'asosiy_filial', taminotchi: '', taminotchiId: null,
+    vozvratStatus: 'xabar_berildi', qaytarilmadiSabab: '',
   })
 
   function set<K extends keyof FormData>(k: K, v: FormData[K]) {
@@ -111,6 +117,16 @@ export default function Step2Forma({ tur, onBack, onNext }: Props) {
 
   function skuTozala() {
     setForm(f => ({ ...f, tovarNomi: '', skuKod: null }))
+  }
+
+  function taminotchiTanlandi(t: TaminotchiTanlov) {
+    setForm(f => ({ ...f, taminotchi: t.nomi, taminotchiId: t.id }))
+    setTaminotchiPickerOchiq(false)
+    setTaminotchiQolda(false)
+  }
+
+  function taminotchiTozala() {
+    setForm(f => ({ ...f, taminotchi: '', taminotchiId: null }))
   }
 
   function handleFile(file: File, base64: string) {
@@ -405,13 +421,37 @@ export default function Step2Forma({ tur, onBack, onNext }: Props) {
 
             {form.yonalish === 'taminotchi' && (
               <Field label="Ta'minotchi nomi (ixtiyoriy)" icon={<Building2 className="w-3.5 h-3.5" />} delay={0.28}>
-                <input
-                  type="text"
-                  value={form.taminotchi}
-                  onChange={e => set('taminotchi', e.target.value)}
-                  placeholder="Masalan: Nestlé Uzbekistan"
-                  className="w-full bg-transparent text-[15px] text-tg-text placeholder:text-tg-hint/60 outline-none"
-                />
+                {form.taminotchiId !== null ? (
+                  <div className="flex items-center gap-2">
+                    <span className="flex-1 min-w-0 text-[15px] font-medium text-tg-text leading-snug">
+                      {form.taminotchi}
+                    </span>
+                    <button onClick={taminotchiTozala} aria-label="Ta'minotchini tozalash"
+                      className="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-tg-hint active:bg-black/[.05]">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : taminotchiQolda ? (
+                  <>
+                    <input
+                      type="text"
+                      value={form.taminotchi}
+                      onChange={e => set('taminotchi', e.target.value)}
+                      placeholder="Masalan: Nestlé Uzbekistan"
+                      className="w-full bg-transparent text-[15px] text-tg-text placeholder:text-tg-hint/60 outline-none"
+                    />
+                    <button onClick={() => { setTaminotchiQolda(false); setTaminotchiPickerOchiq(true) }}
+                      className="mt-2 text-[12px] font-semibold text-tg-btn active:opacity-70">
+                      Ro'yxatdan tanlash
+                    </button>
+                  </>
+                ) : (
+                  <button onClick={() => setTaminotchiPickerOchiq(true)}
+                    className="w-full flex items-center justify-between text-left active:opacity-70">
+                    <span className="text-[15px] text-tg-hint/60">Ro'yxatdan tanlang</span>
+                    <ChevronRight className="w-4 h-4 text-tg-hint" />
+                  </button>
+                )}
               </Field>
             )}
 
@@ -461,6 +501,17 @@ export default function Step2Forma({ tur, onBack, onNext }: Props) {
             onPick={skuTanlandi}
             onQolda={() => { setPickerOchiq(false); setQolda(true) }}
             onClose={() => setPickerOchiq(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Ta'minotchi picker sheet */}
+      <AnimatePresence>
+        {taminotchiPickerOchiq && (
+          <SupplierPicker
+            onPick={taminotchiTanlandi}
+            onQolda={() => { setTaminotchiPickerOchiq(false); setTaminotchiQolda(true) }}
+            onClose={() => setTaminotchiPickerOchiq(false)}
           />
         )}
       </AnimatePresence>

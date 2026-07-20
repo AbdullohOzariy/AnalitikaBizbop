@@ -23,6 +23,8 @@ const schema = z.object({
   filial: z.string().trim().min(1).max(100),
   yonalish: z.enum(["asosiy_filial", "taminotchi"]),
   taminotchi: z.string().trim().max(255).optional().nullable(),
+  // Picker orqali tanlangan bo'lsa — Prisma Supplier.id
+  taminotchi_id: z.number().int().positive().optional().nullable(),
   // status — lenient: eski qiymat kelsa ham vozvratYarat joriy holatga normallashtiradi
   status: z.string().trim().optional(),
   qaytarilmadi_sabab: z.string().trim().max(500).optional().nullable(),
@@ -70,11 +72,29 @@ export async function POST(req: Request) {
     else skuKod = null;
   }
 
+  // Ta'minotchi picker orqali tanlangan bo'lsa — nom haqiqat manbai Supplier (sku_kod
+  // bilan bir xil sabab: yaroqsiz id JIMGINA e'tiborsiz qoldiriladi, 400 farqi
+  // mavjudlik-probing oracle bo'lardi). yonalish "taminotchi" bo'lmasa id e'tiborga olinmaydi.
+  let taminotchi = parsed.data.taminotchi ?? null;
+  let taminotchiId: number | null = parsed.data.taminotchi_id ?? null;
+  if (parsed.data.yonalish === "taminotchi" && taminotchiId != null) {
+    const sup = await prisma.supplier.findUnique({
+      where: { id: taminotchiId },
+      select: { name: true },
+    });
+    if (sup) taminotchi = sup.name.slice(0, 255);
+    else taminotchiId = null;
+  } else {
+    taminotchiId = null;
+  }
+
   // Xodimni imzodan olamiz (soxtalashtirilmasin).
   const d = {
     ...parsed.data,
     tovar,
     sku_kod: skuKod,
+    taminotchi,
+    taminotchi_id: taminotchiId,
     xodim_id: user.id,
     xodim_ism: [user.first_name, user.last_name].filter(Boolean).join(" ") || "Noma'lum",
     xodim_username: user.username ?? null,

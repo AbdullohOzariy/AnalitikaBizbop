@@ -24,6 +24,70 @@ export const ABC_B_LIMIT = 0.95;
 export const XYZ_X_LIMIT = 0.25;
 export const XYZ_Y_LIMIT = 0.5;
 
+// ─── Umumiy tasniflash yadrosi (SKU / postavshik / ... uchun bir manba) ────────
+// Pareto + CV mantiqi tasniflanayotgan obyekt turiga BOG'LIQ EMAS — u faqat
+// {total, sumsq} va davrlar sonidan hisoblanadi. Shuning uchun bu yerda bir marta
+// yozilgan; `supplier-abc.ts` ham shu funksiyadan foydalanadi (dublikat mantiq yo'q).
+
+/** Chegaralar to'plami — daraja (SKU/postavshik) o'zgarganda faqat shu obyekt almashadi. */
+export type AbcXyzLimits = {
+  abcA: number; // kumulyativ ulush ≤ abcA → A
+  abcB: number; // kumulyativ ulush ≤ abcB → B, qolgani C
+  xyzX: number; // CV ≤ xyzX → X
+  xyzY: number; // CV ≤ xyzY → Y, qolgani Z
+};
+
+/** SKU darajasidagi kanonik chegaralar (mavjud xulq — o'zgartirilmaydi). */
+export const SKU_ABC_XYZ_LIMITS: AbcXyzLimits = {
+  abcA: ABC_A_LIMIT,
+  abcB: ABC_B_LIMIT,
+  xyzX: XYZ_X_LIMIT,
+  xyzY: XYZ_Y_LIMIT,
+};
+
+/** Tasniflash uchun minimal kirish: davr bo'yicha yig'indi va kvadratlar yig'indisi. */
+export type AbcXyzInput = {
+  total: number; // Σ savdo summasi
+  sumsq: number; // Σ (davr savdosi)² — populyatsion dispersiya uchun
+};
+
+export type AbcXyzClasses = {
+  share: number; // jami savdoga ulush (0..1)
+  cum: number;   // kumulyativ ulush (0..1)
+  cv: number;    // variatsiya koeffitsiyenti
+  abc: AbcClass;
+  xyz: XyzClass;
+};
+
+/**
+ * Kamayish tartibida (total DESC) SARALANGAN qatorlarni ABC/XYZ ga ajratadi.
+ * Kirish tartibi saqlanadi — natija indeksi kirish indeksiga mos.
+ *
+ * XYZ: populyatsion dispersiya, sotilmagan davrlar 0 sifatida kiradi:
+ * μ = Σs/N, σ² = Σs²/N − μ² (N — umumiy davrlar soni, obyektniki emas).
+ */
+export function classifyAbcXyz(
+  rows: readonly AbcXyzInput[],
+  nPeriods: number,
+  limits: AbcXyzLimits = SKU_ABC_XYZ_LIMITS
+): { totalAmount: number; classes: AbcXyzClasses[] } {
+  const totalAmount = rows.reduce((s, r) => s + r.total, 0);
+
+  let cum = 0;
+  const classes = rows.map((r) => {
+    const share = totalAmount > 0 ? r.total / totalAmount : 0;
+    cum += share;
+    const abc: AbcClass = cum <= limits.abcA ? "A" : cum <= limits.abcB ? "B" : "C";
+    const mean = nPeriods > 0 ? r.total / nPeriods : 0;
+    const variance = nPeriods > 0 ? Math.max(0, r.sumsq / nPeriods - mean * mean) : 0;
+    const cv = mean > 0 ? Math.sqrt(variance) / mean : 0;
+    const xyz: XyzClass = cv <= limits.xyzX ? "X" : cv <= limits.xyzY ? "Y" : "Z";
+    return { share, cum, cv, abc, xyz };
+  });
+
+  return { totalAmount, classes };
+}
+
 /**
  * Default ABC/XYZ oynasining boshlanishi: tugash oyidan 2 oy oldingi oyning 1-kuni
  * (jami ~3 oy — XYZ uchun tarix kerak). Bir manba: sahifa, eksport route,
@@ -116,28 +180,17 @@ async function _computeAbcXyz(
   ]);
 
   const nPeriods = periodRes[0]?.n ?? 0;
-  const totalAmount = raw.reduce((s, r) => s + r.total, 0);
+  // Tasniflash — umumiy yadro (SKU chegaralari bilan); `raw` allaqachon total DESC
+  const { totalAmount, classes } = classifyAbcXyz(raw, nPeriods, SKU_ABC_XYZ_LIMITS);
 
-  let cum = 0;
-  const rows: SkuAnaliz[] = raw.map((r) => {
-    const share = totalAmount > 0 ? r.total / totalAmount : 0;
-    cum += share;
-    const abc: AbcClass = cum <= ABC_A_LIMIT ? "A" : cum <= ABC_B_LIMIT ? "B" : "C";
-    // Populyatsion dispersiya, sotilmagan davrlar 0 sifatida kiradi:
-    // μ = Σs/N, σ² = Σs²/N − μ² (N — umumiy davrlar soni, mahsulotniki emas)
-    const mean = nPeriods > 0 ? r.total / nPeriods : 0;
-    const variance = nPeriods > 0 ? Math.max(0, r.sumsq / nPeriods - mean * mean) : 0;
-    const cv = mean > 0 ? Math.sqrt(variance) / mean : 0;
-    const xyz: XyzClass = cv <= XYZ_X_LIMIT ? "X" : cv <= XYZ_Y_LIMIT ? "Y" : "Z";
-    return {
-      id: r.id, code: r.code, name: r.name,
-      subId: r.subId, subName: r.subName,
-      catId: r.catId, catName: r.catName,
-      groupId: r.groupId, groupName: r.groupName,
-      total: r.total, qty: r.qty,
-      share, cum, cv, abc, xyz,
-    };
-  });
+  const rows: SkuAnaliz[] = raw.map((r, i) => ({
+    id: r.id, code: r.code, name: r.name,
+    subId: r.subId, subName: r.subName,
+    catId: r.catId, catName: r.catName,
+    groupId: r.groupId, groupName: r.groupName,
+    total: r.total, qty: r.qty,
+    ...classes[i],
+  }));
 
   return { rows, nPeriods, totalAmount };
 }
