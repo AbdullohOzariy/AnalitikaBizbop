@@ -1145,3 +1145,99 @@ export async function chiqimExportRows(
     return [];
   }
 }
+
+// ─── SABABLAR (spisaniya sabablari — miniapp bilan UMUMIY jadval) ─────────────
+// BotBizBopSPS (spisaniya-bot mini app) ham shu `sabablar` jadvalini o'qiydi —
+// sxema AYNAN moslashishi SHART (o'zgartirmang). Seed FAQAT jadval bo'sh bo'lganda
+// (admin qo'lda o'chirgan sababni qayta tiklamaslik uchun).
+
+export type Sabab = { id: number; nomi: string; tartib: number; faol: boolean };
+
+// Boshlang'ich sabablar — shu tartibda (faqat bo'sh jadvalga qo'shiladi).
+const SABABLAR_SEED = [
+  "Tozalash-saralash chiqindisi",
+  "Xaridor tomonidan shikast yetkazilgan",
+  "Yangi tovar (sinov uchun olingandi)",
+  "Assortiment uchun zakaz berilgan",
+  "Noto'g'ri tashish",
+  "Ortiqcha ta'minot",
+] as const;
+
+let _sabablarReady = false;
+/** `sabablar` jadvalini ta'minlaydi (CREATE IF NOT EXISTS) + bo'sh bo'lsa seed qiladi. */
+export async function ensureSabablarSchema(): Promise<void> {
+  if (_sabablarReady) return;
+  const p = requirePool();
+  await p.query(`CREATE TABLE IF NOT EXISTS sabablar (
+    id         SERIAL PRIMARY KEY,
+    nomi       VARCHAR(255) NOT NULL UNIQUE,
+    tartib     INTEGER NOT NULL DEFAULT 0,
+    faol       BOOLEAN NOT NULL DEFAULT TRUE,
+    yaratilgan TIMESTAMPTZ DEFAULT NOW()
+  )`);
+  // Seed faqat BO'SH jadvalga — admin o'chirgan sababni tiklamaymiz.
+  const { rows } = await p.query(`SELECT count(*)::int AS n FROM sabablar`);
+  if (((rows[0]?.n as number) ?? 0) === 0) {
+    const vals = SABABLAR_SEED.flatMap((nomi, i) => [nomi, i + 1]);
+    const tuples = SABABLAR_SEED.map((_, i) => `($${i * 2 + 1}, $${i * 2 + 2})`).join(", ");
+    // ON CONFLICT — parallel seed (ikki so'rov bir vaqtda) xavfsiz bo'lsin.
+    await p.query(
+      `INSERT INTO sabablar (nomi, tartib) VALUES ${tuples} ON CONFLICT (nomi) DO NOTHING`,
+      vals
+    );
+  }
+  _sabablarReady = true;
+}
+
+/** Barcha sabablar (faol + nofaol) — tartib, keyin nomi bo'yicha. Xatoda bo'sh qaytadi. */
+export async function sabablarRoyxat(): Promise<Sabab[]> {
+  const p = getPool();
+  if (!p) return [];
+  try {
+    await ensureSabablarSchema();
+    const { rows } = await p.query(
+      `SELECT id, nomi, tartib, faol FROM sabablar ORDER BY tartib, nomi`
+    );
+    return rows as Sabab[];
+  } catch (err) {
+    logDbXato(err);
+    return [];
+  }
+}
+
+/** Yangi sabab qo'shadi (tartib = joriy max + 1). id qaytaradi. Unique buzilishi (23505) yuqoriga tashlanadi. */
+export async function sababQosh(nomi: string): Promise<number> {
+  const p = requirePool();
+  await ensureSabablarSchema();
+  const { rows } = await p.query(
+    `INSERT INTO sabablar (nomi, tartib)
+     VALUES ($1, COALESCE((SELECT MAX(tartib) FROM sabablar), 0) + 1)
+     RETURNING id`,
+    [nomi]
+  );
+  return rows[0].id as number;
+}
+
+/** Sababni qisman yangilaydi (nomi / faol / tartib). O'zgargan bo'lsa true. Unique buzilishi yuqoriga tashlanadi. */
+export async function sababYangila(
+  id: number,
+  patch: { nomi?: string; faol?: boolean; tartib?: number }
+): Promise<boolean> {
+  const p = requirePool();
+  const sets: string[] = [];
+  const vals: unknown[] = [];
+  let i = 1;
+  if (patch.nomi !== undefined)   { sets.push(`nomi=$${i++}`);   vals.push(patch.nomi); }
+  if (patch.faol !== undefined)   { sets.push(`faol=$${i++}`);   vals.push(patch.faol); }
+  if (patch.tartib !== undefined) { sets.push(`tartib=$${i++}`); vals.push(patch.tartib); }
+  if (!sets.length) return false;
+  vals.push(id);
+  const res = await p.query(`UPDATE sabablar SET ${sets.join(", ")} WHERE id=$${i}`, vals);
+  return (res.rowCount ?? 0) > 0;
+}
+
+/** Sababni o'chiradi. Yozuvlarda sabab MATN sifatida saqlanadi (FK yo'q) — o'chirish xavfsiz. */
+export async function sababOchir(id: number): Promise<void> {
+  const p = requirePool();
+  await p.query(`DELETE FROM sabablar WHERE id=$1`, [id]);
+}

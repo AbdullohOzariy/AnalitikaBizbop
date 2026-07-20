@@ -147,6 +147,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/chiqim/statistika", label: "Statistika",       icon: ChartPie,     roles: [SA, A, "CAT_MANAGER", "CEO", "SUPPLYCHAIN", "HEAD_CAT_MANAGER", "OPERATOR"] },
       { href: "/chiqim/vozvratlar", label: "Vozvratlar",       icon: Recycle,      roles: [SA, A, "CAT_MANAGER", "CEO", "SUPPLYCHAIN", "HEAD_CAT_MANAGER", "OPERATOR"] },
       { href: "/chiqim/moslash",    label: "Kategoriya moslash", icon: Tags,       roles: [SA, A] },
+      { href: "/chiqim/sabablar",   label: "Sabablar",         icon: ClipboardList, roles: [SA] },
     ],
   },
   {
