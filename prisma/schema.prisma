@@ -21,6 +21,8 @@ enum Role {
   MERCHANDISER // merchandayzer — faqat Promo (Aksiyalar) bo'limini ko'radi/tahrirlaydi
   OPERATOR // operator — faqat Hisobdan chiqarish va Sverkani KUZATADI (read-only)
   INVENTORY // inventar xodimi — sotuv hisobot (dashboard) + Inventarizatsiya bo'limi; miniapp'da sanash kiritadi
+  LOGIST // logistika nazoratchisi — reyslarni kuzatadi; fors-major holatda haydovchi nomidan tuzatadi
+  DRIVER // haydovchi — faqat miniapp: mashina tanlaydi, yo'lga chiqish / yetib borishni belgilaydi
 }
 
 // Promo (Aksiyalar) turi — har biri odatiy davom etish muddatiga ega
@@ -167,28 +169,29 @@ model Branch {
   sverkaTopicId Int? // sverka guruhidagi topic (message_thread_id) — Sozlamalar → Sverka'da
   createdAt     DateTime @default(now())
 
-  aliases        BranchAlias[]
-  sales          CategorySales[]
-  productSales   ProductSales[]
-  metrics        DailyMetrics[]
-  receiptMetrics DailyReceiptMetric[]
-  visits         DailyVisits[]
-  uploads        UploadedFile[]
-  salesPlans     SalesPlan[]
-  marginPlans    MarginPlan[]
-  forecastCurves ForecastCurve[]
-  forecastRuns   ForecastRun[]
-  forecastDays   ForecastDay[]
-  distributions  Distribution[]
-  transfersFrom  BranchTransfer[]     @relation("TransferFrom")
-  transfersTo    BranchTransfer[]     @relation("TransferTo")
-  batches        ProductBatch[]
-  promoCampaigns PromoCampaign[] // shu filialga oid promo aksiyalar (null = barcha filiallar)
+  aliases           BranchAlias[]
+  sales             CategorySales[]
+  productSales      ProductSales[]
+  metrics           DailyMetrics[]
+  receiptMetrics    DailyReceiptMetric[]
+  visits            DailyVisits[]
+  uploads           UploadedFile[]
+  salesPlans        SalesPlan[]
+  marginPlans       MarginPlan[]
+  forecastCurves    ForecastCurve[]
+  forecastRuns      ForecastRun[]
+  forecastDays      ForecastDay[]
+  distributions     Distribution[]
+  transfersFrom     BranchTransfer[]          @relation("TransferFrom")
+  transfersTo       BranchTransfer[]          @relation("TransferTo")
+  batches           ProductBatch[]
+  promoCampaigns    PromoCampaign[] // shu filialga oid promo aksiyalar (null = barcha filiallar)
   orderItemBranches PurchaseOrderItemBranch[] // zakaz qatorlarining shu filialga taqsimoti
   supplierProfiles  SupplierBranchProfile[] // yetkazib beruvchilarning shu filial profili
   userBranches      UserBranch[] // shu filialga biriktirilgan foydalanuvchilar (miniapp scope)
   inventoryItems    InventoryItem[] // shu filial uchun belgilangan inventar SKU'lari
   inventoryCounts   InventoryCount[] // shu filialdagi inventarizatsiya sanashlari
+  logisticsPoints   LogisticsPoint[] // shu filialga mos reys nuqtasi (odatda bitta)
 }
 
 model BranchAlias {
@@ -226,10 +229,10 @@ model Category {
   parent   Category?      @relation("CategoryParent", fields: [parentId], references: [id], onDelete: SetNull)
   children Category[]     @relation("CategoryParent")
 
-  aliases        CategoryAlias[]
-  sales          CategorySales[]
-  products       Product[]
-  managers       CategoryManager[]
+  aliases           CategoryAlias[]
+  sales             CategorySales[]
+  products          Product[]
+  managers          CategoryManager[]
   salesPlans        SalesPlan[]
   marginPlans       MarginPlan[]
   spisaniyaLinks    SpisaniyaCategoryLink[]
@@ -442,10 +445,10 @@ model Supplier {
   ehfMatch          Boolean? // Perechisleniya fakturada (EHF) 1:1 aks etadimi
   otsrochkaDays     Int? // otsrochka (30/45/60/90)
   debitorHas        Boolean? // debitorka limiti bormi
-  debitorLimit      Decimal? @db.Decimal(18, 2) // debitorka limiti summasi
-  discountPct       Decimal? @db.Decimal(6, 2) // asosiy chegirma %
+  debitorLimit      Decimal?     @db.Decimal(18, 2) // debitorka limiti summasi
+  discountPct       Decimal?     @db.Decimal(6, 2) // asosiy chegirma %
   marketingDiscount Boolean? // marketing skidkasi bormi
-  retrobonusPct     Decimal? @db.Decimal(6, 2) // retrobonus %
+  retrobonusPct     Decimal?     @db.Decimal(6, 2) // retrobonus %
   agentMerchNote    String? // agent/merchandiser ishlash tartibi
   promoSystem       String? // promo tizimi izohi
   promoCalendar     Boolean? // promo kalendari tuzilganmi
@@ -498,15 +501,15 @@ model SupplierBranchProfile {
 // SKU'lari agentlarga taqsimlanadi; har agent o'z kontakti va zakaz kunlari bilan,
 // zakaz har agentga ALOHIDA beriladi (PurchaseOrder.agentId, alohida nakladnoy).
 model Agent {
-  id          Int      @id @default(autoincrement())
-  supplierId  Int
-  name        String // brend nomi (yetkazib beruvchi ichida unikal)
-  phone       String?
-  contactName String? // mas'ul shaxs
-  sortOrder   Int      @default(0)
-  createdAt   DateTime @default(now())
+  id            Int      @id @default(autoincrement())
+  supplierId    Int
+  name          String // brend nomi (yetkazib beruvchi ichida unikal)
+  phone         String?
+  contactName   String? // mas'ul shaxs
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
   // Haftalik takrorlanuvchi zakaz qabul kunlari: 0=Yakshanba ... 6=Shanba (JS getUTCDay)
-  orderWeekdays Int[]  @default([])
+  orderWeekdays Int[]    @default([])
 
   supplier  Supplier        @relation(fields: [supplierId], references: [id], onDelete: Cascade)
   products  Product[]
@@ -572,8 +575,8 @@ model PurchaseOrderItem {
   packSize  Decimal? @db.Decimal(20, 3) // o'sha paytdagi pachka soni/hajmi — quantity = packCount × packSize
   factQty   Decimal? @db.Decimal(20, 3) // FAKT yetib kelgan miqdor — solishtirish uchun
 
-  order   PurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  order      PurchaseOrder             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product    Product                   @relation(fields: [productId], references: [id], onDelete: Cascade)
   branchQtys PurchaseOrderItemBranch[] // filial bo'yicha taqsimot (quantity = yig'indisi)
 
   @@unique([orderId, productId])
@@ -803,27 +806,27 @@ model AnketaSection {
 }
 
 model AnketaField {
-  id        Int           @id @default(autoincrement())
+  id        Int             @id @default(autoincrement())
   sectionId Int
-  section   AnketaSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  section   AnketaSection   @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   label     String
   type      AnketaFieldType @default(text)
-  required  Boolean       @default(false)
-  sortOrder Int           @default(0) // bo'lim ichidagi tartib
-  active    Boolean       @default(true)
-  createdAt DateTime      @default(now())
+  required  Boolean         @default(false)
+  sortOrder Int             @default(0) // bo'lim ichidagi tartib
+  active    Boolean         @default(true)
+  createdAt DateTime        @default(now())
 
   @@index([sectionId, sortOrder])
 }
 
 // Yuborilgan anketalar — javoblar JSON ({ fieldId: qiymat })
 model AnketaSubmission {
-  id          Int      @id @default(autoincrement())
+  id          Int              @id @default(autoincrement())
   companyName String // tezkor ro'yxat uchun (Kompaniya nomi javobidan)
   phone       String?
   answers     Json
   status      SubmissionStatus @default(NEW)
-  createdAt   DateTime @default(now())
+  createdAt   DateTime         @default(now())
 
   @@index([status, createdAt])
 }
@@ -1140,4 +1143,70 @@ model CronRun {
   note   String?
 
   @@unique([job, dayKey])
+}
+
+// ─── LOGISTIKA: REYSLAR (ma'lumotnoma) ────────────────────────────────────────
+// Reys nuqtalari va avtopark. Reys hujjatining o'zi (Trip/TripLeg) alohida
+// migratsiyada qo'shiladi — bu qism avval to'ldiriladi (ma'lumotnomasiz reys
+// ochib bo'lmaydi: nuqta ham, avto ham ro'yxatdan tanlanadi, erkin matn YO'Q).
+
+enum PointKind {
+  WAREHOUSE // markaziy sklad / RC — reyslar shu yerdan boshlanadi
+  BRANCH // savdo filiali — Branch'ga ulanadi
+  CITY // boshqa shahar (Samarqand, Buxoro, Navoiy...)
+  OTHER // bozor, dala hovli, qurilish obyekti, avtostansiya...
+}
+
+/// Reys nuqtasi. Branch'dan kengroq: RC, bozor, boshqa shahar ham nuqta bo'ladi,
+/// lekin savdo filiali bo'lsa Branch KANONIK qoladi va shunga ulanadi (parallel
+/// filial ro'yxati yaratilmaydi).
+model LogisticsPoint {
+  id        Int       @id @default(autoincrement())
+  name      String    @unique
+  kind      PointKind @default(OTHER)
+  branchId  Int? // savdo filiali bo'lsa — Branch bilan bog'lanadi
+  isHub     Boolean   @default(false) // RC / markaziy sklad
+  isActive  Boolean   @default(true)
+  sortOrder Int       @default(0)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  branch  Branch?               @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  aliases LogisticsPointAlias[]
+
+  @@index([isActive, sortOrder])
+  @@index([branchId])
+}
+
+/// Nom variantlari — qo'lda yuritilgan Excelda bitta nuqta 4 xil yozilgan
+/// ("Маззона"/"Маззон"/"Маззоны"/"Мазона"). Tarixiy import va qidiruv shu orqali
+/// kanonik nuqtaga tushadi. BranchAlias naqshi, lekin RC/bozor Branch emas.
+model LogisticsPointAlias {
+  id      Int    @id @default(autoincrement())
+  pointId Int
+  alias   String @unique
+
+  point LogisticsPoint @relation(fields: [pointId], references: [id], onDelete: Cascade)
+
+  @@index([pointId])
+}
+
+/// Avtomobil profili. Sig'im bitta joyda turadi — qo'lda yuritishda bitta avto
+/// uch xil m3 bilan yozilgan edi. Hujjat muddatlari tugasa ish TO'XTAMAYDI:
+/// haydovchiga ogohlantirish ko'rsatiladi, nazoratchiga signal ketadi.
+model Vehicle {
+  id                  Int       @id @default(autoincrement())
+  plateNumber         String    @unique
+  brand               String // Лабо, Дамас, Исузу
+  model               String?
+  capacityM3          Decimal?  @db.Decimal(6, 2)
+  capacityVagonetka   Decimal?  @db.Decimal(6, 2) // yuklama shu birlikda o'lchanadi
+  insuranceUntil      DateTime? @db.Date // sug'urta amal qilish muddati
+  techInspectionUntil DateTime? @db.Date // texnik ko'rik muddati
+  isActive            Boolean   @default(true)
+  note                String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([isActive])
 }
