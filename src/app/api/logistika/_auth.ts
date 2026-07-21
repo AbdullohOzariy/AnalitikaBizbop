@@ -14,6 +14,7 @@ import { verifyInitData } from "@/lib/spisaniya/telegram-auth";
 import { rateLimit } from "@/lib/spisaniya/rate-limit";
 import { driverByTgId } from "@/lib/logistika/ruxsat";
 import { TASHKENT_OFFSET_MS, todayTashkentISO } from "@/lib/date";
+import { redactForLog } from "@/lib/tg-redact";
 
 export type AuthDriver = { id: number; name: string };
 
@@ -55,7 +56,7 @@ export function xato400(matn = "So'rov noto'g'ri") {
 
 /** 500 — kutilmagan xato (ichki tafsilot mijozga chiqarilmaydi). */
 export function xato500(joy: string, err: unknown) {
-  console.error(`[api/logistika/${joy}]`, err instanceof Error ? err.message : err);
+  console.error(`[api/logistika/${joy}]`, redactForLog(err));
   return NextResponse.json({ ok: false, xato: "Server xatosi" }, { status: 500 });
 }
 

@@ -18,6 +18,21 @@ const JOBS: CronJob[] = [
       console.log(`[inv-report] yuborildi: ${r.count} ta muammoli SKU`);
     },
   },
+  // 11:00 — filiallar narx farqi (bir SKU turli filialda turli narxda) PDF. Faqat sozlamada
+  // YOQILGAN bo'lsa: aks holda sozlanmagan tizimda har kuni "cron bajarilmadi" alerti kelardi.
+  // Yangi sotuv fayli yuklanmagan bo'lsa davr o'zgarmaydi va report jim chiqadi.
+  {
+    name: "narx-report", cron: "0 11 * * *", hour: 11, minute: 0,
+    run: async () => {
+      const { getNarxReportConfig } = await import("@/lib/narx-report/sozlama");
+      if (!(await getNarxReportConfig()).autoEnabled) return;
+      const { sendNarxReport } = await import("@/lib/narx-report/report");
+      const r = await sendNarxReport();
+      if (!r.ok) throw new Error(r.error || "yuborilmadi");
+      if (r.skipped) console.log(`[narx-report] o'tkazib yuborildi (davr: ${r.period ?? "yo'q"})`);
+      else console.log(`[narx-report] yuborildi: ${r.count} ta SKU (davr: ${r.period})`);
+    },
+  },
   // 15:00 — marja minus (tannarx > sotuv) kataklari. Faqat sozlamada YOQILGAN bo'lsa.
   {
     name: "margin-report", cron: "0 15 * * *", hour: 15, minute: 0,
@@ -163,6 +178,10 @@ export async function register() {
     await bot.telegram.setWebhook(url, { secret_token: secret });
     console.log(`[instrumentation] Webhook o'rnatildi: ${url} (secret_token bilan)`);
   } catch (err) {
-    console.error("[instrumentation] Webhook xatosi:", err instanceof Error ? err.message : err);
+    // redactForLog SHART: bu setWebhook catch'i, telegraf xatosi
+    // "request to https://api.telegram.org/bot<TOKEN>/setWebhook failed..." ko'rinishida
+    // keladi va har deployda Railway loglariga tokenni yozib qo'yardi.
+    const { redactForLog } = await import("@/lib/tg-redact");
+    console.error("[instrumentation] Webhook xatosi:", redactForLog(err));
   }
 }

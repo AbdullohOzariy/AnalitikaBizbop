@@ -13,6 +13,7 @@ import { prisma } from "@/lib/prisma";
 import { TASHKENT_OFFSET_MS } from "@/lib/date";
 import type { LoadLevel } from "@/generated/prisma/enums";
 import { getLogistikaGroup } from "./sozlama";
+import { redactForLog } from "@/lib/tg-redact";
 
 /** parse_mode:"HTML" uchun eskeyplash — nuqta/mashina nomlaridagi `<`/`&` xabarni buzmasin. */
 function esc(s: string | null | undefined): string {
@@ -163,7 +164,7 @@ async function tgApi(metod: string, body: Record<string, unknown>): Promise<TgJa
     });
     return (await res.json()) as TgJavob;
   } catch (err) {
-    console.error(`[logistika-notify] ${metod} tarmoq xatosi:`, err instanceof Error ? err.message : err);
+    console.error(`[logistika-notify] ${metod} tarmoq xatosi:`, redactForLog(err));
     return null;
   }
 }
@@ -231,7 +232,7 @@ export async function reysXabarYubor(tripId: number): Promise<void> {
       data: { tgMessageId: messageId, tgChatId: chatId },
     });
   } catch (err) {
-    console.error(`[logistika-notify] yubor #${tripId}:`, err instanceof Error ? err.message : err);
+    console.error(`[logistika-notify] yubor #${tripId}:`, redactForLog(err));
   }
 }
 
@@ -286,6 +287,6 @@ export async function reysXabarYangila(tripId: number): Promise<void> {
 
     console.error(`[logistika-notify] edit rad etildi #${tripId}: ${j.description ?? "?"}`);
   } catch (err) {
-    console.error(`[logistika-notify] yangila #${tripId}:`, err instanceof Error ? err.message : err);
+    console.error(`[logistika-notify] yangila #${tripId}:`, redactForLog(err));
   }
 }

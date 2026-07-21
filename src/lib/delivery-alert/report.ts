@@ -7,6 +7,7 @@ import { Telegram } from "telegraf";
 import { lateDeliveries, type ExpectedDelivery } from "@/lib/delivery";
 import { todayTashkentISO } from "@/lib/date";
 import { getDeliveryAlertConfig } from "./sozlama";
+import { redactError } from "@/lib/tg-redact";
 
 const MAX_LINES = 40; // xabar juda uzun bo'lmasin
 const NF = new Intl.NumberFormat("uz-UZ");
@@ -63,7 +64,7 @@ export async function sendDeliveryAlert(
     await tg.sendMessage(cfg.chatId, `${header}\n${body}${more}`, { parse_mode: "HTML", ...thread });
     return { ok: true, count: late.length };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Yuborishda xato.";
+    const msg = err instanceof Error ? redactError(err) : "Yuborishda xato.";
     console.error("[delivery-alert] sendDeliveryAlert:", msg);
     return { ok: false, error: `Yuborilmadi: ${msg}` };
   }

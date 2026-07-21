@@ -12,11 +12,12 @@ import {
   ruxsatToggle,
   ruxsatOchir,
 } from "@/lib/spisaniya/db";
+import { redactError, redactForLog } from "@/lib/tg-redact";
 
 type Result = { ok: true } | { ok: false; error: string };
 
 function xato(err: unknown): Result {
-  const msg = err instanceof Error ? err.message : "Xato.";
+  const msg = err instanceof Error ? redactError(err) : "Xato.";
   if (msg.includes("Ruxsat")) return { ok: false, error: "Ruxsat yo'q." };
   // Postgres unique violation / FK violation — tushunarli xabar
   if (msg.includes("duplicate key") || msg.includes("23505"))
@@ -278,7 +279,7 @@ export async function inventoryReportYuborAction(): Promise<
     const { sendInventoryReport } = await import("@/lib/inventory-report/report");
     return await sendInventoryReport();
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Xato.";
+    const msg = err instanceof Error ? redactError(err) : "Xato.";
     return { ok: false, error: msg.includes("Ruxsat") ? "Ruxsat yo'q." : msg };
   }
 }
@@ -322,7 +323,7 @@ export async function marginReportYuborAction(): Promise<
     const { sendMarginReport } = await import("@/lib/margin-report/report");
     return await sendMarginReport();
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Xato.";
+    const msg = err instanceof Error ? redactError(err) : "Xato.";
     return { ok: false, error: msg.includes("Ruxsat") ? "Ruxsat yo'q." : msg };
   }
 }
@@ -366,7 +367,7 @@ export async function deliveryAlertYuborAction(): Promise<
     const { sendDeliveryAlert } = await import("@/lib/delivery-alert/report");
     return await sendDeliveryAlert();
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Xato.";
+    const msg = err instanceof Error ? redactError(err) : "Xato.";
     return { ok: false, error: msg.includes("Ruxsat") ? "Ruxsat yo'q." : msg };
   }
 }
@@ -415,7 +416,7 @@ export async function zakazPdfTestAction(): Promise<{ ok: true; orderId: number 
     if (!r.ok) return { ok: false, error: r.error };
     return { ok: true, orderId: target.id };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Xato.";
+    const msg = err instanceof Error ? redactError(err) : "Xato.";
     return { ok: false, error: msg.includes("Ruxsat") ? "Ruxsat yo'q." : msg };
   }
 }
@@ -457,7 +458,67 @@ export async function spisaniyaDailyYuborAction(): Promise<{ ok: true; total: nu
     const { sendSpisaniyaDailyReport } = await import("@/lib/spisaniya-daily/report");
     return await sendSpisaniyaDailyReport();
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Xato.";
+    const msg = err instanceof Error ? redactError(err) : "Xato.";
+    return { ok: false, error: msg.includes("Ruxsat") ? "Ruxsat yo'q." : msg };
+  }
+}
+
+// ─── Filiallar narx farqi hisoboti (kunlik PDF) ────────────────────────────────
+
+/** Bot token + guruh chat id + topic id + avto-yoqish'ni saqlash. token bo'sh — o'zgartirilmaydi. */
+export async function narxReportSaqlaAction(input: {
+  token: string; chatId: string; topicId: string; autoEnabled: boolean;
+}): Promise<Result> {
+  try {
+    await requireAdmin();
+    const token = input.token.trim();
+    const chatId = input.chatId.trim();
+    const topicId = input.topicId.trim();
+    if (!chatId) {
+      return { ok: false, error: "Guruh chat ID kiritilishi shart (bo'sh saqlasangiz xabarnoma o'chadi)." };
+    }
+    if (!/^-?\d{5,20}$/.test(chatId)) {
+      return { ok: false, error: "Guruh chat ID raqam bo'lishi kerak (odatda -100... ko'rinishida)." };
+    }
+    if (topicId && !/^\d{1,12}$/.test(topicId)) {
+      return { ok: false, error: "Topic ID musbat raqam bo'lishi kerak." };
+    }
+    if (token && !/^\d{6,}:[A-Za-z0-9_-]{20,}$/.test(token)) {
+      return { ok: false, error: "Bot token noto'g'ri (123456:ABC... ko'rinishida)." };
+    }
+    const { setNarxReportConfig } = await import("@/lib/narx-report/sozlama");
+    // ALOHIDA catch: bu chaqiruv argumentlari orasida TOKEN bor. Prisma xatolari
+    // (masalan PrismaClientValidationError) argumentlarni xato matniga qo'shadi, ya'ni
+    // xom `err.message` brauzerga tokenni olib chiqishi mumkin edi. Mijozga umumiy
+    // xabar, serverga esa redaksiyalangan diagnostika beramiz.
+    try {
+      await setNarxReportConfig({ token, chatId, topicId, autoEnabled: !!input.autoEnabled });
+    } catch (err) {
+      console.error("[sozlamalar] narxReportSaqla:", redactForLog(err));
+      return { ok: false, error: "Sozlamani saqlab bo'lmadi. Qaytadan urinib ko'ring." };
+    }
+    revalidatePath(RP);
+    return { ok: true };
+  } catch (err) { return xato(err); }
+}
+
+/**
+ * Narx farqi hisobotini hoziroq yuborish (sinov tugmasi). force: true — davr
+ * tekshiruvini chetlab o'tadi, aks holda qo'lda bosilganda "allaqachon yuborilgan"
+ * deb jim skipped qaytarardi.
+ */
+export async function narxReportYuborAction(): Promise<
+  { ok: true; count: number; period: string | null; skipped?: boolean } | { ok: false; error: string }
+> {
+  try {
+    await requireAdmin();
+    const { sendNarxReport } = await import("@/lib/narx-report/report");
+    const res = await sendNarxReport({ force: true });
+    // Yuborilgan bo'lsa oxirgi davr yozildi — blokdagi ko'rsatkich yangilansin
+    if (res.ok) revalidatePath(RP);
+    return res;
+  } catch (err) {
+    const msg = err instanceof Error ? redactError(err) : "Xato.";
     return { ok: false, error: msg.includes("Ruxsat") ? "Ruxsat yo'q." : msg };
   }
 }

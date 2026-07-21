@@ -24,4 +24,7 @@ faqat yangi kod uchun):
 - Formatlash: `src/lib/format.ts` (`formatUZS`, `formatDateTimeUZ`, `decimalToNumber`).
 - Kesh teglari: `src/lib/cache-tags.ts` (literal yozmang).
 - Rol predikatlari: `src/lib/roles.ts`. Xato→javob: `src/lib/action-error.ts` (`actionError`).
+- Sir tozalash: `src/lib/tg-redact.ts` (`redactForLog` — log uchun, `redactError` — foydalanuvchi/Telegram
+  uchun). Telegram xatosi matnida bot token bo'ladi (`.../bot<TOKEN>/sendDocument`) — xato obyektini
+  TO'G'RIDAN-TO'G'RI log qilmang yoki mijozga qaytarmang.
 - Cron: `src/lib/cron.ts` (`runCron` — dedup+retry+alert).

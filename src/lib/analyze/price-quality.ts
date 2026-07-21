@@ -4,6 +4,8 @@
  *
  * 3 ko'rinish — har biri ENG OXIRGI yuklangan davr (global MAX periodEnd) bo'yicha:
  *   A) branchPriceDiffs — bir SKU uchun filiallar sotuv narxi (salePrice) farq qiladi.
+ *      + coverage — A) taqqoslashi qancha qamrab olganini ko'rsatadi (narxsiz qatorlar
+ *        taqqoslashga kirmaydi, shuning uchun "farq yo'q" ≠ "muammo yo'q").
  *   B) salePriceMismatch — Продажи Сумма÷Количество ≠ Продажи Цена (faylda nomuvofiqlik).
  *   C) costPriceMismatch — Себестоимость Сумма÷Количество ≠ Себестоимость Цена.
  *
@@ -43,12 +45,55 @@ export type PriceMismatch = {
   diffPct: number; // |diff| / filePrice × 100
 };
 
+/**
+ * Qamrov (coverage) — "A) Filiallar narx farqi" taqqoslashi qancha ma'lumot ustidan
+ * bajarilganini ko'rsatadi. Fayldagi Продажи/Цена bo'sh yoki 0 bo'lgan qatorlar
+ * taqqoslashga UMUMAN kirmaydi; busiz ro'yxat toza ko'rinadi, aslida bir qismi
+ * tekshirilmagan bo'ladi.
+ */
+/*
+ * SKU'lar UCH kesishmaydigan toifaga bo'linadi (yig'indisi = skuTotal). Chegara
+ * `diffRows` dagi `HAVING COUNT(*) > 1` bilan bir xil bo'lishi SHART: narxli
+ * qatori bittadan ko'p bo'lmagan SKU taqqoslanmaydi, ya'ni u "to'liqmas
+ * taqqoslangan" emas, "umuman taqqoslanmagan".
+ *
+ * Eslatma: qator YO'Qligi "narx yo'q" degani emas — parser faqat amount != 0
+ * bo'lganda qator yozadi, ya'ni u filialda shunchaki sotilmagan. Shu sabab
+ * "barcha filiallarida" emas, "mavjud qatorlarining hammasida" deymiz.
+ */
+export type PriceCoverage = {
+  pricedRows: number; // narxi bor SKU×filial qatorlari (taqqoslanganlarning maxraji emas — quyiga qara)
+  comparedRows: number; // HAQIQATDAN taqqoslashga kirgan qatorlar (>=2 narxli qatori bor SKU'larniki)
+  unpricedRows: number; // salePrice null yoki <= 0 — taqqoslashdan tushib qolgan
+  skuTotal: number; // davrdagi jami SKU
+  skuFull: number; // >=2 narxli qatori bor va narxsizi yo'q — taqqoslash to'liq
+  skuNone: number; // narxli qatori 2 tadan kam — taqqoslab bo'lmadi
+  /**
+   * ENG MUHIMI: >=2 filialda narx BOR (ya'ni taqqoslandi), lekin kamida bittasida
+   * YO'Q. Natija ("farq 3%") ishonchsiz — narxsiz filialda narx butunlay boshqa
+   * bo'lishi mumkin.
+   */
+  skuPartial: number;
+};
+
 export type PriceQuality = {
   periodEnd: string | null; // tahlil qilingan eng oxirgi davr (ISO sana), data yo'q bo'lsa null
   branchPriceDiffs: BranchPriceDiff[];
+  coverage: PriceCoverage; // A) taqqoslash qamrovi
   salePriceMismatch: PriceMismatch[];
   costPriceMismatch: PriceMismatch[];
   truncated: boolean; // biror ro'yxat LIMIT'ga yetdimi (to'liq emas)
+  truncatedDiffs: boolean; // FAQAT branchPriceDiffs qirqildimi (PDF hisoboti shuni ishlatadi)
+};
+
+const EMPTY_COVERAGE: PriceCoverage = {
+  pricedRows: 0,
+  comparedRows: 0,
+  unpricedRows: 0,
+  skuTotal: 0,
+  skuFull: 0,
+  skuNone: 0,
+  skuPartial: 0,
 };
 
 const ROW_LIMIT = 500;
@@ -85,7 +130,15 @@ async function _compute(): Promise<PriceQuality> {
   `;
   const periodEnd = peRows[0]?.pe ?? null;
   if (!periodEnd) {
-    return { periodEnd: null, branchPriceDiffs: [], salePriceMismatch: [], costPriceMismatch: [], truncated: false };
+    return {
+      periodEnd: null,
+      branchPriceDiffs: [],
+      coverage: EMPTY_COVERAGE,
+      salePriceMismatch: [],
+      costPriceMismatch: [],
+      truncated: false,
+      truncatedDiffs: false,
+    };
   }
 
   // A) Filiallar narx farqi — bir SKU, eng oxirgi davr, salePrice MIN ≠ MAX.
@@ -111,6 +164,70 @@ async function _compute(): Promise<PriceQuality> {
     ORDER BY (MAX(r.price) - MIN(r.price)) / NULLIF(MIN(r.price), 0) DESC
     LIMIT ${ROW_LIMIT + 1}
   `;
+
+  // A2) Qamrov — yuqoridagi taqqoslash qancha ma'lumot ustidan bajarilgani.
+  //
+  // Nega ALOHIDA so'rov: diffRows'ning WHERE'i narxsiz qatorlarni allaqachon tashlab
+  // yuboradi, shuning uchun undan qamrovni chiqarib bo'lmaydi. Filtrni agregatga
+  // (COUNT FILTER) ko'chirish uchun WHERE, GROUP BY va HAVING semantikasini qayta
+  // yozish kerak bo'lardi — bu mavjud, ishlab turgan ro'yxatni buzish xavfi. Alohida
+  // agregat so'rov bitta skan, arzon va diffRows'ga umuman tegmaydi.
+  //
+  // Baza AYNAN bir xil: o'sha "ProductSales", o'sha periodEnd, o'sha JOIN'lar
+  // (Branch + Product — ikkalasi ham INNER, diffRows'dagidek). Product'da
+  // "archivedAt" filtri diffRows'da YO'Q — shuning uchun bu yerda ham YO'Q, aks holda
+  // foizlar ro'yxat bilan to'g'ri kelmaydi. (Eslatma: arxivlangan SKU'lar ikkala
+  // hisobga ham kiradi — bu mavjud xatti-harakat, o'zgartirilmadi.)
+  const covRows = await prisma.$queryRaw<
+    {
+      pricedRows: number;
+      comparedRows: number;
+      unpricedRows: number;
+      skuTotal: number;
+      skuFull: number;
+      skuNone: number;
+      skuPartial: number;
+    }[]
+  >`
+    WITH r AS (
+      SELECT ps."productId" AS pid,
+        (ps."salePrice" IS NOT NULL AND ps."salePrice" > 0) AS priced
+      FROM "ProductSales" ps
+      JOIN "Branch" b ON b.id = ps."branchId"
+      JOIN "Product" p ON p.id = ps."productId"
+      WHERE ps."periodEnd" = ${periodEnd}::date
+    ),
+    per_sku AS (
+      SELECT pid,
+        COUNT(*) FILTER (WHERE r.priced) AS priced_cnt,
+        COUNT(*) FILTER (WHERE NOT r.priced) AS unpriced_cnt
+      FROM r
+      GROUP BY pid
+    )
+    -- Toifalar chegarasi diffRows'dagi HAVING COUNT(*) > 1 bilan AYNAN bir xil:
+    -- narxli qatori 2 tadan kam SKU taqqoslanmaydi. Uchtasi kesishmaydi va
+    -- yig'indisi skuTotal ga teng: (priced<2) + (priced>1 & unpriced>0) + (priced>1 & unpriced=0).
+    SELECT
+      COALESCE(SUM(priced_cnt), 0)::int AS "pricedRows",
+      COALESCE(SUM(priced_cnt) FILTER (WHERE priced_cnt > 1), 0)::int AS "comparedRows",
+      COALESCE(SUM(unpriced_cnt), 0)::int AS "unpricedRows",
+      COUNT(*)::int AS "skuTotal",
+      COUNT(*) FILTER (WHERE priced_cnt > 1 AND unpriced_cnt = 0)::int AS "skuFull",
+      COUNT(*) FILTER (WHERE priced_cnt < 2)::int AS "skuNone",
+      COUNT(*) FILTER (WHERE priced_cnt > 1 AND unpriced_cnt > 0)::int AS "skuPartial"
+    FROM per_sku
+  `;
+  const coverage: PriceCoverage = covRows[0]
+    ? {
+        pricedRows: Number(covRows[0].pricedRows),
+        comparedRows: Number(covRows[0].comparedRows),
+        unpricedRows: Number(covRows[0].unpricedRows),
+        skuTotal: Number(covRows[0].skuTotal),
+        skuFull: Number(covRows[0].skuFull),
+        skuNone: Number(covRows[0].skuNone),
+        skuPartial: Number(covRows[0].skuPartial),
+      }
+    : EMPTY_COVERAGE;
 
   // B) Продажи Сумма÷Количество ≠ Продажи Цена.
   const saleRows = await prisma.$queryRaw<MismatchRow[]>`
@@ -151,8 +268,13 @@ async function _compute(): Promise<PriceQuality> {
     LIMIT ${ROW_LIMIT + 1}
   `;
 
+  // Ro'yxat-bo'yicha bayroq: umumiy `truncated` UCHALASI bo'yicha OR bo'lgani uchun
+  // faqat bitta ro'yxatdan foydalanadigan iste'molchi (kunlik PDF hisoboti) uni
+  // ishlata olmaydi — boshqa tab 500 ga yetsa soxta ogohlantirish chiqarardi.
+  // `slice` dan OLDIN hisoblanadi: slice'dan keyin 500 va "501+" farqlanmaydi.
+  const truncatedDiffs = diffRows.length > ROW_LIMIT;
   const truncated =
-    diffRows.length > ROW_LIMIT || saleRows.length > ROW_LIMIT || costRows.length > ROW_LIMIT;
+    truncatedDiffs || saleRows.length > ROW_LIMIT || costRows.length > ROW_LIMIT;
 
   const branchPriceDiffs: BranchPriceDiff[] = diffRows.slice(0, ROW_LIMIT).map((r) => {
     const minPrice = Number(r.minPrice);
@@ -194,15 +316,18 @@ async function _compute(): Promise<PriceQuality> {
   return {
     periodEnd: isoDay(periodEnd),
     branchPriceDiffs,
+    coverage,
     salePriceMismatch: toMismatch(saleRows),
     costPriceMismatch: toMismatch(costRows),
     truncated,
+    truncatedDiffs,
   };
 }
 
 /** Keshlangan (ANALYTICS_CACHE_TAG) — yangi sotuv fayli yuklanganda invalidatsiya bo'ladi. */
 export function getPriceQuality(): Promise<PriceQuality> {
-  return unstable_cache(_compute, ["analyze_price_quality_v1"], {
+  // v2 — natijaga `coverage` qo'shildi; eski kesh yangi maydonsiz qaytmasligi uchun bump.
+  return unstable_cache(_compute, ["analyze_price_quality_v3"], {
     tags: [ANALYTICS_CACHE_TAG],
     revalidate: 300,
   })();

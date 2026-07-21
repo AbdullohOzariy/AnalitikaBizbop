@@ -10,6 +10,7 @@ import { insertYozuv, ruxsatBormi, yozuvKategoriyaSet } from "@/lib/spisaniya/db
 import { guruhgaYuborish } from "@/lib/spisaniya/notify";
 import { kategoriyalashtirish, subcatLabelById } from "@/lib/spisaniya/kategoriya";
 import { verifyInitData } from "@/lib/spisaniya/telegram-auth";
+import { redactForLog } from "@/lib/tg-redact";
 import { rateLimit } from "@/lib/spisaniya/rate-limit";
 import { getBotUserScope } from "@/lib/spisaniya/sku-scope";
 
@@ -96,7 +97,7 @@ export async function POST(req: Request) {
     const yozuvId = await insertYozuv(d);
 
     // Fonda — javobni kutmaymiz.
-    void guruhgaYuborish(d, yozuvId).catch((e) => console.error("[yozuv→guruh]", e));
+    void guruhgaYuborish(d, yozuvId).catch((e) => console.error("[yozuv→guruh]", redactForLog(e)));
     if (skuKategoriyaId != null) {
       // Katalogdan tanlangan — kategoriya deterministik, AI shart emas.
       void subcatLabelById(skuKategoriyaId)

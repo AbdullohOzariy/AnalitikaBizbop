@@ -1,5 +1,6 @@
 import { ZodError } from "zod";
 import { AuthorizationError } from "@/lib/auth-helpers";
+import { redactForLog } from "@/lib/tg-redact";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -12,7 +13,9 @@ export type ActionResult = { ok: true } | { ok: false; error: string };
  * bu helper faqat KUTILMAGAN (catch'ga tushgan) xatolar uchun mo'ljallangan.
  */
 export function actionError(err: unknown, context?: string): { ok: false; error: string } {
-  console.error(`[action${context ? `:${context}` : ""}]`, err);
+  // Xato OBYEKTI emas, tozalangan matn log'ga yoziladi: telegraf tarmoq xatosi
+  // message/stack ichida bot token'li URL olib keladi (Railway loglariga sizardi).
+  console.error(`[action${context ? `:${context}` : ""}]`, redactForLog(err));
 
   if (err instanceof AuthorizationError) return { ok: false, error: "Ruxsat yo'q." };
   if (err instanceof ZodError)

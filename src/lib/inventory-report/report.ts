@@ -10,6 +10,7 @@ import { prisma } from "@/lib/prisma";
 import { inventoryProblemRows } from "@/lib/snapshot-reports";
 import { isoDay } from "@/lib/date";
 import { getInventoryReportConfig } from "./sozlama";
+import { redactError } from "@/lib/tg-redact";
 
 
 /** Muammoli tovarlar Excel buferi (so'nggi mavjud kun ma'lumotlari bo'yicha). */
@@ -72,7 +73,7 @@ export async function sendInventoryReport(): Promise<{ ok: true; count: number }
     );
     return { ok: true, count };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Yuborishda xato.";
+    const msg = err instanceof Error ? redactError(err) : "Yuborishda xato.";
     console.error("[inv-report] sendInventoryReport:", msg);
     return { ok: false, error: `Yuborilmadi: ${msg}` };
   }

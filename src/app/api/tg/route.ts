@@ -7,6 +7,7 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import type { Update } from "telegraf/types";
 import { getBot, webhookSecret } from "@/lib/spisaniya/bot";
+import { redactForLog } from "@/lib/tg-redact";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,7 +37,7 @@ export async function POST(req: Request) {
   try {
     await bot.handleUpdate(update);
   } catch (err) {
-    console.error("[tg-webhook] handleUpdate xato:", err instanceof Error ? err.message : err);
+    console.error("[tg-webhook] handleUpdate xato:", redactForLog(err));
   }
   return NextResponse.json({ ok: true });
 }

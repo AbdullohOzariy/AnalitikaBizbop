@@ -14,6 +14,7 @@ import { getDefaultRange } from "@/lib/analytics";
 import { todayTashkentISO, isoDay } from "@/lib/date";
 import { decimalToNumber } from "@/lib/format";
 import { Prisma } from "@/generated/prisma/client";
+import { redactForLog } from "@/lib/tg-redact";
 
 export type OrderItemInput = {
   productId: number;
@@ -390,7 +391,7 @@ async function rememberOrderParams(
       "leadTimeDays"  = COALESCE(v.lead, p."leadTimeDays")
     FROM (VALUES ${Prisma.join(rows)}) AS v(pid, pack, price, lead)
     WHERE p.id = v.pid
-  `.catch((e) => console.warn("[rememberOrderParams]", e instanceof Error ? e.message : e));
+  `.catch((e) => console.warn("[rememberOrderParams]", redactForLog(e)));
 }
 
 type ActorUser = { id: string | number; roles: readonly string[] };
@@ -561,7 +562,7 @@ export async function setOrderStatusAction(
           if (!r.ok) console.warn("[zakaz-pdf] avto yuborilmadi:", r.error);
           else console.log(`[zakaz-pdf] zakaz #${oid} avto yuborildi`);
         } catch (e) {
-          console.error("[zakaz-pdf] avto xato:", e instanceof Error ? e.message : e);
+          console.error("[zakaz-pdf] avto xato:", redactForLog(e));
         }
       })();
     }

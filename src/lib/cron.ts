@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getBot } from "@/lib/spisaniya/bot";
 import { todayTashkentISO } from "@/lib/date";
+import { redactError, redactForLog } from "@/lib/tg-redact";
 
 /** Adminga (ADMIN_IDS[0]) qisqa Telegram ogohlantirish. Bot/ID yo'q bo'lsa jim o'tadi. */
 export async function notifyAdmin(text: string): Promise<void> {
@@ -26,7 +27,7 @@ export async function runCron(job: string, fn: () => Promise<void>): Promise<voi
     await prisma.cronRun.create({ data: { job, dayKey } });
   } catch (e) {
     if ((e as { code?: string })?.code === "P2002") return; // dedup: allaqachon bajarilgan
-    console.warn(`[cron:${job}] dedup yozuvi xatosi (baribir bajaramiz):`, e instanceof Error ? e.message : e);
+    console.warn(`[cron:${job}] dedup yozuvi xatosi (baribir bajaramiz):`, redactForLog(e));
   }
   let lastErr: unknown;
   for (let attempt = 1; attempt <= 2; attempt++) {
@@ -36,11 +37,13 @@ export async function runCron(job: string, fn: () => Promise<void>): Promise<voi
       return;
     } catch (e) {
       lastErr = e;
-      console.error(`[cron:${job}] urinish ${attempt}/2 xato:`, e instanceof Error ? e.message : e);
+      console.error(`[cron:${job}] urinish ${attempt}/2 xato:`, redactForLog(e));
       if (attempt < 2) await new Promise((r) => setTimeout(r, 60_000));
     }
   }
-  const msg = lastErr instanceof Error ? lastErr.message : String(lastErr);
+  // SIR: telegraf tarmoq xatosi xabarga bot token'li URL'ni qo'shadi. Bu matn
+  // CronRun.note ga (DB) yoziladi va adminga Telegram orqali ketadi — avval tozalanadi.
+  const msg = redactError(lastErr);
   await prisma.cronRun.updateMany({ where: { job, dayKey }, data: { status: "error", note: msg.slice(0, 300) } }).catch(() => {});
   await notifyAdmin(`❌ Cron "${job}" bajarilmadi (2 urinish): ${msg}`);
 }

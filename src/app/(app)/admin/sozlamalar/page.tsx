@@ -33,8 +33,11 @@ import { ZakazPdfEditor } from "./zakaz-pdf-editor";
 import { getZakazPdfConfig } from "@/lib/zakaz-pdf/sozlama";
 import { SpisaniyaDailyEditor } from "./spisaniya-daily-editor";
 import { getSpisaniyaDailyConfig } from "@/lib/spisaniya-daily/sozlama";
+import { NarxReportEditor } from "./narx-report-editor";
+import { getNarxReportConfig, getNarxReportLastPeriod } from "@/lib/narx-report/sozlama";
+import { formatDateUZ } from "@/lib/format";
 
-type Tab = "spisaniya" | "sverka" | "inventarizatsiya" | "marja" | "yetkazish" | "zakaz" | "spdaily";
+type Tab = "spisaniya" | "sverka" | "inventarizatsiya" | "marja" | "yetkazish" | "zakaz" | "spdaily" | "narx";
 
 export default async function SozlamalarPage({
   searchParams,
@@ -46,7 +49,7 @@ export default async function SozlamalarPage({
   if (!session.user.roles.includes("SYSTEM_ADMIN")) redirect("/dashboard");
 
   const sp = await searchParams;
-  const tab: Tab = sp.tab === "sverka" ? "sverka" : sp.tab === "inventarizatsiya" ? "inventarizatsiya" : sp.tab === "marja" ? "marja" : sp.tab === "yetkazish" ? "yetkazish" : sp.tab === "zakaz" ? "zakaz" : sp.tab === "spdaily" ? "spdaily" : "spisaniya";
+  const tab: Tab = sp.tab === "sverka" ? "sverka" : sp.tab === "inventarizatsiya" ? "inventarizatsiya" : sp.tab === "marja" ? "marja" : sp.tab === "yetkazish" ? "yetkazish" : sp.tab === "zakaz" ? "zakaz" : sp.tab === "spdaily" ? "spdaily" : sp.tab === "narx" ? "narx" : "spisaniya";
 
   return (
     <div className="space-y-5">
@@ -57,7 +60,8 @@ export default async function SozlamalarPage({
       />
 
       {/* Tablar: Spisaniya / Sverka */}
-      <div role="tablist" className="flex gap-2">
+      {/* flex-wrap — tablar soni 8 ta bo'ldi, tor ekranda toshib ketmasin */}
+      <div role="tablist" className="flex flex-wrap gap-2">
         {([
           { v: "spisaniya", l: "Spisaniya sozlamalari" },
           { v: "sverka", l: "Sverka sozlamalari" },
@@ -66,6 +70,7 @@ export default async function SozlamalarPage({
           { v: "yetkazish", l: "Yetkazish kechikishi" },
           { v: "zakaz", l: "Zakaz PDF" },
           { v: "spdaily", l: "Spisaniya kunlik" },
+          { v: "narx", l: "Filiallar narxi" },
         ] as { v: Tab; l: string }[]).map((t) => (
           <Link
             key={t.v}
@@ -84,7 +89,34 @@ export default async function SozlamalarPage({
         ))}
       </div>
 
-      {tab === "spisaniya" ? <SpisaniyaTab /> : tab === "sverka" ? <SverkaTab /> : tab === "inventarizatsiya" ? <InventarizatsiyaTab /> : tab === "marja" ? <MarjaTab /> : tab === "yetkazish" ? <YetkazishTab /> : tab === "zakaz" ? <ZakazTab /> : <SpisaniyaDailyTab />}
+      {tab === "spisaniya" ? <SpisaniyaTab /> : tab === "sverka" ? <SverkaTab /> : tab === "inventarizatsiya" ? <InventarizatsiyaTab /> : tab === "marja" ? <MarjaTab /> : tab === "yetkazish" ? <YetkazishTab /> : tab === "zakaz" ? <ZakazTab /> : tab === "narx" ? <NarxTab /> : <SpisaniyaDailyTab />}
+    </div>
+  );
+}
+
+// ─── Filiallar narx farqi hisoboti (kunlik PDF) ────────────────────────────────
+
+async function NarxTab() {
+  const [cfg, lastPeriod] = await Promise.all([
+    getNarxReportConfig(),
+    getNarxReportLastPeriod(),
+  ]);
+  return (
+    <div className="space-y-5">
+      <SectionCard
+        title="Filiallar narx farqi hisoboti"
+        description="Har kuni 11:00 (Toshkent) — bir xil SKU filiallarda 5% dan ko'proq farqli narxda sotilsa PDF"
+        actions={<MessageSquare className="h-4 w-4 text-muted-foreground" />}
+      >
+        {/* lastPeriod serverda formatlanadi — client'da toLocaleDateString hydration farqini beradi */}
+        <NarxReportEditor
+          tokenSet={!!cfg.token}
+          chatId={cfg.chatId ?? ""}
+          topicId={cfg.topicId != null ? String(cfg.topicId) : ""}
+          autoEnabled={cfg.autoEnabled}
+          lastPeriod={lastPeriod ? formatDateUZ(lastPeriod) : null}
+        />
+      </SectionCard>
     </div>
   );
 }

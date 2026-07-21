@@ -3,6 +3,7 @@
  * Hammasi fonda (await qilinmasa ham) ishlatilishi mumkin: xato bo'lsa faqat log.
  */
 import { getBot } from "./bot";
+import { redactForLog } from "@/lib/tg-redact";
 import {
   getGroupChatId,
   filialTopicId,
@@ -80,11 +81,11 @@ export async function guruhgaYuborish(d: YozuvKirim, yozuvId: number): Promise<v
           reply_parameters: { message_id: msg.message_id },
           ...(threadId ? { message_thread_id: threadId } : {}),
         })
-        .catch((e) => console.error(`[guruh] QR rasm xato #${yozuvId}:`, e instanceof Error ? e.message : e));
+        .catch((e) => console.error(`[guruh] QR rasm xato #${yozuvId}:`, redactForLog(e)));
     }
     console.log(`[guruh] Yozuv #${yozuvId} guruhga yuborildi (message_id=${msg.message_id})`);
   } catch (err) {
-    console.error(`[guruh] XATO — yozuv #${yozuvId}:`, err instanceof Error ? err.message : err);
+    console.error(`[guruh] XATO — yozuv #${yozuvId}:`, redactForLog(err));
   }
 }
 
@@ -129,7 +130,7 @@ export async function vozvratGuruhgaYuborish(v: VozvratKirim, vozvratId: number)
       : await bot.telegram.sendMessage(chatId, matn, opts);
     await vozvratSetGuruhMessageId(vozvratId, msg.message_id);
   } catch (err) {
-    console.error(`[vozvrat-guruh] #${vozvratId}:`, err instanceof Error ? err.message : err);
+    console.error(`[vozvrat-guruh] #${vozvratId}:`, redactForLog(err));
   }
 }
 
@@ -154,7 +155,7 @@ export async function vozvratHolatGuruhXabar(
   try {
     await bot.telegram.sendMessage(chatId, matn, opts);
   } catch (err) {
-    console.error("[vozvrat-holat-xabar]:", err instanceof Error ? err.message : err);
+    console.error("[vozvrat-holat-xabar]:", redactForLog(err));
   }
 }
 

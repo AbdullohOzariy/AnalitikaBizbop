@@ -2,6 +2,7 @@ import { Telegram } from "telegraf";
 import { getSpisaniyaDailyConfig } from "./sozlama";
 import { chiqimByBranch, chiqimTopTovarlar, type ChiqimRange } from "@/lib/spisaniya/db";
 import { isoDay, todayTashkentISO } from "@/lib/date";
+import { redactError } from "@/lib/tg-redact";
 
 /** HTML parse_mode uchun maxsus belgilarni eskeyplash (kategoriya/filial nomlari xom keladi). */
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -82,7 +83,7 @@ export async function sendSpisaniyaDailyReport(): Promise<{ ok: true; total: num
     await tg.sendMessage(cfg.chatId, built.text, { parse_mode: "HTML", ...thread });
     return { ok: true, total: built.total };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Yuborishda xato.";
+    const msg = err instanceof Error ? redactError(err) : "Yuborishda xato.";
     console.error("[spisaniya-daily] send:", msg);
     return { ok: false, error: `Yuborilmadi: ${msg}` };
   }

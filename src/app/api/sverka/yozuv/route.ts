@@ -10,6 +10,7 @@ import { sverkaRuxsatBormi } from "@/lib/sverka/ruxsat";
 import { rateLimit } from "@/lib/spisaniya/rate-limit";
 import { getSverkaGroupChatId, getSverkaTopicId } from "@/lib/sverka/sozlama";
 import { getBot } from "@/lib/spisaniya/bot";
+import { redactForLog } from "@/lib/tg-redact";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -89,7 +90,7 @@ export async function POST(req: Request) {
       });
     }
   } catch (e) {
-    console.warn("[sverka] guruhga yuborilmadi:", e instanceof Error ? e.message : e);
+    console.warn("[sverka] guruhga yuborilmadi:", redactForLog(e));
   }
 
   return NextResponse.json({ ok: true, id: rec.id });

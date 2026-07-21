@@ -1,6 +1,7 @@
 import { Telegram } from "telegraf";
 import { getZakazPdfConfig } from "./sozlama";
 import { buildZakazPdf } from "./pdf";
+import { redactError } from "@/lib/tg-redact";
 
 const NF = new Intl.NumberFormat("uz-UZ");
 
@@ -49,7 +50,7 @@ export async function sendZakazPdf(orderId: number): Promise<{ ok: true } | { ok
     }
     return { ok: true };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Yuborishda xato.";
+    const msg = err instanceof Error ? redactError(err) : "Yuborishda xato.";
     console.error("[zakaz-pdf] sendZakazPdf:", msg);
     return { ok: false, error: `Yuborilmadi: ${msg}` };
   }

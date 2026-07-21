@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { vozvratYarat, ruxsatBormi } from "@/lib/spisaniya/db";
 import { vozvratGuruhgaYuborish } from "@/lib/spisaniya/notify";
 import { verifyInitData } from "@/lib/spisaniya/telegram-auth";
+import { redactForLog } from "@/lib/tg-redact";
 import { rateLimit } from "@/lib/spisaniya/rate-limit";
 import { getBotUserScope } from "@/lib/spisaniya/sku-scope";
 
@@ -102,7 +103,7 @@ export async function POST(req: Request) {
 
   try {
     const id = await vozvratYarat(d);
-    void vozvratGuruhgaYuborish(d, id).catch((e) => console.error("[vozvrat→guruh]", e));
+    void vozvratGuruhgaYuborish(d, id).catch((e) => console.error("[vozvrat→guruh]", redactForLog(e)));
     return NextResponse.json({ ok: true, id });
   } catch (err) {
     console.error("[api/vozvrat]", err);

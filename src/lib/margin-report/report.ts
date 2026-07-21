@@ -12,6 +12,7 @@ import { Telegram } from "telegraf";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { getMarginReportConfig } from "./sozlama";
+import { redactError } from "@/lib/tg-redact";
 
 type Row = { branch: string; grp: string | null; cat: string | null; sub: string; sales: number; cost: number };
 type SubRow = { cid: number; grp: string | null; cat: string | null; sub: string; sales: number; cost: number | null };
@@ -228,7 +229,7 @@ export async function sendMarginReport(): Promise<{ ok: true; count: number } | 
 
     return { ok: true, count: low?.count ?? 0 };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Yuborishda xato.";
+    const msg = err instanceof Error ? redactError(err) : "Yuborishda xato.";
     console.error("[margin-report] sendMarginReport:", msg);
     return { ok: false, error: `Yuborilmadi: ${msg}` };
   }

@@ -1,6 +1,8 @@
 /**
  * Analyze — narx sifati (data quality) bo'limi. 3 tab:
  *   (1) Filiallar narxi — bir SKU uchun filiallar sotuv narxi farq qiladi (eng oxirgi davr).
+ *       Tab boshida qamrov (coverage) bloki: narxsiz qatorlar taqqoslashga kirmagani uchun
+ *       "farq topilmadi" avtomatik "muammo yo'q" degani emas.
  *   (2) Sotuv narxi — Продажи Сумма÷Количество ≠ Продажи Цена.
  *   (3) Tannarx narxi — Себестоимость Сумма÷Количество ≠ Себестоимость Цена.
  */
@@ -86,7 +88,7 @@ export default async function AnalyzePage({
       ) : tab === "tannarx" ? (
         <CostMismatchTab rows={data.costPriceMismatch} />
       ) : (
-        <BranchDiffTab rows={data.branchPriceDiffs} />
+        <BranchDiffTab rows={data.branchPriceDiffs} coverage={data.coverage} />
       )}
     </div>
   );

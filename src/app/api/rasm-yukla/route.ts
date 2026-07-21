@@ -9,6 +9,7 @@ import { getGroupChatId, ruxsatBormi } from "@/lib/spisaniya/db";
 import { verifyInitData } from "@/lib/spisaniya/telegram-auth";
 import { sverkaRuxsatBormi } from "@/lib/sverka/ruxsat";
 import { rateLimit } from "@/lib/spisaniya/rate-limit";
+import { redactError, redactForLog } from "@/lib/tg-redact";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -64,8 +65,10 @@ export async function POST(req: Request) {
     const fileId = photos[photos.length - 1].file_id;
     return NextResponse.json({ file_id: fileId });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Rasm yuklanmadi";
-    console.error("[api/rasm-yukla]", msg);
+    // sendPhoto tarmoq xatosi xabarga bot token'li URL qo'shadi — mijozga
+    // (miniapp) ham, log'ga ham faqat tozalangan matn chiqadi.
+    const msg = err instanceof Error ? redactError(err) : "Rasm yuklanmadi";
+    console.error("[api/rasm-yukla]", redactForLog(err));
     return NextResponse.json({ xato: "Rasm yuklanmadi: " + msg }, { status: 500 });
   }
 }
