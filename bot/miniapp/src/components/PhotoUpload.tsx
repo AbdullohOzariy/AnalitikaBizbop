@@ -1,4 +1,4 @@
-import { ImageIcon, RefreshCw, Loader2 } from 'lucide-react'
+import { ImageIcon, RefreshCw, Loader2, AlertTriangle } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { compressImage, fileSizeLabel } from '../lib/utils'
 
@@ -8,21 +8,34 @@ interface Props {
   loading: boolean
   onFile: (file: File, base64: string) => void
   onClear: () => void
+  // Fayl tanlangan zahoti — spinner ko'rsatish uchun. Busiz `loading` hech qachon
+  // `true` bo'lmasdi va spinner o'lik kod edi (siqish 1-3 soniya davom etadi).
+  onStart?: () => void
+  // Siqish xatosi — `compressImage` endi reject qiladi (qarang lib/utils.ts)
+  onXato?: (xabar: string) => void
+  xato?: string | null
   title?: string
   hint?: string
+  required?: boolean
 }
 
 export default function PhotoUpload({
-  base64, fileSize, loading, onFile, onClear,
+  base64, fileSize, loading, onFile, onClear, onStart, onXato, xato,
   title = "Tovar rasmini qo'shing",
   hint = 'Galereya yoki kameradan',
+  required = false,
 }: Props) {
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const raw = e.target.files?.[0]
     if (!raw) return
     e.target.value = ''
-    const { file, base64 } = await compressImage(raw)
-    onFile(file, base64)
+    onStart?.()
+    try {
+      const { file, base64 } = await compressImage(raw)
+      onFile(file, base64)
+    } catch (err: unknown) {
+      onXato?.(err instanceof Error ? err.message : 'Rasmni tayyorlab bo\'lmadi')
+    }
   }
 
   return (
@@ -65,14 +78,26 @@ export default function PhotoUpload({
             <ImageIcon className="h-5 w-5 text-brand" />
           </div>
           <div className="text-center">
-            <p className="text-[14px] font-semibold text-tg-text">{title}</p>
-            <p className="mt-0.5 text-[12px] text-tg-hint">{hint}</p>
+            {/* Majburiy/ixtiyoriy farqi KO'RINSIN: yonma-yon turgan ikkita bir xil
+                ko'rinishdagi dashed karta bor va biri (QR) ixtiyoriy — belgisiz
+                xodim qaysi biri CTA'ni bloklayotganini bilolmasdi. */}
+            <p className="text-[14px] font-semibold text-tg-text">
+              {title}
+              {required && <span className="text-red-500 ml-0.5">*</span>}
+            </p>
+            <p className="mt-0.5 text-[12px] text-ink2">{hint}</p>
           </div>
           <label className="flex cursor-pointer items-center gap-1.5 rounded-xl bg-gradient-to-b from-brand-400 to-brand-600 px-5 py-2 text-[13px] font-semibold text-white shadow-brand transition-transform active:scale-95">
             <ImageIcon className="w-3.5 h-3.5" />
             Rasm tanlash
             <input type="file" accept="image/*" onChange={handleFile} className="hidden" />
           </label>
+          {xato && (
+            <p className="flex items-center gap-1.5 px-4 text-center text-[12px] font-medium text-red-500">
+              <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
+              {xato}
+            </p>
+          )}
         </motion.div>
       )}
     </AnimatePresence>

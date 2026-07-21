@@ -6,7 +6,37 @@
   :root {
     /* Light/dark ikkalasida ham ko'rinadigan nozik chiziq (brendsiz, kulrang-alpha) */
     --hairline: rgba(130, 130, 140, 0.16);
+
+    /* Sehrgar balandligi. Klaviatura ochilganda App.tsx `viewportChanged` orqali
+       Telegram bergan haqiqiy `viewportHeight` ni yozadi — shusiz "Davom etish"
+       tugmasi klaviatura ostida qolardi. `dvh` iOS'da klaviaturaga javob
+       bermaydi, shuning uchun u faqat zaxira (Telegram tashqarisida). */
+    --app-h: 100vh;
+
+    /* Yorliq/chip matni (11px uppercase) — AA uchun --tg-hint dan qorong'iroq */
+    --ink-2: #5C5C66;
+    /* Faol bo'lmagan qadam nuqtasi — ATAYLAB alpha'siz: `bg-tg-hint/25`
+       Tailwind'da hech qanday CSS chiqarmasdi (qarang tailwind.config.js) */
+    --dot: rgba(130, 130, 140, 0.45);
   }
+
+  /* `dvh` mavjud bo'lsa afzal (brauzer UI panellarini hisobga oladi). @supports
+     ORQALI: `--app-h: 100dvh` ni to'g'ridan-to'g'ri yozib bo'lmaydi — eski
+     WebView'da custom property qiymat sifatida saqlanadi, `height: var(--app-h)`
+     esa hisoblash bosqichida yaroqsiz bo'lib balandlik `auto` ga tushardi. */
+  @supports (height: 100dvh) {
+    :root { --app-h: 100dvh; }
+  }
+
+  /* Telegram temasi tizim temasidan farq qilishi mumkin — App.tsx `tg.colorScheme`
+     dan `data-theme` yozadi va u tizim afzalligini bosib o'tadi. */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink-2: #A8A8B3;
+    }
+  }
+  :root[data-theme='dark'] { --ink-2: #A8A8B3; }
+  :root[data-theme='light'] { --ink-2: #5C5C66; }
 
   *, *::before, *::after {
     box-sizing: border-box;

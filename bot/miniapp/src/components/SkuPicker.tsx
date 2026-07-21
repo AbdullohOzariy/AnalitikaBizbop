@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { ArrowLeft, ChevronRight, Search, X, Loader2, PackageSearch, PencilLine } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { useTelegram } from '../hooks/useTelegram'
+import { useOrqaga } from '../hooks/useOrqaga'
 
 /**
  * SKU katalogi (to'liq ekranli sheet): iyerarxik navigatsiya (ota → sub → tovar)
@@ -69,7 +70,20 @@ export default function SkuPicker({ onPick, onQolda, onClose }: Props) {
     }, 300)
     return () => clearTimeout(t)
   }, [s, initData])
-  const aktivNatija = qidiruvRejimi && natija?.kalit === s ? natija.items : null
+
+  // Har harfda ro'yxatni spinnerga almashtirish o'rniga ESKI natijani xiralashtirib
+  // qoldiramiz — kontekst yo'qolmaydi, "chaqnash" bo'lmaydi. Race himoyasi o'sha:
+  // `kalit !== s` bo'lsa ro'yxat `pointer-events-none` — eski elementga bosib
+  // bo'lmaydi, ya'ni noto'g'ri SKU tanlanmaydi.
+  //
+  // Lekin eski natija faqat AYNI qidiruvning davomi bo'lsa mazmunli. "cho" qidirib,
+  // X bilan tozalab, "mol" yozilganda tashlab yuborilgan "cho" natijalari xira
+  // holda qolib ketardi — bu butunlay boshqa kontekst. Prefiks munosabati (biri
+  // ikkinchisining boshlanishi) ayni so'zni yozish/o'chirish davomini bildiradi.
+  const natijaMos = natija !== null && (s.startsWith(natija.kalit) || natija.kalit.startsWith(s))
+  const natijaTayyor = qidiruvRejimi && natija?.kalit === s
+  const korsatiladigan = qidiruvRejimi && natija && natijaMos ? natija.items : null
+  const qidirilmoqda = qidiruvRejimi && !natijaTayyor
 
   // Race himoyasi: sub tez almashtirilsa, eski so'rov javobi yangi ro'yxatni bosmasin
   const aktivSubRef = useRef<number | null>(null)
@@ -109,6 +123,10 @@ export default function SkuPicker({ onPick, onQolda, onClose }: Props) {
     else onClose()
   }
 
+  // Native BackButton — 3 pog'onali navigatsiya (tovar → sub → ota → yopish).
+  // `show()/hide()` bu yerda EMAS: qarang lib/orqaga.ts
+  useOrqaga(true, orqaga)
+
   const sarlavha = sub ? sub.nomi : ota ? ota.nomi : 'SKU katalogi'
 
   return (
@@ -141,11 +159,21 @@ export default function SkuPicker({ onPick, onQolda, onClose }: Props) {
               value={q}
               onChange={e => setQ(e.target.value)}
               placeholder="Nomi yoki kodi bo'yicha qidiring..."
-              className="w-full bg-tg-bg2 border border-line rounded-2xl pl-9 pr-9 py-2.5 text-[14px] text-tg-text placeholder:text-tg-hint/60 outline-none"
+              className={cn(
+                'w-full bg-tg-bg2 border border-line rounded-2xl pl-9 py-2.5 text-[14px] text-tg-text placeholder:text-ink2 outline-none',
+                // O'ng joy faqat spinner/tozalash tugmasi BOR paytda kerak
+                q ? 'pr-14' : 'pr-4',
+              )}
             />
+            {/* Spinner ro'yxat o'rnida emas, input yonida — ro'yxat joyida qoladi */}
+            {qidirilmoqda && (
+              <Loader2 className="absolute right-9 top-1/2 w-4 h-4 -translate-y-1/2 animate-spin text-tg-hint" />
+            )}
             {q && (
+              /* Tegish nishoni: ilgari o'lcham klassisiz edi va preflight `padding:0`
+                 tufayli aniq 16×16px chiqardi — WCAG 2.2 AA (24×24) buzilishi. */
               <button onClick={() => setQ('')} aria-label="Tozalash"
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-tg-hint active:opacity-60">
+                className="absolute right-1 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-tg-hint active:opacity-60">
                 <X className="w-4 h-4" />
               </button>
             )}
@@ -157,13 +185,16 @@ export default function SkuPicker({ onPick, onQolda, onClose }: Props) {
       <div className="flex-1 overflow-y-auto px-4 py-3">
         {qidiruvRejimi ? (
           /* ─── Qidiruv natijalari ─── */
-          aktivNatija === null ? (
+          korsatiladigan === null || (korsatiladigan.length === 0 && qidirilmoqda) ? (
             <Holat yuklanmoqda />
-          ) : aktivNatija.length === 0 ? (
+          ) : korsatiladigan.length === 0 ? (
             <Holat matn="Hech narsa topilmadi" />
           ) : (
-            <div className="bg-tg-bg2 rounded-2xl border border-line overflow-hidden">
-              {aktivNatija.map((t, i) => (
+            <div className={cn(
+              'bg-tg-bg2 rounded-2xl border border-line overflow-hidden transition-opacity duration-150',
+              qidirilmoqda && 'opacity-50 pointer-events-none',
+            )}>
+              {korsatiladigan.map((t, i) => (
                 <button key={`${t.kod}-${i}`} onClick={() => tanla({ kod: t.kod, nomi: t.nomi })}
                   className={cn('w-full px-4 py-3 text-left flex items-center gap-3 active:bg-black/[.04]', i > 0 && 'border-t border-line')}>
                   <div className="flex-1 min-w-0">

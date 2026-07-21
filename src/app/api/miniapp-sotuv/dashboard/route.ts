@@ -93,7 +93,13 @@ export async function GET(req: Request) {
     Promise.all(
       scopeRows.map(async (r) => {
         const g = await dailySalesByGroup(range, r.branchId);
-        return { branchId: r.branchId, sales: g.days.reduce((s, d) => s + d.total, 0) };
+        // `days` baribir olinadi — kunlik seriyani qaytarish qo'shimcha so'rov
+        // talab qilmaydi (miniapp hero'sidagi sparkline uchun).
+        return {
+          branchId: r.branchId,
+          sales: g.days.reduce((s, d) => s + d.total, 0),
+          days: g.days.map((d) => d.total),
+        };
       })
     ),
     marjaByGroup(range, unrestricted ? null : branchId ? [branchId] : scopeIds),
@@ -110,6 +116,13 @@ export async function GET(req: Request) {
   ]);
 
   const salesMap = new Map(salesPerBranch.map((s) => [s.branchId, s.sales]));
+
+  /* Qamrovdagi filiallarning kunlik savdosi yig'indisi. Barcha `days`
+     massivlari bir xil `range` dan kelgani uchun uzunligi bir xil. */
+  const kunSoni = salesPerBranch[0]?.days.length ?? 0;
+  const series = Array.from({ length: kunSoni }, (_, i) =>
+    salesPerBranch.reduce((s, b) => s + (b.days[i] ?? 0), 0)
+  );
   const totalSales = salesPerBranch.reduce((s, b) => s + b.sales, 0);
   const totalReceipts = scopeRows.reduce((s, r) => s + r.receipts, 0);
 
@@ -132,6 +145,8 @@ export async function GET(req: Request) {
       avgReceipt: totalReceipts > 0 ? totalSales / totalReceipts : 0,
     },
     branches,
+    // Kunlik savdo dinamikasi (hero sparkline) — "Bugun" da 1 nuqta, UI uni ko'rsatmaydi
+    series,
     marja,
     plan: {
       plan: planTotal,

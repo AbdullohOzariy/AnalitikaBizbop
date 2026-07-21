@@ -74,14 +74,19 @@ export interface Qoralama {
 /**
  * Qoralama saqlashga arziydimi — bo'sh formani banner bilan tiklash bezovta qiladi.
  * Rasm hisobga OLINMAYDI: u saqlanmaydi, ya'ni yolg'iz rasm tiklanganda bo'sh forma beradi.
+ *
+ * `filial` ham hisobga OLINMAYDI (lib/forma.ts uni oxirgi tanlovdan oldindan
+ * to'ldiradi): u endi xodim kiritgan signal emas. Aks holda BUTUNLAY bo'sh forma
+ * ham "arziydi" bo'lib qolardi — natijada (a) har ochilishda soxta "Tugallanmagan
+ * yozuv bor — Nomsiz tovar" banneri, (b) 1-qadamda tur almashtirilganda forma
+ * tozalanadi va o'sha bo'sh qoralama HAQIQIY qoralamaning ustidan yozilardi.
  */
 export function qoralamaArziydi(form: FormData): boolean {
   return Boolean(
     form.tovarNomi.trim() ||
     form.miqdor.trim() ||
     form.summa.trim() ||
-    form.sababTanlov ||
-    form.filial,
+    form.sababTanlov,
   )
 }
 

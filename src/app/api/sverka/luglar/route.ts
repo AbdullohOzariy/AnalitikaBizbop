@@ -30,6 +30,11 @@ export async function GET(req: Request) {
     prisma.$queryRaw<{ v: string }[]>(Prisma.sql`
       SELECT sklad AS v FROM "SverkaRecord" GROUP BY sklad ORDER BY MAX(id) DESC LIMIT 15
     `),
+    // CHEGARA YO'Q — ATAYLAB: 3-qadam yagona erkin matnsiz qadam (faqat
+    // tugmalar). Kesilsa, alifbo bo'yicha chetda qolgan qabulchini miniappda
+    // umuman tanlab bo'lmaydi va sehrgar shu qadamda o'lik qoladi — "yana"
+    // ko'rsatkichi ham, xato ham chiqmaydi. Jadval kichik (admin qo'lda
+    // to'ldiradi) va faqat `ism` tanlanadi.
     prisma.sverkaQabulchi.findMany({ orderBy: { ism: "asc" }, select: { ism: true } }),
     prisma.branch.findMany({ orderBy: { sortOrder: "asc" }, select: { name: true } }),
     supplierId

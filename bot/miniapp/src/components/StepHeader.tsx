@@ -32,7 +32,15 @@ interface Props {
 export default function StepHeader({ onBack, step, tur }: Props) {
   const color = TUR_DOT[tur]
   return (
-    <div className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-line bg-tg-bg/85 px-4 backdrop-blur-xl">
+    /* DIQQAT: bu izohda Tailwind klass nomlarini TO'LIQ yozmang — content skaneri
+       ularni haqiqiy klass deb o'qib, build'ga o'lik CSS qoidasi qo'shadi.
+       Yarim-shaffof fon (bg-tg-bg + 85% alpha) va `backdrop-blur-xl` ATAYLAB
+       olib tashlandi: rang `var()` bo'lgani
+       uchun Tailwind alpha utility'sini umuman chiqarmasdi → header FONSIZ qolib,
+       kontent uning ostidan o'tib ketardi. Ustiga header flex-sibling, scroll
+       konteyner esa uning ukasi — ya'ni `sticky` baribir no-op, blur faqat har
+       kadrda backdrop snapshot talab qilardi. Qattiq fon — to'g'ri va arzon. */
+    <div className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-line bg-tg-bg px-4">
       <button
         onClick={onBack}
         className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-line bg-tg-bg2 transition-transform active:scale-95"
@@ -44,16 +52,19 @@ export default function StepHeader({ onBack, step, tur }: Props) {
       <div className="flex flex-1 items-center gap-1.5">
         {[1, 2, 3].map((n) => (
           <div key={n} className="flex flex-1 items-center gap-1.5 last:flex-none">
+            {/* Hint rangiga 25%/20% alpha berilgan variantlar hech qanday CSS
+                chiqarmasdi (var()+alpha) — nuqtalar va ulagichlar KO'RINMASDI.
+                Endi qattiq `--dot` tokeni. */}
             <div
               className={cn(
                 'h-1.5 flex-shrink-0 rounded-full transition-all duration-300',
-                n <= step ? 'w-5' : 'w-1.5 bg-tg-hint/25'
+                n <= step ? 'w-5' : 'w-1.5 bg-dot'
               )}
               style={n <= step ? { backgroundColor: color } : {}}
             />
             {n < 3 && (
               <div
-                className={cn('h-[2px] flex-1 rounded-full transition-colors duration-300', n >= step && 'bg-tg-hint/20')}
+                className={cn('h-[2px] flex-1 rounded-full transition-colors duration-300', n >= step && 'bg-dot')}
                 style={n < step ? { backgroundColor: color + '50' } : {}}
               />
             )}

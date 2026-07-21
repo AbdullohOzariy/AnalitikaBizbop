@@ -35,10 +35,13 @@ export default async function AnalyzePage({
 
   const data = await getPriceQuality();
 
-  const tabs: { v: Tab; l: string; count: number }[] = [
-    { v: "filiallar", l: "Filiallar narxi", count: data.branchPriceDiffs.length },
-    { v: "sotuv", l: "Sotuv narx farqi", count: data.salePriceMismatch.length },
-    { v: "tannarx", l: "Tannarx narx farqi", count: data.costPriceMismatch.length },
+  // "+" bayrog'i ro'yxat-BO'YICHA: umumiy `data.truncated` uchalasi bo'yicha OR bo'lgani
+  // uchun undan foydalansak, bitta tab chegaraga yetganda qolgan ikkitasi ham soxta
+  // "500+" ko'rsatardi.
+  const tabs: { v: Tab; l: string; count: number; more: boolean }[] = [
+    { v: "filiallar", l: "Filiallar narxi", count: data.branchPriceDiffs.length, more: data.truncatedDiffs },
+    { v: "sotuv", l: "Sotuv narx farqi", count: data.salePriceMismatch.length, more: data.truncatedSale },
+    { v: "tannarx", l: "Tannarx narx farqi", count: data.costPriceMismatch.length, more: data.truncatedCost },
   ];
 
   return (
@@ -76,7 +79,7 @@ export default async function AnalyzePage({
                 )}
               >
                 {t.count}
-                {data.truncated ? "+" : ""}
+                {t.more ? "+" : ""}
               </span>
             )}
           </Link>
@@ -84,9 +87,9 @@ export default async function AnalyzePage({
       </div>
 
       {tab === "sotuv" ? (
-        <SaleMismatchTab rows={data.salePriceMismatch} />
+        <SaleMismatchTab rows={data.salePriceMismatch} truncated={data.truncatedSale} />
       ) : tab === "tannarx" ? (
-        <CostMismatchTab rows={data.costPriceMismatch} />
+        <CostMismatchTab rows={data.costPriceMismatch} truncated={data.truncatedCost} />
       ) : (
         <BranchDiffTab rows={data.branchPriceDiffs} coverage={data.coverage} />
       )}

@@ -7,12 +7,26 @@
  *      + coverage — A) taqqoslashi qancha qamrab olganini ko'rsatadi (narxsiz qatorlar
  *        taqqoslashga kirmaydi, shuning uchun "farq yo'q" ≠ "muammo yo'q").
  *   B) salePriceMismatch — Продажи Сумма÷Количество ≠ Продажи Цена (faylda nomuvofiqlik).
+ *      + promos — qator shu davrda AKSIYADA bo'lgan SKU'ga tegishlimi (quyiga qara).
  *   C) costPriceMismatch — Себестоимость Сумма÷Количество ≠ Себестоимость Цена.
  *
  * Nomuvofiqlik tolerantligi: yaxlitlash xatosini (narx 3 kasr, summa 2 kasr) e'tiborsiz
  * qoldirish uchun nisbiy 0.5% YOKI absolyut 1 so'm — qaysi katta bo'lsa.
+ *
+ * B) da aksiya belgisi NEGA kerak: `amount ÷ soldQty` — davrdagi HAQIQIY o'rtacha
+ * narx, `salePrice` esa fayldagi RO'YXAT narxi. Davrda aksiya/chegirma bo'lgan bo'lsa
+ * ikkisi farq qilishi NORMAL, bu ma'lumot xatosi emas. Shu sabab aksiyadagi qatorlar
+ * ro'yxatdan CHIQARILMAYDI (ma'lumot yashirilmaydi), faqat belgilanadi — UI ularni
+ * "kutilgan farq" sifatida ko'rsatadi. Aksiya tannarxga ta'sir qilmaydi, shuning uchun
+ * C) belgilanmaydi (`promos` u yerda doim bo'sh).
+ *
+ * MUHIM: belgi — kesishuv FAKTI, "xato emas" degan hukm EMAS. Chegirma farqni faqat
+ * BIR yo'nalishda izohlaydi (`amount÷soldQty` < `salePrice`); teskari holatda (ro'yxat
+ * narxidan qimmat sotilgan) aksiya sabab bo'la olmaydi. Yo'nalish tekshiruvi UI'da
+ * (`analyze-client.tsx: isPromoExplained`) — bu yerda faqat kesishuv hisoblanadi.
  */
 import { unstable_cache } from "next/cache";
+import type { PromoStatus, PromoType } from "@/generated/prisma/client";
 import { isoDay } from "@/lib/date";
 import { prisma } from "@/lib/prisma";
 import { ANALYTICS_CACHE_TAG } from "@/lib/analytics";
@@ -31,7 +45,25 @@ export type BranchPriceDiff = {
   branches: BranchPrice[];
 };
 
+/**
+ * Aksiya belgisi — qator davri (periodStart..periodEnd) shu SKU qatnashgan aksiya
+ * davri bilan KESISHGANINI bildiradi. Belgi "bu qatorda chegirma bo'lgan" degani,
+ * "bu qator xato emas" degan qat'iy isbot emas: qator davri aksiyadan kengroq
+ * bo'lishi ham mumkin. Shuning uchun qator ro'yxatda qoladi, faqat kontekst bilan.
+ */
+export type PromoMark = {
+  campaignId: number;
+  title: string;
+  type: PromoType;
+  /** Kampaniya holati — CANCELLED ham belgi beradi (quyida `loadPromoMarks` izohiga qara). */
+  status: PromoStatus;
+  startDate: string; // ISO sana
+  endDate: string | null; // null = doimiy (BIZBOP_NARX)
+};
+
 export type PriceMismatch = {
+  /** Ro'yxatdagi barqaror yagona kalit (React `key` uchun) — quyidagi izohga qara. */
+  rowKey: string;
   productId: number;
   code: number;
   name: string;
@@ -43,6 +75,8 @@ export type PriceMismatch = {
   filePrice: number; // fayldagi tayyor narx
   diff: number; // derivedPrice − filePrice
   diffPct: number; // |diff| / filePrice × 100
+  /** Qator davriga tushgan aksiyalar (bo'sh = aksiya yo'q). C) da doim bo'sh. */
+  promos: PromoMark[];
 };
 
 /**
@@ -84,6 +118,8 @@ export type PriceQuality = {
   costPriceMismatch: PriceMismatch[];
   truncated: boolean; // biror ro'yxat LIMIT'ga yetdimi (to'liq emas)
   truncatedDiffs: boolean; // FAQAT branchPriceDiffs qirqildimi (PDF hisoboti shuni ishlatadi)
+  truncatedSale: boolean; // FAQAT salePriceMismatch qirqildimi
+  truncatedCost: boolean; // FAQAT costPriceMismatch qirqildimi
 };
 
 const EMPTY_COVERAGE: PriceCoverage = {
@@ -118,7 +154,110 @@ type MismatchRow = {
   soldQty: number;
   derivedPrice: number;
   filePrice: number;
+  /** Faqat B) so'rovi tanlaydi — aksiya davri kesishuvi uchun. C) da yo'q. */
+  periodStart?: Date;
 };
+
+/**
+ * Qator-BO'YICHA belgilar: `marks[i]` — kirish `rows[i]` ga tegishli aksiyalar.
+ *
+ * NEGA `Map` EMAS: tabiiy ko'ringan `productId:branchId` kaliti QATORLARNI ARALASHTIRADI.
+ * `ProductSales` unique kaliti `[productId, branchId, periodStart, periodEnd]` — ya'ni
+ * bitta `periodEnd`da bir SKU×filial uchun bir NECHTA qator bo'lishi mumkin (kunlik 1C
+ * JSON `periodStart = periodEnd = kun` yozadi, oylik Excel esa `01.07 → 20.07` — ikkalasi
+ * ham 20.07 bilan tugaydi va yonma-yon yashaydi). Umumiy kalitda oylik qatorning aksiyasi
+ * 1 kunlik qatorga o'tib ketardi (yoki teskarisi). Indeks bo'yicha moslash bu sinf
+ * xatolarini butunlay yo'q qiladi — kalit umuman yo'q.
+ */
+type PromoMarkList = PromoMark[][];
+
+/**
+ * Nomuvofiqlik qatorlarini aksiya bo'yicha belgilaydi (kirish tartibini SAQLAYDI).
+ *
+ * NEGA ProductSales'ga JOIN emas: B) so'rovi 731k qatorli jadval ustidan skanlaydi,
+ * unga PromoItem×PromoCampaign qo'shish o'sha skanni qimmatlashtiradi. Bu yerga esa
+ * allaqachon LIMIT bilan qirqilgan (≤501) qatorlar keladi — ularning productId'lari
+ * bo'yicha bitta yengil so'rov (`PromoItem.productId` indeksli) yetadi, kesishuvni
+ * xotirada hisoblaymiz. Ya'ni og'ir so'rov o'zgarmaydi, qo'shimcha xarajat doimiy.
+ *
+ * Statuslar: ACTIVE, ENDED va CANCELLED. CANCELLED NEGA kiradi: holat UI'da QO'LDA
+ * tanlanadi va ACTIVE→CANCELLED o'tishi ochiq — ya'ni bir necha kun haqiqatan ishlagan,
+ * keyin "Bekor" qilingan aksiya ham bo'ladi. Uni tashlab yuborish false-negative beradi:
+ * chegirma sababli kelgan farq "haqiqiy xato" bo'lib ko'rinadi. Chipda holat ko'rsatiladi,
+ * qaror foydalanuvchida qoladi. DRAFT esa KIRMAYDI — u hech qachon e'lon qilinmagan.
+ * Filial: `campaign.branchId = null` — barcha filiallar, aks holda faqat o'shanisi.
+ */
+async function loadPromoMarks(rows: MismatchRow[], periodEnd: Date): Promise<PromoMarkList> {
+  // Har bir qatorga bo'sh ro'yxat — indeks moslashuvi kirish uzunligi bilan kafolatlanadi.
+  const marks: PromoMarkList = rows.map(() => []);
+  if (rows.length === 0) return marks;
+
+  const productIds = [...new Set(rows.map((r) => r.productId))];
+  // Eng erta qator boshlanishi — so'rovni toraytirish uchun (qatorlarning periodEnd'i
+  // bir xil, periodStart esa fayl formatiga qarab farq qilishi mumkin).
+  let minStart = periodEnd;
+  for (const r of rows) if (r.periodStart && r.periodStart < minStart) minStart = r.periodStart;
+
+  const items = await prisma.promoItem.findMany({
+    where: {
+      productId: { in: productIds },
+      campaign: {
+        status: { in: ["ACTIVE", "ENDED", "CANCELLED"] },
+        startDate: { lte: periodEnd },
+        OR: [{ endDate: null }, { endDate: { gte: minStart } }],
+      },
+    },
+    select: {
+      productId: true,
+      campaign: {
+        select: {
+          id: true,
+          title: true,
+          type: true,
+          status: true,
+          branchId: true,
+          startDate: true,
+          endDate: true,
+        },
+      },
+    },
+  });
+  if (items.length === 0) return marks;
+
+  const byProduct = new Map<number, typeof items>();
+  for (const it of items) {
+    const list = byProduct.get(it.productId);
+    if (list) list.push(it);
+    else byProduct.set(it.productId, [it]);
+  }
+
+  rows.forEach((r, i) => {
+    const list = byProduct.get(r.productId);
+    if (!list) return;
+    const rowStart = r.periodStart ?? periodEnd;
+    marks[i] = list
+      .filter((it) => {
+        const c = it.campaign;
+        if (c.branchId !== null && c.branchId !== r.branchId) return false;
+        // Davr kesishuvi: aksiya boshlanishi qator oxiridan keyin bo'lmasin va
+        // aksiya tugashi (bor bo'lsa) qator boshlanishidan oldin bo'lmasin.
+        if (c.startDate > periodEnd) return false;
+        if (c.endDate !== null && c.endDate < rowStart) return false;
+        return true;
+      })
+      .map<PromoMark>((it) => ({
+        campaignId: it.campaign.id,
+        title: it.campaign.title,
+        type: it.campaign.type,
+        status: it.campaign.status,
+        startDate: isoDay(it.campaign.startDate),
+        endDate: it.campaign.endDate ? isoDay(it.campaign.endDate) : null,
+      }))
+      .sort((a, b) => a.startDate.localeCompare(b.startDate));
+  });
+
+  return marks;
+}
 
 async function _compute(): Promise<PriceQuality> {
   // Eng oxirgi yuklangan davr — narx ustunlari bor qatorlar ichida (eski narxsiz
@@ -138,6 +277,8 @@ async function _compute(): Promise<PriceQuality> {
       costPriceMismatch: [],
       truncated: false,
       truncatedDiffs: false,
+      truncatedSale: false,
+      truncatedCost: false,
     };
   }
 
@@ -234,6 +375,7 @@ async function _compute(): Promise<PriceQuality> {
     SELECT ps."productId" AS "productId", p.code AS code, p.name AS name, c.name AS "categoryName",
       ps."branchId" AS "branchId", b.name AS "branchName",
       ps."soldQty"::float8 AS "soldQty",
+      ps."periodStart" AS "periodStart",
       (ps.amount / ps."soldQty")::float8 AS "derivedPrice",
       ps."salePrice"::float8 AS "filePrice"
     FROM "ProductSales" ps
@@ -273,8 +415,9 @@ async function _compute(): Promise<PriceQuality> {
   // ishlata olmaydi — boshqa tab 500 ga yetsa soxta ogohlantirish chiqarardi.
   // `slice` dan OLDIN hisoblanadi: slice'dan keyin 500 va "501+" farqlanmaydi.
   const truncatedDiffs = diffRows.length > ROW_LIMIT;
-  const truncated =
-    truncatedDiffs || saleRows.length > ROW_LIMIT || costRows.length > ROW_LIMIT;
+  const truncatedSale = saleRows.length > ROW_LIMIT;
+  const truncatedCost = costRows.length > ROW_LIMIT;
+  const truncated = truncatedDiffs || truncatedSale || truncatedCost;
 
   const branchPriceDiffs: BranchPriceDiff[] = diffRows.slice(0, ROW_LIMIT).map((r) => {
     const minPrice = Number(r.minPrice);
@@ -293,12 +436,25 @@ async function _compute(): Promise<PriceQuality> {
     };
   });
 
-  const toMismatch = (rows: MismatchRow[]): PriceMismatch[] =>
-    rows.slice(0, ROW_LIMIT).map((r) => {
+  // Aksiya belgisi — FAQAT ko'rsatiladigan (slice'dan keyingi) qatorlar uchun.
+  const saleTop = saleRows.slice(0, ROW_LIMIT);
+  const salePromoMarks = await loadPromoMarks(saleTop, periodEnd);
+
+  // `marks` indeks bo'yicha moslanadi — shuning uchun u AYNAN shu yerdagi kabi
+  // qirqilgan massivdan qurilgan bo'lishi shart (pastda: `saleTop` ikkalasiga ham
+  // beriladi, uzunligi ≤ ROW_LIMIT bo'lgani uchun bu `slice` — nol-operatsiya).
+  const toMismatch = (rows: MismatchRow[], marks?: PromoMarkList): PriceMismatch[] =>
+    rows.slice(0, ROW_LIMIT).map((r, i) => {
       const derivedPrice = Number(r.derivedPrice);
       const filePrice = Number(r.filePrice);
       const diff = derivedPrice - filePrice;
       return {
+        // productId+branchId YAGONA EMAS: unique kalit [productId, branchId,
+        // periodStart, periodEnd], so'rov esa faqat periodEnd bo'yicha filtrlaydi —
+        // kunlik (start=end) va diapazonli (start<end) qatorlar bir xil periodEnd
+        // bilan yonma-yon yashaydi. React kaliti sifatida ishlatilsa dublikat
+        // chiqadi va qator holati (PromoChip ochiqligi) qo'shni qatorga oqib ketadi.
+        rowKey: `${r.productId}:${r.branchId}:${i}`,
         productId: r.productId,
         code: r.code,
         name: r.name,
@@ -310,6 +466,7 @@ async function _compute(): Promise<PriceQuality> {
         filePrice,
         diff,
         diffPct: filePrice > 0 ? (Math.abs(diff) / filePrice) * 100 : 0,
+        promos: marks?.[i] ?? [],
       };
     });
 
@@ -317,17 +474,22 @@ async function _compute(): Promise<PriceQuality> {
     periodEnd: isoDay(periodEnd),
     branchPriceDiffs,
     coverage,
-    salePriceMismatch: toMismatch(saleRows),
+    salePriceMismatch: toMismatch(saleTop, salePromoMarks),
     costPriceMismatch: toMismatch(costRows),
     truncated,
     truncatedDiffs,
+    truncatedSale,
+    truncatedCost,
   };
 }
 
 /** Keshlangan (ANALYTICS_CACHE_TAG) — yangi sotuv fayli yuklanganda invalidatsiya bo'ladi. */
 export function getPriceQuality(): Promise<PriceQuality> {
-  // v2 — natijaga `coverage` qo'shildi; eski kesh yangi maydonsiz qaytmasligi uchun bump.
-  return unstable_cache(_compute, ["analyze_price_quality_v3"], {
+  // v3 — natijaga `coverage` qo'shildi; v4 — `PriceMismatch.promos` qo'shildi;
+  // v5 — `PromoMark.status` qo'shildi + belgilash qator-indeksiga o'tdi (eski keshda
+  // qatorlar bir-birining aksiyasini olgan bo'lishi mumkin — u qayta hisoblansin).
+  // Eski kesh yangi maydonsiz qaytib UI'ni yiqitmasligi uchun har safar bump SHART.
+  return unstable_cache(_compute, ["analyze_price_quality_v6"], {
     tags: [ANALYTICS_CACHE_TAG],
     revalidate: 300,
   })();

@@ -1,3 +1,27 @@
+/**
+ * Telegram temasidan keladigan rang uchun Tailwind rang-fabrikasi.
+ *
+ * NEGA FUNKSIYA, oddiy `'var(--tg-theme-bg-color, #fff)'` EMAS:
+ * Tailwind v3 alpha modifikatorini (`/85`, `/60`, `/25`) qo'llash uchun rangni
+ * parse qila olishi kerak. `var(...)` parse qilinmaydi → utility JIMGINA tashlanadi,
+ * hech qanday CSS chiqmaydi. Natijada `bg-tg-bg/85` fonsiz header, `bg-tg-hint/25`
+ * esa ko'rinmas nuqta berardi. Funksiya shaklida Tailwind bizga `opacityValue` beradi
+ * va biz `color-mix()` orqali o'zimiz shaffoflik yasaymiz.
+ *
+ * Eski WebView'da (`color-mix` yo'q) e'lon yaroqsiz bo'lib tashlanadi — ya'ni
+ * bugungi holatga qaytadi, REGRESSIYA emas. Shuning uchun KO'ZGA TASHLANADIGAN
+ * joylar (StepHeader foni va qadam nuqtalari) alpha'ga emas, qattiq rangga tayanadi.
+ */
+const tgRang = (nom, zaxira) => ({ opacityValue }) => {
+  // DIQQAT: Tailwind alpha'ni STRING sifatida uzatadi ('0.6'), modifikatorsiz
+  // holatda esa CSS o'zgaruvchi matnini ('var(--tw-bg-opacity)'). Shuning uchun
+  // `typeof === 'number'` tekshiruvi ISHLAMAYDI — Number() + isFinite kerak.
+  const alpha = Number(opacityValue)
+  return Number.isFinite(alpha) && alpha !== 1
+    ? `color-mix(in srgb, var(${nom}, ${zaxira}) ${alpha * 100}%, transparent)`
+    : `var(${nom}, ${zaxira})`
+}
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
@@ -11,13 +35,13 @@ export default {
       colors: {
         // Telegram temasiga moslashadigan yuzalar (light/dark avtomatik)
         tg: {
-          bg:       'var(--tg-theme-bg-color, #F2F3F7)',
-          bg2:      'var(--tg-theme-secondary-bg-color, #FFFFFF)',
-          text:     'var(--tg-theme-text-color, #0B0B0F)',
-          hint:     'var(--tg-theme-hint-color, #8A8A8E)',
-          link:     'var(--tg-theme-link-color, #1FBF5C)',
-          btn:      'var(--tg-theme-button-color, #1FBF5C)',
-          'btn-txt':'var(--tg-theme-button-text-color, #FFFFFF)',
+          bg:       tgRang('--tg-theme-bg-color', '#F2F3F7'),
+          bg2:      tgRang('--tg-theme-secondary-bg-color', '#FFFFFF'),
+          text:     tgRang('--tg-theme-text-color', '#0B0B0F'),
+          hint:     tgRang('--tg-theme-hint-color', '#8A8A8E'),
+          link:     tgRang('--tg-theme-link-color', '#1FBF5C'),
+          btn:      tgRang('--tg-theme-button-color', '#1FBF5C'),
+          'btn-txt':tgRang('--tg-theme-button-text-color', '#FFFFFF'),
         },
         // BizBop brend (emerald) — temadan qat'i nazar barqaror
         brand: {
@@ -30,6 +54,11 @@ export default {
           700: '#0F7D39',
         },
         line: 'var(--hairline)',
+        // Yorliq/chip matni: --tg-hint 11px uppercase'da AA dan o'tmaydi (3.44:1).
+        // Qorong'iroq neytral token — index.css da light/dark uchun alohida.
+        ink2: 'var(--ink-2)',
+        // Faol bo'lmagan qadam nuqtasi — alpha'siz qattiq rang (yuqoridagi izohga qarang)
+        dot: 'var(--dot)',
       },
       borderRadius: {
         '2xl': '16px',

@@ -1,11 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Search, Store, ScanSearch, AlertTriangle, CheckCircle2, CircleDashed, Tag } from "lucide-react";
+import { Search, Store, ScanSearch, AlertTriangle, CheckCircle2, CircleDashed, Tag, Percent } from "lucide-react";
 import { EmptyState, Pill, StatCard } from "@/components/common/page";
 import { cn } from "@/lib/utils";
-import { formatNumber, formatPercent } from "@/lib/format";
-import type { BranchPriceDiff, PriceCoverage, PriceMismatch } from "@/lib/analyze/price-quality";
+import { formatNumber, formatPercent, formatDateUZ } from "@/lib/format";
+import { PROMO_TYPE_META } from "@/lib/promo";
+import type { BranchPriceDiff, PriceCoverage, PriceMismatch, PromoMark } from "@/lib/analyze/price-quality";
 
 // Narx — so'mda, 2 kasrgacha (yaxlitlash farqlari ko'rinishi uchun).
 function fmtPrice(n: number): string {
@@ -209,10 +210,91 @@ export function BranchDiffTab({ rows, coverage }: { rows: BranchPriceDiff[]; cov
   );
 }
 
+// ─── Aksiya belgisi ─────────────────────────────────────────────────────────
+// Sotuv tabida "Сумма÷Кол" — davrdagi AMALDAGI o'rtacha narx, "Цена" esa ro'yxat
+// narxi. Aksiya bo'lgan SKU'da ikkisi farq qilishi kutilgan — qator ro'yxatda
+// qoladi, lekin xato emasligi ko'rinib tursin.
+function promoTypeLabel(t: PromoMark["type"]): string {
+  return t === "FLASH" ? "Flash" : PROMO_TYPE_META[t].label;
+}
+
+// Aksiya bitta qator matni. CANCELLED alohida ko'rsatiladi: u belgi BERADI (aksiya
+// haqiqatan ishlagan bo'lishi mumkin — holat qo'lda "Bekor" ga o'tkaziladi), lekin
+// bu zaifroq dalil, foydalanuvchi buni ko'rib qaror qilsin.
+function promoLine(p: PromoMark): string {
+  const period = p.endDate
+    ? `${formatDateUZ(p.startDate)} — ${formatDateUZ(p.endDate)}`
+    : `${formatDateUZ(p.startDate)} — doimiy`;
+  const suffix = p.status === "CANCELLED" ? " — keyin bekor qilingan" : "";
+  return `${promoTypeLabel(p.type)}: ${p.title} (${period})${suffix}`;
+}
+
+/**
+ * `title` atributi YETARLI EMAS — sensorli qurilmada va klaviatura bilan hover yo'q,
+ * ya'ni aksiya nomi/davri umuman yetib bormaydi. Shuning uchun chip — bosiladigan
+ * disclosure: bosilganda tafsilot qatorlari ro'yida ochiladi (hover uchun `title`
+ * ham qoldirilgan). `Pill` `title`/`onClick` propini qabul qilmaydi (umumiy komponent
+ * — o'zgartirmaymiz), shuning uchun u tashqi `button` ichida.
+ */
+function PromoChip({ promos }: { promos: PromoMark[] }) {
+  const [open, setOpen] = useState(false);
+  const lines = promos.map(promoLine);
+
+  return (
+    <div className="mt-1">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-label={`Aksiya tafsilotlari: ${lines.join("; ")}`}
+        title={lines.join("\n")}
+        className="rounded-full outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-violet-500/60"
+      >
+        <Pill tone="violet">
+          <Percent className="h-3 w-3" />
+          Aksiya
+          {promos.length > 1 && <span className="tabular-nums">×{promos.length}</span>}
+        </Pill>
+      </button>
+      {open && (
+        <ul className="mt-1 space-y-0.5 text-xs leading-relaxed text-muted-foreground">
+          {promos.map((p, i) => (
+            <li key={`${p.campaignId}-${i}`}>{lines[i]}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Aksiya farqni FAQAT BIR yo'nalishda izohlaydi: chegirma haqiqiy o'rtacha narxni
+ * ro'yxat narxidan PASAYTIRADI, ya'ni `diff = Сумма÷Кол − Цена < 0`. Agar diff > 0
+ * bo'lsa (ro'yxat narxidan QIMMAT sotilgan), chegirma buni izohlay olmaydi — bunday
+ * qator "kutilgan" deb ko'rsatilmaydi, rangi xato rangida qoladi va banner sanog'iga
+ * kirmaydi. Chip esa qoladi: "bu davrda aksiya bo'lgan" — bu fakt, yashirmaymiz.
+ */
+function isPromoExplained(r: PriceMismatch): boolean {
+  return r.promos.length > 0 && r.diff < 0;
+}
+
 // ─── Tab 2/3: Summa÷soni ≠ Narx (sotuv yoki tannarx) ────────────────────────
-function MismatchTab({ rows, kind }: { rows: PriceMismatch[]; kind: "sale" | "cost" }) {
+function MismatchTab({ rows, kind, truncated }: { rows: PriceMismatch[]; kind: "sale" | "cost"; truncated: boolean }) {
   const [q, setQ] = useState("");
   const filtered = useMemo(() => rows.filter((r) => matchesQuery(q, r.code, r.name)), [rows, q]);
+  // Sanoq `filtered` bo'yicha — jadval ham shuni chizadi. `rows` bo'yicha hisoblansa
+  // qidiruvda banner "37 ta qator" deb turar, jadvalda esa 2 qator qolardi.
+  // Aksiya faqat sotuv narxiga ta'sir qiladi — tannarx tabida `promos` doim bo'sh.
+  const promoStats = useMemo(() => {
+    let explained = 0; // diff < 0 — chegirma izohlaydi
+    let opposite = 0; // diff >= 0 — aksiya bor, lekin farq teskari yo'nalishda
+    for (const r of filtered) {
+      if (r.promos.length === 0) continue;
+      if (isPromoExplained(r)) explained += 1;
+      else opposite += 1;
+    }
+    return { explained, opposite, total: explained + opposite };
+  }, [filtered]);
 
   const sumLabel = kind === "sale" ? "Сумма÷Кол (sotuv)" : "Сумма÷Кол (tannarx)";
   const fileLabel = kind === "sale" ? "Цена (sotuv)" : "Цена (tannarx)";
@@ -233,6 +315,38 @@ function MismatchTab({ rows, kind }: { rows: PriceMismatch[]; kind: "sale" | "co
 
   return (
     <div className="space-y-3">
+      {promoStats.total > 0 && (
+        <div className="flex flex-col gap-2 rounded-2xl border border-violet-500/30 bg-violet-500/10 p-4 sm:flex-row sm:items-start sm:gap-3">
+          <Percent className="h-5 w-5 shrink-0 text-violet-600 dark:text-violet-400" />
+          <div className="space-y-1">
+            <p className="text-sm font-semibold text-violet-700 dark:text-violet-300">
+              {formatNumber(promoStats.total)} ta qator ({formatNumber(filtered.length)}
+              {truncated ? "+" : ""} dan) aksiya davriga tushadi
+            </p>
+            {promoStats.explained > 0 && (
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                Ulardan <span className="font-medium text-foreground">{formatNumber(promoStats.explained)} tasida</span>{" "}
+                «Сумма÷Кол» «Цена» dan past — bu <span className="font-medium text-foreground">kutilgan</span>:
+                «Сумма÷Кол» davrda haqiqatdan sotilgan o'rtacha narx (chegirmali), «Цена» esa fayldagi ro'yxat narxi.
+                Chegirma bo'lgan SKU'da ular mos kelmasligi normal — ma'lumot xatosi emas.
+              </p>
+            )}
+            {promoStats.opposite > 0 && (
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                Qolgan <span className="font-medium text-foreground">{formatNumber(promoStats.opposite)} tasida</span>{" "}
+                esa aksincha — o'rtacha narx ro'yxat narxidan{" "}
+                <span className="font-medium text-foreground">yuqori</span>. Chegirma bunday farqni izohlay olmaydi,
+                shuning uchun ular xato rangida qoldirildi va yuqoridagi «kutilgan» sanoqqa kirmaydi.
+              </p>
+            )}
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Qatorlar yashirilmadi, faqat «Aksiya» chipi bilan belgilandi — chipni bossangiz aksiya nomi va davri
+              ochiladi.
+              {truncated && " Ro'yxat chegaraga yetib qirqilgan, shuning uchun sanoqlar faqat ko'rinayotgan qatorlar bo'yicha."}
+            </p>
+          </div>
+        </div>
+      )}
       <SearchBox value={q} onChange={setQ} placeholder="Kod yoki nom bo'yicha qidirish…" />
       <div className="overflow-x-auto rounded-2xl border border-border bg-card shadow-card">
         <table className="w-full min-w-[840px] text-sm">
@@ -249,11 +363,12 @@ function MismatchTab({ rows, kind }: { rows: PriceMismatch[]; kind: "sale" | "co
           </thead>
           <tbody>
             {filtered.map((r) => (
-              <tr key={`${r.productId}-${r.branchId}`} className="border-b border-border/40 last:border-b-0 hover:bg-muted/30">
+              <tr key={r.rowKey} className="border-b border-border/40 last:border-b-0 hover:bg-muted/30">
                 <td className="px-4 py-2.5 tabular-nums text-muted-foreground">{r.code}</td>
                 <td className="px-4 py-2.5">
                   <div className="font-medium">{r.name}</div>
                   {r.categoryName && <div className="text-xs text-muted-foreground">{r.categoryName}</div>}
+                  {r.promos.length > 0 && <PromoChip promos={r.promos} />}
                 </td>
                 <td className="px-4 py-2.5">
                   <Pill tone="muted">{r.branchName}</Pill>
@@ -262,7 +377,18 @@ function MismatchTab({ rows, kind }: { rows: PriceMismatch[]; kind: "sale" | "co
                 <td className="px-4 py-2.5 text-right tabular-nums font-medium">{fmtPrice(r.derivedPrice)}</td>
                 <td className="px-4 py-2.5 text-right tabular-nums">{fmtPrice(r.filePrice)}</td>
                 <td className="px-4 py-2.5 text-right">
-                  <div className={cn("font-semibold tabular-nums", r.diff > 0 ? "text-destructive" : "text-amber-600 dark:text-amber-400")}>
+                  {/* Violet — FAQAT aksiya izohlagan yo'nalish (diff < 0). Aksiya bor,
+                      lekin farq teskari bo'lsa xato rangida qoladi. */}
+                  <div
+                    className={cn(
+                      "font-semibold tabular-nums",
+                      isPromoExplained(r)
+                        ? "text-violet-600 dark:text-violet-400"
+                        : r.diff > 0
+                        ? "text-destructive"
+                        : "text-amber-600 dark:text-amber-400"
+                    )}
+                  >
                     {r.diff > 0 ? "+" : ""}
                     {fmtPrice(r.diff)}
                   </div>
@@ -278,10 +404,10 @@ function MismatchTab({ rows, kind }: { rows: PriceMismatch[]; kind: "sale" | "co
   );
 }
 
-export function SaleMismatchTab({ rows }: { rows: PriceMismatch[] }) {
-  return <MismatchTab rows={rows} kind="sale" />;
+export function SaleMismatchTab({ rows, truncated }: { rows: PriceMismatch[]; truncated: boolean }) {
+  return <MismatchTab rows={rows} kind="sale" truncated={truncated} />;
 }
 
-export function CostMismatchTab({ rows }: { rows: PriceMismatch[] }) {
-  return <MismatchTab rows={rows} kind="cost" />;
+export function CostMismatchTab({ rows, truncated }: { rows: PriceMismatch[]; truncated: boolean }) {
+  return <MismatchTab rows={rows} kind="cost" truncated={truncated} />;
 }

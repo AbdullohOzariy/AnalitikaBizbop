@@ -19,6 +19,7 @@ import {
 } from "recharts";
 import { Info, TrendingUp, TrendingDown, Minus, ChevronRight } from "lucide-react";
 import { formatNumber } from "@/lib/format";
+import { marjaTone, MARJA_YAXSHI, MARJA_QONIQARLI, type MarjaTone } from "@/lib/marja";
 import { cn } from "@/lib/utils";
 import { ExpandableCard } from "@/components/ui/expandable-card";
 import { DailySalesChart } from "@/components/charts";
@@ -169,21 +170,22 @@ function MarjaInfoTooltip() {
             (Sotuv − Tannarx) ÷ Sotuv × 100
           </p>
           <div className="mt-2 pt-2 border-t border-border/60 space-y-0.5 text-[11px] text-muted-foreground">
+            {/* Chegaralar src/lib/marja.ts dan — afsona va bo'yoq bir manbadan */}
             <div className="flex justify-between">
               <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-[#81b29a] inline-block" />≥ 30%
+                <span className="w-2 h-2 rounded-full bg-[#81b29a] inline-block" />≥ {MARJA_YAXSHI}%
               </span>
               <span>Yaxshi</span>
             </div>
             <div className="flex justify-between">
               <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-[#f2c94c] inline-block" />15–30%
+                <span className="w-2 h-2 rounded-full bg-[#f2c94c] inline-block" />{MARJA_QONIQARLI}–{MARJA_YAXSHI}%
               </span>
               <span>O&apos;rtacha</span>
             </div>
             <div className="flex justify-between">
               <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-[#e07a5f] inline-block" />&lt; 15%
+                <span className="w-2 h-2 rounded-full bg-[#e07a5f] inline-block" />&lt; {MARJA_QONIQARLI}%
               </span>
               <span>Past</span>
             </div>
@@ -194,10 +196,20 @@ function MarjaInfoTooltip() {
   );
 }
 
+/** Semantik tone → shu vidjetning Recharts palitrasi (boshqa ekranlarda boshqacha). */
+const MARJA_RANG: Record<MarjaTone, string> = {
+  good: "#81b29a",
+  ok: "#f2c94c",
+  bad: "#e07a5f",
+  none: "#f1f5f9",
+};
+
 function MarjaBaseWidget({ title, rows }: { title: React.ReactNode; rows: MarjaRow[] }) {
   const sortedData = [...rows]
     .sort((a, b) => (b.marja ?? -100) - (a.marja ?? -100))
-    .map((r) => ({ name: r.name, marja: r.marja ?? 0, hasCost: r.cost > 0 }));
+    // `tone` shu yerda hisoblanadi: tannarx yo'q bo'lsa marja "0" emas, NULL —
+    // aks holda ma'lumot yetishmasligi "past marja" deb bo'yalardi.
+    .map((r) => ({ name: r.name, marja: r.marja ?? 0, tone: marjaTone(r.cost > 0 ? r.marja : null) }));
 
   if (sortedData.length === 0) {
     return (
@@ -223,12 +235,7 @@ function MarjaBaseWidget({ title, rows }: { title: React.ReactNode; rows: MarjaR
               {sortedData.map((d) => (
                 <Cell
                   key={d.name}
-                  fill={
-                    !d.hasCost ? "#f1f5f9" :
-                    d.marja >= 30 ? "#81b29a" :
-                    d.marja >= 15 ? "#f2c94c" :
-                    "#e07a5f"
-                  }
+                  fill={MARJA_RANG[d.tone]}
                 />
               ))}
               <LabelList

@@ -6,14 +6,25 @@ import Step2Forma from './components/Step2Forma'
 import Step3Tasdiq from './components/Step3Tasdiq'
 import Step4Muvaffaqiyat from './components/Step4Muvaffaqiyat'
 import type { FormData } from './components/Step2Forma'
-import { boshFormData } from './lib/forma'
+import { boshFormData, oxirgiFilialSaqla } from './lib/forma'
 import { qoralamaOqi, qoralamaSaqla, qoralamaTozala, qoralamaArziydi, type Qoralama } from './lib/draft'
+import { orqagaChuqurlik, orqagaObuna, orqagaTepasi } from './lib/orqaga'
+import { yangiSeans } from './lib/yuborish'
 import { useTelegram } from './hooks/useTelegram'
 
 type Tur = 'vozvrat' | 'kafe' | 'ovqatlanish' | 'spisaniya' | 'ichki_sotuv' | 'qaytarish'
 type Step = 1 | 2 | 3 | 4
 // 'denied' — server ataylab rad etdi ({allowed:false}); 'xato' — ulanib bo'lmadi
 type Gate = 'checking' | 'allowed' | 'denied' | 'xato'
+
+const TUR_LABEL: Record<Tur, string> = {
+  vozvrat:     'Qayta ishlash',
+  kafe:        'Kafe',
+  ovqatlanish: 'Ovqatlanish',
+  spisaniya:   'Spisaniya',
+  ichki_sotuv: 'Ichki sotuv',
+  qaytarish:   'Vozvrat',
+}
 
 const slideVariants = {
   enter: (dir: number) => ({ x: dir > 0 ? '100%' : '-100%', opacity: 0 }),
@@ -24,8 +35,10 @@ const slideVariants = {
 const transition = { type: 'spring' as const, stiffness: 320, damping: 32, mass: 0.9 }
 
 export default function App() {
-  const { initData, user } = useTelegram()
+  const { initData, user, tg } = useTelegram()
   const [gate, setGate] = useState<Gate>('checking')
+  // Native "orqaga" steki chuqurligi (ochiq sheet'lar soni) — qarang lib/orqaga.ts
+  const [orqagaChuqur, setOrqagaChuqur] = useState(0)
   const [urinish, setUrinish] = useState(0)
   const [step, setStep] = useState<Step>(1)
   const [dir, setDir] = useState(1)
@@ -34,6 +47,79 @@ export default function App() {
   const [form, setForm] = useState<FormData>(boshFormData)
   // Ochilishda topilgan tugallanmagan yozuv (effekt emas — set-state-in-effect'dan qochish)
   const [taklif, setTaklif] = useState<Qoralama | null>(() => qoralamaOqi())
+  // Yuborish seansi (idempotentlik kaliti + rasm keshi). ATAYLAB App'da: Step3
+  // "Orqaga" bosilganda unmount bo'ladi, kalit esa qayta urinishlar oralig'ida
+  // O'ZGARMASLIGI kerak — aks holda server dublikatni tanimaydi (lib/yuborish.ts).
+  // `useRef` EMAS: ref qiymatini render paytida o'qish taqiqlangan (react-hooks/refs).
+  const [seans, setSeans] = useState(yangiSeans)
+
+  // Ko'rinadigan balandlik + tema. `--app-h` klaviatura ochilganda kichrayadi va
+  // 2/3-qadamdagi CTA ko'rinib turadi (100vh/100dvh iOS'da javob bermaydi).
+  // `data-theme` — Telegram temasi tizim temasidan farq qilishi mumkin, --ink-2
+  // tokeni esa to'g'ri variantni tanlashi kerak (index.css).
+  useEffect(() => {
+    if (!tg) return
+    const kok = document.documentElement
+    // Telegram bu hodisani sheet ochilish/yopilish/sudralish ANIMATSIYASINING har
+    // kadrida yuboradi — har kadrda `--app-h` yozilsa butun 2-qadam formasi
+    // relayout bo'lardi. Beqaror kadrlarni o'tkazib yuboramiz. Faqat ANIQ `false`
+    // tekshiriladi: eski mijoz parametrni umuman bermasa (yoki funksiya to'g'ridan
+    // -to'g'ri chaqirilsa) yangilash SHART, aks holda klaviatura ochilganda
+    // "Davom etish" tugmasi yana ekran ostida qolib ketardi.
+    const balandlikYangila = (p?: { isStateStable?: boolean }) => {
+      if (p?.isStateStable === false) return
+      const h = tg.viewportHeight
+      if (typeof h === 'number' && h > 0) kok.style.setProperty('--app-h', `${h}px`)
+    }
+    const temaYangila = () => {
+      if (tg.colorScheme) kok.setAttribute('data-theme', tg.colorScheme)
+    }
+    balandlikYangila()
+    temaYangila()
+    tg.onEvent?.('viewportChanged', balandlikYangila)
+    tg.onEvent?.('themeChanged', temaYangila)
+    return () => {
+      tg.offEvent?.('viewportChanged', balandlikYangila)
+      tg.offEvent?.('themeChanged', temaYangila)
+    }
+  }, [tg])
+
+  // Yopilishni tasdiqlash — faqat forma to'ldiriladigan qadamlarda.
+  // ATAYLAB App'da, komponentlar ichida EMAS: shunda `handleReset` (4→1) va
+  // `handleYuborildi` (3→4) o'tishlari ham avtomatik qamraladi. Step4'da o'chirish
+  // MAJBURIY — u yerda "Yopish" tugmasi `tg.close()` chaqiradi va tasdiq yoqiq
+  // qolsa xodim o'zi bosgan harakat uchun keraksiz ogohlantirish ko'rardi.
+  useEffect(() => {
+    if (!tg) return
+    // `?.` — Bot API 6.2 dan eskiroq mijozda bu metodlar yo'q (BackButton kabi)
+    if (gate === 'allowed' && (step === 2 || step === 3)) tg.enableClosingConfirmation?.()
+    else tg.disableClosingConfirmation?.()
+  }, [tg, gate, step])
+
+  // Stek o'zgarishini kuzatamiz (sheet ochildi/yopildi)
+  useEffect(() => orqagaObuna(() => setOrqagaChuqur(orqagaChuqurlik())), [])
+
+  // Native BackButton — YAGONA egasi shu effekt. Avval ochiq sheet yopiladi,
+  // sheet bo'lmasa sehrgar qadami orqaga qaytadi. 1 va 4-qadamda tugma yashirin
+  // (1 — boshlanish, 4 — terminal ekran, qaytadigan joy yo'q).
+  useEffect(() => {
+    const bb = tg?.BackButton
+    if (!bb) return
+    const sehrgardaOrqagaBor = gate === 'allowed' && (step === 2 || step === 3)
+    if (orqagaChuqur === 0 && !sehrgardaOrqagaBor) {
+      bb.hide()
+      return
+    }
+    const ishlovchi = () => {
+      const tepa = orqagaTepasi()
+      if (tepa) { tepa(); return }
+      setDir(-1)
+      setStep(s => (s === 2 || s === 3 ? ((s - 1) as Step) : s))
+    }
+    bb.onClick(ishlovchi)
+    bb.show()
+    return () => bb.offClick(ishlovchi)
+  }, [tg, gate, step, orqagaChuqur])
 
   // Ochilishda ruxsatni tekshiramiz (Telegram imzosi orqali server tomonda).
   useEffect(() => {
@@ -151,21 +237,36 @@ export default function App() {
     // ya'ni tur almashtirilsa oldingi turning ma'lumoti, jumladan RASMI, yangi
     // yozuvga ko'chib o'tardi. Ayni tur qayta tanlansa saqlab qolamiz: xodim
     // tasodifan "Orqaga" bosib qaytgan bo'lishi mumkin.
-    if (t !== tur) setForm(boshFormData())
+    if (t !== tur) { setForm(boshFormData()); setSeans(yangiSeans()) }
     setTur(t)
     goTo(2)
   }
 
   function handleYuborildi() {
+    // Keyingi yozuvga oldindan qo'yish uchun eslab qolamiz (qarang lib/forma.ts)
+    oxirgiFilialSaqla(form.filial)
     qoralamaTozala()
     setTaklif(null)
+    // Yozuv yopildi — keyingisi YANGI kalit bilan ketsin, aks holda server uni
+    // oldingisining dublikati deb tashlab yuborardi (qarang lib/yuborish.ts)
+    setSeans(yangiSeans())
     goTo(4)
+  }
+
+  /** Step4 birlamchi harakati: shu turda yana bitta yozuv — to'g'ridan-to'g'ri 2-qadam. */
+  function handleYanaShuTurda() {
+    qoralamaTozala()
+    setTaklif(null)
+    setForm(boshFormData())
+    setSeans(yangiSeans())
+    goTo(2)
   }
 
   function handleReset() {
     qoralamaTozala()
     setTaklif(null)
     setForm(boshFormData())
+    setSeans(yangiSeans())
     goTo(1)
   }
 
@@ -175,6 +276,7 @@ export default function App() {
     // Rasm saqlanmagan — shuning uchun har doim 2-qadamga qaytamiz, 3-qadamga emas
     setForm({ ...boshFormData(), ...taklif.form })
     setTaklif(null)
+    setSeans(yangiSeans())
     setDir(1)
     setStep(2)
   }
@@ -238,6 +340,7 @@ export default function App() {
             <Step3Tasdiq
               tur={tur}
               form={form}
+              seans={seans}
               onBack={() => goTo(2)}
               onDone={handleYuborildi}
             />
@@ -255,7 +358,11 @@ export default function App() {
             transition={transition}
             className="absolute inset-0"
           >
-            <Step4Muvaffaqiyat onYangi={handleReset} />
+            <Step4Muvaffaqiyat
+              onYangi={handleReset}
+              onYanaShuTurda={handleYanaShuTurda}
+              turNomi={TUR_LABEL[tur]}
+            />
           </motion.div>
         )}
       </AnimatePresence>

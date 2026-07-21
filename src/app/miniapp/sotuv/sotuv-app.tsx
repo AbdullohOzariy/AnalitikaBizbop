@@ -8,9 +8,10 @@
  * Auth: Telegram initData ("x-telegram-init-data" header) → /api/miniapp-sotuv/me.
  * Window.Telegram global tipi sverka-app.tsx da e'lon qilingan (declare global).
  */
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { isoDay, todayTashkentISO } from "@/lib/date";
 import { formatUZS, formatNumber, formatQty, formatDateUZ } from "@/lib/format";
+import { marjaTone, type MarjaTone } from "@/lib/marja";
 
 type MeUser = {
   name: string;
@@ -24,6 +25,8 @@ type DashData = {
   marja: { name: string; marja: number | null; sales: number }[];
   plan: { plan: number; fakt: number; percent: number };
   lastDataDay: string | null;
+  /** Kunlik savdo (davr bo'yicha, qamrov yig'indisi) — hero sparkline uchun. */
+  series?: number[];
 };
 type InvItem = {
   productId: number;
@@ -52,14 +55,49 @@ function davrRange(d: Davr): { start: string; end: string } {
   return { start: end.slice(0, 8) + "01", end }; // oy boshidan bugungacha
 }
 
+/**
+ * Xato TURI — "ruxsat yo'q" ni tarmoq/server uzilishidan ajratadi.
+ * Ilgari `res.json()` `res.ok` dan OLDIN chaqirilardi: Railway redeploy yoki
+ * Neon uzilishida qaytgan 502/504 HTML sahifasi SyntaxError berib, xodimga
+ * "Hisobingiz ulanmagan — ID'ni adminga yuboring" ekranini ko'rsatardi. Bu
+ * terminal ekran edi (qayta urinish yo'q), ya'ni vaqtinchalik uzilish doimiy
+ * ruxsat muammosidek tuyulardi.
+ */
+type XatoTuri = "tarmoq" | "ruxsat" | "server";
+class ApiXato extends Error {
+  readonly turi: XatoTuri;
+  constructor(message: string, turi: XatoTuri) {
+    super(message);
+    this.name = "ApiXato";
+    this.turi = turi;
+  }
+}
+/** Xato → foydalanuvchiga ko'rsatiladigan tur (noma'lum xato = server). */
+const xatoTuri = (e: unknown): XatoTuri => (e instanceof ApiXato ? e.turi : "server");
+const xatoMatn = (e: unknown, zaxira = "Xatolik yuz berdi") =>
+  e instanceof Error && e.message ? e.message : zaxira;
+
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const initData = window.Telegram?.WebApp?.initData ?? "";
-  const res = await fetch(path, {
-    ...init,
-    headers: { ...(init?.headers ?? {}), "x-telegram-init-data": initData },
-  });
-  const j = (await res.json()) as T & { xato?: string };
-  if (!res.ok) throw new Error(j?.xato ?? "Xatolik yuz berdi");
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      ...init,
+      headers: { ...(init?.headers ?? {}), "x-telegram-init-data": initData },
+    });
+  } catch {
+    // fetch reject = tarmoq (DNS/offline/uzilish) — server umuman javob bermadi
+    throw new ApiXato("Internetga ulanib bo'lmadi.", "tarmoq");
+  }
+  // JSON'ni ixtiyoriy o'qiymiz: statusni aniqlash undan MUSTAQIL bo'lsin
+  let j: (T & { xato?: string }) | null = null;
+  try { j = (await res.json()) as T & { xato?: string }; } catch { /* HTML/bo'sh javob */ }
+  if (!res.ok) {
+    // 429 (rate-limit) ataylab "server" — u vaqtinchalik, ruxsat muammosi emas
+    const turi: XatoTuri = res.status === 401 || res.status === 403 ? "ruxsat" : "server";
+    throw new ApiXato(j?.xato ?? (turi === "ruxsat" ? "Ruxsat yo'q." : "Server javob bermadi."), turi);
+  }
+  if (j === null) throw new ApiXato("Server javobi tushunarsiz.", "server");
   return j;
 }
 
@@ -108,15 +146,29 @@ const IconBox = () => (
     <path d="M3 8l9-4 9 4v8l-9 4-9-4V8z" /><path d="M3 8l9 4 9-4" /><path d="M12 12v8" />
   </svg>
 );
+const IconRefresh = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M21 12a9 9 0 1 1-2.64-6.36" /><path d="M21 4v5h-5" />
+  </svg>
+);
 
 export function SotuvApp() {
-  const [phase, setPhase] = useState<"loading" | "denied" | "app">("loading");
+  /* "denied" (ruxsat yo'q — terminal) va "error" (tarmoq/server — qayta urinsa
+     bo'ladi) ATAYLAB alohida: ilgari ikkalasi ham qulf ekraniga tushib, xodim
+     vaqtinchalik uzilishda ham adminni bezovta qilardi. */
+  const [phase, setPhase] = useState<"loading" | "denied" | "error" | "app">("loading");
   const [deniedMsg, setDeniedMsg] = useState("");
   const [me, setMe] = useState<MeUser | null>(null);
   const [tab, setTab] = useState<"hisobot" | "inventar">("hisobot");
   const [tgId, setTgId] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
   const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [urinish, setUrinish] = useState(0);          // "Qayta urinish" hisoblagichi
+  /* Hisobot yangilash: `reload` — fetch trigger, `refreshing` — faqat ikona
+     holati. Kalitga (davr|filial) TEGMAYMIZ, aks holda skeleton chaqnardi. */
+  const [reload, setReload] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const oxirgiFetch = useRef(0);
 
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
@@ -124,20 +176,51 @@ export function SotuvApp() {
     // Ro'yxat tepasida over-scroll → sheet yopiladi → sanalgan SKU'lar yo'qoladi
     if (tg?.isVersionAtLeast?.("7.7")) tg.disableVerticalSwipes?.();
     // Tema Telegram'dan (prefers-color-scheme emas — custom temalar mos kelmaydi)
-    tg?.onEvent?.("themeChanged", () => setTheme(tg?.colorScheme ?? "light"));
+    const onTheme = () => setTheme(window.Telegram?.WebApp?.colorScheme ?? "light");
+    tg?.onEvent?.("themeChanged", onTheme);
     (async () => {
       setTheme(tg?.colorScheme ?? "light");
       setTgId(tg?.initDataUnsafe?.user?.id ?? null);
+      setPhase("loading");
       try {
         const r = await api<{ ok: true; user: MeUser }>("/api/miniapp-sotuv/me");
         setMe(r.user);
         setPhase("app");
       } catch (e) {
-        setDeniedMsg(e instanceof Error ? e.message : "Telegram orqali oching.");
-        setPhase("denied");
+        setDeniedMsg(xatoMatn(e, "Telegram orqali oching."));
+        setPhase(xatoTuri(e) === "ruxsat" ? "denied" : "error");
       }
     })();
+    return () => { window.Telegram?.WebApp?.offEvent?.("themeChanged", onTheme); };
+  }, [urinish]);
+
+  /* Fonda turgan ilova eskirgan raqamlarni ko'rsatmasin. 60s — 1C yangilanish
+     tezligiga nisbatan arzon. Yon foyda: yarim tundan o'tganda `davrRange()`
+     qayta hisoblanadi, aks holda "Bugun" kechagi sanani so'rab turardi. */
+  useEffect(() => {
+    if (phase !== "app") return;   // HisobotTab mount emas — reload'ni kutib oladigan hech kim yo'q
+    const onVis = () => {
+      if (document.visibilityState !== "visible") return;
+      if (Date.now() - oxirgiFetch.current < 60_000) return;
+      setRefreshing(true);
+      setReload((n) => n + 1);
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [phase]);
+
+  /* BARQAROR referens shart: HisobotTab fetch effektining deps'ida turadi —
+     har renderda yangilansa cheksiz fetch sikli bo'lardi. */
+  const refreshLoaded = useCallback(() => {
+    oxirgiFetch.current = Date.now();
+    setRefreshing(false);
   }, []);
+  const refresh = () => {
+    if (refreshing) return;
+    haptic.impact();
+    setRefreshing(true);
+    setReload((n) => n + 1);
+  };
 
   const copyId = () => {
     if (tgId == null) return;
@@ -151,6 +234,20 @@ export function SotuvApp() {
 
   if (phase === "loading") {
     return <Shell theme={theme}><div className="skwrap"><div className="sk h" /><div className="sk r" /><div className="sk c" /></div></Shell>;
+  }
+  /* Tarmoq/server uzilishi — vaqtinchalik. Adminning ID'si bu yerda ATAYLAB
+     yo'q: muammo ruxsatda emas, xodimni adashtirmaslik kerak. */
+  if (phase === "error") {
+    return (
+      <Shell theme={theme}>
+        <div className="locked">
+          <div className="lockic">📡</div>
+          <h2>Ulanib bo&apos;lmadi</h2>
+          <p className="muted">{deniedMsg || "Aloqa yoki server vaqtincha mavjud emas."}</p>
+          <button className="retry" onClick={() => setUrinish((n) => n + 1)}>↻ Qayta urinish</button>
+        </div>
+      </Shell>
+    );
   }
   if (phase === "denied" || !me) {
     return (
@@ -178,18 +275,31 @@ export function SotuvApp() {
       <div className="brandbar">
         <span className="branddot" />
         <b>{tab === "hisobot" ? "BizbopSotuv" : "Inventar"}</b>
-        <span className="who"><span className="avatar">{initials(me.name)}</span>{me.name}</span>
+        <span className="who"><span className="avatar">{initials(me.name)}</span><span className="whon">{me.name}</span></span>
+        {/* Yangilash faqat Hisobot uchun: Inventar'ni qayta yuklash sanoqni
+            serverdagi holatga qaytarish xavfini tug'diradi (qoralama bor, lekin
+            xodim uchun bu kutilmagan harakat bo'lardi). */}
+        {tab === "hisobot" && (
+          <button className="refresh" onClick={refresh} disabled={refreshing} aria-label="Yangilash"
+            data-spin={refreshing ? "1" : undefined}>
+            <IconRefresh />
+          </button>
+        )}
       </div>
       {/* Ikkala tab ham MOUNT holda qoladi: ternary bilan almashganda InventarTab
           unmount bo'lib, sanalgan miqdorlarni (faqat React state'da) jimgina
           o'chirar edi. Yashirish — CSS (.pane.off) orqali. */}
-      <div className={tab === "hisobot" ? "pane" : "pane off"}><HisobotTab me={me} /></div>
+      <div className={tab === "hisobot" ? "pane" : "pane off"}>
+        <HisobotTab me={me} reload={reload} onLoaded={refreshLoaded} onRetry={refresh} />
+      </div>
       {me.canInventory && (
         <div className={tab === "inventar" ? "pane" : "pane off"}><InventarTab me={me} /></div>
       )}
       {me.canInventory && (
-        <div className="tabbar">
+        <nav className="tabbar" aria-label="Bo'limlar">
           <div className="barcol">
+            {/* aria-pressed toggle to'plami — WCAG 4.1.2 ga mos va pastki nav-bar
+                uchun tabiiyroq (role="tab" roving tabindex'siz a11y'ni buzardi). */}
             <div className="tabnav" data-active={tab}>
               <button className="tabbtn" aria-pressed={tab === "hisobot"} onClick={() => switchTab("hisobot")}>
                 <IconChart /> Hisobot
@@ -199,7 +309,7 @@ export function SotuvApp() {
               </button>
             </div>
           </div>
-        </div>
+        </nav>
       )}
     </Shell>
   );
@@ -207,7 +317,17 @@ export function SotuvApp() {
 
 // ─── Hisobot ──────────────────────────────────────────────────────────────────
 
-function HisobotTab({ me }: { me: MeUser }) {
+/** Semantik tone → miniapp palitrasi (chegaralar src/lib/marja.ts da). */
+const MARJA_RANG: Record<MarjaTone, string> = {
+  good: "var(--brand)",
+  ok: "var(--warn)",
+  bad: "var(--danger)",
+  none: "var(--ink-3)",
+};
+
+function HisobotTab({ me, reload, onLoaded, onRetry }: {
+  me: MeUser; reload: number; onLoaded: () => void; onRetry: () => void;
+}) {
   const single = me.branches.length === 1;
   const [davr, setDavr] = useState<Davr>("bugun");
   const [branchId, setBranchId] = useState<number>(single ? me.branches[0].id : 0);
@@ -225,17 +345,20 @@ function HisobotTab({ me }: { me: MeUser }) {
     const k = `${davr}|${branchId}`;
     (async () => {
       try {
+        // `davrRange` ATAYLAB shu yerda — har yangilashda joriy kunni oladi
         const { start, end } = davrRange(davr);
         const q = new URLSearchParams({ start, end });
         if (branchId > 0) q.set("branchId", String(branchId));
         const r = await api<{ ok: true } & DashData>(`/api/miniapp-sotuv/dashboard?${q}`);
         if (!cancelled) { setRes({ key: k, data: r, err: "" }); setOxirgiKun(r.lastDataDay); }
       } catch (e) {
-        if (!cancelled) setRes({ key: k, data: null, err: e instanceof Error ? e.message : "Xatolik yuz berdi" });
+        if (!cancelled) setRes({ key: k, data: null, err: xatoMatn(e) });
+      } finally {
+        if (!cancelled) onLoaded();   // yangilash ikonasini to'xtatish + vaqt tamg'asi
       }
     })();
     return () => { cancelled = true; };
-  }, [davr, branchId]);
+  }, [davr, branchId, reload, onLoaded]);
 
   const setDavrH = (d: Davr) => { if (d !== davr) { haptic.select(); setDavr(d); } };
   const davrLabel = DAVRLAR.find((d) => d.key === davr)?.label.toLowerCase() ?? "";
@@ -255,9 +378,11 @@ function HisobotTab({ me }: { me: MeUser }) {
         </p>
       )}
 
+      {/* Davr — FILTR (tab emas): shuning uchun aria-pressed, role="tab" emas */}
       <div className="seg">
         {DAVRLAR.map((d) => (
-          <button key={d.key} className={davr === d.key ? "on" : ""} onClick={() => setDavrH(d.key)}>{d.label}</button>
+          <button key={d.key} className={davr === d.key ? "on" : ""} aria-pressed={davr === d.key}
+            onClick={() => setDavrH(d.key)}>{d.label}</button>
         ))}
       </div>
 
@@ -270,7 +395,7 @@ function HisobotTab({ me }: { me: MeUser }) {
         </div>
       )}
 
-      {err && <p className="err">{err}</p>}
+      {err && <p className="err">{err} <button className="inretry" onClick={onRetry}>↻ Qayta urinish</button></p>}
       {loading && <div className="skwrap"><div className="sk h" /><div className="sk r" /><div className="sk c" /></div>}
 
       {!loading && data && isZero && (
@@ -295,7 +420,8 @@ function HisobotTab({ me }: { me: MeUser }) {
 
       {!loading && data && !isZero && (
         <>
-          <HeroCard sales={data.kpi.sales} receipts={data.kpi.receipts} avgReceipt={data.kpi.avgReceipt} davrLabel={davrLabel} />
+          <HeroCard sales={data.kpi.sales} receipts={data.kpi.receipts} avgReceipt={data.kpi.avgReceipt}
+            davrLabel={davrLabel} series={davr === "bugun" ? [] : data.series ?? []} />
 
           <div className="card">
             <div className="chead"><b>Reja bajarilishi</b></div>
@@ -318,13 +444,20 @@ function HisobotTab({ me }: { me: MeUser }) {
           {sorted.length > 1 && (
             <div className="card">
               <div className="chead"><b>Filiallar kesimi</b><span className="pct muted-c">{sorted.length} ta</span></div>
+              {/* Ikki qator: yuqorida nom/summa, pastda progress+ulush. Ilgari
+                  bitta 3-ustunli grid edi va `.sh` (grid-column:3) `.track`
+                  (2/-1) bilan to'qnashib 3-qatorga tushardi. */}
               {sorted.map((b, i) => (
                 <div key={b.id} className={`brow ${i === 0 ? "lead" : ""}`}>
-                  <span className="brank">{i + 1}</span>
-                  <span className="bn">{b.name}</span>
-                  <span className="bv">{formatUZS(b.sales, { compact: true })}</span>
-                  <div className="track"><i style={{ width: `${Math.max(4, (b.sales / maxBranch) * 100)}%` }} /></div>
-                  <span className="sh">{b.share.toFixed(1)}%</span>
+                  <div className="btop">
+                    <span className="brank">{i + 1}</span>
+                    <span className="bn">{b.name}</span>
+                    <span className="bv">{formatUZS(b.sales, { compact: true })}</span>
+                  </div>
+                  <div className="bbot">
+                    <div className="track"><i style={{ width: `${Math.max(4, (b.sales / maxBranch) * 100)}%` }} /></div>
+                    <span className="sh">{b.share.toFixed(1)}%</span>
+                  </div>
                 </div>
               ))}
             </div>
@@ -334,7 +467,7 @@ function HisobotTab({ me }: { me: MeUser }) {
             <div className="chead"><b>Marja · guruhlar</b></div>
             {data.marja.length === 0 && <p className="muted">Ma&apos;lumot yo&apos;q</p>}
             {data.marja.map((m) => {
-              const col = m.marja == null ? "var(--ink-3)" : m.marja >= 20 ? "var(--brand)" : m.marja >= 12 ? "var(--ink-2)" : "var(--ortiqcha)";
+              const col = MARJA_RANG[marjaTone(m.marja)];
               return (
                 <div key={m.name} className="mrow">
                   <span className="mdot" style={{ background: col }} />
@@ -352,19 +485,58 @@ function HisobotTab({ me }: { me: MeUser }) {
 }
 
 /** Gradient "pul kartasi" — savdo + 2 KPI (Revolut balans patterni). */
-function HeroCard({ sales, receipts, avgReceipt, davrLabel }: {
-  sales: number; receipts: number; avgReceipt: number; davrLabel: string;
+function HeroCard({ sales, receipts, avgReceipt, davrLabel, series }: {
+  sales: number; receipts: number; avgReceipt: number; davrLabel: string; series: number[];
 }) {
   const animated = useCountUp(sales);
   return (
     <div className="hero">
       <div className="eyebrow">Savdo · {davrLabel}</div>
-      <div className="val">{formatUZS(animated, { compact: true })}</div>
+      {/* compact FAQAT shu qatorda qoladi — u useCountUp rAF animatsiyasi bilan
+          juftlangan (to'liq qiymat har kadrda titrardi). Birlik alohida span:
+          eyebrow'da "SO'M" uppercase apostrof bilan xunuk chiqadi. */}
+      <div className="val">{formatUZS(animated, { compact: true })}<span className="unit">so&apos;m</span></div>
+      <Sparkline points={series} />
       <div className="sub">
         <div><div className="k">Cheklar</div><div className="n">{formatNumber(receipts)}</div></div>
-        <div><div className="k">O&apos;rtacha chek</div><div className="n">{formatUZS(avgReceipt, { compact: true })}</div></div>
+        {/* O'rtacha chek — TO'LIQ: u animatsiyalanmaydi va "1,2 mln" ko'rinishi
+            chek summasi uchun juda dag'al (qo'shni `receipts` ham to'liq). */}
+        <div><div className="k">O&apos;rtacha chek</div><div className="n">{formatUZS(avgReceipt)}</div></div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Kunlik savdo mikro-grafigi. ATAYLAB faqat 2+ kunli davrlarda: "Bugun" da
+ * bitta nuqta bo'ladi, ustiga 1C kechikishi tufayli to'liq bo'lmagan bugun
+ * to'liq kecha bilan yonma-yon turib soxta pasayish taassurotini berardi.
+ */
+function Sparkline({ points }: { points: number[] }) {
+  if (points.length < 2) return null;
+  const max = Math.max(...points);
+  const min = Math.min(...points);
+  const span = max - min || 1;
+  const W = 100, H = 26;
+  const d = points
+    .map((v, i) => {
+      const x = (i / (points.length - 1)) * W;
+      const y = H - ((v - min) / span) * H;
+      return `${i === 0 ? "M" : "L"}${x.toFixed(1)} ${y.toFixed(1)}`;
+    })
+    .join(" ");
+  // Matn muqobili: trend faqat vizual edi — skrinrider foydalanuvchisi uchun
+  // yo'nalish + chegaralar so'z bilan. `aria-hidden` o'rniga role="img".
+  const oxirgi = points[points.length - 1];
+  const yonalish = oxirgi > points[0] ? "o'sish" : oxirgi < points[0] ? "pasayish" : "o'zgarishsiz";
+  const label = `Kunlik savdo grafigi, ${points.length} kun: ${yonalish}. `
+    + `Eng yuqori ${formatUZS(max)}, eng past ${formatUZS(min)} so'm.`;
+  return (
+    <svg className="spark" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label={label}>
+      <path d={`${d} L${W} ${H} L0 ${H} Z`} fill="rgba(255,255,255,.14)" stroke="none" />
+      <path d={d} fill="none" stroke="rgba(255,255,255,.85)" strokeWidth="1.6"
+        strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+    </svg>
   );
 }
 
@@ -373,7 +545,10 @@ function Gauge({ percent }: { percent: number }) {
   const C = 289.03, ARC = 216.77; // 2π·46 ; 0.75·C
   const pct = Math.min(100, Math.max(0, percent));
   const off = ARC * (1 - pct / 100);
-  const col = percent >= 100 ? "var(--brand)" : "var(--ortiqcha)";
+  /* Uch pog'ona: 85% dan past — haqiqiy ogohlantirish, 85-100% — deyarli reja.
+     `--ortiqcha` (inventar semantikasi: "ortiqcha qoldiq") ATAYLAB ishlatilmadi
+     — bu yerda ma'no boshqa, bir token ikki ma'noda chalkashtiradi. */
+  const col = percent >= 100 ? "var(--brand)" : percent >= 85 ? "var(--warn)" : "var(--danger)";
   return (
     <div className="gauge">
       <svg viewBox="0 0 104 104" aria-hidden>
@@ -431,6 +606,10 @@ function InventarTab({ me }: { me: MeUser }) {
   const [savedMsg, setSavedMsg] = useState("");
   const [dirty, setDirty] = useState(false);      // saqlanmagan kiritish bormi
   const [restored, setRestored] = useState(false); // qoralama tiklandimi
+  /* Qayta yuklash hisoblagichi. Busiz BITTA filialli xodim uchun ro'yxat
+     yuklanmasa boshi berk ko'cha edi: effekt deps'i faqat [branchId], u esa
+     hech qachon o'zgarmaydi — appni yopib-ochishdan boshqa yo'l yo'q. */
+  const [qayta, setQayta] = useState(0);
   /* `vals` QAYSI filialning sanoqlari (null — hech qaysi/yuklanmoqda). Kalitsiz
      yozuv xavfli: productId'lar filiallar aro umumiy (katalog bitta), shuning
      uchun A ning sanoqlari B ning qoralamasiga tushib, soxta sanoq saqlanardi. */
@@ -480,11 +659,11 @@ function InventarTab({ me }: { me: MeUser }) {
       } catch (e) {
         if (cancelled) return;
         valsBranch.current = null; // yuklanmadi — hech narsa yozilmasin
-        setRes({ branchId, items: [], err: e instanceof Error ? e.message : "Xatolik yuz berdi" });
+        setRes({ branchId, items: [], err: xatoMatn(e) });
       }
     })();
     return () => { cancelled = true; };
-  }, [branchId]);
+  }, [branchId, qayta]);
 
   /* Qoralamani yozish (300ms debounce) — faqat saqlanmagan o'zgarish bo'lganda VA
      `vals` haqiqatan shu filialniki bo'lsa. Egalik tekshiruvisiz filial almashuvi
@@ -622,7 +801,17 @@ function InventarTab({ me }: { me: MeUser }) {
         </>
       )}
 
-      {(loadErr || err) && <p className="err">{loadErr || err}</p>}
+      {/* Ro'yxat yuklanmadi — qayta urinish (res=null → skeleton qaytadi, ya'ni
+          takroriy muvaffaqiyatsizlikda ham "bosildi" degan fikrbildirish bor).
+          `err` — saqlash xatosi: uni qayta yuklash tuzatmaydi, sanoq esa
+          o'chib ketardi, shuning uchun tugma faqat `loadErr` da. */}
+      {loadErr && (
+        <p className="err">
+          {loadErr}{" "}
+          <button className="inretry" onClick={() => { setRes(null); setQayta((n) => n + 1); }}>↻ Qayta urinish</button>
+        </p>
+      )}
+      {!loadErr && err && <p className="err">{err}</p>}
       {restored && <p className="draft">↺ Saqlanmagan qoralama tiklandi</p>}
       {savedMsg && <p className="saved">{savedMsg}</p>}
       {loading && <div className="skwrap"><div className="sk inv" /><div className="sk inv" /><div className="sk inv" /></div>}
@@ -710,36 +899,70 @@ function Shell({ theme, children }: { theme: "light" | "dark"; children: React.R
           --line:   color-mix(in srgb, var(--tg-hint) 22%, transparent);
           --line-2: color-mix(in srgb, var(--tg-hint) 12%, transparent);
 
-          /* Brend emerald */
+          /* Brend emerald. Gradient ATAYLAB oldingidan qorong'iroq: oq matn
+             (eyebrow/KPI) eski #12B67F ustida 2.2–3.9:1 berardi — AA dan past.
+             Bu token .avatar/.savebtn/.tabnav::before da ham ishlatiladi, ular
+             ham oq matnli, ya'ni qoraytirish faqat foyda keltiradi. */
           --brand: #10B981; --brand-2: #059669; --brand-deep: #047857;
           --brand-soft: color-mix(in srgb, var(--brand) 14%, transparent);
-          --hero-grad: linear-gradient(152deg, #12B67F 0%, #0A8A63 52%, #065F46 100%);
-          --hero-glow: radial-gradient(130px 130px at 84% -12%, rgba(255,255,255,.22), transparent 70%);
+          --hero-grad: linear-gradient(152deg, #0C9268 0%, #076F52 52%, #05513C 100%);
+          --hero-glow: radial-gradient(130px 130px at 84% -12%, rgba(255,255,255,.14), transparent 70%);
+          /* Matn ostidagi scrim — FAQAT .hero da. Karta tepasi (eyebrow) va
+             pastki KPI qatorini qoraytiradi, o'rtasi ochiq qolib gradient
+             ko'rinishini saqlaydi. */
+          --hero-scrim: linear-gradient(180deg, rgba(0,0,0,.30) 0%, rgba(0,0,0,.06) 44%, rgba(0,0,0,.26) 100%);
 
           /* Semantik */
           --kamomad: #E5484D; --kamomad-soft: color-mix(in srgb, #E5484D 13%, transparent);
           --ortiqcha: #F59E0B; --ortiqcha-soft: color-mix(in srgb, #F59E0B 15%, transparent);
           --mos: #10B981; --mos-soft: color-mix(in srgb, #10B981 15%, transparent);
+          /* Ogohlantirish/xavf — inventar semantikasidan (kamomad/ortiqcha)
+             ALOHIDA: reja va marja pog'onalari boshqa ma'no anglatadi. */
+          --warn: #D97706; --warn-soft: color-mix(in srgb, #D97706 14%, transparent);
+          --danger: #DC2626; --danger-soft: color-mix(in srgb, #DC2626 12%, transparent);
 
           --shadow: 0 1px 2px rgba(8,30,20,.05), 0 12px 28px -16px rgba(8,30,20,.14);
-          --lift: 0 10px 26px -10px rgba(16,185,129,.5); }
+          --lift: 0 10px 26px -10px rgba(16,185,129,.5);
+
+          /* Qotirilgan panellar balandligi — .savebar joylashuvi va .col pastki
+             padding'i shulardan hisoblanadi (ilgari 67/152 qo'lda yozilgan
+             sehrli raqamlar edi va bir-biridan mustaqil eskirardi). */
+          --bar-h: 67px; --savebar-h: 72px;
+          --safe-b: max(env(safe-area-inset-bottom, 0px), var(--tg-safe-area-inset-bottom, 0px)); }
 
         .wrap[data-theme="dark"] {
           --card-2: color-mix(in srgb, var(--tg-card) 80%, #ffffff 5%);
           --line: color-mix(in srgb, var(--tg-hint) 32%, transparent);
           --shadow: inset 0 1px 0 rgba(255,255,255,.04), 0 14px 32px -18px rgba(0,0,0,.65);
-          --brand-soft: color-mix(in srgb, var(--brand) 22%, transparent); }
+          --brand-soft: color-mix(in srgb, var(--brand) 22%, transparent);
+          /* Qorong'i fonda to'q sariq/qizil o'qilmaydi — ochroq variant */
+          --warn: #FBBF24; --warn-soft: color-mix(in srgb, #FBBF24 20%, transparent);
+          --danger: #F87171; --danger-soft: color-mix(in srgb, #F87171 18%, transparent); }
 
-        /* Kontent ustuni; pastki padding tab-bar (67px) + saqlash paneli (72px) ni qoplaydi */
-        .col { max-width: 460px; margin: 0 auto; padding: 8px 15px 152px; }
+        /* Kontent ustuni; pastki padding ikkala qotirilgan panelni + home-indicator zonasini qoplaydi */
+        .col { max-width: 460px; margin: 0 auto;
+          padding: 8px 15px calc(var(--bar-h) + var(--savebar-h) + 13px + var(--safe-b)); }
         /* Qotirilgan panellar: fon/chegara ekran bo'ylab, kontent markazda */
         .barcol { max-width: 460px; margin: 0 auto; }
 
         .brandbar { display: flex; align-items: center; gap: 9px; padding: 14px 2px 12px; }
         .branddot { width: 9px; height: 9px; border-radius: 50%; background: var(--brand); box-shadow: 0 0 0 4px var(--brand-soft); }
         .brandbar b { font-size: 16px; font-weight: 700; letter-spacing: -.3px; }
-        .who { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--ink-3); font-weight: 600; }
-        .avatar { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 10px; font-weight: 700; color: #fff;
+        /* max-width: brandbar'ga refresh tugmasi (32px + 8px) qo'shilgach uzun
+           ism <b> ni qisardi. Ellipsis ismning O'ZIDA (.whon): flex konteynerda
+           text-overflow yalang' matn tugunini kesmaydi. */
+        .who { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--ink-3); font-weight: 600;
+          min-width: 0; max-width: 55%; }
+        .whon { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        /* Yangilash — 32px nishon (WCAG 2.2 AA 24px dan katta) */
+        .refresh { flex: 0 0 auto; width: 32px; height: 32px; margin-left: 8px; display: grid; place-items: center;
+          border: 1px solid var(--line); background: var(--card); color: var(--ink-2); border-radius: 10px; }
+        .refresh svg { width: 16px; height: 16px; }
+        .refresh:active { transform: scale(.94); }
+        .refresh:disabled { opacity: .6; }
+        .refresh[data-spin="1"] svg { animation: spin .9s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .avatar { flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 10px; font-weight: 700; color: #fff;
           background: var(--hero-grad); }
 
         .muted { color: var(--ink-3); font-size: 13px; line-height: 1.5; }
@@ -764,20 +987,28 @@ function Shell({ theme, children }: { theme: "light" | "dark"; children: React.R
         .seg button.on { background: var(--card); color: var(--ink-1); box-shadow: var(--shadow); }
 
         .selrow { margin-bottom: 11px; }
+        /* font-size 16px MAJBURIY: iOS Safari/WebView 16px dan kichik maydonga
+           fokusda sahifani zoom qiladi va qaytarmaydi. Vizual balandlik
+           padding bilan saqlangan (12px → 10.5px). */
         .sel { width: 100%; appearance: none; border: 1px solid var(--line); background: var(--card); color: var(--ink-1);
-          border-radius: 13px; padding: 12px 34px 12px 14px; font-size: 14.5px; font-weight: 600; outline: none;
+          border-radius: 13px; padding: 10.5px 34px 10.5px 14px; font-size: 16px; font-weight: 600; outline: none;
           background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2 4l4 4 4-4' stroke='%238A9C93' stroke-width='1.6' fill='none' stroke-linecap='round'/></svg>");
           background-repeat: no-repeat; background-position: right 14px center; }
         .sel:focus { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
 
         /* Hero — brend-gradientli pul kartasi */
         .hero { position: relative; overflow: hidden; border-radius: 22px; padding: 18px 18px 16px; color: #fff;
-          background: var(--hero-glow), var(--hero-grad);
+          background: var(--hero-scrim), var(--hero-glow), var(--hero-grad);
           box-shadow: 0 16px 36px -16px rgba(6,95,70,.55); margin-bottom: 11px; }
-        .hero .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; color: rgba(255,255,255,.72); }
+        /* Alfalar o'lchov bo'yicha tanlangan (scrim + qorong'i gradient ustida):
+           .86 → 4.67:1, .80 → 6.9:1 — ikkalasi ham WCAG AA (4.5:1) dan yuqori,
+           ammo ierarxiya (yorliq < qiymat) saqlanadi. */
+        .hero .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; color: rgba(255,255,255,.86); }
         .hero .val { font-size: 34px; font-weight: 800; letter-spacing: -1px; line-height: 1.05; margin-top: 5px; font-variant-numeric: tabular-nums; }
+        .hero .val .unit { font-size: 15px; font-weight: 700; letter-spacing: 0; margin-left: 6px; opacity: .6; }
+        .hero .spark { display: block; width: 100%; height: 26px; margin-top: 10px; overflow: visible; }
         .hero .sub { display: grid; grid-template-columns: 1fr 1fr; margin-top: 15px; padding-top: 13px; border-top: 1px solid rgba(255,255,255,.16); }
-        .hero .sub .k { font-size: 10.5px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: rgba(255,255,255,.66); }
+        .hero .sub .k { font-size: 10.5px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: rgba(255,255,255,.80); }
         .hero .sub .n { font-size: 17px; font-weight: 800; margin-top: 3px; font-variant-numeric: tabular-nums; }
         .hero .sub > div + div { padding-left: 14px; border-left: 1px solid rgba(255,255,255,.14); }
 
@@ -805,20 +1036,29 @@ function Shell({ theme, children }: { theme: "light" | "dark"; children: React.R
         .prow .v { font-weight: 800; font-variant-numeric: tabular-nums; }
         .planchip { align-self: flex-start; font-size: 11px; font-weight: 800; padding: 4px 10px; border-radius: 999px; }
         .planchip.good { color: var(--brand-deep); background: var(--mos-soft); }
-        .planchip.warn { color: var(--ortiqcha); background: var(--ortiqcha-soft); }
+        /* Reja semantikasi — --warn (inventar --ortiqcha si EMAS, ma'no boshqa) */
+        .planchip.warn { color: var(--warn); background: var(--warn-soft); }
         .wrap[data-theme="dark"] .planchip.good { color: var(--brand); }
 
-        /* Filiallar — ranked leaderboard */
-        .brow { display: grid; grid-template-columns: 20px 1fr auto; align-items: center; gap: 3px 10px; padding: 9px 8px; border-radius: 12px; }
+        /* Filiallar — ranked leaderboard. Grid o'rniga ikki flex qator:
+           grid'da .sh (ustun 3) va .track (2/-1) bir katakka da'vogar bo'lib,
+           .sh 3-qatorga tushib ~13px ortiqcha balandlik hosil qilardi. */
+        .brow { padding: 9px 8px; border-radius: 12px; }
         .brow.lead { background: var(--brand-soft); }
-        .brank { font-size: 11px; font-weight: 800; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+        .btop { display: flex; align-items: center; gap: 10px; }
+        /* padding-left = .brank (20px) + gap (10px): eski grid'da .track
+           "grid-column: 2 / -1" bilan aynan nom ostidan boshlanardi. */
+        .bbot { display: flex; align-items: center; gap: 10px; margin-top: 5px; padding-left: 30px; }
+        /* Qat'iy 20px — eski grid ustuni bilan bir xil: "min-width" bo'lsa
+           ikki xonali rank (10+) kengayib, nomlar qatordan qatorga siljirdi. */
+        .brank { flex: 0 0 20px; font-size: 11px; font-weight: 800; color: var(--ink-3); font-variant-numeric: tabular-nums; }
         .brow.lead .brank { color: var(--brand-deep); }
         .wrap[data-theme="dark"] .brow.lead .brank { color: var(--brand); }
-        .bn { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .bv { font-size: 13.5px; font-weight: 800; font-variant-numeric: tabular-nums; text-align: right; }
-        .track { grid-column: 2 / -1; height: 6px; border-radius: 999px; background: var(--line-2); overflow: hidden; margin-top: 4px; }
+        .bn { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .bv { flex: 0 0 auto; font-size: 13.5px; font-weight: 800; font-variant-numeric: tabular-nums; text-align: right; }
+        .track { flex: 1; min-width: 0; height: 6px; border-radius: 999px; background: var(--line-2); overflow: hidden; }
         .track i { display: block; height: 100%; border-radius: 999px; background: var(--hero-grad); transition: width .5s cubic-bezier(.3,.8,.3,1); }
-        .sh { grid-column: 3; font-size: 11px; font-weight: 700; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+        .sh { flex: 0 0 auto; font-size: 11px; font-weight: 700; color: var(--ink-3); font-variant-numeric: tabular-nums; }
 
         /* Marja */
         .mrow { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line-2); font-size: 13.5px; }
@@ -864,16 +1104,21 @@ function Shell({ theme, children }: { theme: "light" | "dark"; children: React.R
         .counter input::-webkit-outer-spin-button, .counter input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
         .counter input:focus { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
         .counter input.filled { border-color: var(--brand); }
+        /* 16px — iOS zoom himoyasi (yuqoridagi .sel izohiga qarang) */
         .invnote { margin-top: 8px; width: 100%; box-sizing: border-box; border: 1px solid var(--line); background: var(--card-2); color: var(--ink-1);
-          border-radius: 11px; padding: 9px 12px; font-size: 13px; outline: none; }
+          border-radius: 11px; padding: 8px 12px; font-size: 16px; outline: none; }
         .invnote:focus { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
         .invnote::placeholder { color: var(--ink-3); }
 
         .empty { text-align: center; padding: 34px 20px; }
 
-        /* Tab-bar — sliding segmented */
+        /* Tab-bar — sliding segmented.
+           safe-area: env() YOLG'IZ yetarli emas — u viewport-fit=cover
+           e'lon qilinmasa spec bo'yicha 0 qaytaradi (page.tsx da qo'shildi),
+           Telegram esa o'z --tg-safe-area-inset-bottom ini beradi. max() —
+           qaysi biri mavjud bo'lsa o'sha ishlaydi (--safe-b tokeni). */
         .tabbar { position: fixed; left: 0; right: 0; bottom: 0;
-          padding: 8px 15px calc(10px + env(safe-area-inset-bottom));
+          padding: 8px 15px calc(10px + var(--safe-b));
           background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(16px); border-top: 1px solid var(--line); z-index: 30; }
         .tabnav { position: relative; display: grid; grid-template-columns: 1fr 1fr; background: var(--card-2); border: 1px solid var(--line);
           border-radius: 16px; padding: 4px; }
@@ -888,7 +1133,8 @@ function Shell({ theme, children }: { theme: "light" | "dark"; children: React.R
         /* Tab-bar USTIDA turadi: ikkalasi ham bottom:0 / z-index:30 bo'lganda
            savebar DOM'da oldin kelgani uchun tab-bar uni yopib qo'yardi va
            Saqlash tugmasi bosilmasdi. Endi tab-bar balandligicha ko'tarilgan. */
-        .savebar { position: fixed; left: 0; right: 0; bottom: calc(67px + env(safe-area-inset-bottom));
+        .savebar { position: fixed; left: 0; right: 0;
+          bottom: calc(var(--bar-h) + var(--safe-b));
           padding: 11px 15px 13px;
           background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(16px); border-top: 1px solid var(--line); z-index: 31; }
         .savebtn { width: 100%; border: 0; border-radius: 15px; padding: 15px; font-size: 15px; font-weight: 800; letter-spacing: -.2px; color: #fff;
@@ -904,6 +1150,14 @@ function Shell({ theme, children }: { theme: "light" | "dark"; children: React.R
         .wrap[data-theme="dark"] .saved { color: var(--brand); }
         .draft { color: var(--ortiqcha); font-size: 12.5px; font-weight: 700; margin: 6px 2px 10px;
           background: var(--ortiqcha-soft); border: 1px solid var(--ortiqcha-soft); border-radius: 12px; padding: 10px 13px; }
+
+        /* Qayta urinish — to'liq ekran xatosida (.retry) va qator ichida (.inretry) */
+        .retry { margin-top: 18px; border: 0; border-radius: 14px; padding: 13px 22px; font-size: 14.5px; font-weight: 800;
+          color: #fff; background: var(--hero-grad); box-shadow: var(--lift); }
+        .retry:active { transform: scale(.97); }
+        .inretry { display: inline-block; margin-left: 4px; border: 1px solid currentColor; background: transparent;
+          color: inherit; border-radius: 9px; padding: 4px 10px; font-size: 12px; font-weight: 700; }
+        .inretry:active { transform: scale(.96); }
 
         .locked { text-align: center; padding: 44px 20px; }
         .lockic { width: 62px; height: 62px; margin: 0 auto 14px; display: grid; place-items: center; font-size: 26px; border-radius: 20px;

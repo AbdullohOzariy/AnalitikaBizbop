@@ -54,6 +54,24 @@ function soat(d: Date): string {
   return `${String(t.getUTCHours()).padStart(2, "0")}:${String(t.getUTCMinutes()).padStart(2, "0")}`;
 }
 
+/**
+ * Qurilma vaqti bilan server vaqti orasidagi farq sezilarlimi?
+ *
+ * schema.prisma da'vo qiladi: "clientDepartedAt — qurilma da'vosi (farq katta
+ * bo'lsa xabarga qator qo'shiladi)". Shu va'da AYNAN SHU YERDA bajariladi:
+ * tahlil hamon SERVER vaqtiga tayanadi, lekin nazoratchi yozuv kech
+ * yuborilganini (tunnel/zaif signal) ko'radi va vaqtga ko'r-ko'rona ishonmaydi.
+ */
+const SKEW_OSTONA_MS = 5 * 60_000;
+
+function skew(server: Date, client: Date | null): string | null {
+  if (!client) return null;
+  const farq = server.getTime() - client.getTime();
+  if (Math.abs(farq) < SKEW_OSTONA_MS) return null;
+  const d = Math.round(Math.abs(farq) / 60_000);
+  return farq > 0 ? `${d}d kech yuborilgan` : `qurilma soati ${d}d oldinda`;
+}
+
 /** Millisekund -> "1s 15d" / "40d". Manfiy yoki bema'ni qiymat -> null. */
 function davomiylik(ms: number): string | null {
   if (!Number.isFinite(ms) || ms < 0) return null;
@@ -87,6 +105,8 @@ async function reysOqi(tripId: number) {
           seq: true,
           departedAt: true,
           arrivedAt: true,
+          clientDepartedAt: true,
+          clientArrivedAt: true,
           load: true,
           loadEstimated: true,
           lateReport: true,
@@ -127,6 +147,17 @@ function matnQur(t: TripFull): string {
     } else {
       qatorlar.push(`🔵 ${yol} · ${soat(l.departedAt)} · yo'lda · ${yuk}`);
     }
+    // Qurilma vaqti server vaqtidan sezilarli farq qilsa — ogohlantirish.
+    // `lateReport` da O'TKAZIB YUBORILADI: u yuqorida allaqachon "· kech
+    // kiritildi" bo'lib chiqqan, skew qatori esa xuddi shu plechoga ikkinchi
+    // "kech" signalini qo'shib, nazoratchi uchun shovqin yasardi.
+    const nomuvofiq = l.lateReport
+      ? []
+      : [
+          skew(l.departedAt, l.clientDepartedAt),
+          l.arrivedAt ? skew(l.arrivedAt, l.clientArrivedAt) : null,
+        ].filter(Boolean);
+    if (nomuvofiq.length) qatorlar.push(`   ⏱ ${nomuvofiq.join(" · ")}`);
     if (l.note) qatorlar.push(`   💬 ${esc(l.note)}`);
   }
 

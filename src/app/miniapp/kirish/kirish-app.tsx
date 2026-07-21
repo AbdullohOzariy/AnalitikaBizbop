@@ -5,7 +5,7 @@
  * miniapp bilan bir xil): emerald brend, Sora sarlavhalar, tg-tema moslashuvi.
  * initData sessionStorage + hash orqali keyingi sahifada ham tiklanadi.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 // Window.Telegram tipi sverka-app.tsx dagi global e'londan keladi.
 type Holat =
@@ -19,6 +19,36 @@ const LOGISTIKA_URL = "/miniapp/logistika";
 
 function go(url: string) {
   window.location.replace(url + window.location.hash);
+}
+
+/**
+ * Telegram ID — bosilganda nusxalanadi.
+ * Faqat `user-select: all` yetarli emas: WebView'da uzoq bosish ishonchsiz,
+ * holbuki foydalanuvchining ishga kirishi shu ID ni uzatishga bog'liq.
+ */
+function IdNusxa({ id }: { id: number }) {
+  const [olindi, setOlindi] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+
+  const nusxa = () => {
+    navigator.clipboard?.writeText(String(id)).then(
+      () => {
+        window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred("success");
+        setOlindi(true);
+        if (timer.current) clearTimeout(timer.current);
+        timer.current = setTimeout(() => setOlindi(false), 1600);
+      },
+      () => { /* ruxsat yo'q — matn baribir tanlanadi */ },
+    );
+  };
+
+  return (
+    <button className="idbox" onClick={nusxa}>
+      <span className="idnum">🆔 {id}</span>
+      <span className="idc">{olindi ? "✅ nusxa olindi" : "📋 nusxa olish"}</span>
+    </button>
+  );
 }
 
 export function KirishApp() {
@@ -74,7 +104,7 @@ export function KirishApp() {
         <div className="card center" style={{ marginTop: 24 }}>
           <div className="lockic">🔒</div>
           <h2>Ruxsat yo&apos;q</h2>
-          {st.id != null && <p className="idbox">🆔 {st.id}</p>}
+          {st.id != null && <IdNusxa id={st.id} />}
           <p className="muted">
             Shu ID raqamni adminga yuboring — ruxsat berilgach, botni qayta oching.
           </p>
@@ -128,7 +158,9 @@ export function KirishApp() {
         .wrap { min-height: 100dvh; max-width: 440px; margin: 0 auto; padding: 0 16px 24px;
           font-family: -apple-system, system-ui, sans-serif;
           background: var(--tg-theme-bg-color, #F2F3F7); color: var(--tg-theme-text-color, #0B0B0F);
-          --brand: #1FBF5C; --line: rgba(130,130,140,.16); }
+          /* --brand-deep — MATN uchun: .idbox da --brand (#1FBF5C) o'z yumshoq
+             foni ustida 2.2:1 berardi (AA'dan yiqiladi). Naqsh logistika'dan. */
+          --brand: #1FBF5C; --brand-deep: #0B7A38; --line: rgba(130,130,140,.16); }
         .brandbar { display: flex; align-items: center; gap: 9px; padding: 16px 2px 18px; }
         .brandbar b { font-family: Sora, -apple-system, sans-serif; font-size: 17px; letter-spacing: -.3px; }
         .brandbar small { margin-left: auto; font-size: 11px; font-weight: 600; text-transform: uppercase;
@@ -143,9 +175,12 @@ export function KirishApp() {
         .lockic { width: 64px; height: 64px; margin: 0 auto 12px; display: flex; align-items: center;
           justify-content: center; font-size: 28px; border-radius: 20px; background: rgba(130,130,140,.10); }
         h2 { margin: 4px 0 6px; font-family: Sora, -apple-system, sans-serif; font-size: 20px; letter-spacing: -.4px; }
-        .idbox { font-family: ui-monospace, monospace; font-size: 17px; font-weight: 700;
-          background: rgba(31,191,92,.10); color: var(--brand); border: 1px solid rgba(31,191,92,.25);
-          border-radius: 12px; padding: 9px 16px; display: inline-block; margin: 6px 0 10px; user-select: all; }
+        .idbox { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; min-height: 56px;
+          background: rgba(31,191,92,.10); color: var(--brand-deep); border: 1px solid rgba(31,191,92,.25);
+          border-radius: 14px; padding: 9px 18px; margin: 6px 0 10px; cursor: pointer; }
+        .idnum { font-family: ui-monospace, monospace; font-size: 17px; font-weight: 700; user-select: all; }
+        .idc { font-size: 11.5px; font-weight: 700; opacity: .85; }
+        @media (prefers-color-scheme: dark) { .idbox { color: var(--brand); } }
         .spin { width: 28px; height: 28px; margin: 0 auto 12px; border-radius: 50%;
           border: 3px solid var(--line); border-top-color: var(--brand); animation: sp .8s linear infinite; }
         @keyframes sp { to { transform: rotate(360deg); } }

@@ -2,7 +2,13 @@
 <html lang="uz">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- interactive-widget=resizes-content: klaviatura ochilganda WebView kontenti
+         qisqaradi (layout viewport kichrayadi) va pastdagi CTA ko'rinib turadi.
+         Telegram Android'da asosiy himoya; iOS uchun App.tsx dagi --app-h ishlaydi. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content"
+    />
     <meta name="theme-color" content="var(--tg-theme-bg-color, #F2F3F7)" />
     <title>BizBop — Yozuv qo'shish</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />

@@ -19,7 +19,10 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           'transition-all duration-150 active:scale-[.97] disabled:opacity-40 disabled:cursor-not-allowed',
           (variant === 'primary' || variant === 'success') && brandCta,
           variant === 'secondary' && 'bg-tg-bg2 text-tg-text border border-line',
-          variant === 'ghost'     && 'bg-transparent text-tg-hint hover:text-tg-text',
+          // ghost matni --ink-2 da, --tg-hint da EMAS: `lg` o'lchamda ham 15.5px —
+          // WCAG "large text" emas, ya'ni 4.5:1 kerak. --tg-hint (#8A8A8E) fonda
+          // atigi ~3.1:1 berardi, `hover:` esa sensorli ekranda hech qachon ishlamaydi.
+          variant === 'ghost'     && 'bg-transparent text-ink2 hover:text-tg-text',
           size === 'sm' && 'text-[13px] px-4 py-2',
           size === 'md' && 'text-[14px] px-5 py-2.5',
           size === 'lg' && 'w-full text-[15.5px] py-[15px] tracking-[-0.2px]',

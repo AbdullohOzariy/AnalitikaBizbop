@@ -6,12 +6,15 @@ import { useTelegram } from '../hooks/useTelegram'
 import StepHeader from './StepHeader'
 import { Button } from './ui/Button'
 import type { FormData } from './Step2Forma'
+import type { YuborishSeans } from '../lib/yuborish'
 
 type Tur = 'vozvrat' | 'kafe' | 'ovqatlanish' | 'spisaniya' | 'ichki_sotuv' | 'qaytarish'
 
 interface Props {
   tur: Tur
   form: FormData
+  /** Idempotentlik kaliti + yuklangan rasm keshi — egasi App (qarang lib/yuborish.ts) */
+  seans: YuborishSeans
   onBack: () => void
   onDone: () => void
 }
@@ -42,7 +45,7 @@ const item = {
   show: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 340, damping: 30 } },
 }
 
-export default function Step3Tasdiq({ tur, form, onBack, onDone }: Props) {
+export default function Step3Tasdiq({ tur, form, seans, onBack, onDone }: Props) {
   const { tg, haptic, initData } = useTelegram()
   const [loading, setLoading] = useState(false)
   const [xato, setXato] = useState<string | null>(null)
@@ -51,11 +54,26 @@ export default function Step3Tasdiq({ tur, form, onBack, onDone }: Props) {
 
   async function handleYuborish() {
     haptic?.impactOccurred('medium')
+
+    // Miqdor tekshiruvi ENG BOSHIDA — rasm yuklanishidan OLDIN. Pastroqda tursa,
+    // ishga tushgan paytida 300-800KB rasm allaqachon yuborilgan va Telegram'da
+    // hech qachon ishlatilmaydigan yetim `file_id` qolgan bo'lardi.
+    //
+    // `|| 1` fallback ATAYLAB YO'Q. U ma'lumotni jimgina soxtalashtirardi: tasdiq
+    // ekrani "0 dona" deb ko'rsatar, bazaga esa 1 tushardi. Miqdor 2-qadamda
+    // majburiy musbat, bu — ikkinchi mudofaa chizig'i.
+    const miqdor = Number(form.miqdor.replace(',', '.'))
+    if (!Number.isFinite(miqdor) || miqdor <= 0) {
+      setXato('Miqdor noto\'g\'ri — orqaga qaytib to\'g\'rilang')
+      haptic?.notificationOccurred('error')
+      return
+    }
+
     setLoading(true)
     setXato(null)
     try {
-      let fileId: string | null = null
-      if (form.photo) {
+      let fileId: string | null = seans.rasmOl()
+      if (form.photo && !fileId) {
         const fd = new FormData()
         fd.append('rasm', form.photo)
         const res = await fetch('/api/rasm-yukla', {
@@ -68,11 +86,12 @@ export default function Step3Tasdiq({ tur, form, onBack, onDone }: Props) {
           throw new Error(json.xato || 'Rasm yuklanmadi. Qaytadan urinib ko\'ring.')
         }
         fileId = json.file_id
+        seans.rasmSaqla(json.file_id)
       }
 
       // QR kod rasmi — ixtiyoriy; yuklanmasa ham yozuv ketaveradi
-      let qrFileId: string | null = null
-      if (tur !== 'qaytarish' && form.qrPhoto) {
+      let qrFileId: string | null = seans.qrOl()
+      if (tur !== 'qaytarish' && form.qrPhoto && !qrFileId) {
         try {
           const fd = new FormData()
           fd.append('rasm', form.qrPhoto)
@@ -82,12 +101,11 @@ export default function Step3Tasdiq({ tur, form, onBack, onDone }: Props) {
             body: fd,
           })
           const json = await res.json().catch(() => ({}))
-          if (res.ok && json.file_id) qrFileId = json.file_id
+          if (res.ok && json.file_id) { qrFileId = json.file_id; seans.qrSaqla(json.file_id) }
         } catch { /* ixtiyoriy — jim */ }
       }
 
       const tgUser = tg?.initDataUnsafe?.user
-      const miqdor = Number(form.miqdor.replace(',', '.')) || 1
       const summa = Number(form.summa) || 0
 
       let endpoint = '/api/yozuv'
@@ -97,6 +115,7 @@ export default function Step3Tasdiq({ tur, form, onBack, onDone }: Props) {
         // Yangi Vozvrat jarayoni — alohida endpoint/jadval.
         endpoint = '/api/vozvrat'
         payload = {
+          idempotency_key: seans.kalit,
           tovar: form.tovarNomi,
           sku_kod: form.skuKod ?? undefined,
           miqdor,
@@ -113,6 +132,7 @@ export default function Step3Tasdiq({ tur, form, onBack, onDone }: Props) {
         }
       } else {
         payload = {
+          idempotency_key: seans.kalit,
           tur,
           tovar: form.tovarNomi,
           sku_kod: form.skuKod ?? undefined,
@@ -180,7 +200,8 @@ export default function Step3Tasdiq({ tur, form, onBack, onDone }: Props) {
   ]
 
   return (
-    <div className="flex flex-col h-screen bg-tg-bg">
+    /* h-screen EMAS — qarang Step2Forma va index.css (--app-h) */
+    <div className="flex flex-col h-[var(--app-h)] bg-tg-bg">
       <StepHeader onBack={onBack} step={3} tur="tasdiq" />
 
       <div className="flex-1 overflow-y-auto px-4 pt-4 pb-4 space-y-3">

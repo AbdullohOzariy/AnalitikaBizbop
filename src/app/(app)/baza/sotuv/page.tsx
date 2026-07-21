@@ -21,11 +21,20 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { marjaTone, type MarjaTone } from "@/lib/marja";
 import { skuRowBg } from "@/lib/sku-rang";
 import { BazaFilter } from "../baza-filter";
 import { BazaPagination } from "../baza-pagination";
 
 const PAGE_SIZE = 50;
+
+/** Semantik tone → StatCard palitrasi (bu ekranning o'z ranglari). */
+const MARJA_STAT_TONE: Record<MarjaTone, "green" | "orange" | "red" | "default"> = {
+  good: "green",
+  ok: "orange",
+  bad: "red",
+  none: "default",
+};
 
 // Kategoriya iyerarxiyasi (filtr daraxti) — kam o'zgaradi, keshlaymiz ("iyerarxiya" tegi).
 const getCategoryTree = unstable_cache(
@@ -253,11 +262,12 @@ export default async function BazaSotuvPage({
           icon={Database}
           tone="orange"
         />
+        {/* Chegaralar src/lib/marja.ts dan — miniapp va dashboard-v2 bilan bitta */}
         <StatCard
           label="Marja"
           value={totalAmount > 0 ? `${margin.toFixed(1)}%` : "—"}
           icon={TrendingUp}
-          tone={margin >= 15 ? "green" : margin > 0 ? "orange" : "default"}
+          tone={MARJA_STAT_TONE[marjaTone(totalAmount > 0 ? margin : null)]}
         />
       </div>
 

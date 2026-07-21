@@ -62,11 +62,15 @@ export async function POST(req: Request) {
             id: true,
             vehicleId: true,
             vehicle: { select: { plateNumber: true, brand: true } },
+            // BUTUN zanjir (avval take:1 edi): 3-4 plecholi reysda haydovchi
+            // "men allaqachon Chilonzorga bordimmi?" savoliga javob topa olmasdi —
+            // ayniqsa telefon almashgan yoki ilova qayta ochilgan bo'lsa.
             legs: {
-              orderBy: { seq: "desc" },
-              take: 1,
+              orderBy: { seq: "asc" },
               select: {
+                seq: true,
                 arrivedAt: true,
+                fromPoint: { select: { name: true } },
                 toPoint: { select: { id: true, name: true } },
               },
             },
@@ -131,15 +135,25 @@ export async function POST(req: Request) {
       // tayanmaydi: telefon almashsa yoki WebView tozalansa ham ishlaydi).
       kelindi:
         !ochiqLeg && kelinganTrip
-          ? {
-              tripId: kelinganTrip.id,
-              vehicleId: kelinganTrip.vehicleId,
-              plateNumber: kelinganTrip.vehicle.plateNumber,
-              brand: kelinganTrip.vehicle.brand,
-              pointId: kelinganTrip.legs[0]?.toPoint.id ?? null,
-              pointName: kelinganTrip.legs[0]?.toPoint.name ?? null,
-              arrivedAt: kelinganTrip.legs[0]?.arrivedAt?.toISOString() ?? null,
-            }
+          ? (() => {
+              // legs endi seq bo'yicha O'SISH tartibida — joriy nuqta OXIRGISI.
+              const oxirgi = kelinganTrip.legs.at(-1);
+              return {
+                tripId: kelinganTrip.id,
+                vehicleId: kelinganTrip.vehicleId,
+                plateNumber: kelinganTrip.vehicle.plateNumber,
+                brand: kelinganTrip.vehicle.brand,
+                pointId: oxirgi?.toPoint.id ?? null,
+                pointName: oxirgi?.toPoint.name ?? null,
+                arrivedAt: oxirgi?.arrivedAt?.toISOString() ?? null,
+                // O'tilgan yo'l — miniapp shundan "Ombor › Chilonzor › Yunusobod"
+                // zanjirini chizadi.
+                yol: [
+                  kelinganTrip.legs[0]?.fromPoint.name ?? "",
+                  ...kelinganTrip.legs.map((l) => l.toPoint.name),
+                ].filter(Boolean),
+              };
+            })()
           : null,
       vehicles: vehicles.map((v) => ({
         id: v.id,
