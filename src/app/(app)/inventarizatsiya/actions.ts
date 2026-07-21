@@ -220,6 +220,36 @@ export async function importInventoryItemsXlsxAction(
   }
 }
 
+/**
+ * Ro'yxatni ommaviy tozalash — belgilangan SKU'lar (InventoryItem) o'chiriladi.
+ * `branchId` berilsa faqat o'sha filial, aks holda BARCHA filiallar tozalanadi.
+ * DIQQAT: bu faqat "sanash uchun belgilangan ro'yxat"; miniappda kiritilgan
+ * haqiqiy sanoq natijalari (InventoryCount) alohida jadvalda va TEGILMAYDI.
+ */
+export async function clearInventoryItemsAction(
+  // ATAYLAB majburiy va ATAYLAB `null` ni ochiq talab qiladi: eng buzg'unchi doira
+  // ("barcha filiallar") hech qachon tushib qolgan/standart qiymat bo'lmasin.
+  // `clearInventoryItemsAction()` deb chaqirib bo'lmaydi — kompilyator to'xtatadi.
+  branchId: number | null
+): Promise<{ ok: true; deleted: number } | { ok: false; error: string }> {
+  try {
+    await requireItemsManager();
+    // Mijoz filtriga ishonmaymiz: id shakli zod bilan, mavjudligi baza bilan tekshiriladi.
+    const bid = z.coerce.number().int().positive().nullable().parse(branchId);
+    if (bid !== null) {
+      const branch = await prisma.branch.findUnique({ where: { id: bid }, select: { id: true } });
+      if (!branch) return { ok: false, error: "Filial topilmadi." };
+    }
+    const res = await prisma.inventoryItem.deleteMany({
+      where: bid === null ? {} : { branchId: bid },
+    });
+    revalidatePath("/inventarizatsiya");
+    return { ok: true, deleted: res.count };
+  } catch (err) {
+    return actionError(err, "clearInventoryItems");
+  }
+}
+
 /** SKU'ni inventarizatsiya ro'yxatidan o'chirish. */
 export async function removeInventoryItemAction(
   id: number

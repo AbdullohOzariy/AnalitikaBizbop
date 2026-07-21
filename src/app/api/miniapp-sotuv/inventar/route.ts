@@ -135,16 +135,23 @@ export async function POST(req: Request) {
     select: { productId: true },
   });
   const allowedSet = new Set(allowed.map((a) => a.productId));
-  if (items.some((i) => !allowedSet.has(i.productId))) {
-    return miniappXato("Ba'zi mahsulotlar inventar ro'yxatida yo'q.", 400);
+  // QISMAN saqlaymiz — "hammasi yoki hech narsa" EMAS. Ilgari bitta mos kelmagan
+  // SKU butun paketni 400 bilan rad etardi: xodim 200 SKU sanab bo'lgach admin
+  // ro'yxatdan bitta qatorni olib tashlasa (yoki ro'yxatni tozalasa), soatlab
+  // qilingan ish HECH QAYERGA saqlanmasdi. Endi ro'yxatda qolganlari yoziladi,
+  // tushib qolganlari sanab qaytariladi va xodimga aytiladi.
+  const skipped = items.filter((i) => !allowedSet.has(i.productId)).length;
+  const saqlanadi = items.filter((i) => allowedSet.has(i.productId));
+  if (saqlanadi.length === 0) {
+    return miniappXato("Bu SKU'lar endi inventar ro'yxatida yo'q — ro'yxat o'zgargan.", 400);
   }
 
   const { date: sanaDate } = bugunSanaKuni();
   // Tizim qoldig'i — barcha itemlar uchun bitta so'rovda (create'da snapshot bo'ladi).
-  const stockMap = await latestStockByProduct(p.branchId, items.map((i) => i.productId));
+  const stockMap = await latestStockByProduct(p.branchId, saqlanadi.map((i) => i.productId));
 
   await prisma.$transaction(
-    items.map((it) =>
+    saqlanadi.map((it) =>
       prisma.inventoryCount.upsert({
         where: {
           productId_branchId_sanaKuni: {
@@ -171,5 +178,5 @@ export async function POST(req: Request) {
     )
   );
 
-  return NextResponse.json({ ok: true, saved: items.length });
+  return NextResponse.json({ ok: true, saved: saqlanadi.length, skipped });
 }

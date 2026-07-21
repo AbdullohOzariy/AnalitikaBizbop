@@ -730,7 +730,7 @@ function InventarTab({ me }: { me: MeUser }) {
         const v = vals[it.productId];
         return { productId: it.productId, countedQty: Number(v.qty), ...(v.note.trim() ? { note: v.note.trim() } : {}) };
       });
-      const r = await api<{ ok: true; saved: number }>("/api/miniapp-sotuv/inventar", {
+      const r = await api<{ ok: true; saved: number; skipped?: number }>("/api/miniapp-sotuv/inventar", {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ branchId: saqlangan, items: yuborilgan }),
       });
       haptic.ok();
@@ -759,11 +759,13 @@ function InventarTab({ me }: { me: MeUser }) {
         // Qoldiq borligini AYTAMIZ. Aks holda qator abadiy "saqlanmagan" holatda
         // qotib qolardi (yopish tasdig'i doim yoqiq, banner doim yonadi) va xodim
         // nima yuborilmaganini bilmasdi — miqdorsiz qatorni server qabul qilmaydi.
-        setSavedMsg(
-          qoldiqSoni > 0
-            ? `✓ ${r.saved} ta SKU saqlandi · ${qoldiqSoni} ta qatorda miqdor yo'q — saqlanmadi`
-            : `✓ ${r.saved} ta SKU saqlandi`
-        );
+        // `skipped` — server ro'yxatidan tushib qolgan SKU'lar (admin ro'yxatni
+        // o'zgartirgan). Ilgari server butun paketni rad etardi; endi qolganlari
+        // saqlanadi, lekin xodim NIMA saqlanmaganini bilishi shart.
+        const qismlar = [`✓ ${r.saved} ta SKU saqlandi`];
+        if (qoldiqSoni > 0) qismlar.push(`${qoldiqSoni} ta qatorda miqdor yo'q — saqlanmadi`);
+        if (r.skipped) qismlar.push(`${r.skipped} tasi ro'yxatdan chiqarilgan — saqlanmadi`);
+        setSavedMsg(qismlar.join(" · "));
         setRestored(false);
         if (editSeq.current === seq) setDirty(bor);
       }

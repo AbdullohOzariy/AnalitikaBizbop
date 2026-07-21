@@ -10,12 +10,13 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Plus, Trash2, Search, Loader2, Zap, FileUp } from "lucide-react";
+import { Plus, Trash2, Search, Loader2, Zap, FileUp, Eraser } from "lucide-react";
 import { toast } from "sonner";
 import {
   searchProductsForInventoryAction,
   addInventoryItemAction,
   removeInventoryItemAction,
+  clearInventoryItemsAction,
   autoAddOosItemsAction,
   importInventoryItemsXlsxAction,
   type InventorySearchRow,
@@ -105,9 +106,21 @@ export function ItemsClient({
   const [oosRunning, startOos] = useTransition();
   const [del, setDel] = useState<InventoryItemRow | null>(null);
   const [deleting, startDelete] = useTransition();
+  const [clearOpen, setClearOpen] = useState(false);
+  const [clearConfirm, setClearConfirm] = useState(""); // katta ro'yxat uchun qo'lda yozib tasdiqlash
+  const [clearing, startClear] = useTransition();
   const [branchFilter, setBranchFilter] = useState<number>(0); // 0 = barchasi
 
   const filtered = branchFilter === 0 ? rows : rows.filter((r) => r.branchId === branchFilter);
+
+  // Tozalash doirasi — ekranda ko'rinib turgani (filial filtri) bilan bir xil.
+  const clearScopeName =
+    branchFilter === 0
+      ? "barcha filiallar"
+      : branches.find((b) => b.id === branchFilter)?.name ?? "tanlangan filial";
+  // 50+ yozuvda tasodifiy bosishdan himoya: yozuvlar sonini qo'lda yozish talab qilinadi.
+  const clearNeedsTyping = filtered.length >= 50;
+  const clearReady = !clearNeedsTyping || clearConfirm.trim() === String(filtered.length);
 
   const runOosAuto = () => {
     startOos(async () => {
@@ -136,6 +149,25 @@ export function ItemsClient({
     });
   };
 
+  const closeClear = () => {
+    setClearOpen(false);
+    setClearConfirm("");
+  };
+
+  const confirmClear = () => {
+    if (!clearReady) return;
+    startClear(async () => {
+      const res = await clearInventoryItemsAction(branchFilter === 0 ? null : branchFilter);
+      if (res.ok) {
+        toast.success(
+          `${res.deleted} ta yozuv ro'yxatdan o'chirildi (${clearScopeName}). Saqlangan sanoq natijalari qoldi.`
+        );
+        closeClear();
+        router.refresh();
+      } else toast.error(res.error);
+    });
+  };
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -156,6 +188,17 @@ export function ItemsClient({
         </select>
         {canManage && (
           <div className="ml-auto flex flex-wrap items-center gap-2">
+            {filtered.length > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 gap-1.5 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={() => { setClearConfirm(""); setClearOpen(true); }}
+              >
+                <Eraser className="h-3.5 w-3.5" />
+                {branchFilter === 0 ? "Hammasini o'chirish" : "Filialni tozalash"}
+              </Button>
+            )}
             <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => setOosOpen(true)}>
               <Zap className="h-3.5 w-3.5 text-amber-500" /> Avto to&apos;ldirish
             </Button>
@@ -295,6 +338,68 @@ export function ItemsClient({
             <Button variant="destructive" onClick={confirmDelete} disabled={deleting}>
               {deleting && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
               O&apos;chirish
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Ommaviy tozalash tasdiqlash — nima o'chishi va nima QOLISHI aniq aytiladi */}
+      <Dialog open={clearOpen} onOpenChange={(o) => !o && closeClear()}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Ro&apos;yxat tozalansinmi?</DialogTitle>
+            <DialogDescription>
+              Belgilangan SKU ro&apos;yxatidan <b className="text-destructive">{filtered.length} ta yozuv</b>{" "}
+              o&apos;chiriladi — doira: <b>{clearScopeName}</b>.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+            <p>
+              <b className="text-foreground">SAQLANGAN sanoq natijalari qoladi.</b> Miniappdan
+              yuborilgan sanoqlar (InventoryCount) alohida jadvalda va bu amaldan
+              ta&apos;sirlanmaydi — kamomad/ortiqcha hisobotlari joyida qoladi.
+            </p>
+            <p className="mt-1.5 text-amber-700 dark:text-amber-400">
+              <b>Diqqat:</b> hozir miniappda sanab turgan xodimning HALI SAQLANMAGAN ishi
+              yo&apos;qoladi — ro&apos;yxatdan chiqarilgan SKU&apos;lar saqlanmaydi. Sanash
+              ketayotgan bo&apos;lsa, tugatishini kuting.
+            </p>
+            <p className="mt-1.5">
+              O&apos;chadigani faqat &laquo;qaysi SKU sanalsin&raquo; ro&apos;yxati. Uni keyin qayta
+              qo&apos;shish mumkin (avto to&apos;ldirish yoki Excel&apos;dan yuklash).
+            </p>
+          </div>
+
+          {clearNeedsTyping && (
+            <div className="space-y-1.5">
+              <p className="text-xs text-muted-foreground">
+                Ro&apos;yxat katta. Tasdiqlash uchun <b className="text-foreground">{filtered.length}</b> raqamini
+                yozing:
+              </p>
+              <Input
+                value={clearConfirm}
+                onChange={(e) => setClearConfirm(e.target.value)}
+                inputMode="numeric"
+                autoComplete="off"
+                placeholder={String(filtered.length)}
+                className="h-9"
+              />
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={closeClear} disabled={clearing}>
+              Bekor qilish
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmClear}
+              disabled={clearing || !clearReady}
+              className="gap-1.5"
+            >
+              {clearing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Eraser className="h-3.5 w-3.5" />}
+              {filtered.length} ta yozuvni o&apos;chirish
             </Button>
           </DialogFooter>
         </DialogContent>
