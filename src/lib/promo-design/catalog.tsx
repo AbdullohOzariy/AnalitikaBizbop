@@ -169,13 +169,16 @@ function Card({ d, w, h }: { d: DesignData; w: number; h: number }) {
  * ENDAN miqyoslanadi: to'liq enda (w=W) joriy maket bilan AYNAN bir xil chiqadi
  * (ratio'lar shunday tanlangan); 10-mahsulot maketida esa 2 ustun eniga siqiladi.
  */
-function HeaderPanel({ w, h, title, dateText, maxDiscount }: {
+function HeaderPanel({ w, h, title, dateText, maxDiscount, titleRatio = 0.0855 }: {
   w: number; h: number; title: string; dateText: string; maxDiscount: number;
+  // Sarlavha shrifti endan miqyoslanadi. To'liq enli banner default (0.0855) da
+  // joriy maket bilan aynan bir xil; hero maketda (tor en) kattaroq nisbat beriladi.
+  titleRatio?: number;
 }) {
   return (
     <div style={{ display: "flex", position: "relative", width: w, height: h, backgroundColor: GREEN }}>
       <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", width: "68%", height: "100%", padding: PAD + 16 }}>
-        <div style={{ display: "flex", fontSize: Math.round(w * 0.0855), fontWeight: 700, color: "#ffffff", lineHeight: 1.02 }}>{title}</div>
+        <div style={{ display: "flex", fontSize: Math.round(w * titleRatio), fontWeight: 700, color: "#ffffff", lineHeight: 1.02 }}>{title}</div>
         <div style={{ display: "flex", fontSize: Math.round(w * 0.0239), fontWeight: 700, color: "#ffffff" }}>{dateText}</div>
       </div>
 
@@ -227,7 +230,7 @@ function HeroLayout({
     <div style={{ display: "flex", flexDirection: "column", width: W, height: H, fontFamily: "VelaSans", backgroundColor: "#ffffff" }}>
       {/* ── YUQORI QATOR: sarlavha (2 ustun) + hero kartochka (3-ustun) ── */}
       <div style={{ display: "flex", width: W, height: rowH }}>
-        <HeaderPanel w={headerW} h={rowH} title={title} dateText={dateText} maxDiscount={maxDiscount} />
+        <HeaderPanel w={headerW} h={rowH} title={title} dateText={dateText} maxDiscount={maxDiscount} titleRatio={0.108} />
         <div style={{ display: "flex", marginLeft: GAP }}>
           <Card d={hero} w={cardW} h={rowH} />
         </div>
