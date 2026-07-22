@@ -164,6 +164,93 @@ function Card({ d, w, h }: { d: DesignData; w: number; h: number }) {
   );
 }
 
+/**
+ * Sarlavha paneli — yashil blok + o'ngida to'q-sariq chegirma bloki. Fontlar
+ * ENDAN miqyoslanadi: to'liq enda (w=W) joriy maket bilan AYNAN bir xil chiqadi
+ * (ratio'lar shunday tanlangan); 10-mahsulot maketida esa 2 ustun eniga siqiladi.
+ */
+function HeaderPanel({ w, h, title, dateText, maxDiscount }: {
+  w: number; h: number; title: string; dateText: string; maxDiscount: number;
+}) {
+  return (
+    <div style={{ display: "flex", position: "relative", width: w, height: h, backgroundColor: GREEN }}>
+      <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", width: "68%", height: "100%", padding: PAD + 16 }}>
+        <div style={{ display: "flex", fontSize: Math.round(w * 0.0855), fontWeight: 700, color: "#ffffff", lineHeight: 1.02 }}>{title}</div>
+        <div style={{ display: "flex", fontSize: Math.round(w * 0.0239), fontWeight: 700, color: "#ffffff" }}>{dateText}</div>
+      </div>
+
+      {maxDiscount > 0 && (
+        <div
+          style={{
+            display: "flex", flexDirection: "column", alignItems: "flex-end", justifyContent: "center",
+            position: "absolute", top: 0, right: 0, width: "33%", height: "100%",
+            backgroundColor: ORANGE, padding: PAD,
+            borderTopLeftRadius: 44, borderBottomLeftRadius: 130, borderBottomRightRadius: 44,
+          }}
+        >
+          <div style={{ display: "flex", fontSize: Math.round(w * 0.0844), fontWeight: 700, color: "#ffffff", fontFamily: "Golos", lineHeight: 1 }}>
+            -{maxDiscount}%
+          </div>
+          <div style={{ display: "flex", fontSize: Math.round(w * 0.0262), fontWeight: 700, color: "#ffffff", marginTop: 4 }}>gacha</div>
+          <div style={{ display: "flex", fontSize: Math.round(w * 0.0433), fontWeight: 700, color: "#ffffff", marginTop: 10 }}>tejamkorlik</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * 10-mahsulot maketi (dizayner referensi): sarlavha SETKA ichida — yuqori qatorda
+ * 2 ustunni egallaydi (chap yuqori burchakka to'liq yopishadi), 3-ustunda 1-mahsulot
+ * ("hero" kartochka), keyin pastda 3×3 = 9 mahsulot. Odatiy 3+3+3+1 (oxirgi qator
+ * bo'sh-yalang) o'rniga muvozanatli chiqadi.
+ */
+function HeroLayout({
+  items, title, dateText, maxDiscount, logoData,
+}: {
+  items: DesignData[]; title: string; dateText: string; maxDiscount: number; logoData: string;
+}) {
+  const cols = 3;
+  const gridW = W - PAD * 2;
+  const cardW = Math.floor((gridW - GAP * (cols - 1)) / cols);
+  const headerW = PAD + cardW * 2 + GAP; // chap chekkadan 2 ustun oxirigacha (full-bleed)
+  const TOP_H = 640; // sarlavha va hero kartochka balandligi
+  const bodyH = H - TOP_H - FOOT_H - GAP;
+  const rowH = Math.floor((bodyH - GAP * 2) / 3);
+  const cardH = Math.min(rowH, Math.round(cardW * 1.15));
+
+  const hero = items[0];
+  const rows = chunk(items.slice(1), cols); // qolgan 9 ta → 3×3
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", width: W, height: H, fontFamily: "VelaSans", backgroundColor: "#ffffff" }}>
+      {/* ── YUQORI QATOR: sarlavha (2 ustun) + hero kartochka (3-ustun) ── */}
+      <div style={{ display: "flex", width: W, height: TOP_H }}>
+        <HeaderPanel w={headerW} h={TOP_H} title={title} dateText={dateText} maxDiscount={maxDiscount} />
+        <div style={{ display: "flex", marginLeft: GAP }}>
+          <Card d={hero} w={cardW} h={TOP_H} />
+        </div>
+      </div>
+
+      {/* ── PASTKI 3×3 SETKA ── */}
+      <div style={{ display: "flex", flexDirection: "column", width: W, paddingLeft: PAD, paddingRight: PAD, marginTop: GAP }}>
+        {rows.map((row, ri) => (
+          <div key={ri} style={{ display: "flex", marginBottom: ri === rows.length - 1 ? 0 : GAP }}>
+            {row.map((d, ci) => (
+              <div key={d.kind + d.id} style={{ display: "flex", marginRight: ci === row.length - 1 ? 0 : GAP }}>
+                <Card d={d} w={cardW} h={cardH} />
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+
+      {/* ── FUTER ── */}
+      <Footer logoData={logoData} />
+    </div>
+  );
+}
+
 export function CatalogBanner({
   items, title, dateText, maxDiscount, logoData,
 }: {
@@ -173,6 +260,11 @@ export function CatalogBanner({
   maxDiscount: number; // eng katta chegirma foizi — sarlavhadagi "-45% gacha"
   logoData: string;
 }) {
+  // Roppa-rosa 10 ta mahsulot — dizayner maketiga mos hero setka (sarlavha ichida).
+  if (items.length === 10) {
+    return <HeroLayout items={items} title={title} dateText={dateText} maxDiscount={maxDiscount} logoData={logoData} />;
+  }
+
   const cols = colsFor(items.length);
   const rows = chunk(items, cols);
   const gridW = W - PAD * 2;
@@ -187,29 +279,7 @@ export function CatalogBanner({
   return (
     <div style={{ display: "flex", flexDirection: "column", width: W, height: H, fontFamily: "VelaSans", backgroundColor: "#ffffff" }}>
       {/* ── SARLAVHA: yashil panel, o'ngida to'q-sariq chegirma bloki ── */}
-      <div style={{ display: "flex", position: "relative", width: W, height: HEAD_H, backgroundColor: GREEN }}>
-        <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", width: "68%", height: "100%", padding: PAD + 16 }}>
-          <div style={{ display: "flex", fontSize: 150, fontWeight: 700, color: "#ffffff", lineHeight: 1.02 }}>{title}</div>
-          <div style={{ display: "flex", fontSize: 42, fontWeight: 700, color: "#ffffff" }}>{dateText}</div>
-        </div>
-
-        {maxDiscount > 0 && (
-          <div
-            style={{
-              display: "flex", flexDirection: "column", alignItems: "flex-end", justifyContent: "center",
-              position: "absolute", top: 0, right: 0, width: "33%", height: "100%",
-              backgroundColor: ORANGE, padding: PAD,
-              borderTopLeftRadius: 44, borderBottomLeftRadius: 130, borderBottomRightRadius: 44,
-            }}
-          >
-            <div style={{ display: "flex", fontSize: 148, fontWeight: 700, color: "#ffffff", fontFamily: "Golos", lineHeight: 1 }}>
-              -{maxDiscount}%
-            </div>
-            <div style={{ display: "flex", fontSize: 46, fontWeight: 700, color: "#ffffff", marginTop: 4 }}>gacha</div>
-            <div style={{ display: "flex", fontSize: 76, fontWeight: 700, color: "#ffffff", marginTop: 10 }}>tejamkorlik</div>
-          </div>
-        )}
-      </div>
+      <HeaderPanel w={W} h={HEAD_H} title={title} dateText={dateText} maxDiscount={maxDiscount} />
 
       {/* ── SETKA ── */}
       <div
@@ -230,25 +300,32 @@ export function CatalogBanner({
       </div>
 
       {/* ── FUTER: logo + ijtimoiy tarmoqlar ── */}
-      <div style={{ display: "flex", flexGrow: 1, alignItems: "center", justifyContent: "space-between", paddingLeft: PAD + 16, paddingRight: PAD + 16 }}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={logoData} width={Math.round(88 * LOGO_RATIO)} height={88} alt="" />
-        <div style={{ display: "flex", alignItems: "center" }}>
-          {/* Instagram (template.tsx dagi bilan bir xil kontur) */}
-          <svg width={52} height={52} viewBox="0 0 24 24" fill="none">
-            <rect x="2" y="2" width="20" height="20" rx="5.5" stroke={GREEN} strokeWidth="1.8" />
-            <circle cx="12" cy="12" r="4.6" stroke={GREEN} strokeWidth="1.8" />
-            <circle cx="17.3" cy="6.7" r="1.4" fill={GREEN} />
-          </svg>
-          {/* Telegram */}
-          <svg width={52} height={52} viewBox="0 0 24 24" fill="none" style={{ marginLeft: 14 }}>
-            <path
-              d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z"
-              fill={GREEN}
-            />
-          </svg>
-          <div style={{ display: "flex", fontSize: 46, fontWeight: 700, color: GREEN, marginLeft: 16 }}>bizbop_supermarket</div>
-        </div>
+      <Footer logoData={logoData} />
+    </div>
+  );
+}
+
+/** Futer — logo (chapda) + ijtimoiy tarmoqlar (o'ngda). Ikkala maketda bir xil. */
+function Footer({ logoData }: { logoData: string }) {
+  return (
+    <div style={{ display: "flex", flexGrow: 1, alignItems: "center", justifyContent: "space-between", paddingLeft: PAD + 16, paddingRight: PAD + 16 }}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={logoData} width={Math.round(88 * LOGO_RATIO)} height={88} alt="" />
+      <div style={{ display: "flex", alignItems: "center" }}>
+        {/* Instagram (template.tsx dagi bilan bir xil kontur) */}
+        <svg width={52} height={52} viewBox="0 0 24 24" fill="none">
+          <rect x="2" y="2" width="20" height="20" rx="5.5" stroke={GREEN} strokeWidth="1.8" />
+          <circle cx="12" cy="12" r="4.6" stroke={GREEN} strokeWidth="1.8" />
+          <circle cx="17.3" cy="6.7" r="1.4" fill={GREEN} />
+        </svg>
+        {/* Telegram */}
+        <svg width={52} height={52} viewBox="0 0 24 24" fill="none" style={{ marginLeft: 14 }}>
+          <path
+            d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z"
+            fill={GREEN}
+          />
+        </svg>
+        <div style={{ display: "flex", fontSize: 46, fontWeight: 700, color: GREEN, marginLeft: 16 }}>bizbop_supermarket</div>
       </div>
     </div>
   );
