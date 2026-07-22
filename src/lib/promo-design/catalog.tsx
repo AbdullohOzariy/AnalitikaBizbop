@@ -214,10 +214,11 @@ function HeroLayout({
   const gridW = W - PAD * 2;
   const cardW = Math.floor((gridW - GAP * (cols - 1)) / cols);
   const headerW = PAD + cardW * 2 + GAP; // chap chekkadan 2 ustun oxirigacha (full-bleed)
-  const TOP_H = 640; // sarlavha va hero kartochka balandligi
-  const bodyH = H - TOP_H - FOOT_H - GAP;
-  const rowH = Math.floor((bodyH - GAP * 2) / 3);
-  const cardH = Math.min(rowH, Math.round(cardW * 1.15));
+  // 4 qatorning HAMMASI bir xil balandlikda: 1-qator = sarlavha + hero, 2–4 = 3×3.
+  // Hero'ni sarlavha balandligiga (640) cho'zsak, mahsulot rasmi kichik bo'lganda
+  // karta bo'm-bo'sh/cho'ziq ko'rinardi — endi u pastdagi kartalar bilan bir xil.
+  const rowH = Math.floor((H - FOOT_H - GAP * 3) / 4);
+  const cardH = rowH;
 
   const hero = items[0];
   const rows = chunk(items.slice(1), cols); // qolgan 9 ta → 3×3
@@ -225,10 +226,10 @@ function HeroLayout({
   return (
     <div style={{ display: "flex", flexDirection: "column", width: W, height: H, fontFamily: "VelaSans", backgroundColor: "#ffffff" }}>
       {/* ── YUQORI QATOR: sarlavha (2 ustun) + hero kartochka (3-ustun) ── */}
-      <div style={{ display: "flex", width: W, height: TOP_H }}>
-        <HeaderPanel w={headerW} h={TOP_H} title={title} dateText={dateText} maxDiscount={maxDiscount} />
+      <div style={{ display: "flex", width: W, height: rowH }}>
+        <HeaderPanel w={headerW} h={rowH} title={title} dateText={dateText} maxDiscount={maxDiscount} />
         <div style={{ display: "flex", marginLeft: GAP }}>
-          <Card d={hero} w={cardW} h={TOP_H} />
+          <Card d={hero} w={cardW} h={rowH} />
         </div>
       </div>
 
