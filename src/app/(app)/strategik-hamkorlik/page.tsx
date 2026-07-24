@@ -40,7 +40,7 @@ export default async function StrategikHamkorlikPage({
     <div className="space-y-5">
       <PageHeader
         title="Strategik hamkorlik"
-        description="Ta'minotchi skorkarti — gross-marja tuzilishi (front + orqa-marja)"
+        description="Ta'minotchi skorkarti — yalpi marja tuzilishi (front + orqa-marja)"
         icon={Handshake}
       />
 

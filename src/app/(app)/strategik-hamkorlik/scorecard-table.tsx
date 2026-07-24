@@ -268,7 +268,7 @@ export function ScorecardTable({
               <th className="px-2 py-2 text-right">Nasiya marjasi</th>
               <th className="px-2 py-2 text-right">Bonus</th>
               <th className="px-2 py-2 text-right">Yo'qotish</th>
-              <th className="px-2 py-2 text-right">Гросс</th>
+              <th className="px-2 py-2 text-right">Yalpi marja</th>
             </tr>
           </thead>
           <tbody>
