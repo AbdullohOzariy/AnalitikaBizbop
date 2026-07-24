@@ -17,6 +17,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const LOGO = path.join(process.cwd(), "public/logo.png");
+const KUN_ICON = path.join(process.cwd(), "public/promo/kun.png"); // "Kun taklifi" quyosh belgisi
+const ARZON_ICON = path.join(process.cwd(), "public/promo/arzon.png"); // "A-a-arzon narx!" savat belgisi
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -33,11 +35,15 @@ export async function GET(req: Request) {
   const data = await getDesignData(kind, id);
   if (!data) return new NextResponse("Topilmadi", { status: 404 });
 
-  const [fonts, logoBuf] = await Promise.all([loadDesignFonts(), readFile(LOGO)]);
+  const [fonts, logoBuf, iconBuf, basketBuf] = await Promise.all([
+    loadDesignFonts(), readFile(LOGO), readFile(KUN_ICON), readFile(ARZON_ICON),
+  ]);
   const logoData = `data:image/png;base64,${logoBuf.toString("base64")}`;
+  const iconData = `data:image/png;base64,${iconBuf.toString("base64")}`;
+  const basketData = `data:image/png;base64,${basketBuf.toString("base64")}`;
   const { width, height } = format === "a4" ? { width: 1414, height: 1000 } : { width: 1080, height: 1350 };
 
-  return new ImageResponse(<DesignBanner data={data} format={format} logoData={logoData} />, {
+  return new ImageResponse(<DesignBanner data={data} format={format} logoData={logoData} iconData={iconData} basketData={basketData} />, {
     width,
     height,
     fonts,

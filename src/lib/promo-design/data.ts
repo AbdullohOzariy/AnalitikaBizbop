@@ -32,10 +32,12 @@ export type DesignData = {
   badgeText: string;
   dateText: string; // "25-iyundan 1-iyulgacha"
   fileTag: string;
-  // Banner ko'rinishi: HAFTA_CHEGIRMA — yashil dizayner maketi (katta narx + doira + CTA);
-  // BIZBOP_NARX — to'q-sariq maket (eski narx qizil qiyshiq chiziq bilan, sana/doirasiz);
-  // qolgan turlar — klassik.
-  variant: "hafta" | "bizbop" | "classic";
+  // Banner ko'rinishi: KUN_TAKLIFI — sariq maket (quyosh belgisi, "Kun taklifi" pill,
+  // supermarket narxi qizilda); AAARZON — sariq maket ("A-a-arzon narx!" pill + savat ikonkasi,
+  // qizil narx/doira, limit qatorlari); HAFTA_CHEGIRMA — yashil dizayner maketi (katta narx +
+  // doira + CTA); BIZBOP_NARX — to'q-sariq maket (eski narx qizil qiyshiq chiziq bilan,
+  // sana/doirasiz); qolgan turlar — klassik.
+  variant: "kun" | "arzon" | "hafta" | "bizbop" | "classic";
 };
 
 type PriceRow = { regularPrice: number; promoPrice: number; promoLimit: number | null; buyQty: number | null; freeQty: number | null };
@@ -94,7 +96,12 @@ function build(p: {
     badgeText: BADGE[p.type] ?? "AKSIYA",
     dateText: formatPromoDateRange(p.startDate, p.endDate),
     fileTag,
-    variant: p.type === "HAFTA_CHEGIRMA" ? "hafta" : p.type === "BIZBOP_NARX" ? "bizbop" : "classic",
+    variant:
+      p.type === "KUN_TAKLIFI" ? "kun"
+      : p.type === "AAARZON" ? "arzon"
+      : p.type === "HAFTA_CHEGIRMA" ? "hafta"
+      : p.type === "BIZBOP_NARX" ? "bizbop"
+      : "classic",
   };
 }
 

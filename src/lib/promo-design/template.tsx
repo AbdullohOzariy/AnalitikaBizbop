@@ -314,15 +314,16 @@ const B_INSTA: BSizes = {
 };
 
 /** Supermarket uslubidagi narx bloki (katta ming qism + ko'tarilgan 3 raqam + so'm).
- *  `avail` — panelda mavjud en: narx sig'masa shriftlar shu yerda kichrayadi. */
-function SupPrice({ value, main, sup, som, avail }: { value: number; main: number; sup: number; som: number; avail: number }) {
+ *  `avail` — panelda mavjud en: narx sig'masa shriftlar shu yerda kichrayadi.
+ *  `color` — matn rangi (default oq; "kun" varianti qizil beradi). */
+function SupPrice({ value, main, sup, som, avail, color = "#ffffff" }: { value: number; main: number; sup: number; som: number; avail: number; color?: string }) {
   const p = splitPrice(value);
   const k = splitPriceScale(p.main, p.sup, main, sup, som, avail);
   const mS = Math.round(main * k);
   const sS = Math.round(sup * k);
   const soS = Math.round(som * k);
   return (
-    <div style={{ display: "flex", alignItems: "flex-start", color: "#ffffff" }}>
+    <div style={{ display: "flex", alignItems: "flex-start", color }}>
       <div style={{ display: "flex", fontSize: mS, fontWeight: 700, fontFamily: "Golos", lineHeight: 0.8 }}>{p.main}</div>
       {p.sup ? (
         <div style={{ display: "flex", flexDirection: "column", marginLeft: 8 }}>
@@ -440,7 +441,324 @@ function BizbopBanner({ data, S, logoData }: { data: DesignData; S: BSizes; logo
   );
 }
 
-export function DesignBanner({ data, format, logoData }: { data: DesignData; format: Format; logoData: string }) {
+// ─── KUN TAKLIFI varianti (sariq maket) ────────────────────────────────────────
+// Farqlar: sariq chap panel, o'ngda oq panel (chap burchaklari yumaloq); tepada "Kun taklifi"
+// pill (chap) + bizbop logo (o'ng), logo yonida quyosh belgisi (iconData — public/promo/kun.png);
+// narx supermarket uslubida QIZILda (eski narx ustidan qora qiyshiq chiziq); markazda mahsulot +
+// qizil chegirma doira. Sana/limit/CTA yo'q (dizayner maketiga mos).
+const PROMO_YELLOW = "#FFE500";
+const PROMO_RED = "#EC1C24";
+
+type KSizes = {
+  W: number; H: number; leftPct: string; rightPct: string; pad: number; radius: number;
+  titleSize: number; ruSize: number;
+  oldMain: number; oldSup: number; oldSom: number;
+  newMain: number; newSup: number; newSom: number;
+  pillSize: number; logoH: number;
+  iconW: number; iconH: number; iconTop: number; iconRight: number;
+  imgW: number; imgH: number;
+  circleSize: number; circlePct: number; circleTop: number; circleRight: number;
+};
+
+const K_A4: KSizes = {
+  W: 1414, H: 1000, leftPct: "48%", rightPct: "52%", pad: 60, radius: 90,
+  titleSize: 66, ruSize: 34,
+  oldMain: 72, oldSup: 40, oldSom: 30,
+  newMain: 190, newSup: 88, newSom: 60,
+  pillSize: 34, logoH: 46,
+  iconW: 250, iconH: 208, iconTop: 150, iconRight: 60,
+  imgW: 580, imgH: 580,
+  circleSize: 180, circlePct: 54, circleTop: 500, circleRight: 150,
+};
+const K_INSTA: KSizes = {
+  W: 1080, H: 1350, leftPct: "50%", rightPct: "50%", pad: 52, radius: 80,
+  titleSize: 54, ruSize: 30,
+  oldMain: 78, oldSup: 42, oldSom: 32,
+  newMain: 200, newSup: 92, newSom: 62,
+  pillSize: 32, logoH: 40,
+  iconW: 200, iconH: 166, iconTop: 130, iconRight: 44,
+  imgW: 460, imgH: 620,
+  circleSize: 170, circlePct: 52, circleTop: 700, circleRight: 120,
+};
+
+function KunBanner({ data, S, logoData, iconData }: { data: DesignData; S: KSizes; logoData: string; iconData?: string }) {
+  const img = data.imageData ?? logoData;
+  const placeholder = !data.imageData;
+  const availW = Math.round((parseFloat(S.leftPct) / 100) * S.W) - S.pad * 2;
+
+  return (
+    <div style={{ display: "flex", width: S.W, height: S.H, fontFamily: "VelaSans", backgroundColor: PROMO_YELLOW }}>
+      {/* ── CHAP: sariq panel ── */}
+      <div style={{ display: "flex", flexDirection: "column", width: S.leftPct, height: "100%", padding: S.pad }}>
+        {/* nom (qizil) */}
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          <div style={{ display: "flex", fontSize: S.titleSize, fontWeight: 700, color: PROMO_RED, lineHeight: 1.05 }}>
+            {data.titleUz}
+          </div>
+          {data.titleRu && (
+            <div style={{ display: "flex", fontSize: S.ruSize, color: PROMO_RED, marginTop: 14 }}>{data.titleRu}</div>
+          )}
+        </div>
+
+        {/* narxlar — pastga yopishgan (qizil, supermarket uslubi) */}
+        <div style={{ display: "flex", flexGrow: 1, flexDirection: "column", justifyContent: "flex-end" }}>
+          {!data.nPlusM && data.regularPrice > data.promoPrice && (
+            <div style={{ display: "flex", position: "relative", alignSelf: "flex-start", marginBottom: 16 }}>
+              <SupPrice value={data.regularPrice} main={S.oldMain} sup={S.oldSup} som={S.oldSom} avail={availW} color={PROMO_RED} />
+              {/* qora qiyshiq ustma chiziq (maketdagidek — chapdan pastga qiya) */}
+              <div
+                style={{
+                  position: "absolute", left: "-4%", right: "-4%", top: "46%",
+                  height: Math.max(4, Math.round(S.oldMain * 0.09)),
+                  backgroundColor: "#111111", transform: "rotate(-9deg)",
+                }}
+              />
+            </div>
+          )}
+          <SupPrice value={data.promoPrice} main={S.newMain} sup={S.newSup} som={S.newSom} avail={availW} color={PROMO_RED} />
+        </div>
+      </div>
+
+      {/* ── O'NG: oq panel (chap burchaklari yumaloq) ── */}
+      <div
+        style={{
+          display: "flex", flexDirection: "column", width: S.rightPct, height: "100%",
+          backgroundColor: "#ffffff", padding: S.pad, position: "relative",
+          borderTopLeftRadius: S.radius, borderBottomLeftRadius: S.radius,
+        }}
+      >
+        {/* tepa qator: "Kun taklifi" pill (chap) + bizbop logo (o'ng) */}
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
+          <div
+            style={{
+              display: "flex", backgroundColor: PROMO_YELLOW, color: "#111111", fontSize: S.pillSize,
+              fontWeight: 700, padding: "10px 26px", borderRadius: 9999,
+            }}
+          >
+            Kun taklifi
+          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={logoData} width={Math.round(S.logoH * LOGO_RATIO)} height={S.logoH} alt="" />
+        </div>
+
+        {/* quyosh belgisi — logo tagida, o'ng-yuqorida (absolute) */}
+        {iconData && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={iconData}
+            width={S.iconW}
+            height={S.iconH}
+            alt=""
+            style={{ position: "absolute", top: S.iconTop, right: S.iconRight, objectFit: "contain" }}
+          />
+        )}
+
+        {/* mahsulot rasmi (markaz) */}
+        <div style={{ display: "flex", flexGrow: 1, alignItems: "center", justifyContent: "center" }}>
+          <ProductImage src={img} w={S.imgW} h={S.imgH} zoom={data.imageZoom} placeholder={placeholder} />
+        </div>
+
+        {/* chegirma/N+M doirasi (absolute, mahsulot ustida) — qizil */}
+        {(data.nPlusM || data.discountPct > 0) && (
+          <div
+            style={{
+              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+              position: "absolute", top: S.circleTop, right: S.circleRight,
+              width: S.circleSize, height: S.circleSize, borderRadius: 9999, backgroundColor: PROMO_RED,
+            }}
+          >
+            {data.nPlusM ? (
+              <div style={{ display: "flex", fontSize: Math.round(S.circlePct * 1.15), fontWeight: 700, color: "#ffffff", lineHeight: 1, fontFamily: "Golos" }}>
+                {data.nPlusM.buy}+{data.nPlusM.free}
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                <div style={{ display: "flex", fontSize: S.circlePct, fontWeight: 700, color: "#ffffff", lineHeight: 1, fontFamily: "Golos" }}>
+                  -{data.discountPct}%
+                </div>
+                <div style={{ display: "flex", fontSize: Math.round(S.circlePct * 0.36), fontWeight: 700, color: "#ffffff", marginTop: 4 }}>
+                  TEJANG
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── A-A-ARZON NARX varianti (sariq maket) ─────────────────────────────────────
+// Bizbop maketiga o'xshash, ammo SARIQ: sariq chap panel, o'ngda oq panel (chap burchaklari
+// yumaloq); tepada "A-a-arzon narx!" sariq pill + qizil savat ikonkasi (basketData —
+// public/promo/arzon.png) + bizbop logo; narx supermarket uslubida QIZILda (eski narx ustidan
+// qora qiyshiq chiziq); qizil doira — chegirmada "-N% tejang!", chegirmasiz "Ajoyib taklif!";
+// A4'da yashil/qizil limit qatorlari, Insta'da "Barcha filiallarda amal qiladi".
+type AZSizes = {
+  W: number; H: number; leftPct: string; rightPct: string; pad: number; radius: number;
+  smallSize: number; titleSize: number; ruSize: number;
+  oldMain: number; oldSup: number; oldSom: number;
+  newMain: number; newSup: number; newSom: number;
+  pillSize: number; basketH: number; logoH: number; imgW: number; imgH: number;
+  circleSize: number; circleText: number; circleTop: number; circleRight: number;
+  limitUz: number; limitRu: number; branchSize: number;
+  showLimit: boolean; // limit qatorlari faqat A4 (chop) formatida
+};
+
+const AZ_A4: AZSizes = {
+  W: 1414, H: 1000, leftPct: "53%", rightPct: "47%", pad: 60, radius: 80,
+  smallSize: 26, titleSize: 62, ruSize: 30,
+  oldMain: 64, oldSup: 34, oldSom: 26,
+  newMain: 160, newSup: 74, newSom: 50,
+  pillSize: 30, basketH: 44, logoH: 44, imgW: 520, imgH: 600,
+  circleSize: 172, circleText: 30, circleTop: 470, circleRight: 430,
+  limitUz: 22, limitRu: 13, branchSize: 30, showLimit: true,
+};
+const AZ_INSTA: AZSizes = {
+  W: 1080, H: 1350, leftPct: "50%", rightPct: "50%", pad: 52, radius: 70,
+  smallSize: 24, titleSize: 50, ruSize: 28,
+  oldMain: 76, oldSup: 40, oldSom: 30,
+  newMain: 185, newSup: 84, newSom: 58,
+  pillSize: 28, basketH: 40, logoH: 36, imgW: 420, imgH: 620,
+  circleSize: 166, circleText: 28, circleTop: 300, circleRight: 60,
+  limitUz: 24, limitRu: 17, branchSize: 30, showLimit: false,
+};
+
+const BASKET_RATIO = 360 / 280; // public/promo/arzon.png nisbatlari
+
+function ArzonBanner({ data, S, logoData, basketData }: { data: DesignData; S: AZSizes; logoData: string; basketData?: string }) {
+  const img = data.imageData ?? logoData;
+  const placeholder = !data.imageData;
+  const availW = Math.round((parseFloat(S.leftPct) / 100) * S.W) - S.pad * 2;
+
+  return (
+    <div style={{ display: "flex", width: S.W, height: S.H, fontFamily: "VelaSans", backgroundColor: PROMO_YELLOW }}>
+      {/* ── CHAP: sariq panel ── */}
+      <div style={{ display: "flex", flexDirection: "column", width: S.leftPct, height: "100%", padding: S.pad }}>
+        <div style={{ display: "flex", fontSize: S.smallSize, fontWeight: 700, color: PROMO_RED }}>
+          Mahsulot miqdori chegaralangan.
+        </div>
+
+        {/* nom (qizil) */}
+        <div style={{ display: "flex", flexDirection: "column", marginTop: Math.round(S.pad * 0.9) }}>
+          <div style={{ display: "flex", fontSize: S.titleSize, fontWeight: 700, color: PROMO_RED, lineHeight: 1.08 }}>
+            {data.titleUz}
+          </div>
+          {data.titleRu && (
+            <div style={{ display: "flex", fontSize: S.ruSize, color: PROMO_RED, marginTop: 16 }}>{data.titleRu}</div>
+          )}
+        </div>
+
+        {/* narxlar — pastga yopishgan (qizil, supermarket uslubi) */}
+        <div style={{ display: "flex", flexGrow: 1, flexDirection: "column", justifyContent: "flex-end" }}>
+          {!data.nPlusM && data.regularPrice > data.promoPrice && (
+            <div style={{ display: "flex", position: "relative", alignSelf: "flex-start", marginBottom: 18 }}>
+              <SupPrice value={data.regularPrice} main={S.oldMain} sup={S.oldSup} som={S.oldSom} avail={availW} color={PROMO_RED} />
+              {/* qora qiyshiq ustma chiziq (maketdagidek) */}
+              <div
+                style={{
+                  position: "absolute", left: "-6%", right: "-6%", top: "46%",
+                  height: Math.max(5, Math.round(S.oldMain * 0.1)),
+                  backgroundColor: "#111111", transform: "rotate(-7deg)",
+                }}
+              />
+            </div>
+          )}
+          <SupPrice value={data.promoPrice} main={S.newMain} sup={S.newSup} som={S.newSom} avail={availW} color={PROMO_RED} />
+          {!S.showLimit && (
+            <div style={{ display: "flex", fontSize: S.branchSize, fontWeight: 700, color: PROMO_RED, marginTop: Math.round(S.pad * 1.1) }}>
+              Barcha filiallarda amal qiladi
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── O'NG: oq panel (chap burchaklari yumaloq) ── */}
+      <div
+        style={{
+          display: "flex", flexDirection: "column", width: S.rightPct, height: "100%",
+          backgroundColor: "#ffffff", padding: S.pad, position: "relative",
+          borderTopLeftRadius: S.radius, borderBottomLeftRadius: S.radius,
+        }}
+      >
+        {/* tepa qator: "A-a-arzon narx!" pill + savat (chap) + bizbop logo (o'ng) */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center" }}>
+            <div
+              style={{
+                display: "flex", backgroundColor: PROMO_YELLOW, color: PROMO_RED, fontSize: S.pillSize,
+                fontWeight: 700, padding: "10px 24px", borderRadius: 9999,
+              }}
+            >
+              A-a-arzon narx!
+            </div>
+            {basketData && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={basketData} width={Math.round(S.basketH * BASKET_RATIO)} height={S.basketH} alt="" style={{ marginLeft: 16, objectFit: "contain" }} />
+            )}
+          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={logoData} width={Math.round(S.logoH * LOGO_RATIO)} height={S.logoH} alt="" />
+        </div>
+
+        {/* mahsulot rasmi (markaz) */}
+        <div style={{ display: "flex", flexGrow: 1, alignItems: "center", justifyContent: "center" }}>
+          <ProductImage src={img} w={S.imgW} h={S.imgH} zoom={data.imageZoom} placeholder={placeholder} />
+        </div>
+
+        {/* qizil doira (absolute, mahsulot ustida) — chegirma yoki "Ajoyib taklif!" */}
+        <div
+          style={{
+            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+            position: "absolute", top: S.circleTop, right: S.circleRight,
+            width: S.circleSize, height: S.circleSize, borderRadius: 9999, backgroundColor: PROMO_RED,
+          }}
+        >
+          {data.nPlusM ? (
+            <div style={{ display: "flex", fontSize: Math.round(S.circleText * 1.6), fontWeight: 700, color: "#ffffff", lineHeight: 1, fontFamily: "Golos" }}>
+              {data.nPlusM.buy}+{data.nPlusM.free}
+            </div>
+          ) : data.discountPct >= 16 ? (
+            /* Chegirma ≥16% — foiz; aks holda "Ajoyib taklif!" (dizayner qoidasi) */
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+              <div style={{ display: "flex", fontSize: Math.round(S.circleText * 1.7), fontWeight: 700, color: "#ffffff", lineHeight: 1, fontFamily: "Golos" }}>
+                -{data.discountPct}%
+              </div>
+              <div style={{ display: "flex", fontSize: S.circleText, fontWeight: 700, color: "#ffffff", marginTop: 2 }}>
+                tejang!
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+              <div style={{ display: "flex", fontSize: Math.round(S.circleText * 1.05), fontWeight: 700, color: "#ffffff", lineHeight: 1.1 }}>Ajoyib</div>
+              <div style={{ display: "flex", fontSize: Math.round(S.circleText * 1.05), fontWeight: 700, color: "#ffffff", lineHeight: 1.1 }}>taklif!</div>
+            </div>
+          )}
+        </div>
+
+        {/* limit — faqat A4 (chop): yashil uz + qizil ru qatorlar */}
+        {S.showLimit && data.limitN != null && (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+            <div style={{ display: "flex", width: "100%", justifyContent: "center", fontSize: S.limitUz, fontWeight: 700, color: GREEN, textAlign: "center", lineHeight: 1.25 }}>
+              {`Barchaga birdek yetishi uchun limit: ${fmtLimit(data.limitN)} ${data.limitUnit}`}
+            </div>
+            <div style={{ display: "flex", width: "100%", justifyContent: "center", fontSize: S.limitRu, fontWeight: 700, color: PROMO_RED, textAlign: "center", lineHeight: 1.3, marginTop: 6 }}>
+              {`Чтобы дать возможность каждому приобрести данный товар: ${fmtLimit(data.limitN)} ${data.limitUnit === "kg" ? "кг" : "шт"} в одни руки`}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function DesignBanner({ data, format, logoData, iconData, basketData }: { data: DesignData; format: Format; logoData: string; iconData?: string; basketData?: string }) {
+  if (data.variant === "kun") {
+    return <KunBanner data={data} S={format === "a4" ? K_A4 : K_INSTA} logoData={logoData} iconData={iconData} />;
+  }
+  if (data.variant === "arzon") {
+    return <ArzonBanner data={data} S={format === "a4" ? AZ_A4 : AZ_INSTA} logoData={logoData} basketData={basketData} />;
+  }
   if (data.variant === "hafta") {
     return <HaftaBanner data={data} S={format === "a4" ? H_A4 : H_INSTA} logoData={logoData} />;
   }
