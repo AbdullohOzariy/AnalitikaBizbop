@@ -694,6 +694,46 @@ export async function vozvratSummary(
   }
 }
 
+/** Ta'minotchiga attribut qilish uchun vozvrat qatori (Strategik hamkorlik → Списание). */
+export type VozvratAttribInput = {
+  summa: number;
+  taminotchi: string | null;
+  taminotchi_id: number | null;
+  sku_kod: number | null;
+};
+
+/**
+ * Davr bo'yicha SPISANIYE (haqiqiy yo'qotish) vozvratlari — supplierga attribut uchun.
+ * Faqat `qaytarilmadi` (ta'minotchi qaytarib olmagan = biz yo'qotgan) hisoblanadi:
+ * `qaytarildi` — ta'minotchi qaytarib oldi, bizga yo'qotish emas; saqlash/xabar — hali ochiq.
+ * Pool yo'q/xato bo'lsa BO'SH qaytadi (jim) — Neon idle uzilishi sahifani qulatmasin.
+ */
+export async function vozvratlarSpisaniyeAttrib(range: ChiqimRange): Promise<VozvratAttribInput[]> {
+  const p = getPool();
+  if (!p) return [];
+  try {
+    await ensureSozlamalarSchema();
+    const [start, end] = dayParams(range);
+    const { rows } = await p.query(
+      `SELECT summa::float8 AS summa, taminotchi,
+              taminotchi_id::int AS taminotchi_id, sku_kod::int AS sku_kod
+         FROM vozvratlar
+        WHERE vaqt::date >= $1::date AND vaqt::date <= $2::date
+          AND status = 'qaytarilmadi'`,
+      [start, end]
+    );
+    return rows.map((r) => ({
+      summa: Number(r.summa) || 0,
+      taminotchi: (r.taminotchi as string | null) ?? null,
+      taminotchi_id: (r.taminotchi_id as number | null) ?? null,
+      sku_kod: (r.sku_kod as number | null) ?? null,
+    }));
+  } catch (err) {
+    logDbXato(err);
+    return [];
+  }
+}
+
 /** Vozvrat statusini yangilaydi. Yangilangan yozuvni qaytaradi (guruh xabari uchun). */
 export async function vozvratHolatYangila(
   id: number,

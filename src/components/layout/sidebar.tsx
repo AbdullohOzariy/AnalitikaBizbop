@@ -42,6 +42,7 @@ import {
   BarChart2,
   ScanSearch,
   Boxes,
+  Handshake,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -127,6 +128,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/pme",             label: "PME analyze",     icon: Gem,             roles: [SA, A, "CAT_MANAGER", "SUPPLYCHAIN", "HEAD_CAT_MANAGER"] },
       { href: "/analyze",         label: "Analyze (narx)",  icon: ScanSearch,      roles: [SA, A, "CAT_MANAGER", "SUPPLYCHAIN", "HEAD_CAT_MANAGER"] },
       { href: "/report",          label: "Hisobot",         icon: Table2,          roles: [SA, A, "SUPPLYCHAIN"] },
+      { href: "/strategik-hamkorlik", label: "Strategik hamkorlik", icon: Handshake, roles: [SA, A, "CEO", "SUPPLYCHAIN"] },
       { href: "/rejalar",         label: "Rejalar",         icon: ClipboardList,   roles: [SA, A, "CAT_MANAGER", "CEO", "HEAD_CAT_MANAGER"] },
     ],
   },

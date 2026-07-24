@@ -135,6 +135,7 @@ model User {
   inventoryItems    InventoryItem[] // inventarizatsiya ro'yxatiga qo'shgan SKU'lari (createdBy)
   inventoryCounts   InventoryCount[] // kiritgan sanashlari (countedBy)
   actedTrips        Trip[] // fors-major holatda haydovchi nomidan kiritgan reyslari
+  scorecards        PartnershipScorecard[] // tahrirlagan strategik hamkorlik skorkartalari (updatedBy)
 }
 
 // Foydalanuvchi ↔ filial (ko'p-ko'p): miniapp'da dashboard/inventar shu filiallar bilan
@@ -471,6 +472,7 @@ model Supplier {
   orderDays      SupplierOrderDay[]
   agents         Agent[]
   branchProfiles SupplierBranchProfile[] // filial bo'yicha profil ma'lumotlari
+  scorecards     PartnershipScorecard[] // strategik hamkorlik skorkartalari (orqa-marja override'lar)
 }
 
 // Yetkazib beruvchi × filial profil ma'lumotlari (✓ per-filial maydonlar)
@@ -512,13 +514,49 @@ model Agent {
   // Haftalik takrorlanuvchi zakaz qabul kunlari: 0=Yakshanba ... 6=Shanba (JS getUTCDay)
   orderWeekdays Int[]    @default([])
 
-  supplier  Supplier        @relation(fields: [supplierId], references: [id], onDelete: Cascade)
-  products  Product[]
-  orderDays AgentOrderDay[]
-  orders    PurchaseOrder[]
+  supplier   Supplier               @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  products   Product[]
+  orderDays  AgentOrderDay[]
+  orders     PurchaseOrder[]
+  scorecards PartnershipScorecard[] // brend-darajasidagi skorkarta override'lar
 
   @@unique([supplierId, name])
   @@index([supplierId])
+}
+
+// Strategik hamkorlik skorkartasi (ta'minotchi skorkarti).
+// SAQLANADIGAN "yumshoq" orqa-marja override'lari: ta'minotchi × brend × davr kesimida.
+// QATTIQ ustunlar (oborot, marja, SKU soni, ulush, ABC) BU YERDA SAQLANMAYDI —
+// ular so'rov vaqtida ProductSales'dan hisoblanadi. Bu yerda faqat qo'lda kiritma/override'lar.
+// agentId NULL = ta'minotchi-darajasidagi qator; to'ldirilgan = shu brend uchun override.
+model PartnershipScorecard {
+  id          Int      @id @default(autoincrement())
+  supplierId  Int
+  agentId     Int? // NULL = supplier-darajasi; to'ldirilgan = brend-darajasi override
+  periodStart DateTime @db.Date
+  periodEnd   DateTime @db.Date
+
+  // ── Yumshoq orqa-marja override'lari (foizlar; NULL = kiritilmagan) ──
+  promoCompPct  Decimal? @db.Decimal(6, 2) // Факт Промо компенсации (%)
+  rassrochkaPct Decimal? @db.Decimal(6, 2) // Доп. маржа от рассрочки (%)
+  bonusPct      Decimal? @db.Decimal(6, 2) // Факт бонусы (%)
+  spisaniyePct  Decimal? @db.Decimal(6, 2) // Списание qo'lda override (%, manfiy); NULL = backend vozvratlardan hisoblaydi
+  abcOverride   String?  @db.VarChar(4) // ABC qo'lda ("AA" kabi)
+  note          String?
+
+  updatedById Int? // oxirgi tahrirlagan foydalanuvchi
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  supplier  Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  agent     Agent?   @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  updatedBy User?    @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+
+  // Har (supplierId, agentId, davr) uchun BITTA yozuv. agentId NULL bo'lgani uchun
+  // migration.sql'da unique index'ga NULLS NOT DISTINCT qo'lda qo'shiladi (PG 15+/Neon).
+  @@unique([supplierId, agentId, periodStart, periodEnd])
+  @@index([supplierId])
+  @@index([periodStart, periodEnd])
 }
 
 // Yetkazib beruvchi bilan shartnoma — hujjat fayli tashqi havola (Drive va h.k.) sifatida.

@@ -9,3 +9,5 @@ export const TAG_ANALYTICS = "analytics";
 export const TAG_IYERARXIYA = "iyerarxiya";
 export const TAG_SUPPLIERS = "suppliers";
 export const TAG_BRANCHES = "branches";
+// Strategik hamkorlik (ta'minotchi skorkarti) — yumshoq override saqlanganda invalidatsiya.
+export const TAG_PARTNERSHIP = "partnership";
