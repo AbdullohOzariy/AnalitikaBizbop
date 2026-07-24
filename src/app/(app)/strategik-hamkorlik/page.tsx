@@ -48,7 +48,7 @@ export default async function StrategikHamkorlikPage({
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard
-          label="Jami oborot"
+          label="Jami aylanma"
           value={formatUZS(data.totalTurnover, { compact: true })}
           icon={TrendingUp}
           tone="green"

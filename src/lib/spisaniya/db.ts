@@ -694,38 +694,32 @@ export async function vozvratSummary(
   }
 }
 
-/** Ta'minotchiga attribut qilish uchun vozvrat qatori (Strategik hamkorlik → Списание). */
-export type VozvratAttribInput = {
+/** Supplierga attribut qilish uchun hisobdan chiqarish (yozuvlar) qatori — Strategik hamkorlik "Yo'qotish". */
+export type ChiqimYoqotishInput = {
   summa: number;
-  taminotchi: string | null;
-  taminotchi_id: number | null;
   sku_kod: number | null;
 };
 
 /**
- * Davr bo'yicha SPISANIYE (haqiqiy yo'qotish) vozvratlari — supplierga attribut uchun.
- * Faqat `qaytarilmadi` (ta'minotchi qaytarib olmagan = biz yo'qotgan) hisoblanadi:
- * `qaytarildi` — ta'minotchi qaytarib oldi, bizga yo'qotish emas; saqlash/xabar — hali ochiq.
- * Pool yo'q/xato bo'lsa BO'SH qaytadi (jim) — Neon idle uzilishi sahifani qulatmasin.
+ * Davr bo'yicha HISOBDAN CHIQARISH (yozuvlar) — supplierga attribut uchun ("Yo'qotish" ustuni).
+ * Supplier FAQAT sku_kod (→ Product.code → Product.supplierId) orqali topiladi: yozuvlarda
+ * taminotchi maydoni yo'q, shuning uchun sku_kod'siz (katalogdan tanlanmagan) yozuvlar
+ * attribut qilinmaydi. Pool yo'q/xato bo'lsa BO'SH qaytadi (jim) — Neon idle uzilishi
+ * sahifani qulatmasin.
  */
-export async function vozvratlarSpisaniyeAttrib(range: ChiqimRange): Promise<VozvratAttribInput[]> {
+export async function chiqimYoqotishAttrib(range: ChiqimRange): Promise<ChiqimYoqotishInput[]> {
   const p = getPool();
   if (!p) return [];
   try {
-    await ensureSozlamalarSchema();
     const [start, end] = dayParams(range);
     const { rows } = await p.query(
-      `SELECT summa::float8 AS summa, taminotchi,
-              taminotchi_id::int AS taminotchi_id, sku_kod::int AS sku_kod
-         FROM vozvratlar
-        WHERE vaqt::date >= $1::date AND vaqt::date <= $2::date
-          AND status = 'qaytarilmadi'`,
+      `SELECT summa::float8 AS summa, sku_kod::int AS sku_kod
+         FROM yozuvlar
+        WHERE vaqt::date >= $1::date AND vaqt::date <= $2::date`,
       [start, end]
     );
     return rows.map((r) => ({
       summa: Number(r.summa) || 0,
-      taminotchi: (r.taminotchi as string | null) ?? null,
-      taminotchi_id: (r.taminotchi_id as number | null) ?? null,
       sku_kod: (r.sku_kod as number | null) ?? null,
     }));
   } catch (err) {

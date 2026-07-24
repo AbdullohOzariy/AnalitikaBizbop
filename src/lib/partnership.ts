@@ -19,8 +19,10 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { unstable_cache } from "next/cache";
 import { TAG_PARTNERSHIP } from "@/lib/cache-tags";
-import { buildSupplierMatcher, type VozvratMatchConfidence } from "@/lib/vozvrat-supplier";
-import { vozvratlarSpisaniyeAttrib } from "@/lib/spisaniya/db";
+import { chiqimYoqotishAttrib } from "@/lib/spisaniya/db";
+
+/** Yo'qotish (hisobdan chiqarish) sku_kod attributi ishonchi (override bo'lsa null). */
+export type SpisConfidence = "aniq" | "taxminiy" | null;
 
 /** Kapital stavka (yillik %) — rassrochka avto-bahosida. AppSetting bilan sozlanadi. */
 export const CAPITAL_RATE_SETTING_KEY = "capital_rate_yearly_pct";
@@ -53,8 +55,8 @@ export type ScorecardRow = {
   spisaniyePct: number;
   grossPct: number;
   overrides: SoftOverrideFlags;
-  /** Spisaniye vozvratlardan attribut qilingan ishonch darajasi (override bo'lsa null). */
-  spisaniyeConfidence: VozvratMatchConfidence | null;
+  /** Yo'qotish (hisobdan chiqarish) sku_kod orqali attribut qilingan ishonch (override bo'lsa null). */
+  spisaniyeConfidence: SpisConfidence;
   note: string | null;
   /** Brend (agent) kesimidagi yoyiladigan qatorlar (faqat ta'minotchi qatorida). */
   children?: ScorecardRow[];
@@ -114,7 +116,7 @@ async function _getPartnershipScorecard(periodStart: string, periodEnd: string):
       prisma.partnershipScorecard.findMany({ where: { periodStart: startDate, periodEnd: endDate } }),
       prisma.appSetting.findUnique({ where: { key: CAPITAL_RATE_SETTING_KEY } }),
       prisma.product.findMany({ select: { code: true, supplierId: true } }),
-      vozvratlarSpisaniyeAttrib({ start: startDate, end: endDate }),
+      chiqimYoqotishAttrib({ start: startDate, end: endDate }),
     ]);
 
   const capitalRatePct = capitalSetting?.value ? Number(capitalSetting.value) || DEFAULT_CAPITAL_RATE_PCT : DEFAULT_CAPITAL_RATE_PCT;
@@ -132,22 +134,17 @@ async function _getPartnershipScorecard(periodStart: string, periodEnd: string):
     if (!cur || r.t > cur.t) xyzBest.set(r.sup, { xyz: r.xyz, t: r.t });
   }
 
-  // ── Spisaniye attribut (vozvratlar → supplier) ──
+  // ── Yo'qotish attribut (hisobdan chiqarish → supplier, sku_kod orqali; aniq moslik) ──
   const codeMap = new Map<number, number | null>();
-  for (const p of productCodes) codeMap.set(p.code, p.supplierId);
-  const matcher = buildSupplierMatcher(suppliers.map((s) => ({ id: s.id, name: s.name })), codeMap);
-  const spisBySupplier = new Map<number, { summa: number; conf: VozvratMatchConfidence }>();
-  for (const v of spisAttrib) {
-    const m = matcher.match({ taminotchiId: v.taminotchi_id, skuKod: v.sku_kod, taminotchi: v.taminotchi });
-    if (m.supplierId == null) continue;
-    const cur = spisBySupplier.get(m.supplierId);
-    if (!cur) {
-      spisBySupplier.set(m.supplierId, { summa: v.summa, conf: m.confidence });
-    } else {
-      cur.summa += v.summa;
-      // Bittasi ham "taxminiy" bo'lsa — butun ta'minotchi taxminiy.
-      if (m.confidence === "taxminiy") cur.conf = "taxminiy";
-    }
+  for (const pc of productCodes) codeMap.set(pc.code, pc.supplierId);
+  const spisBySupplier = new Map<number, { summa: number; conf: SpisConfidence }>();
+  for (const y of spisAttrib) {
+    if (y.sku_kod == null) continue;
+    const supId = codeMap.get(y.sku_kod);
+    if (supId == null) continue;
+    const cur = spisBySupplier.get(supId);
+    if (!cur) spisBySupplier.set(supId, { summa: y.summa, conf: "aniq" });
+    else cur.summa += y.summa;
   }
 
   // ── Ta'minotchi bo'yicha guruhlash ──
@@ -183,7 +180,7 @@ async function _getPartnershipScorecard(periodStart: string, periodEnd: string):
     frontPct: number;
     /** Faqat ta'minotchi qatorida vozvrat-attributi qo'llanadi. */
     autoSpisaniyePct: number;
-    autoSpisConf: VozvratMatchConfidence | null;
+    autoSpisConf: SpisConfidence;
   }) => {
     const meta = supMeta.get(opts.supplierId);
     const ov = overrideByKey.get(`${opts.supplierId}:${opts.agentId ?? "null"}`);

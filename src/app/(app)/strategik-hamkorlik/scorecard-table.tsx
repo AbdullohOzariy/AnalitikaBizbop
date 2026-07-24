@@ -215,13 +215,13 @@ export function ScorecardTable({
               <th className="px-2 py-2 text-center">ABC</th>
               <th className="px-2 py-2 text-right">Ulush</th>
               <th className="px-2 py-2 text-right">SKU</th>
-              <th className="px-2 py-2 text-right">Oborot</th>
+              <th className="px-2 py-2 text-right">Aylanma</th>
               <th className="px-2 py-2 text-right">Marja</th>
               <th className="px-2 py-2 text-right">Front</th>
               <th className="px-2 py-2 text-right">Promo</th>
               <th className="px-2 py-2 text-right">Rassrochka</th>
               <th className="px-2 py-2 text-right">Bonus</th>
-              <th className="px-2 py-2 text-right">Списание</th>
+              <th className="px-2 py-2 text-right">Yo'qotish</th>
               <th className="px-2 py-2 text-right">Гросс</th>
             </tr>
           </thead>
@@ -259,9 +259,9 @@ export function ScorecardTable({
       </div>
       {canEdit && (
         <div className="border-t border-border px-3 py-2 text-[11px] text-muted-foreground">
-          Yumshoq ustunlar (Promo, Rassrochka, Bonus, Списание, ABC) tahrirlanadi — katakni bosing.
+          Yumshoq ustunlar (Promo, Rassrochka, Bonus, Yo'qotish, ABC) tahrirlanadi — katakni bosing.
           Nuqta <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary align-middle" /> — qo'lda kiritilgan;
-          xira qiymat — avto-hisoblangan. <Info className="inline h-3 w-3 text-amber-500 align-middle" /> — spisaniye taxminiy moslik.
+          xira qiymat — avto-hisoblangan. Yo'qotish hisobdan chiqarish (yozuvlar) ma'lumotidan — SKU tanlangan yozuvlar bo'yicha.
         </div>
       )}
     </div>
