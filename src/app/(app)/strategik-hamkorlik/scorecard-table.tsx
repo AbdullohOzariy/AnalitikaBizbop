@@ -1,9 +1,9 @@
 "use client";
 
-import { Fragment, useState, useTransition } from "react";
+import { Fragment, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ChevronRight, ChevronDown, Loader2, Info } from "lucide-react";
+import { ChevronRight, ChevronDown, Loader2, Info, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatUZS } from "@/lib/format";
 import type { ScorecardResult, ScorecardRow } from "@/lib/partnership";
@@ -38,6 +38,28 @@ export function ScorecardTable({
   // Tahrir holati: bitta katak — `${supplierId}:${agentId ?? "s"}:${field}`.
   const [editKey, setEditKey] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  const [q, setQ] = useState("");
+  const query = q.trim().toLowerCase();
+
+  // Qidiruv: ta'minotchi nomi mos kelsa — butun qator (barcha brendlar bilan).
+  // Faqat brend mos kelsa — ta'minotchi mos brendlar bilan + avto-yoyiladi.
+  const { rows: shownRows, forceExpand } = useMemo(() => {
+    if (!query) return { rows: data.rows, forceExpand: new Set<number>() };
+    const out: ScorecardRow[] = [];
+    const fe = new Set<number>();
+    for (const row of data.rows) {
+      if (row.supplierName.toLowerCase().includes(query)) {
+        out.push(row);
+        continue;
+      }
+      const kids = row.children?.filter((c) => (c.brandName ?? "").toLowerCase().includes(query)) ?? [];
+      if (kids.length) {
+        out.push({ ...row, children: kids });
+        fe.add(row.supplierId);
+      }
+    }
+    return { rows: out, forceExpand: fe };
+  }, [data.rows, query]);
 
   const toggle = (id: number) =>
     setExpanded((prev) => {
@@ -128,7 +150,7 @@ export function ScorecardTable({
 
   const renderRow = (row: ScorecardRow, idx: number | null, isChild: boolean) => {
     const hasChildren = !isChild && (row.children?.length ?? 0) > 0;
-    const isExp = expanded.has(row.supplierId);
+    const isExp = expanded.has(row.supplierId) || forceExpand.has(row.supplierId);
     return (
       <tr
         key={`${row.supplierId}:${row.agentId ?? "s"}`}
@@ -201,9 +223,33 @@ export function ScorecardTable({
 
   return (
     <div className="shadow-card overflow-hidden rounded-2xl border border-border bg-card">
-      <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
-        <span className="text-sm font-semibold">Ta'minotchilar ({data.rows.length})</span>
-        {pending && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2">
+        <span className="text-sm font-semibold">
+          Ta'minotchilar ({shownRows.length}
+          {query && shownRows.length !== data.rows.length ? ` / ${data.rows.length}` : ""})
+        </span>
+        <div className="flex items-center gap-2">
+          {pending && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Ta'minotchi yoki brend qidirish…"
+              className="h-8 w-56 rounded-lg border border-border bg-background pl-7 pr-7 text-xs outline-none focus:border-primary"
+            />
+            {q && (
+              <button
+                type="button"
+                onClick={() => setQ("")}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                aria-label="Tozalash"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[1100px] border-collapse text-sm">
@@ -219,17 +265,24 @@ export function ScorecardTable({
               <th className="px-2 py-2 text-right">Marja</th>
               <th className="px-2 py-2 text-right">Front</th>
               <th className="px-2 py-2 text-right">Promo</th>
-              <th className="px-2 py-2 text-right">Rassrochka</th>
+              <th className="px-2 py-2 text-right">Nasiya marjasi</th>
               <th className="px-2 py-2 text-right">Bonus</th>
               <th className="px-2 py-2 text-right">Yo'qotish</th>
               <th className="px-2 py-2 text-right">Гросс</th>
             </tr>
           </thead>
           <tbody>
-            {data.rows.map((row, i) => (
+            {shownRows.length === 0 && (
+              <tr>
+                <td colSpan={14} className="px-2 py-6 text-center text-sm text-muted-foreground">
+                  Qidiruv bo'yicha topilmadi.
+                </td>
+              </tr>
+            )}
+            {shownRows.map((row, i) => (
               <Fragment key={row.supplierId}>
                 {renderRow(row, i + 1, false)}
-                {expanded.has(row.supplierId) &&
+                {(expanded.has(row.supplierId) || forceExpand.has(row.supplierId)) &&
                   row.children?.map((c) => renderRow(c, null, true))}
               </Fragment>
             ))}
@@ -259,7 +312,7 @@ export function ScorecardTable({
       </div>
       {canEdit && (
         <div className="border-t border-border px-3 py-2 text-[11px] text-muted-foreground">
-          Yumshoq ustunlar (Promo, Rassrochka, Bonus, Yo'qotish, ABC) tahrirlanadi — katakni bosing.
+          Yumshoq ustunlar (Promo, Nasiya marjasi, Bonus, Yo'qotish, ABC) tahrirlanadi — katakni bosing.
           Nuqta <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary align-middle" /> — qo'lda kiritilgan;
           xira qiymat — avto-hisoblangan. Yo'qotish hisobdan chiqarish (yozuvlar) ma'lumotidan — SKU tanlangan yozuvlar bo'yicha.
         </div>
