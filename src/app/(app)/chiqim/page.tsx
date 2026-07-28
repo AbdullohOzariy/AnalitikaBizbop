@@ -79,7 +79,7 @@ export default async function ChiqimPage({
   const session = await auth();
   if (!session) redirect("/login");
   const roles = session.user.roles;
-  if (!canSeeChiqim(roles)) redirect("/dashboard-v2");
+  if (!canSeeChiqim(roles)) redirect("/dashboard");
 
   // Bot ulanmaganmi?
   if (!botConfigured()) {

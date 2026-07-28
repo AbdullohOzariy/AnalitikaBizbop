@@ -24,7 +24,7 @@ const getSuppliers = unstable_cache(
 
 export default async function TaminotchilarPage() {
   const session = await auth();
-  if (!session?.user || !canSeeSuppliers(session.user.roles)) redirect("/dashboard-v2");
+  if (!session?.user || !canSeeSuppliers(session.user.roles)) redirect("/dashboard");
   const canEdit = canEditSuppliers(session.user.roles);
 
   return (

@@ -112,7 +112,7 @@ export default async function StatistikaPage({
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!canSeeReys(session.user.roles)) redirect("/dashboard-v2");
+  if (!canSeeReys(session.user.roles)) redirect("/dashboard");
 
   const sp = await searchParams;
 

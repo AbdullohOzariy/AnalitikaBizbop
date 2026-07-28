@@ -129,7 +129,7 @@ export default async function BazaSotuvPage({
   const session = await auth();
   if (!session) redirect("/login");
   const roles = session.user.roles;
-  if (!canSeeBazaSotuv(roles)) redirect("/dashboard-v2");
+  if (!canSeeBazaSotuv(roles)) redirect("/dashboard");
 
   const sp = await searchParams;
   const page = Math.max(1, parseInt(sp.page ?? "1") || 1);

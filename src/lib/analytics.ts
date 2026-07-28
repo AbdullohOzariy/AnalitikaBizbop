@@ -100,7 +100,8 @@ async function _salesByBranch(range: DateRange): Promise<Map<number, number>> {
 type CatMargin = { fact: number; sales: number; cost: number };
 async function _priceMarginByCategory(
   range: DateRange,
-  branchId?: number
+  branchId?: number,
+  scope?: number[] | null // kategoriya menejeri qamrovi (subkat id'lari)
 ): Promise<Map<number, CatMargin>> {
   const frac = Prisma.sql`(
     (LEAST(ps."periodEnd", ${range.end}::date) - GREATEST(ps."periodStart", ${range.start}::date) + 1)::numeric
@@ -117,6 +118,7 @@ async function _priceMarginByCategory(
     WHERE ps."periodStart" <= ${range.end}::date
       AND ps."periodEnd"   >= ${range.start}::date
       ${branchId ? Prisma.sql`AND ps."branchId" = ${branchId}` : Prisma.empty}
+      ${scope ? Prisma.sql`AND p."categoryId" = ANY(${scope}::int[])` : Prisma.empty}
     GROUP BY COALESCE(sub."parentId", sub.id)
   `;
   const map = new Map<number, CatMargin>();
@@ -326,10 +328,49 @@ export const branchShare = (range: DateRange) =>
     { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
   )();
 
+/**
+ * TOP-LEVEL kategoriya bo'yicha davr REJASI — SalesPlan (oylik) pro-rata.
+ * SalesPlan subkat darajasida (ba'zan to'g'ridan-to'g'ri top-kat'ga) kiritiladi,
+ * shuning uchun COALESCE(par.id, sub.id) bilan top-level'ga yig'iladi.
+ * Davr oyning bir qismini qamrasa — reja kunlar ulushi bo'yicha bo'linadi.
+ */
+async function _planByCategory(
+  range: DateRange,
+  branchId?: number,
+  scope?: number[] | null
+): Promise<Map<number, number>> {
+  const rows = await prisma.$queryRaw<{ categoryId: number; plan: number | null }[]>`
+    SELECT COALESCE(par.id, sub.id) AS "categoryId",
+      COALESCE(SUM(sp.amount::numeric * (
+        (LEAST(m."end", ${range.end}::date) - GREATEST(m."start", ${range.start}::date) + 1)::numeric
+        / NULLIF((m."end" - m."start" + 1), 0)::numeric
+      )), 0)::float8 AS plan
+    FROM "SalesPlan" sp
+    JOIN "Category" sub ON sub.id = sp."categoryId"
+    LEFT JOIN "Category" par ON par.id = sub."parentId"
+    CROSS JOIN LATERAL (
+      SELECT make_date(sp.year, sp.month, 1) AS "start",
+             (make_date(sp.year, sp.month, 1) + interval '1 month' - interval '1 day')::date AS "end"
+    ) m
+    WHERE m."start" <= ${range.end}::date
+      AND m."end"   >= ${range.start}::date
+      ${branchId ? Prisma.sql`AND sp."branchId" = ${branchId}` : Prisma.empty}
+      ${scope ? Prisma.sql`AND sp."categoryId" = ANY(${scope}::int[])` : Prisma.empty}
+    GROUP BY COALESCE(par.id, sub.id)
+  `;
+  const map = new Map<number, number>();
+  for (const r of rows) map.set(r.categoryId, Number(r.plan ?? 0));
+  return map;
+}
+
 export type CategoryRow = {
   categoryId: number;
   categoryName: string;
   fact: number;
+  /** Davr rejasi (SalesPlan pro-rata). Reja kiritilmagan bo'lsa 0. */
+  plan: number;
+  /** Reja bajarilishi % = fakt / reja * 100. Reja yo'q bo'lsa null. */
+  planPct: number | null;
   /** (sotuv - tannarx) / sotuv * 100. Tannarx ma'lumoti yo'q yoki sotuv 0 bo'lsa null. */
   marja: number | null;
 };
@@ -337,31 +378,46 @@ export type CategoryRow = {
 async function _topCategories(
   range: DateRange,
   branchId?: number,
-  limit = 18
+  limit = 18,
+  scope?: number[] | null
 ): Promise<CategoryRow[]> {
-  const [cats, marginMap] = await Promise.all([
+  const [cats, marginMap, planMap] = await Promise.all([
     prisma.category.findMany({ where: { parentId: null }, orderBy: { sortOrder: "asc" } }),
-    _priceMarginByCategory(range, branchId),
+    _priceMarginByCategory(range, branchId, scope),
+    _planByCategory(range, branchId, scope),
   ]);
   const rows: CategoryRow[] = cats.map((c) => {
     const v = marginMap.get(c.id);
     const fact = v?.fact ?? 0; // ko'rsatiladigan savdo = amount (haqiqiy savdo)
     // marja narxlardan (vaznli), top-level kategoriyaga yig'ilgan
     const marja = v && v.sales > 0 ? ((v.sales - v.cost) / v.sales) * 100 : null;
+    const plan = planMap.get(c.id) ?? 0;
     return {
       categoryId: c.id,
       categoryName: c.name,
       fact,
+      plan,
+      planPct: plan > 0 ? (fact / plan) * 100 : null,
       marja,
     };
   });
   return rows.sort((a, b) => b.fact - a.fact).slice(0, limit);
 }
 
-export const topCategories = (range: DateRange, branchId?: number, limit = 10) =>
+export const topCategories = (
+  range: DateRange,
+  branchId?: number,
+  limit = 10,
+  scope?: number[] | null
+) =>
   unstable_cache(
-    () => _topCategories(range, branchId, limit),
-    ["topCategories", ...makeKey(range, branchId, `l${limit}`)],
+    () => _topCategories(range, branchId, limit, scope),
+    // _v2: qatorga reja (plan/planPct) qo'shildi — eski kesh yozuvlari ishlatilmasin
+    [
+      "topCategories_v2",
+      ...makeKey(range, branchId, `l${limit}`),
+      scope ? `s${[...scope].sort((a, b) => a - b).join(",")}` : "all",
+    ],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
   )();
 

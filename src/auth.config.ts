@@ -65,8 +65,8 @@ export const authConfig = {
               ? "/logistika/hozir"
               : role === "INVENTORY"
               ? "/sotuv-dashboard"
-              : role === "CAT_MANAGER" || role === "SUPPLYCHAIN" || role === "HEAD_CAT_MANAGER"
-              ? "/dashboard-v2"
+              // Qolganlar (CAT_MANAGER/SUPPLYCHAIN/HEAD_CAT_MANAGER ham) — birlashgan
+              // Dashboard (v2 shu yerga yig'ildi; qamrov sahifa ichida qo'llanadi).
               : "/dashboard";
           return Response.redirect(new URL(dest, request.nextUrl));
         }

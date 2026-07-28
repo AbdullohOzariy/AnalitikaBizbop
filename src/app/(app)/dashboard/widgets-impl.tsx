@@ -2,13 +2,10 @@
 
 import { useMemo, useState, useRef } from "react";
 import {
-  LineChart,
-  Line,
   BarChart,
   Bar,
   XAxis,
   YAxis,
-  CartesianGrid,
   Tooltip,
   Legend,
   ResponsiveContainer,
@@ -42,10 +39,9 @@ const tooltipStyle: React.CSSProperties = {
   color: "var(--foreground)",
 };
 
-// Grafik o'qi / grid uchun CSS token yordamchi qiymatlari
+// Grafik o'qi uchun CSS token yordamchi qiymati
 // (recharts SVG elementlari CSS variables qo'llab-quvvatlamaydi,
-//  shuning uchun bir joyda saqlangan o'zgaruvchilar orqali boshqaramiz)
-const CHART_GRID_STROKE = "var(--border)";
+//  shuning uchun bir joyda saqlangan o'zgaruvchi orqali boshqaramiz)
 const CHART_TICK_FILL = "var(--muted-foreground)";
 
 export function TrendIndicator({ value }: { value?: number | null }) {
@@ -96,41 +92,6 @@ function WidgetTitle({ title, trend }: { title: React.ReactNode; trend?: number 
       <span>{title}</span>
       <CompareBadge value={trend} />
     </span>
-  );
-}
-
-// ============ Kunlik son dinamikasi (Tashriflar + Cheklar) ============
-
-export function CountDynamicsWidget({
-  title,
-  data,
-  trend,
-}: {
-  title: string;
-  data: { label: string; tashrif: number; chek: number }[];
-  trend?: number | null;
-}) {
-  return (
-    <ExpandableCard title={<WidgetTitle title={title} trend={trend} />} className="rounded-2xl">
-      <ResponsiveContainer width="100%" height={280}>
-        <LineChart data={data} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_STROKE} />
-          <XAxis dataKey="label" tick={{ fontSize: 11, fill: CHART_TICK_FILL }} interval="preserveStartEnd" />
-          <YAxis tick={{ fontSize: 11, fill: CHART_TICK_FILL }} tickFormatter={(v) => formatNumber(Number(v))} />
-          <Tooltip
-            contentStyle={tooltipStyle}
-            // Recharts formatter'ga dataKey emas, Line'ning name prop'i keladi
-            // ("Tashriflar"/"Cheklar") — uni o'zini ishlatamiz, qayta map qilmaymiz
-            // (eski `name === "tashrif"` sharti hech qachon to'g'ri kelmasdi —
-            //  ikkala chiziq ham "Cheklar" deb chiqardi).
-            formatter={(value, name) => [formatNumber(Number(value)), String(name)]}
-          />
-          <Legend wrapperStyle={{ fontSize: 12 }} />
-          <Line type="monotone" dataKey="tashrif" name="Tashriflar" stroke="#0ea5e9" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-          <Line type="monotone" dataKey="chek" name="Cheklar" stroke="#10b981" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-        </LineChart>
-      </ResponsiveContainer>
-    </ExpandableCard>
   );
 }
 
@@ -440,8 +401,7 @@ export function GroupSalesDynamicsWidget({
   const activeName = activeGroup == null ? "Barcha guruhlar" : groups.find((g) => g.id === activeGroup)?.name ?? "";
 
   return (
-    <div className="col-span-2">
-      <ExpandableCard title="Guruhlar bo'yicha kunlik savdo" className="rounded-2xl">
+    <ExpandableCard title="Guruhlar bo'yicha kunlik savdo" className="rounded-2xl">
         {/* Guruh filtri */}
         <div className="mb-4 flex flex-wrap gap-2">
           <button
@@ -498,9 +458,8 @@ export function GroupSalesDynamicsWidget({
               </ResponsiveContainer>
             )}
           </div>
-        </div>
-      </ExpandableCard>
-    </div>
+      </div>
+    </ExpandableCard>
   );
 }
 
@@ -526,8 +485,7 @@ export function SalesShareWidget({ data }: { data: MarjaGroupNode[] }) {
   const pct = (v: number) => (total > 0 ? `${((v / total) * 100).toFixed(1)}%` : "0%");
 
   return (
-    <div className="col-span-2">
-      <ExpandableCard title="Savdo ulushi — guruh va kategoriyalar" className="rounded-2xl">
+    <ExpandableCard title="Savdo ulushi — guruh va kategoriyalar" className="rounded-2xl">
         {total === 0 ? (
           <p className="py-10 text-center text-xs italic text-muted-foreground">Tanlangan davrda savdo ma&apos;lumoti yo&apos;q.</p>
         ) : (
@@ -556,13 +514,12 @@ export function SalesShareWidget({ data }: { data: MarjaGroupNode[] }) {
                   <span className="font-semibold tabular-nums">{pct(g.value)}</span>
                 </div>
               ))}
-              <p className="mt-1 border-t border-border/60 pt-2 text-[11px] text-muted-foreground">
+            <p className="mt-1 border-t border-border/60 pt-2 text-[11px] text-muted-foreground">
                 Ichki halqa — guruhlar, tashqi — kategoriyalar. Hover: umumiyga nisbatan ulush %.
               </p>
             </div>
           </div>
         )}
-      </ExpandableCard>
-    </div>
+    </ExpandableCard>
   );
 }

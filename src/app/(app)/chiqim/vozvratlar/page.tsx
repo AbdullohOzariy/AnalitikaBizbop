@@ -24,7 +24,7 @@ export default async function VozvratlarPage({
   const session = await auth();
   if (!session) redirect("/login");
   const roles = session.user.roles;
-  if (!canSeeChiqim(roles)) redirect("/dashboard-v2");
+  if (!canSeeChiqim(roles)) redirect("/dashboard");
 
   if (!botConfigured()) {
     return (

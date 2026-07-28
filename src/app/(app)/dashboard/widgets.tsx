@@ -12,11 +12,6 @@ const fallback = (h: string) => (
   </div>
 );
 
-export const CountDynamicsWidget = dynamic(
-  () => import("./widgets-impl").then((m) => m.CountDynamicsWidget),
-  { ssr: false, loading: () => fallback("h-72") }
-);
-
 export const MarjaByBranchWidget = dynamic(
   () => import("./widgets-impl").then((m) => m.MarjaByBranchWidget),
   { ssr: false, loading: () => fallback("h-64") }

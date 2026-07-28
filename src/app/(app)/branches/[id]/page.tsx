@@ -37,7 +37,7 @@ export default async function BranchDetailPage({
   searchParams: Promise<{ start?: string; end?: string }>;
 }) {
   const session = await auth();
-  if (!session?.user || !session.user.roles.includes("SYSTEM_ADMIN")) redirect("/dashboard-v2");
+  if (!session?.user || !session.user.roles.includes("SYSTEM_ADMIN")) redirect("/dashboard");
 
   const { id } = await params;
   const sp = await searchParams;

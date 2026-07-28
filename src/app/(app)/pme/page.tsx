@@ -23,7 +23,7 @@ export default async function PmePage({
 }) {
   const session = await auth();
   const roles = session?.user?.roles;
-  if (!session?.user || !canSeePme(roles)) redirect("/dashboard-v2");
+  if (!session?.user || !canSeePme(roles)) redirect("/dashboard");
   const canEdit = canEditPme(roles);
   const sp = await searchParams;
   const tab: Tab = sp.tab === "analyze" ? "analyze" : "biriktirish";

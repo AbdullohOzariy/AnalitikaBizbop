@@ -60,7 +60,7 @@ function davomiylik(ms: number): string {
 export default async function HozirPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!canSeeReys(session.user.roles)) redirect("/dashboard-v2");
+  if (!canSeeReys(session.user.roles)) redirect("/dashboard");
 
   // "Bugun" — Toshkent kalendar kuni, UTC oralig'iga o'giriladi (startedAt UTC saqlanadi).
   const kunBoshi = new Date(

@@ -51,7 +51,7 @@ export default async function SotuvDashboardPage({
   if (!session) redirect("/login");
   const roles = session.user.roles;
   // INVENTORY (inventar xodimi) ham sotuv hisobotini ko'radi (izolatsiya: faqat shu + inventarizatsiya)
-  if (!isAdminTier(roles) && !hasRole(roles, "CEO", "SUPPLYCHAIN", "INVENTORY")) redirect("/dashboard-v2");
+  if (!isAdminTier(roles) && !hasRole(roles, "CEO", "SUPPLYCHAIN", "INVENTORY")) redirect("/dashboard");
 
   const sp = await searchParams;
   const now = new Date();

@@ -28,7 +28,7 @@ export default async function FinansPage({
   const session = await auth();
   if (!session) redirect("/login");
   const roles = session.user.roles;
-  if (!isAdminTier(roles) && !hasRole(roles, "CEO")) redirect("/dashboard-v2");
+  if (!isAdminTier(roles) && !hasRole(roles, "CEO")) redirect("/dashboard");
   const canEdit = isAdminTier(roles);
 
   const sp = await searchParams;

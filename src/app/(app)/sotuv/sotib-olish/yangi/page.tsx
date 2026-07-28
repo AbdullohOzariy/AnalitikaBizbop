@@ -15,7 +15,7 @@ export default async function YangiZakazPage({
 }) {
   const session = await auth();
   const roles = session?.user?.roles;
-  if (!session?.user || !canManageOrders(roles)) redirect("/dashboard-v2");
+  if (!session?.user || !canManageOrders(roles)) redirect("/dashboard");
   const sp = await searchParams;
   const initialSupplierId = sp.supplier ? Number(sp.supplier) || undefined : undefined;
   const initialAgentId = sp.agent ? Number(sp.agent) || undefined : undefined;

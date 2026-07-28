@@ -21,7 +21,7 @@ export default async function RejalarPage({
   if (!session) redirect("/login");
   const roles = session.user.roles;
   if (!canSeeAnalytics(roles)) {
-    redirect("/dashboard-v2");
+    redirect("/dashboard");
   }
   const isAdmin = isSystemAdmin(roles);
 

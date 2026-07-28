@@ -25,7 +25,7 @@ export default async function BazaTashrifPage({
 }) {
   const session = await auth();
   if (!session) redirect("/login");
-  if (!isAdminTier(session.user.roles)) redirect("/dashboard-v2");
+  if (!isAdminTier(session.user.roles)) redirect("/dashboard");
   const canEdit = isSystemAdmin(session.user.roles);
 
   const sp = await searchParams;

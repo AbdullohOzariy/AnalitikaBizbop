@@ -22,7 +22,7 @@ export default async function ChiqimMoslashPage() {
   const session = await auth();
   if (!session) redirect("/login");
   const roles = session.user.roles;
-  if (!isAdminTier(roles)) redirect("/dashboard-v2");
+  if (!isAdminTier(roles)) redirect("/dashboard");
   const canEdit = isSystemAdmin(roles);
 
   if (!botConfigured()) {

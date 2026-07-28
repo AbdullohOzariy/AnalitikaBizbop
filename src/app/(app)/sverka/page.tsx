@@ -25,7 +25,7 @@ export default async function SverkaPage({
   const session = await auth();
   const roles = session?.user?.roles;
   if (!session?.user || !canSeeSverka(roles)) {
-    redirect("/dashboard-v2");
+    redirect("/dashboard");
   }
   const canDelete = isSystemAdmin(roles) || isSupplyChain(roles);
 

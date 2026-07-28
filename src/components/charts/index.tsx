@@ -28,8 +28,8 @@ export const DailySalesChart = dynamic(
   { ssr: false, loading: () => fallback("h-72") }
 );
 
-export const DailyReceiptsChart = dynamic(
-  () => import("./charts-impl").then((m) => m.DailyReceiptsChart),
+export const DailyCountsChart = dynamic(
+  () => import("./charts-impl").then((m) => m.DailyCountsChart),
   { ssr: false, loading: () => fallback("h-64") }
 );
 

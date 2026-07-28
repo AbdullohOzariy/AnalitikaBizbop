@@ -40,7 +40,7 @@ const getBranches = unstable_cache(
 
 export default async function BranchesPage() {
   const session = await auth();
-  if (!session?.user || !session.user.roles.includes("SYSTEM_ADMIN")) redirect("/dashboard-v2");
+  if (!session?.user || !session.user.roles.includes("SYSTEM_ADMIN")) redirect("/dashboard");
   // Bu sahifa faqat ADMIN uchun (yuqorida redirect) — barcha tahrir amallari ochiq.
   const branches = await getBranches();
   const totalAliases = branches.reduce((s, b) => s + b.aliases.length, 0);

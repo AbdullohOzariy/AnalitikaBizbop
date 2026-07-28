@@ -32,7 +32,7 @@ export default async function BugunPage() {
     !session?.user ||
     !hasRole(roles, "SYSTEM_ADMIN", "ADMIN", "CAT_MANAGER", "SUPPLYCHAIN", "HEAD_CAT_MANAGER")
   ) {
-    redirect("/dashboard-v2");
+    redirect("/dashboard");
   }
   const userId = Number(session.user.id);
   const canCreateOrder = hasRole(roles, "SYSTEM_ADMIN", "CAT_MANAGER", "HEAD_CAT_MANAGER");

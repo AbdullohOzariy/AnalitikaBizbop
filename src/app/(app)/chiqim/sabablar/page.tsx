@@ -13,7 +13,7 @@ export default async function ChiqimSabablarPage() {
   const session = await auth();
   if (!session) redirect("/login");
   // FAQAT to'liq admin (SYSTEM_ADMIN) — read-only ADMIN ham o'tmaydi.
-  if (!isSystemAdmin(session.user.roles)) redirect("/dashboard-v2");
+  if (!isSystemAdmin(session.user.roles)) redirect("/dashboard");
 
   if (!botConfigured()) {
     return (

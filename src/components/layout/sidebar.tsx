@@ -12,7 +12,6 @@ import {
   LayoutDashboard,
   Menu,
   Table2,
-  Sparkles,
   PanelLeftClose,
   PanelLeftOpen,
   ChevronDown,
@@ -119,9 +118,8 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "Analitika",
     items: [
-      { href: "/dashboard",       label: "Dashboard",       icon: LayoutDashboard, roles: [SA, A, "CEO", "SUPPLYCHAIN"] },
+      { href: "/dashboard",       label: "Dashboard",       icon: LayoutDashboard, roles: [SA, A, "CAT_MANAGER", "CEO", "SUPPLYCHAIN", "HEAD_CAT_MANAGER"] },
       { href: "/sotuv-dashboard", label: "Sotuv Dashboard", icon: Target,          roles: [SA, A, "CEO", "SUPPLYCHAIN"] },
-      { href: "/dashboard-v2",    label: "Dashboard v2",    icon: Sparkles,        roles: [SA, A, "CAT_MANAGER", "CEO", "SUPPLYCHAIN", "HEAD_CAT_MANAGER"] },
       { href: "/oos",             label: "OOS",             icon: PackageX,        roles: [SA, A, "CAT_MANAGER", "CEO", "SUPPLYCHAIN", "HEAD_CAT_MANAGER"] },
       { href: "/stockday",        label: "Stockday",        icon: Hourglass,       roles: [SA, A, "CAT_MANAGER", "CEO", "SUPPLYCHAIN", "HEAD_CAT_MANAGER"] },
       { href: "/abc-xyz",         label: "ABC/XYZ",         icon: LayoutGrid,      roles: [SA, A, "CAT_MANAGER", "CEO", "SUPPLYCHAIN", "HEAD_CAT_MANAGER"] },

@@ -11,6 +11,9 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
 } from "recharts";
 import { formatUZS, formatNumber } from "@/lib/format";
 
@@ -19,6 +22,7 @@ const BRAND_GREEN = "#10b981"; // Primary Accent (Sizning logotipingiz yashiliga
 const YELLOW = "#facc15";      // Secondary 1 (Xantal sariq)
 const ORANGE = "#fb923c";      // Secondary 2 (Yumshoq to'q sariq)
 const RED = "#f87171";         // Alert / Negative
+const BLUE = "#0ea5e9";        // Tashriflar (Dashboard v2 bilan bir xil)
 const GRAY = "#94a3b8";        // Neutral / Compare
 
 const COLORS = [BRAND_GREEN, YELLOW, ORANGE, RED, "#6366f1", "#0ea5e9"];
@@ -145,47 +149,61 @@ export function BranchShareChart({
       </div>
     );
   }
-  const maxSales = filtered[0].sales;
-  const total = filtered.reduce((s, d) => s + d.sales, 0);
+  // Summasiz — faqat ulush %. Bo'lak burchagi savdo hajmiga proporsional.
+  const slices = filtered.map((d, i) => ({
+    name: d.branchName,
+    value: d.sales,
+    share: d.share,
+    color: COLORS[i % COLORS.length],
+  }));
+  const total = slices.reduce((s, d) => s + d.value, 0);
 
   return (
-    <div className="space-y-1">
-      <p className="text-[11px] text-muted-foreground mb-3">
-        Jami: <span className="font-semibold text-foreground">{formatUZS(total, { compact: true })}</span>
-      </p>
-      <div className="space-y-3.5 overflow-y-auto max-h-[300px] pr-0.5">
-        {filtered.map((d, i) => {
-          const color = COLORS[i % COLORS.length];
-          const pct = (d.sales / maxSales) * 100;
-          return (
-            <div key={d.branchId}>
-              <div className="flex items-center justify-between gap-2 mb-1.5">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span
-                    className="w-2 h-2 rounded-full shrink-0"
-                    style={{ backgroundColor: color }}
-                  />
-                  <span className="text-[13px] font-medium truncate leading-none">{d.branchName}</span>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-[11px] text-muted-foreground">{formatUZS(d.sales, { compact: true })}</span>
-                  <span
-                    className="text-[12px] font-bold tabular-nums w-[42px] text-right"
-                    style={{ color }}
-                  >
-                    {d.share.toFixed(1)}%
-                  </span>
-                </div>
-              </div>
-              <div className="relative h-2 rounded-full bg-muted overflow-hidden">
-                <div
-                  className="absolute inset-y-0 left-0 rounded-full transition-all duration-700"
-                  style={{ width: `${pct}%`, backgroundColor: color }}
-                />
-              </div>
-            </div>
-          );
-        })}
+    <div className="flex flex-col">
+      <div className="h-[210px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={slices}
+              dataKey="value"
+              nameKey="name"
+              cx="50%"
+              cy="50%"
+              innerRadius={55}
+              outerRadius={92}
+              paddingAngle={2}
+              stroke="var(--card)"
+              strokeWidth={2}
+            >
+              {slices.map((s) => (
+                <Cell key={s.name} fill={s.color} />
+              ))}
+            </Pie>
+            <Tooltip
+              contentStyle={tooltipStyle}
+              formatter={(v, n) => [
+                `${total > 0 ? ((Number(v) / total) * 100).toFixed(1) : "0"}%`,
+                String(n),
+              ]}
+            />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* Afsona — nom + ulush % (summa ko'rsatilmaydi) */}
+      <div className="mt-3 space-y-2 overflow-y-auto max-h-[130px] pr-0.5">
+        {slices.map((s) => (
+          <div key={s.name} className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
+            <span className="text-[13px] font-medium truncate leading-none flex-1">{s.name}</span>
+            <span
+              className="text-[12px] font-bold tabular-nums w-[46px] text-right"
+              style={{ color: s.color }}
+            >
+              {s.share.toFixed(1)}%
+            </span>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -242,18 +260,64 @@ export function DailySalesChart({
   );
 }
 
-export function DailyReceiptsChart({ receipts }: { receipts: { date: string; value: number }[] }) {
-  if (receipts.length === 0) return <div className="h-64 flex items-center justify-center text-sm text-muted-foreground">Chek soni ma'lumoti yo'q.</div>;
+/** Kunlik son: tashrif va chek — bitta o'qda ikki chiziq (Dashboard v2 naqshi). */
+export function DailyCountsChart({
+  visits,
+  receipts,
+}: {
+  visits: { date: string; value: number }[];
+  receipts: { date: string; value: number }[];
+}) {
+  const map = new Map<string, { date: string; tashrif: number; chek: number }>();
+  for (const r of visits) map.set(r.date, { date: r.date, tashrif: r.value, chek: 0 });
+  for (const r of receipts) {
+    const cur = map.get(r.date) ?? { date: r.date, tashrif: 0, chek: 0 };
+    cur.chek = r.value;
+    map.set(r.date, cur);
+  }
+  const data = [...map.values()].sort((a, b) => a.date.localeCompare(b.date));
+
+  if (data.length === 0)
+    return (
+      <div className="h-64 flex items-center justify-center text-sm text-muted-foreground">
+        Tashrif/chek ma&apos;lumoti yo&apos;q.
+      </div>
+    );
+
   return (
     <div className="h-64">
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={receipts.map(r => ({ date: r.date, receipts: r.value }))} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+        <ComposedChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
           {CHART_GRADIENTS}
           <CartesianGrid strokeDasharray="4 4" stroke="#f1f5f9" vertical={false} />
           <XAxis dataKey="date" tickFormatter={shortDate} fontSize={12} fill={GRAY} tickLine={false} axisLine={false} tickMargin={12} fontFamily="Sora" />
           <YAxis tickFormatter={(v) => formatNumber(v as number)} fontSize={12} fill={GRAY} tickLine={false} axisLine={false} tickMargin={12} fontFamily="Sora" />
-          <Tooltip contentStyle={tooltipStyle} formatter={(v) => [formatNumber(Number(v)), "Cheklar"]} labelFormatter={(v) => `Sana: ${v}`} />
-          <Line type="monotone" dataKey="receipts" name="Cheklar" stroke={YELLOW} strokeWidth={4} dot={false} activeDot={{ r: 6, fill: YELLOW, strokeWidth: 4, stroke: "#fff" }} style={{ filter: "drop-shadow(0px 8px 16px rgba(250, 204, 21, 0.3))" }} />
+          <Tooltip
+            contentStyle={tooltipStyle}
+            formatter={(v, n) => [formatNumber(Number(v)), String(n)]}
+            labelFormatter={(v) => `Sana: ${v}`}
+          />
+          <Legend iconType="circle" wrapperStyle={{ fontSize: "13px", fontFamily: "Sora", paddingTop: "15px" }} />
+          <Line
+            type="monotone"
+            dataKey="tashrif"
+            name="Tashriflar"
+            stroke={BLUE}
+            strokeWidth={3}
+            dot={false}
+            activeDot={{ r: 6, fill: BLUE, strokeWidth: 4, stroke: "#fff" }}
+            style={{ filter: "drop-shadow(0px 8px 16px rgba(14, 165, 233, 0.25))" }}
+          />
+          <Line
+            type="monotone"
+            dataKey="chek"
+            name="Cheklar"
+            stroke={YELLOW}
+            strokeWidth={3}
+            dot={false}
+            activeDot={{ r: 6, fill: YELLOW, strokeWidth: 4, stroke: "#fff" }}
+            style={{ filter: "drop-shadow(0px 8px 16px rgba(250, 204, 21, 0.3))" }}
+          />
         </ComposedChart>
       </ResponsiveContainer>
     </div>
@@ -267,6 +331,8 @@ export function TopCategoriesChart({
     categoryId: number;
     categoryName: string;
     fact: number;
+    /** Reja bajarilishi % (fakt ÷ reja). Reja kiritilmagan bo'lsa null. */
+    planPct?: number | null;
     marja: number | null;
   }[];
 }) {
@@ -279,14 +345,18 @@ export function TopCategoriesChart({
     );
   }
 
-  const maxFact = Math.max(...filtered.map((d) => d.fact));
-
   return (
     <div>
-      {/* Legend */}
+      {/* Legend — summa emas, reja bajarilishi ko'rsatiladi */}
       <div className="flex items-center gap-4 mb-4 text-[11px] font-medium text-muted-foreground">
         <span className="flex items-center gap-1.5">
-          <span className="w-3 h-1.5 rounded-full bg-emerald-500 inline-block" /> Fakt
+          <span className="w-3 h-1.5 rounded-full bg-emerald-500 inline-block" /> Reja bajarilishi (≥100%)
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-1.5 rounded-full bg-yellow-400 inline-block" /> 90–100%
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-1.5 rounded-full bg-red-400 inline-block" /> &lt; 90%
         </span>
         <span className="flex items-center gap-1.5">
           <span className="w-3 h-1.5 rounded-full bg-orange-400 inline-block" /> Marja
@@ -295,8 +365,10 @@ export function TopCategoriesChart({
 
       <div className="divide-y divide-border/30">
         {filtered.map((d, i) => {
-          /* fact bar width: relative to max fact so bars fill nicely */
-          const factW = maxFact > 0 ? (d.fact / maxFact) * 100 : 0;
+          const pct = d.planPct ?? null;
+          // Bar — reja bajarilishi (100% = to'la); 100%+ to'lgan holatda qoladi
+          const barW = pct == null ? 0 : Math.max(0, Math.min(100, pct));
+          const barColor = pct == null ? GRAY : pct >= 100 ? BRAND_GREEN : pct >= 90 ? YELLOW : RED;
 
           return (
             <div key={d.categoryId} className="py-3 first:pt-1 last:pb-1">
@@ -314,17 +386,21 @@ export function TopCategoriesChart({
                       M {d.marja.toFixed(1)}%
                     </span>
                   )}
-                  <span className="text-[12px] font-semibold tabular-nums text-muted-foreground">
-                    {formatUZS(d.fact, { compact: true })}
+                  <span
+                    className="text-[12px] font-bold tabular-nums w-[52px] text-right"
+                    style={{ color: pct == null ? undefined : barColor }}
+                    title="Reja bajarilishi: fakt ÷ reja"
+                  >
+                    {pct == null ? "reja yo'q" : `${pct.toFixed(0)}%`}
                   </span>
                 </div>
               </div>
 
-              {/* Fact bar */}
+              {/* Reja bajarilishi bar */}
               <div className="relative h-3 rounded-full bg-muted overflow-hidden">
                 <div
                   className="absolute inset-y-0 left-0 rounded-full transition-all duration-500"
-                  style={{ width: `${factW}%`, backgroundColor: BRAND_GREEN }}
+                  style={{ width: `${barW}%`, backgroundColor: barColor }}
                 />
               </div>
             </div>
