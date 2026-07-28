@@ -180,6 +180,7 @@ model Branch {
   uploads           UploadedFile[]
   salesPlans        SalesPlan[]
   marginPlans       MarginPlan[]
+  writeoffPlans     WriteoffPlan[]
   forecastCurves    ForecastCurve[]
   forecastRuns      ForecastRun[]
   forecastDays      ForecastDay[]
@@ -237,6 +238,7 @@ model Category {
   managers          CategoryManager[]
   salesPlans        SalesPlan[]
   marginPlans       MarginPlan[]
+  writeoffPlans     WriteoffPlan[]
   spisaniyaLinks    SpisaniyaCategoryLink[]
   botUserCategories BotUserCategory[]
 
@@ -765,6 +767,26 @@ model MarginPlan {
   branchId   Int
   categoryId Int
   marginPct  Decimal  @default(0) @db.Decimal(6, 2)
+  updatedAt  DateTime @updatedAt
+
+  branch   Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([branchId, categoryId])
+  @@index([branchId])
+  @@index([categoryId])
+}
+
+// Chiqim (hisobdan chiqarish) rejasi — subkategoriya × filial, vaqtsiz (MarginPlan naqshi).
+// pct = chiqimning SAVDOGA nisbatan ruxsat etilgan ulushi, foizda (masalan 1.250 = 1.25%).
+// Kategoriya/bo'lim/umumiy darajadagi reja shu yerdan SAVDO bilan vaznlanib rollup qilinadi
+// (src/lib/spisaniya/writeoff-plan.ts). Kompaniya bo'yicha umumiy chegara — AppSetting
+// ("writeoff_plan_total_pct"), u rollup bilan yonma-yon nazorat qilinadi.
+model WriteoffPlan {
+  id         Int      @id @default(autoincrement())
+  branchId   Int
+  categoryId Int
+  pct        Decimal  @default(0) @db.Decimal(6, 3)
   updatedAt  DateTime @updatedAt
 
   branch   Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)

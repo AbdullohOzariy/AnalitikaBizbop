@@ -154,6 +154,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/chiqim",            label: "Chiqimlar",        icon: PackageMinus, roles: [SA, A, "CAT_MANAGER", "CEO", "SUPPLYCHAIN", "HEAD_CAT_MANAGER", "OPERATOR"] },
       { href: "/chiqim/statistika", label: "Statistika",       icon: ChartPie,     roles: [SA, A, "CAT_MANAGER", "CEO", "SUPPLYCHAIN", "HEAD_CAT_MANAGER", "OPERATOR"] },
+      { href: "/chiqim/nazorat",    label: "Reja nazorati",    icon: Target,       roles: [SA, A, "CAT_MANAGER", "CEO", "SUPPLYCHAIN", "HEAD_CAT_MANAGER", "OPERATOR"] },
       { href: "/chiqim/vozvratlar", label: "Vozvratlar",       icon: Recycle,      roles: [SA, A, "CAT_MANAGER", "CEO", "SUPPLYCHAIN", "HEAD_CAT_MANAGER", "OPERATOR"] },
       { href: "/chiqim/moslash",    label: "Kategoriya moslash", icon: Tags,       roles: [SA, A] },
       { href: "/chiqim/sabablar",   label: "Sabablar",         icon: ClipboardList, roles: [SA] },
