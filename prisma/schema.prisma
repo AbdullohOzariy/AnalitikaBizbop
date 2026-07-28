@@ -1535,3 +1535,49 @@ model AccessSession {
   @@index([lastSeenAt(sort: Desc)]) // "hozir faol" lentasi
   @@index([userId, startedAt(sort: Desc)])
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Mijozlar guruhi (Telegram) — so'rov/murojaat analitikasi
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Kuzatiladigan Telegram guruh. chatId — Bot API formatida (supergroup: -100…).
+model TgGroup {
+  id       Int      @id @default(autoincrement())
+  chatId   BigInt   @unique
+  title    String?  @db.VarChar(200)
+  active   Boolean  @default(true)
+  joinedAt DateTime @default(now())
+
+  messages TgGroupMessage[]
+}
+
+/// Guruhdagi xom xabar arxivi. Jonli webhook ham, Telegram Desktop JSON eksporti
+/// ham SHU jadvalga yozadi (`source` bilan farqlanadi) — statistika bitta manbadan.
+model TgGroupMessage {
+  id        Int      @id @default(autoincrement())
+  chatId    BigInt
+  messageId Int // Telegram message_id (chat ichida unikal)
+  threadId  Int? // topic / message_thread_id — guruh topic'larga bo'lingan bo'lsa
+  sentAt    DateTime // xabar yuborilgan payt (Telegram date, UTC)
+  dayKey    String   @db.VarChar(10) // sentAt ning Toshkent kuni — kunlik agregat uchun
+
+  fromId   BigInt? // yuboruvchi Telegram ID
+  fromName String? @db.VarChar(120) // SNAPSHOT — keyin ism o'zgarsa ham tarix o'zgarmaydi
+  fromBot  Boolean @default(false)
+
+  text      String    @db.Text // matn (caption ham shu yerga); media-only bo'lsa bo'sh
+  mediaKind String?   @db.VarChar(20) // photo | video | document | voice | sticker …
+  replyToId Int? // reply qilingan message_id (javob zanjirini tiklash uchun)
+  editedAt  DateTime?
+
+  source    String   @db.VarChar(8) // LIVE | EXPORT
+  createdAt DateTime @default(now())
+
+  group TgGroup @relation(fields: [chatId], references: [chatId], onDelete: Cascade)
+
+  @@unique([chatId, messageId]) // qayta import / dublikat update idempotent bo'lsin
+  @@index([chatId, sentAt])
+  @@index([chatId, dayKey])
+  @@index([chatId, replyToId]) // "shu xabarga javoblar" — zanjir yig'ish
+  @@index([fromId])
+}

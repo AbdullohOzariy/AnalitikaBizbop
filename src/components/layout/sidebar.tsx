@@ -43,6 +43,7 @@ import {
   Boxes,
   Handshake,
   LogIn,
+  MessagesSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -185,12 +186,13 @@ const NAV_GROUPS: NavGroup[] = [
     // MERCHANDISER izolatsiyasi: bu guruh canSeePromo predikatiga bog'liq.
     // Boshqa guruhlarning har biri o'z roles[] massiviga ega bo'lib, MERCHANDISER
     // u massiвlarda yo'q — shuning uchun Promo'dan boshqa hech bir guruh ko'rinmaydi.
-    label: "Promo",
+    label: "Marketing",
     guard: canSeePromo,
     items: [
-      { href: "/promo/doimiy",  label: "Doimiy aksiyalar", icon: Megaphone, roles: [SA, A, "CAT_MANAGER", "CEO", "HEAD_CAT_MANAGER", "MERCHANDISER"] },
-      { href: "/promo/flash",   label: "Flash aksiyalar",  icon: Zap,       roles: [SA, A, "CAT_MANAGER", "CEO", "HEAD_CAT_MANAGER", "MERCHANDISER"] },
-      { href: "/promo/hisobot", label: "Hisobot",          icon: BarChart2, roles: [SA, A, "CAT_MANAGER", "CEO", "HEAD_CAT_MANAGER", "MERCHANDISER"] },
+      { href: "/promo/doimiy",         label: "Doimiy aksiyalar", icon: Megaphone,      roles: [SA, A, "CAT_MANAGER", "CEO", "HEAD_CAT_MANAGER", "MERCHANDISER"] },
+      { href: "/promo/flash",          label: "Flash aksiyalar",  icon: Zap,            roles: [SA, A, "CAT_MANAGER", "CEO", "HEAD_CAT_MANAGER", "MERCHANDISER"] },
+      { href: "/promo/hisobot",        label: "Hisobot",          icon: BarChart2,      roles: [SA, A, "CAT_MANAGER", "CEO", "HEAD_CAT_MANAGER", "MERCHANDISER"] },
+      { href: "/marketing/community",  label: "Community",        icon: MessagesSquare, roles: [SA, A, "CAT_MANAGER", "CEO", "HEAD_CAT_MANAGER", "MERCHANDISER"] },
     ],
   },
   {

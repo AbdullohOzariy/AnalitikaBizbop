@@ -189,6 +189,27 @@ export async function register() {
   // ── Telegram webhook ──
   const token = process.env.BOT_TOKEN;
   const base = (process.env.WEBHOOK_URL || "").replace(/\/$/, "");
+
+  // Mijozlar guruhi boti (alohida token) — bo'lsa, o'z webhook'ini o'rnatadi.
+  if (process.env.GROUP_BOT_TOKEN && base) {
+    try {
+      const { getGroupBot, groupWebhookSecret } = await import("@/lib/tg-group/bot");
+      const gbot = getGroupBot();
+      const gsecret = groupWebhookSecret();
+      if (gbot && gsecret) {
+        const gurl = `${base}/api/tg-group`;
+        await gbot.telegram.setWebhook(gurl, {
+          secret_token: gsecret,
+          allowed_updates: ["message", "edited_message", "my_chat_member"],
+        });
+        console.log(`[instrumentation] Guruh bot webhook'i o'rnatildi: ${gurl}`);
+      }
+    } catch (err) {
+      const { redactForLog } = await import("@/lib/tg-redact");
+      console.error("[instrumentation] Guruh bot webhook xatosi:", redactForLog(err));
+    }
+  }
+
   if (!token || !base) {
     console.warn("[instrumentation] BOT_TOKEN yoki WEBHOOK_URL yo'q — webhook o'rnatilmadi");
     return;
