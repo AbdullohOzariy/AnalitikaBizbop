@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { verifyInitData } from "@/lib/spisaniya/telegram-auth";
 import { sverkaRuxsatBormi } from "@/lib/sverka/ruxsat";
+import { touchAccess } from "@/lib/access-log/log";
 import { rateLimit } from "@/lib/spisaniya/rate-limit";
 
 export const runtime = "nodejs";
@@ -22,6 +23,8 @@ export async function GET(req: Request) {
   if (!(await sverkaRuxsatBormi(user.id))) {
     return NextResponse.json({ xato: "Ruxsat yo'q. ID raqamingizni adminga yuboring." }, { status: 403 });
   }
+  // Kirishlar jurnali — faollik oynasini uzaytiradi (Tizim → Kirishlar).
+  touchAccess({ surface: "BOT_SVERKA", tgUserId: user.id, route: "/api/sverka/luglar" });
 
   const url = new URL(req.url);
   const supplierId = Number(url.searchParams.get("supplierId")) || 0;

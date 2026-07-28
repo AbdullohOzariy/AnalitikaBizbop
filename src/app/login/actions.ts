@@ -3,6 +3,7 @@
 import { headers } from "next/headers";
 import { signIn } from "@/auth";
 import { AuthError } from "next-auth";
+import { logAccessEvent } from "@/lib/access-log/log";
 
 // In-memory token bucket: 5 urinish / 15 daqiqa — IP bo'yicha HAM, login bo'yicha HAM.
 // Faqat IP kifoya emas: XFF spoof yoki ko'p IP'dan bitta akkauntga brute-force mumkin.
@@ -38,6 +39,19 @@ export async function signInAction(input: {
   const ipOk = checkRateLimit(ipKey);
   const loginOk = checkRateLimit(loginKey);
   if (!ipOk || !loginOk) {
+    // Bloklangandan keyin ham urinishlar kelaveradi — throttle bilan yozamiz,
+    // aks holda bitta hujumchi jurnalni cheksiz to'ldira olardi.
+    logAccessEvent({
+      surface: "WEB",
+      type: "BLOCKED",
+      reason: "RATE_LIMIT",
+      login: input.login.trim().slice(0, 120),
+      route: "/login",
+      // Kalit FAQAT IP bo'yicha. Ilgari `login` ham kalitda edi — u hujumchi
+      // boshqaradigan satr bo'lgani uchun har urinishda yangi kalit yasab
+      // throttle'ni butunlay aylanib o'tish mumkin edi (va xotiradagi Map o'sardi).
+      throttle: { key: ipKey, ms: WINDOW_MS },
+    });
     return { error: "Juda ko'p urinish. 15 daqiqadan so'ng qayta urinib ko'ring." };
   }
 

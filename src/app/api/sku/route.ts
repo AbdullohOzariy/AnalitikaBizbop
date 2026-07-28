@@ -6,6 +6,7 @@
 import { NextResponse } from "next/server";
 import { verifyInitData } from "@/lib/spisaniya/telegram-auth";
 import { rateLimit } from "@/lib/spisaniya/rate-limit";
+import { touchAccess } from "@/lib/access-log/log";
 import { ruxsatBormi } from "@/lib/spisaniya/db";
 import { getBotUserScope, skuDaraxt, skuRoyxat, skuQidiruv } from "@/lib/spisaniya/sku-scope";
 
@@ -22,6 +23,13 @@ export async function GET(req: Request) {
   if (!(await ruxsatBormi(user.id))) {
     return NextResponse.json({ xato: "Ruxsat yo'q. Admindan ruxsat oling." }, { status: 403 });
   }
+  // Kirishlar jurnali — faollik oynasini uzaytiradi (Tizim → Kirishlar).
+  touchAccess({
+    surface: "BOT_SPISANIYA",
+    tgUserId: user.id,
+    actorName: [user.first_name, user.last_name].filter(Boolean).join(" ") || null,
+    route: "/api/sku",
+  });
 
   const sp = new URL(req.url).searchParams;
   try {

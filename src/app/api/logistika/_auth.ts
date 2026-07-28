@@ -11,7 +11,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { verifyInitData } from "@/lib/spisaniya/telegram-auth";
-import { rateLimit } from "@/lib/spisaniya/rate-limit";
+import { rateLimit, clientIp } from "@/lib/spisaniya/rate-limit";
+import { logAccessEvent, touchAccess } from "@/lib/access-log/log";
 import { driverByTgId } from "@/lib/logistika/ruxsat";
 import { TASHKENT_OFFSET_MS, todayTashkentISO } from "@/lib/date";
 import { redactForLog } from "@/lib/tg-redact";
@@ -31,11 +32,51 @@ export async function authDriver(
   req: Request,
   limit = 120
 ): Promise<{ driver: AuthDriver } | null> {
+  const yol = new URL(req.url).pathname;
   const user = verifyInitData(req.headers.get("x-telegram-init-data") || "");
-  if (!user) return null;
-  if (!rateLimit(`logistika:${user.id}`, limit, 60_000)) return null;
+  if (!user) {
+    // Autentifikatsiyadan OLDINGI yo'l (rate-limit quyida, user.id bo'yicha) —
+    // throttle bo'lmasa anonim so'rov jurnalni cheksiz to'ldirardi.
+    logAccessEvent({
+      surface: "BOT_LOGISTIKA",
+      type: "LOGIN_FAIL",
+      reason: "BAD_SIGNATURE",
+      route: yol,
+      throttle: { key: clientIp(req), ms: 10 * 60_000 },
+    });
+    return null;
+  }
+  if (!rateLimit(`logistika:${user.id}`, limit, 60_000)) {
+    logAccessEvent({
+      surface: "BOT_LOGISTIKA",
+      type: "BLOCKED",
+      reason: "RATE_LIMIT",
+      tgUserId: user.id,
+      route: yol,
+      throttle: { key: String(user.id), ms: 10 * 60_000 },
+    });
+    return null;
+  }
   const d = await driverByTgId(user.id);
-  if (!d) return null;
+  if (!d) {
+    logAccessEvent({
+      surface: "BOT_LOGISTIKA",
+      type: "DENIED",
+      reason: "NOT_WHITELISTED",
+      tgUserId: user.id,
+      route: yol,
+      throttle: { key: String(user.id), ms: 60 * 60_000 },
+    });
+    return null;
+  }
+  // Faollik oynasini uzaytiramiz. `openEvent` YO'Q: kirish hodisasi miniapp
+  // ochilganda /api/ruxsat da bir marta yoziladi — bu yerda takrorlanmasin.
+  touchAccess({
+    surface: "BOT_LOGISTIKA",
+    tgUserId: user.id,
+    actorName: d.name,
+    route: yol,
+  });
   return { driver: { id: d.id, name: d.name } };
 }
 

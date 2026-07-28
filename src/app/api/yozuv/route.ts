@@ -12,6 +12,7 @@ import { kategoriyalashtirish, subcatLabelById } from "@/lib/spisaniya/kategoriy
 import { verifyInitData } from "@/lib/spisaniya/telegram-auth";
 import { redactForLog } from "@/lib/tg-redact";
 import { rateLimit } from "@/lib/spisaniya/rate-limit";
+import { touchAccess } from "@/lib/access-log/log";
 import { getBotUserScope } from "@/lib/spisaniya/sku-scope";
 
 export const runtime = "nodejs";
@@ -47,6 +48,13 @@ export async function POST(req: Request) {
       { status: 403 }
     );
   }
+  // Kirishlar jurnali — faollik oynasini uzaytiradi (Tizim → Kirishlar).
+  touchAccess({
+    surface: "BOT_SPISANIYA",
+    tgUserId: user.id,
+    actorName: [user.first_name, user.last_name].filter(Boolean).join(" ") || null,
+    route: "/api/yozuv",
+  });
 
   let raw: unknown;
   try {

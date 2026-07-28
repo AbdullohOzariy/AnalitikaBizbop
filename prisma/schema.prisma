@@ -1445,3 +1445,93 @@ model TripRate {
   @@unique([fromPointId, toPointId, activeFrom])
   @@index([isActive])
 }
+
+// ─── TIZIM: KIRISHLAR JURNALI (platforma + botlar) ───────────────────────────
+// Faqat SYSTEM_ADMIN ko'radi (/admin/kirishlar). Ikki jadval ATAYLAB ajratilgan:
+//
+//   AccessEvent   — autentifikatsiya MOMENTI (kirdi / kira olmadi / rad etildi).
+//                   Kam, lekin qimmatli yozuv; xavfsizlik paneli shundan quriladi.
+//   AccessSession — FAOLLIK OYNASI (30 daqiqa jimlikdan keyin yangisi ochiladi).
+//                   Botlar miniappda HAR harakatda API chaqiradi — har chaqiruvni
+//                   hodisa deb yozsak kuniga o'n minglab qator bo'lardi. Shu sababli
+//                   sessiya qatori bir marta ochiladi, keyin `lastSeenAt`/`hits`
+//                   yangilanib boradi (yozish qatlami buferlaydi: src/lib/access-log).
+//
+// Davomiylik DENORMAL ustunda saqlanmaydi — `lastSeenAt - startedAt` bo'yicha
+// hisobda derivatsiya qilinadi (bitta haqiqat manbai).
+//
+// Sana kesimi `dayKey` (Toshkent "YYYY-MM-DD", CronRun.dayKey naqshi): SQL'da TZ
+// konversiyasi va ifodali indeks kerak emas — `migrate dev` ifodali indeksni
+// "ortiqcha" deb DROP qilib yuborardi.
+//
+// FK ATAYLAB YO'Q: (a) bot foydalanuvchilarining `User` yozuvi umuman bo'lmasligi
+// mumkin (Driver / SverkaXodim / bizbop whitelist), (b) audit yozuvi foydalanuvchi
+// o'chirilishini bloklamasin va u bilan birga YO'QOLMASIN. Kim ekani `actorName`
+// snapshotida qoladi.
+
+/// Kirish nuqtasi — har biri alohida auth yo'liga mos keladi.
+enum AccessSurface {
+  WEB // platforma (NextAuth Credentials) — src/auth.ts authorize()
+  BOT_KIRISH // umumiy Telegram darvozasi /api/ruxsat — qaysi bot ekani hali noma'lum
+  BOT_SPISANIYA // /api/yozuv, /api/vozvrat, /api/sku — bizbop whitelist (ruxsatBormi)
+  BOT_SVERKA // /api/sverka/* — SverkaXodim
+  BOT_LOGISTIKA // /api/logistika/* — Driver (authDriver)
+  BOT_SOTUV // /api/miniapp-sotuv/* — User.telegramId
+}
+
+/// Hodisa turi. DENIED va LOGIN_FAIL ATAYLAB ajratilgan: birinchisi "shaxs
+/// tasdiqlandi, lekin ro'yxatda yo'q" (whitelist), ikkinchisi "parol/imzo
+/// yaroqsiz" — ya'ni hujum belgisi bo'lishi mumkin.
+enum AccessEventType {
+  LOGIN_OK // muvaffaqiyatli kirish (yangi sessiya ochildi)
+  LOGIN_FAIL // parol xato / initData imzosi yaroqsiz / forma yaroqsiz
+  DENIED // autentifikatsiya OK, lekin ruxsat yo'q (whitelist/nofaol)
+  BLOCKED // rate-limit to'sdi (juda ko'p urinish)
+}
+
+/// Bitta kirish hodisasi. APPEND-ONLY; `access-cleanup` cron 1 yildan eskisini o'chiradi.
+model AccessEvent {
+  id        Int             @id @default(autoincrement())
+  surface   AccessSurface
+  type      AccessEventType
+  dayKey    String          @db.VarChar(10) // Toshkent kuni "YYYY-MM-DD" — todayTashkentISO()
+  userId    Int? // platforma foydalanuvchisi (FK yo'q — yuqoridagi izoh)
+  tgUserId  BigInt? // Telegram ID (Driver / SverkaXodim / whitelist / User.telegramId)
+  actorName String?         @db.VarChar(120) // SNAPSHOT — keyin o'zgarsa ham tarix o'zgarmaydi
+  login     String?         @db.VarChar(120) // WEB: kiritilgan login satri. PAROL HECH QACHON YOZILMAYDI
+  reason    String?         @db.VarChar(40) // BAD_INPUT | NO_USER | BAD_PASSWORD | BAD_SIGNATURE | NOT_WHITELISTED | RATE_LIMIT
+  route     String?         @db.VarChar(120) // "/api/logistika/holat"
+  createdAt DateTime        @default(now())
+
+  @@index([dayKey]) // davr bo'yicha barcha so'rovlarning yetakchi ustuni
+  @@index([createdAt(sort: Desc)]) // "so'nggi hodisalar" lentasi
+  @@index([surface, dayKey]) // yuza × kun agregati
+  @@index([type, createdAt(sort: Desc)]) // xavfsizlik paneli (FAIL/DENIED/BLOCKED)
+  @@index([userId, createdAt(sort: Desc)]) // bitta xodim tarixi
+  @@index([tgUserId, createdAt(sort: Desc)]) // bitta bot foydalanuvchisi tarixi
+}
+
+/// Faollik oynasi: aktorning uzluksiz ishlash seansi. 30 daqiqa jimlikdan keyingi
+/// birinchi so'rov YANGI qator ochadi. `hits` — oynadagi so'rovlar soni.
+model AccessSession {
+  id      Int           @id @default(autoincrement())
+  surface AccessSurface
+
+  /// Aktor kaliti: "u:12" (User.id) yoki "tg:518123456". ATAYLAB matn va NOT NULL —
+  /// userId/tgUserId nullable bo'lgani uchun ular bo'yicha unique kalit
+  /// `NULLS NOT DISTINCT` talab qilardi (PG15+ da bor, lokal PG14 da yo'q).
+  actorKey   String   @db.VarChar(40)
+  dayKey     String   @db.VarChar(10) // startedAt ning Toshkent kuni
+  userId     Int?
+  tgUserId   BigInt?
+  actorName  String?  @db.VarChar(120)
+  hits       Int      @default(1) // sessiya davomidagi so'rovlar soni
+  startedAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now()) // davomiylik = lastSeenAt - startedAt
+
+  @@index([dayKey])
+  @@index([actorKey, surface, lastSeenAt(sort: Desc)]) // "ochiq sessiya bormi?" — jarayon restartidan keyingi sovuq yo'l
+  @@index([surface, dayKey]) // yuza × kun agregati
+  @@index([lastSeenAt(sort: Desc)]) // "hozir faol" lentasi
+  @@index([userId, startedAt(sort: Desc)])
+}

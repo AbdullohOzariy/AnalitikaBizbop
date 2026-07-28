@@ -5,6 +5,7 @@ import { z } from "zod";
 import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { authConfig } from "@/auth.config";
+import { logAccessEvent, startAccessSession } from "@/lib/access-log/log";
 import type { Role } from "@/generated/prisma/enums";
 
 /** Rol o'zgartirilganda/foydalanuvchi o'chirilganda invalidatsiya qilinadigan tag. */
@@ -106,15 +107,54 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: "Parol", type: "password" },
       },
       authorize: async (raw) => {
+        // Kirishlar jurnali (Tizim → Kirishlar). HAR BIR chaqiruv fire-and-forget:
+        // jurnal DB'si yiqilsa ham login ishlayveradi (src/lib/access-log/log.ts).
+        // Kiritilgan LOGIN satri yoziladi — PAROL hech qachon.
+        //
+        // Bu yerda per-kalit throttle ATAYLAB yo'q (login satri hujumchi qo'lida —
+        // kalitga qo'shilsa throttle aylanib o'tilardi). Yozuv toshqinini
+        // log.ts dagi GLOBAL shift to'sadi: `authorize` /api/auth/callback/credentials
+        // orqali /login formasidagi rate-limit'siz ham chaqirilishi mumkin.
+        const login =
+          typeof (raw as { email?: unknown })?.email === "string"
+            ? (raw as { email: string }).email.trim().slice(0, 120)
+            : null;
+
         const parsed = credentialsSchema.safeParse(raw);
-        if (!parsed.success) return null;
+        if (!parsed.success) {
+          logAccessEvent({ surface: "WEB", type: "LOGIN_FAIL", reason: "BAD_INPUT", login });
+          return null;
+        }
         const { email, password } = parsed.data;
 
         const user = await prisma.user.findUnique({ where: { email } });
-        if (!user) return null;
+        if (!user) {
+          logAccessEvent({ surface: "WEB", type: "LOGIN_FAIL", reason: "NO_USER", login });
+          return null;
+        }
 
         const ok = await bcrypt.compare(password, user.passwordHash);
-        if (!ok) return null;
+        if (!ok) {
+          logAccessEvent({
+            surface: "WEB",
+            type: "LOGIN_FAIL",
+            reason: "BAD_PASSWORD",
+            login,
+            userId: user.id,
+            actorName: user.name,
+          });
+          return null;
+        }
+
+        logAccessEvent({
+          surface: "WEB",
+          type: "LOGIN_OK",
+          userId: user.id,
+          actorName: user.name,
+        });
+        // Login = MAJBURAN yangi sessiya (mavjud oynani uzaytirmaydi) — aks holda
+        // 30 daqiqa ichida qayta kirgan xodim jurnalda ko'rinmay qolardi.
+        startAccessSession({ surface: "WEB", userId: user.id, actorName: user.name });
 
         return {
           id: String(user.id),

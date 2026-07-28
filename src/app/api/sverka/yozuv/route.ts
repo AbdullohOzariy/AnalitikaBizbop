@@ -7,6 +7,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { verifyInitData } from "@/lib/spisaniya/telegram-auth";
 import { sverkaRuxsatBormi } from "@/lib/sverka/ruxsat";
+import { touchAccess } from "@/lib/access-log/log";
 import { rateLimit } from "@/lib/spisaniya/rate-limit";
 import { getSverkaGroupChatId, getSverkaTopicId } from "@/lib/sverka/sozlama";
 import { getBot } from "@/lib/spisaniya/bot";
@@ -35,6 +36,8 @@ export async function POST(req: Request) {
   if (!(await sverkaRuxsatBormi(user.id))) {
     return NextResponse.json({ xato: "Ruxsat yo'q. Admindan ruxsat oling." }, { status: 403 });
   }
+  // Kirishlar jurnali — faollik oynasini uzaytiradi (Tizim → Kirishlar).
+  touchAccess({ surface: "BOT_SVERKA", tgUserId: user.id, route: "/api/sverka/yozuv" });
 
   let p: z.infer<typeof schema>;
   try {

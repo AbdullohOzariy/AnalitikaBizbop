@@ -79,6 +79,18 @@ const JOBS: CronJob[] = [
       console.log(`[spisaniya-daily] yuborildi: jami ${r.total}`);
     },
   },
+  // 03:00 — kirishlar jurnalini tozalash (1 yildan eskisi). Tunda: paketli
+  // DELETE kunduzgi so'rovlarga xalaqit qilmasin.
+  {
+    name: "access-cleanup", cron: "0 3 * * *", hour: 3, minute: 0,
+    run: async () => {
+      const { cleanupAccessLog } = await import("@/lib/access-log/cleanup");
+      const r = await cleanupAccessLog();
+      if (r.events || r.sessions) {
+        console.log(`[access-cleanup] ${r.events} hodisa, ${r.sessions} sessiya o'chirildi`);
+      }
+    },
+  },
 ];
 
 /**
