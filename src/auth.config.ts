@@ -26,11 +26,19 @@ export const authConfig = {
         "/api/health", // Railway healthcheck — sessiyasiz
 
         "/api/tg",
+        "/api/tg-group", // mijozlar guruhi boti webhook'i — ALOHIDA yozuv shart:
+        // moslik aniq segment bo'yicha, "/api/tg" prefiksi "/api/tg-group" ni QAMRAMAYDI.
         "/api/yozuv",
         "/api/vozvrat",
         "/api/filialar",
         "/api/rasm-yukla",
         "/api/ruxsat",
+        // Miniapp pickerlari — o'zlari verifyInitData + ruxsatBormi + rate-limit bilan
+        // himoyalangan. Ro'yxatda yo'q edi: jonli miniappda SKU/sabab/ta'minotchi
+        // tanlagichlari login'ga yo'naltirilib ishlamay turardi.
+        "/api/sku",
+        "/api/sabablar",
+        "/api/taminotchilar",
         "/api/import", // 1C avto sotuv importi — IMPORT_TOKEN bilan himoyalangan (sessiyasiz)
         "/api/miniapp-sotuv", // BizbopSotuv mini app — initData HMAC + User.telegramId bilan himoyalangan
         "/api/sverka", // sverka mini app API'lari — o'zi initData HMAC + SverkaXodim bilan himoyalangan

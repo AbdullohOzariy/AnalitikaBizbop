@@ -20,9 +20,11 @@ Supermarket savdo analitikasi platformasi. 1C dan eksport qilingan Excel fayllar
 > **Eslatma:** README asosiy MVP oqimini tavsiflaydi. Ilova o'sgan — qo'shimcha modullar:
 > **chiqim** (hisobdan chiqarish), **logistika** (ombor / taqsimot / ko'chirish), **promo**
 > (aksiyalar), **sotuv/zakaz** (xarid buyurtmalari), **sverka**, **iyerarxiya**, **abc-xyz**,
-> **oos/stockday**, **AI prognoz**. Shuningdek **Telegram bot + Mini App** (`src/app/api/tg`
-> webhook, `bot/miniapp`) va **kunlik cron hisobotlar** (`src/instrumentation.ts` — 09:00–15:00
-> orasida 5 ta ish). Arxitektura tafsilotlari: `bot/README.md`, `AGENTS.md`.
+> **oos/stockday**, **AI prognoz**. Shuningdek **Telegram botlar + Mini App'lar**
+> (`src/app/api/tg`, `src/app/api/tg-group` webhook'lari, `bot/miniapp`) va **kunlik cron
+> hisobotlar** (`src/instrumentation.ts` — 03:00–15:00 orasida 7 ta ish).
+> Arxitektura tafsilotlari: **`BOTLAR.md`** (barcha botlar, tokenlar, tuzoqlar),
+> `bot/README.md`, `AGENTS.md`.
 
 ## Texnologiyalar
 
@@ -146,10 +148,11 @@ SEED_ADMIN_PASSWORD="strong-password"
 SEED_ADMIN_NAME="Admin"
 ```
 
-> To'liq ro'yxat (Telegram bot, AI kalitlari, hisobot cron yo'nalishlari, retention) —
-> **`.env.example`** ga qarang. Ayniqsa `ANTHROPIC_API_KEY` (AI prognoz/kategoriyalash) va
-> hisobot-bot uchligi (`INVENTORY_/MARGIN_/DELIVERY_/SPDAILY_/ZAKAZ_*`) unutilmasin —
-> aks holda AI va Telegram hisobotlar jimgina o'chadi.
+> To'liq ro'yxat (Telegram botlar, AI kalitlari, hisobot cron yo'nalishlari, retention) —
+> **`.env.example`** va **`BOTLAR.md`** ga qarang. Ayniqsa `ANTHROPIC_API_KEY` (AI
+> prognoz/kategoriyalash), bot tokenlari (`BOT_TOKEN`, `GROUP_BOT_TOKEN`, `SOTUV_BOT_TOKEN`)
+> va hisobot-bot slotlari (`INVENTORY_/NARX_REPORT_/MARGIN_/DELIVERY_/SPDAILY_/ZAKAZ_*`)
+> unutilmasin — aks holda AI va Telegram hisobotlar jimgina o'chadi.
 
 Railway service sozlamalari:
 
