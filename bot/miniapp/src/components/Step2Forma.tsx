@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Package, Hash, DollarSign, MapPin, Building2, ChevronDown, ChevronRight, AlignLeft, X } from 'lucide-react'
+import { Package, Hash, DollarSign, MapPin, Building2, ChevronDown, ChevronRight, AlignLeft, MessageSquare, X } from 'lucide-react'
 import { cn, formatSum } from '../lib/utils'
 import { useFilialar } from '../hooks/useFilialar'
 import { useSabablar } from '../hooks/useSabablar'
@@ -31,6 +31,9 @@ export interface FormData {
   summa: string
   // Sabab — faqat ro'yxatdan tanlanadi (erkin matn yo'q)
   sababTanlov: string
+  // Izoh — xodim QO'LDA yozadi, MAJBURIY EMAS. Sabab "nima uchun"ni turkumlaydi,
+  // izoh esa sababga sig'maydigan tafsilotni saqlaydi ("2 ta quti nam bo'lgan").
+  izoh: string
   filial: string
   firmaNomi: string
   kafeNomi: string
@@ -398,6 +401,21 @@ export default function Step2Forma({ tur, form, setForm, onBack, onNext }: Props
               </button>
             ))}
           </div>
+        </Field>
+
+        {/* Izoh — ixtiyoriy erkin matn (sabab ro'yxati qamramagan tafsilot uchun) */}
+        <Field label="Izoh" icon={<MessageSquare className="w-3.5 h-3.5" />} delay={0.2}>
+          <textarea
+            value={form.izoh}
+            onChange={e => set('izoh', e.target.value)}
+            rows={2}
+            maxLength={500}
+            placeholder="Ixtiyoriy — qo'shimcha tafsilot yozing"
+            className="w-full bg-transparent text-[15px] text-tg-text placeholder:text-ink2 outline-none resize-none"
+          />
+          {form.izoh.trim().length > 0 && (
+            <p className="text-[11px] text-ink2 mt-1 text-right">{form.izoh.length}/500</p>
+          )}
         </Field>
 
         {/* Filial — bottom sheet (absolute dropdown EMAS).

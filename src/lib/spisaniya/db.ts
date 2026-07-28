@@ -151,6 +151,7 @@ export type ChiqimRecord = {
   birlik: string;
   summa: number;
   sabab: string | null;
+  izoh: string | null; // xodim qo'lda yozgan erkin izoh
   filial: string;
   firma: string | null;
   kafe_nomi: string | null;
@@ -187,7 +188,7 @@ export async function chiqimRecords(
     params.push(offset);
     const offsetIdx = params.length;
     const { rows } = await p.query(
-      `SELECT id, tur, tovar, miqdor::float8, birlik, summa::float8, sabab, filial, firma,
+      `SELECT id, tur, tovar, miqdor::float8, birlik, summa::float8, sabab, izoh, filial, firma,
               kafe_nomi, xodim_ism, kategoriya, vaqt::text, status, rasm_file_id
        FROM yozuvlar WHERE ${where}
        ORDER BY vaqt DESC
@@ -237,6 +238,7 @@ export type YozuvKirim = {
   birlik?: string | null;
   summa: number | string;
   sabab?: string | null;
+  izoh?: string | null; // xodim qo'lda yozadigan erkin izoh (ixtiyoriy)
   filial: string;
   firma?: string | null;
   kafe_nomi?: string | null;
@@ -282,13 +284,13 @@ export async function insertYozuv(d: YozuvKirim): Promise<number> {
     await client.query("BEGIN");
     const { rows } = await client.query(
       `INSERT INTO yozuvlar
-        (tur, tovar, miqdor, birlik, summa, sabab, filial,
+        (tur, tovar, miqdor, birlik, summa, sabab, izoh, filial,
          firma, kafe_nomi, xodim_ism, xodim_username, xodim_id, rasm_file_id, qr_file_id, sku_kod)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
        RETURNING id`,
       [
         d.tur, d.tovar, d.miqdor, d.birlik || "kg", d.summa,
-        d.sabab || null, d.filial, d.firma || null, d.kafe_nomi || null,
+        d.sabab || null, d.izoh || null, d.filial, d.firma || null, d.kafe_nomi || null,
         d.xodim_ism, d.xodim_username || null, d.xodim_id, d.rasm_file_id || null,
         d.qr_file_id || null, d.sku_kod ?? null,
       ]
@@ -428,6 +430,10 @@ export async function ensureSozlamalarSchema(): Promise<void> {
   await p.query(`ALTER TABLE yozuvlar ADD COLUMN IF NOT EXISTS qr_file_id VARCHAR(500)`).catch(() => {});
   // 1C/Prisma Product.code (SKU tanlangan bo'lsa) — miniapp katalogdan biriktiradi
   await p.query(`ALTER TABLE yozuvlar ADD COLUMN IF NOT EXISTS sku_kod INTEGER`).catch(() => {});
+  // Xodim qo'lda yozadigan erkin izoh — IXTIYORIY (sabab ro'yxatdan, izoh matn).
+  // Sabab "nima uchun"ni turkumlaydi, izoh esa tafsilotni saqlaydi ("2 ta quti nam bo'lgan").
+  await p.query(`ALTER TABLE yozuvlar ADD COLUMN IF NOT EXISTS izoh TEXT`).catch(() => {});
+  await p.query(`ALTER TABLE vozvratlar ADD COLUMN IF NOT EXISTS izoh TEXT`).catch(() => {});
   // yozuvlar.tur CHECK — 'ichki_sotuv' qo'shamiz. DROP+ADD bitta DO-blokda (atomik):
   // ADD muvaffaqiyatsiz bo'lsa DROP ham qaytariladi, jadval constraintsiz qolmaydi.
   await p.query(`
@@ -487,6 +493,7 @@ export type VozvratKirim = {
   birlik?: string | null;
   summa: number | string;
   sabab?: string | null;
+  izoh?: string | null; // xodim qo'lda yozadigan erkin izoh (ixtiyoriy)
   filial: string;
   yonalish: string;
   taminotchi?: string | null;
@@ -507,6 +514,7 @@ export type VozvratYozuv = {
   birlik: string;
   summa: number;
   sabab: string | null;
+  izoh: string | null;
   filial: string;
   yonalish: string;
   taminotchi: string | null;
@@ -522,7 +530,7 @@ export type VozvratYozuv = {
   taminotchi_id: number | null;
 };
 
-const VOZVRAT_COLS = `id, tovar, miqdor::float8, birlik, summa::float8, sabab, filial,
+const VOZVRAT_COLS = `id, tovar, miqdor::float8, birlik, summa::float8, sabab, izoh, filial,
   yonalish, taminotchi, rasm_file_id, xodim_ism, status, qaytarilmadi_sabab,
   chiqim_yozuv_id, vaqt::text, sku_kod::int, taminotchi_id::int`;
 
@@ -534,12 +542,12 @@ export async function vozvratYarat(d: VozvratKirim): Promise<number> {
   const yonalish = d.yonalish === "taminotchi" ? "taminotchi" : "asosiy_filial";
   const { rows } = await p.query(
     `INSERT INTO vozvratlar
-       (tovar, miqdor, birlik, summa, sabab, filial, yonalish, taminotchi, taminotchi_id,
+       (tovar, miqdor, birlik, summa, sabab, izoh, filial, yonalish, taminotchi, taminotchi_id,
         rasm_file_id, xodim_ism, xodim_username, xodim_id, status, qaytarilmadi_sabab, sku_kod)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
      RETURNING id`,
     [
-      d.tovar, d.miqdor, d.birlik || "dona", d.summa, d.sabab || null, d.filial,
+      d.tovar, d.miqdor, d.birlik || "dona", d.summa, d.sabab || null, d.izoh || null, d.filial,
       yonalish, yonalish === "taminotchi" ? d.taminotchi || null : null,
       yonalish === "taminotchi" ? d.taminotchi_id ?? null : null,
       d.rasm_file_id || null, d.xodim_ism, d.xodim_username || null, d.xodim_id,
@@ -771,13 +779,13 @@ export async function vozvratChiqimgaOtkaz(
     const v = vr[0];
     const { rows: yz } = await client.query(
       `INSERT INTO yozuvlar
-         (tur, tovar, miqdor, birlik, summa, sabab, filial,
+         (tur, tovar, miqdor, birlik, summa, sabab, izoh, filial,
           xodim_ism, xodim_username, xodim_id, rasm_file_id, sku_kod)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
        RETURNING id`,
       [
         tur, v.tovar, v.miqdor, v.birlik, v.summa,
-        sabab || v.qaytarilmadi_sabab || v.sabab || null, v.filial,
+        sabab || v.qaytarilmadi_sabab || v.sabab || null, v.izoh || null, v.filial,
         v.xodim_ism, v.xodim_username, v.xodim_id || 0, v.rasm_file_id, v.sku_kod ?? null,
       ]
     );
@@ -1002,6 +1010,7 @@ export async function yozuvYangila(
     birlik?: string;
     summa?: number;
     sabab?: string | null;
+    izoh?: string | null;
     filial?: string;
     kategoriya?: string | null;
   }
@@ -1016,13 +1025,14 @@ export async function yozuvYangila(
   if (patch.birlik !== undefined)    { sets.push(`birlik=$${i++}`);    vals.push(patch.birlik); }
   if (patch.summa !== undefined)     { sets.push(`summa=$${i++}`);     vals.push(patch.summa); }
   if (patch.sabab !== undefined)     { sets.push(`sabab=$${i++}`);     vals.push(patch.sabab); }
+  if (patch.izoh !== undefined)      { sets.push(`izoh=$${i++}`);      vals.push(patch.izoh); }
   if (patch.filial !== undefined)    { sets.push(`filial=$${i++}`);    vals.push(patch.filial); }
   if (patch.kategoriya !== undefined){ sets.push(`kategoriya=$${i++}`); vals.push(patch.kategoriya); }
   if (!sets.length) return null;
   vals.push(id);
   const { rows } = await p.query(
     `UPDATE yozuvlar SET ${sets.join(", ")} WHERE id=$${i}
-     RETURNING id, tur, tovar, miqdor::float8, birlik, summa::float8, sabab,
+     RETURNING id, tur, tovar, miqdor::float8, birlik, summa::float8, sabab, izoh,
                filial, firma, kafe_nomi, xodim_ism, kategoriya, vaqt::text, status`,
     vals
   );
@@ -1205,7 +1215,7 @@ export async function chiqimExportRows(
     if (opts.filial) { params.push(opts.filial); cond.push(`filial = $${params.length}`); }
     const where = cond.join(" AND ");
     const { rows } = await p.query(
-      `SELECT id, tur, tovar, miqdor::float8, birlik, summa::float8, sabab, filial, firma,
+      `SELECT id, tur, tovar, miqdor::float8, birlik, summa::float8, sabab, izoh, filial, firma,
               kafe_nomi, xodim_ism, kategoriya, vaqt::text, status
        FROM yozuvlar WHERE ${where}
        ORDER BY vaqt DESC LIMIT 50000`,

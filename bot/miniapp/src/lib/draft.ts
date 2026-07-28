@@ -40,11 +40,12 @@ function birida<T extends string>(ruyxat: readonly T[], v: unknown): v is T {
 function shaklniTekshir(x: unknown): FormaQoralama | null {
   if (typeof x !== 'object' || x === null || Array.isArray(x)) return null
   const {
-    tovarNomi, skuKod, miqdor, birlik, summa, sababTanlov, filial, firmaNomi,
+    tovarNomi, skuKod, miqdor, birlik, summa, sababTanlov, izoh, filial, firmaNomi,
     kafeNomi, yonalish, taminotchi, taminotchiId, vozvratStatus, qaytarilmadiSabab,
   } = x as Record<string, unknown>
 
   if (!matn(tovarNomi) || !matn(miqdor) || !matn(summa) || !matn(sababTanlov)) return null
+  if (!matn(izoh)) return null
   if (!matn(filial) || !matn(firmaNomi) || !matn(kafeNomi)) return null
   if (!matn(taminotchi) || !matn(qaytarilmadiSabab)) return null
   if (!sonYokiNull(skuKod) || !sonYokiNull(taminotchiId)) return null
@@ -53,7 +54,7 @@ function shaklniTekshir(x: unknown): FormaQoralama | null {
   if (!birida(VOZVRAT_HOLATLAR, vozvratStatus)) return null
 
   return {
-    tovarNomi, skuKod, miqdor, birlik, summa, sababTanlov, filial, firmaNomi,
+    tovarNomi, skuKod, miqdor, birlik, summa, sababTanlov, izoh, filial, firmaNomi,
     kafeNomi, yonalish, taminotchi, taminotchiId, vozvratStatus, qaytarilmadiSabab,
   }
 }
@@ -98,6 +99,7 @@ export function qoralamaSaqla(tur: Tur, form: FormData) {
     birlik: form.birlik,
     summa: form.summa,
     sababTanlov: form.sababTanlov,
+    izoh: form.izoh,
     filial: form.filial,
     firmaNomi: form.firmaNomi,
     kafeNomi: form.kafeNomi,

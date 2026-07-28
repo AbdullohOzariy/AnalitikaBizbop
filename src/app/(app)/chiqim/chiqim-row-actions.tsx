@@ -59,6 +59,7 @@ export function ChiqimRowActions({
   const [filial, setFilial] = useState(record.filial ?? "");
   const [kategoriya, setKategoriya] = useState(record.kategoriya ?? "__none__");
   const [sabab, setSabab] = useState(record.sabab ?? "");
+  const [izoh, setIzoh] = useState(record.izoh ?? "");
 
   // --- O'chirish holati ---
   const [ochirOpen, setOchirOpen] = useState(false);
@@ -73,6 +74,7 @@ export function ChiqimRowActions({
     setFilial(record.filial ?? "");
     setKategoriya(record.kategoriya ?? "__none__");
     setSabab(record.sabab ?? "");
+    setIzoh(record.izoh ?? "");
     setEditOpen(true);
   };
 
@@ -91,6 +93,7 @@ export function ChiqimRowActions({
     const katValue = kategoriya === "__none__" ? null : kategoriya;
     if (katValue !== (record.kategoriya ?? null)) input.kategoriya = katValue ?? undefined;
     if (sabab !== (record.sabab ?? ""))           input.sabab     = sabab || undefined;
+    if (izoh !== (record.izoh ?? ""))             input.izoh      = izoh;
 
     startTransition(async () => {
       const res = await chiqimYozuvYangilaAction(input);
@@ -297,6 +300,20 @@ export function ChiqimRowActions({
                 disabled={isPending}
                 className="h-10 rounded-xl"
                 placeholder="Chiqarilish sababi"
+              />
+            </div>
+
+            {/* Izoh — xodim miniappda qo'lda yozgan erkin matn (ixtiyoriy) */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Izoh
+              </Label>
+              <Input
+                value={izoh}
+                onChange={(e) => setIzoh(e.target.value)}
+                disabled={isPending}
+                className="h-10 rounded-xl"
+                placeholder="Ixtiyoriy izoh"
               />
             </div>
           </div>

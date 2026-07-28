@@ -40,6 +40,7 @@ const yangilaSchema = z.object({
   birlik: z.string().trim().max(20).optional(),
   summa: z.coerce.number().nonnegative().optional(),
   sabab: z.string().trim().max(500).optional(),
+  izoh: z.string().trim().max(500).optional(),
   filial: z.string().trim().max(100).optional(),
   kategoriya: z.string().trim().max(100).optional(),
 });
@@ -52,6 +53,7 @@ export async function chiqimYozuvYangilaAction(input: {
   birlik?: string;
   summa?: number;
   sabab?: string;
+  izoh?: string;
   filial?: string;
   kategoriya?: string;
 }): Promise<Result> {
@@ -66,6 +68,7 @@ export async function chiqimYozuvYangilaAction(input: {
       summa: p.summa,
       // bo'sh satr → null
       sabab: p.sabab !== undefined ? (p.sabab || null) : undefined,
+      izoh: p.izoh !== undefined ? (p.izoh || null) : undefined,
       filial: p.filial,
       kategoriya: p.kategoriya !== undefined ? (p.kategoriya || null) : undefined,
     });

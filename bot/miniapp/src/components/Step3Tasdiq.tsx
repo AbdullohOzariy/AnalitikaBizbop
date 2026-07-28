@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Send, Loader2, ImageIcon, Package, Hash, DollarSign, MapPin, Building2, AlignLeft, Tag, Barcode } from 'lucide-react'
+import { Send, Loader2, ImageIcon, Package, Hash, DollarSign, MapPin, Building2, AlignLeft, MessageSquare, Tag, Barcode } from 'lucide-react'
 import { formatSum } from '../lib/utils'
 import { useTelegram } from '../hooks/useTelegram'
 import StepHeader from './StepHeader'
@@ -51,6 +51,7 @@ export default function Step3Tasdiq({ tur, form, seans, onBack, onDone }: Props)
   const [xato, setXato] = useState<string | null>(null)
 
   const sabab = form.sababTanlov
+  const izoh = form.izoh.trim()
 
   async function handleYuborish() {
     haptic?.impactOccurred('medium')
@@ -122,6 +123,7 @@ export default function Step3Tasdiq({ tur, form, seans, onBack, onDone }: Props)
           birlik: form.birlik,
           summa,
           sabab,
+          izoh: izoh || null,
           filial: form.filial,
           yonalish: form.yonalish,
           taminotchi: form.yonalish === 'taminotchi' ? (form.taminotchi || null) : null,
@@ -140,6 +142,7 @@ export default function Step3Tasdiq({ tur, form, seans, onBack, onDone }: Props)
           birlik: form.birlik,
           summa,
           sabab,
+          izoh: izoh || null,
           filial: form.filial,
           rasm_file_id: fileId,
           qr_file_id: qrFileId,
@@ -181,6 +184,9 @@ export default function Step3Tasdiq({ tur, form, seans, onBack, onDone }: Props)
     { icon: <Hash className="w-3.5 h-3.5" />,       label: 'Miqdor', value: `${form.miqdor} ${form.birlik}` },
     { icon: <DollarSign className="w-3.5 h-3.5" />, label: 'Summa',  value: form.summa ? formatSum(Number(form.summa)) : '—' },
     { icon: <AlignLeft className="w-3.5 h-3.5" />,  label: 'Sabab',  value: sabab },
+    ...(izoh
+      ? [{ icon: <MessageSquare className="w-3.5 h-3.5" />, label: 'Izoh', value: izoh }]
+      : []),
     { icon: <MapPin className="w-3.5 h-3.5" />,     label: 'Filial', value: form.filial },
     ...(form.qrPhotoBase64
       ? [{ icon: <ImageIcon className="w-3.5 h-3.5" />, label: 'QR kod', value: '✓ biriktirildi' }]

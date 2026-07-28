@@ -302,9 +302,19 @@ export default async function ChiqimPage({
                           {r.kategoriya || "—"}
                         </TableCell>
 
-                        {/* Sabab */}
-                        <TableCell className="text-xs text-muted-foreground max-w-[160px] truncate" title={r.sabab ?? undefined}>
-                          {r.sabab || "—"}
+                        {/* Sabab + xodim qo'lda yozgan izoh (bo'lsa, ostida xira qator) */}
+                        <TableCell className="text-xs text-muted-foreground max-w-[190px]">
+                          <span className="block truncate" title={r.sabab ?? undefined}>
+                            {r.sabab || "—"}
+                          </span>
+                          {r.izoh && (
+                            <span
+                              className="mt-0.5 block truncate text-[11px] italic text-muted-foreground/70"
+                              title={r.izoh}
+                            >
+                              {r.izoh}
+                            </span>
+                          )}
                         </TableCell>
 
                         {/* Xodim */}

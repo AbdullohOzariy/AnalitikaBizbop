@@ -136,6 +136,18 @@ export async function register() {
     console.warn("[instrumentation] qulf tekshiruvi:", err instanceof Error ? err.message : err)
   );
 
+  // bizbop (bot) bazasi sxemasi — Prisma migratsiyalari bu bazani BOSHQARMAYDI, ustunlar
+  // `ensureSozlamalarSchema` ichida ADD COLUMN IF NOT EXISTS bilan qo'shiladi. Ilgari u
+  // faqat YOZISH yo'lida (insertYozuv) chaqirilardi: yangi ustun qo'shilgan deploydan keyin
+  // birinchi yozuv kelgunicha uni SELECT qiladigan ro'yxat xato berib bo'sh chiqardi.
+  // Shu sabab start'da bir marta ishlatamiz (idempotent, bazasiz muhitda jim yiqiladi).
+  void (async () => {
+    const { ensureSozlamalarSchema } = await import("@/lib/spisaniya/db");
+    await ensureSozlamalarSchema();
+  })().catch((err) =>
+    console.warn("[instrumentation] bot sxemasi:", err instanceof Error ? err.message : err)
+  );
+
   // Deploy/restart'dan keyin fonda: (1) SKU matritsa sinflari (backfill), (2) kesh isitish.
   (async () => {
     const { updateProductMatrixClasses } = await import("@/lib/abc-xyz");

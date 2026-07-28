@@ -27,7 +27,7 @@ export function boshFormData(): FormData {
     photo: null, photoBase64: null, photoSize: 0,
     qrPhoto: null, qrPhotoBase64: null, qrPhotoSize: 0,
     tovarNomi: '', skuKod: null, miqdor: '', birlik: 'dona', summa: '',
-    sababTanlov: '',
+    sababTanlov: '', izoh: '',
     filial: oxirgiFilial(), firmaNomi: '', kafeNomi: '',
     yonalish: 'asosiy_filial', taminotchi: '', taminotchiId: null,
     vozvratStatus: 'xabar_berildi', qaytarilmadiSabab: '',

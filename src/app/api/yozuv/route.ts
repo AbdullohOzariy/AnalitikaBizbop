@@ -25,6 +25,8 @@ const schema = z.object({
   birlik: z.string().trim().max(20).optional().nullable(),
   summa: z.coerce.number().nonnegative().max(1_000_000_000_000),
   sabab: z.string().trim().max(255).optional().nullable(),
+  // Xodim qo'lda yozadigan erkin izoh — MAJBURIY EMAS (bo'sh satr null'ga aylanadi)
+  izoh: z.string().trim().max(500).optional().nullable().transform((v) => v || null),
   filial: z.string().trim().min(1).max(100),
   rasm_file_id: z.string().max(500).optional().nullable(),
   qr_file_id: z.string().max(500).optional().nullable(),

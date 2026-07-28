@@ -30,6 +30,7 @@ export type VozvratCardData = {
   birlik: string;
   summa: number;
   sabab: string | null;
+  izoh: string | null;
   filial: string;
   yonalish: string;
   taminotchi: string | null;
@@ -104,6 +105,7 @@ export function VozvratCard({ v, canEdit = true }: { v: VozvratCardData; canEdit
             <Row label="Filial" value={v.filial} />
             <Row label="Yo'nalish" value={`${YONALISH_LABEL[v.yonalish] ?? v.yonalish}${v.taminotchi ? ` (${v.taminotchi})` : ""}`} />
             {v.sabab && <Row label="Sabab" value={v.sabab} />}
+            {v.izoh && <Row label="Izoh" value={v.izoh} />}
           </dl>
           {v.rasm_file_id && (
             <div className="flex items-center gap-2">

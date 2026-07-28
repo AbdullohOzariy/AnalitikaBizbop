@@ -56,6 +56,7 @@ export async function guruhgaYuborish(d: YozuvKirim, yozuvId: number): Promise<v
     `📏 <b>Miqdor:</b> ${d.miqdor} ${esc(d.birlik || "dona")}\n` +
     `💰 <b>Summa:</b> ${Number(d.summa).toLocaleString("uz-UZ")} so'm\n`;
   if (d.sabab) matn += `📝 <b>Sabab:</b> ${esc(d.sabab)}\n`;
+  if (d.izoh) matn += `💬 <b>Izoh:</b> ${esc(d.izoh)}\n`;
   if (d.firma) matn += `🏢 <b>Firma:</b> ${esc(d.firma)}\n`;
   matn +=
     `📍 <b>Filial:</b> ${esc(d.filial)}\n` +
@@ -114,6 +115,7 @@ export async function vozvratGuruhgaYuborish(v: VozvratKirim, vozvratId: number)
     `📏 <b>Miqdor:</b> ${v.miqdor} ${esc(v.birlik || "dona")}\n` +
     `💰 <b>Summa:</b> ${Number(v.summa).toLocaleString("uz-UZ")} so'm\n`;
   if (v.sabab) matn += `📝 <b>Sabab:</b> ${esc(v.sabab)}\n`;
+  if (v.izoh) matn += `💬 <b>Izoh:</b> ${esc(v.izoh)}\n`;
   matn += `➡️ <b>Yo'nalish:</b> ${VOZVRAT_YONALISH_LABEL[v.yonalish] || esc(v.yonalish)}`;
   if (v.yonalish === "taminotchi" && v.taminotchi) matn += ` (${esc(v.taminotchi)})`;
   matn += `\n`;

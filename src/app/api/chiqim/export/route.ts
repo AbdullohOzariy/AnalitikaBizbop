@@ -44,7 +44,7 @@ async function handleGET(req: NextRequest) {
   // ── 1. Yozuvlar varag'i ────────────────────────────────────────────────────
   const yozuvlarHeader = [
     "Vaqt", "Tur", "Tovar", "Miqdor", "Birlik", "Summa",
-    "Filial", "Kategoriya", "Sabab", "Xodim",
+    "Filial", "Kategoriya", "Sabab", "Izoh", "Xodim",
   ];
   const yozuvlarRows = rows.map((r) => [
     r.vaqt ? r.vaqt.slice(0, 16).replace("T", " ") : "",
@@ -56,6 +56,7 @@ async function handleGET(req: NextRequest) {
     r.filial,
     r.kategoriya ?? "",
     r.sabab ?? "",
+    r.izoh ?? "",
     r.xodim_ism,
   ]);
   XLSX.utils.book_append_sheet(
