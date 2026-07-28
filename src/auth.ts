@@ -6,6 +6,8 @@ import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { authConfig } from "@/auth.config";
 import { logAccessEvent, startAccessSession } from "@/lib/access-log/log";
+import { clientIp } from "@/lib/spisaniya/rate-limit";
+import { clearLoginAttempts, consumeLoginAttempt } from "@/lib/login-rate-limit";
 import type { Role } from "@/generated/prisma/enums";
 
 /** Rol o'zgartirilganda/foydalanuvchi o'chirilganda invalidatsiya qilinadigan tag. */
@@ -106,19 +108,44 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         email: { label: "Login", type: "text" },
         password: { label: "Parol", type: "password" },
       },
-      authorize: async (raw) => {
+      authorize: async (raw, request) => {
         // Kirishlar jurnali (Tizim → Kirishlar). HAR BIR chaqiruv fire-and-forget:
         // jurnal DB'si yiqilsa ham login ishlayveradi (src/lib/access-log/log.ts).
         // Kiritilgan LOGIN satri yoziladi — PAROL hech qachon.
         //
         // Bu yerda per-kalit throttle ATAYLAB yo'q (login satri hujumchi qo'lida —
         // kalitga qo'shilsa throttle aylanib o'tilardi). Yozuv toshqinini
-        // log.ts dagi GLOBAL shift to'sadi: `authorize` /api/auth/callback/credentials
-        // orqali /login formasidagi rate-limit'siz ham chaqirilishi mumkin.
+        // log.ts dagi GLOBAL shift to'sadi.
         const login =
           typeof (raw as { email?: unknown })?.email === "string"
             ? (raw as { email: string }).email.trim().slice(0, 120)
             : null;
+
+        // ── BRUTE-FORCE CHEKLOVI — YAGONA CHOKE POINT ──────────────────────
+        // Bu tekshiruv SHU YERDA turishi SHART. Ilgari u faqat /login server
+        // action'ida edi, lekin `POST /api/auth/callback/credentials` (NextAuth
+        // o'z handler'i, src/auth-handler.ts) action'ni chetlab o'tib to'g'ridan-
+        // to'g'ri shu funksiyani chaqiradi — ya'ni parol tanlash cheklanmagan edi.
+        // Ikkala yo'l ham `authorize` dan o'tadi, shuning uchun hisob shu yerda.
+        //
+        // `request` — @auth/core asl header'lar bilan yasagan Request
+        // (callback/index.js:231; server-action yo'lida next-auth/lib/actions.js
+        // `new Headers(await nextHeaders())` ni to'liq uzatadi), demak IP ishonchli.
+        //
+        // Tekshiruv bcrypt'dan OLDIN: bcrypt.compare ataylab qimmat (~100ms CPU),
+        // ya'ni uning o'zi ham DoS vektori.
+        const ip = request ? clientIp(request) : "unknown";
+        if (!consumeLoginAttempt(ip, login ?? "")) {
+          logAccessEvent({
+            surface: "WEB",
+            type: "BLOCKED",
+            reason: "RATE_LIMIT",
+            login,
+            route: "/api/auth/callback/credentials",
+            throttle: { key: ip, ms: 15 * 60_000 },
+          });
+          return null;
+        }
 
         const parsed = credentialsSchema.safeParse(raw);
         if (!parsed.success) {
@@ -145,6 +172,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           });
           return null;
         }
+
+        // Halol foydalanuvchi limitga tiqilib qolmasin (bir necha marta kirsa ham).
+        clearLoginAttempts(ip, login ?? "");
 
         logAccessEvent({
           surface: "WEB",
