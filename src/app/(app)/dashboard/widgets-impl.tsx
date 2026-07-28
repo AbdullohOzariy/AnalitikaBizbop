@@ -26,6 +26,7 @@ import type {
   KpiByBranchRow,
   GroupSalesDayRow,
   GroupPlanDayRow,
+  PlanGroupNode,
 } from "@/lib/analytics-v2";
 
 // CSS tokenlariga asoslangan tooltip — dark mode'da ham to'g'ri
@@ -296,6 +297,217 @@ export function MarjaHierarchyWidget({ data }: { data: MarjaGroupNode[] }) {
                         </span>
                       </div>
                     ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </ExpandableCard>
+  );
+}
+
+// ============ Reja bajarilishi: bo'lim → kategoriya → subkategoriya ============
+
+/** Reja bajarilishi ohangi — Top kategoriyalar/KPI bilan bir xil chegaralar. */
+function planColor(pct: number | null): string {
+  if (pct == null) return "text-muted-foreground";
+  return pct >= 100
+    ? "text-emerald-600 dark:text-emerald-400"
+    : pct >= 90
+    ? "text-amber-600 dark:text-amber-400"
+    : "text-red-600 dark:text-red-400";
+}
+function planBar(pct: number | null): string {
+  if (pct == null) return "bg-muted-foreground/30";
+  return pct >= 100 ? "bg-emerald-500" : pct >= 90 ? "bg-amber-500" : "bg-red-500";
+}
+function PlanMiniBar({ pct, small }: { pct: number | null; small?: boolean }) {
+  const w = pct == null ? 0 : Math.max(0, Math.min(100, pct)); // 100% = to'la
+  return (
+    <div className={cn("shrink-0 overflow-hidden rounded-full bg-muted", small ? "h-1.5 w-14" : "h-2 w-24")}>
+      <div className={cn("h-full rounded-full", planBar(pct))} style={{ width: `${w}%` }} />
+    </div>
+  );
+}
+function PlanPct({ pct, small }: { pct: number | null; small?: boolean }) {
+  return (
+    <span
+      className={cn(
+        "text-right tabular-nums",
+        small ? "w-12 text-xs" : "w-14 text-sm font-bold",
+        planColor(pct)
+      )}
+      title="Reja bajarilishi: fakt ÷ reja"
+    >
+      {pct != null ? `${pct.toFixed(0)}%` : "—"}
+    </span>
+  );
+}
+
+// ── Chiqim (spisaniya) reja holati — writeoff-plan.ts statuslari bilan bir xil ──
+// Polyarlik teskari: chiqim reja ICHIDA bo'lsa yaxshi (yashil), oshsa — qizil.
+export type WoCell = {
+  /** "g" — bo'lim, "c" — kategoriya, "s" — subkategoriya (id'lar darajalararo kesishmasin) */
+  level: "g" | "c" | "s";
+  id: number;
+  factPct: number | null;
+  planPct: number | null;
+  status: "ok" | "warn" | "over" | "none";
+};
+
+const WO_TONE: Record<WoCell["status"], string> = {
+  ok:   "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+  warn: "bg-amber-400/15 text-amber-700 dark:text-amber-400",
+  over: "bg-red-500/10 text-red-600 dark:text-red-400",
+  none: "bg-muted text-muted-foreground",
+};
+const WO_HINT: Record<WoCell["status"], string> = {
+  ok:   "reja ichida",
+  warn: "rejadan biroz oshgan",
+  over: "rejadan oshgan",
+  none: "reja qo'yilmagan",
+};
+
+function WoBadge({ wo, small }: { wo?: WoCell; small?: boolean }) {
+  const w = small ? "w-[86px]" : "w-[96px]";
+  if (!wo || wo.factPct == null) {
+    return <span className={cn("shrink-0 text-right text-[11px] text-muted-foreground/60", w)}>—</span>;
+  }
+  const fact = wo.factPct.toFixed(1);
+  const plan = wo.planPct != null ? wo.planPct.toFixed(1) : null;
+  return (
+    <span
+      className={cn(
+        "shrink-0 rounded-full px-2 py-0.5 text-center font-semibold tabular-nums",
+        small ? "text-[10px]" : "text-[11px]",
+        w,
+        WO_TONE[wo.status]
+      )}
+      title={`Chiqim: fakt ${fact}%${plan ? ` / reja ${plan}%` : ""} — ${WO_HINT[wo.status]}`}
+    >
+      {plan ? `${fact}/${plan}%` : `${fact}%`}
+    </span>
+  );
+}
+
+/**
+ * Iyerarxiya bilan bir xil daraxt (bo'lim → kategoriya → subkategoriya), har
+ * darajada SAVDO reja bajarilishi % va CHIQIM (spisaniya) reja holati.
+ * Summalar ko'rsatilmaydi. Kesish/limit yo'q — Iyerarxiyadagi barcha kategoriyalar
+ * ro'yxatda bo'ladi.
+ */
+export function PlanHierarchyWidget({
+  data,
+  writeoff,
+  writeoffLimitPct,
+}: {
+  data: PlanGroupNode[];
+  /** Chiqim nazorati (writeoff-plan.ts) — daraja+id bo'yicha biriktiriladi */
+  writeoff?: WoCell[];
+  /** Kompaniya bo'yicha qo'lda qo'yilgan chiqim chegarasi (AppSetting) — kontekst uchun */
+  writeoffLimitPct?: number | null;
+}) {
+  const [openGroups, setOpenGroups] = useState<Set<number>>(new Set());
+  const [openCats, setOpenCats] = useState<Set<number>>(new Set());
+  const woMap = useMemo(
+    () => new Map((writeoff ?? []).map((w) => [`${w.level}:${w.id}`, w])),
+    [writeoff]
+  );
+  const wo = (level: WoCell["level"], id: number) => woMap.get(`${level}:${id}`);
+  const toggle = (set: Set<number>, id: number) => {
+    const n = new Set(set);
+    if (n.has(id)) n.delete(id); else n.add(id);
+    return n;
+  };
+
+  return (
+    <ExpandableCard
+      title={
+        <span className="flex flex-wrap items-center gap-2">
+          <span>Reja bajarilishi — bo&apos;lim va kategoriyalar</span>
+          <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+            savdo: fakt ÷ reja · chiqim: fakt/reja %
+          </span>
+          {writeoffLimitPct != null && (
+            <span
+              className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
+              title="Kompaniya bo'yicha chiqim chegarasi (Sozlamalar)"
+            >
+              chiqim chegarasi {writeoffLimitPct.toFixed(1)}%
+            </span>
+          )}
+        </span>
+      }
+      className="rounded-2xl border-border/50"
+    >
+      {data.length === 0 ? (
+        <p className="py-6 text-center text-xs italic text-muted-foreground">Ma&apos;lumot yo&apos;q</p>
+      ) : (
+        <div className="space-y-0.5 pt-1">
+          {/* Ustun sarlavhalari */}
+          <div className="flex items-center gap-2 px-2 pb-1 pl-8 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            <span className="flex-1">Bo&apos;lim / kategoriya</span>
+            <span className="w-[96px] text-center">Chiqim</span>
+            <span className="w-24">Savdo rejasi</span>
+            <span className="w-14 text-right">%</span>
+          </div>
+          {data.map((g) => {
+            const gOpen = openGroups.has(g.id);
+            return (
+              <div key={g.id}>
+                <button
+                  onClick={() => setOpenGroups((p) => toggle(p, g.id))}
+                  aria-expanded={gOpen}
+                  className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors hover:bg-muted/50"
+                >
+                  <ChevronRight className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", gOpen && "rotate-90")} />
+                  <span className="flex-1 truncate text-sm font-semibold">{g.name}</span>
+                  <WoBadge wo={wo("g", g.id)} />
+                  <PlanMiniBar pct={g.planPct} />
+                  <PlanPct pct={g.planPct} />
+                </button>
+
+                {gOpen && (
+                  <div className="mb-1 ml-[19px] space-y-0.5 border-l border-border/50 pl-2">
+                    {g.categories.map((c) => {
+                      const cOpen = openCats.has(c.id);
+                      return (
+                        <div key={c.id}>
+                          <button
+                            onClick={() => setOpenCats((p) => toggle(p, c.id))}
+                            aria-expanded={cOpen}
+                            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-muted/50"
+                          >
+                            <ChevronRight
+                              className={cn(
+                                "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform",
+                                cOpen && "rotate-90",
+                                c.subs.length === 0 && "opacity-0"
+                              )}
+                            />
+                            <span className="flex-1 truncate text-[13px]">{c.name}</span>
+                            <WoBadge wo={wo("c", c.id)} />
+                            <PlanMiniBar pct={c.planPct} />
+                            <PlanPct pct={c.planPct} />
+                          </button>
+
+                          {cOpen && c.subs.length > 0 && (
+                            <div className="mb-1 ml-[15px] space-y-0.5 border-l border-border/50 pl-3">
+                              {c.subs.map((s) => (
+                                <div key={s.id} className="flex items-center gap-2 py-1">
+                                  <span className="flex-1 truncate text-xs text-muted-foreground">{s.name}</span>
+                                  <WoBadge wo={wo("s", s.id)} small />
+                                  <PlanMiniBar pct={s.planPct} small />
+                                  <PlanPct pct={s.planPct} small />
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>

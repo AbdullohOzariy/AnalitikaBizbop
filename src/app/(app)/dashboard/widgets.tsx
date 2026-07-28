@@ -22,6 +22,11 @@ export const MarjaHierarchyWidget = dynamic(
   { ssr: false, loading: () => fallback("h-64") }
 );
 
+export const PlanHierarchyWidget = dynamic(
+  () => import("./widgets-impl").then((m) => m.PlanHierarchyWidget),
+  { ssr: false, loading: () => fallback("h-64") }
+);
+
 export const ConversionWidget = dynamic(
   () => import("./widgets-impl").then((m) => m.ConversionWidget),
   { ssr: false, loading: () => fallback("h-64") }

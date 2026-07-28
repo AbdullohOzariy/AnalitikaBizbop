@@ -8,7 +8,6 @@ import {
   dailyReceiptsSeries,
   dailyVisitsSeries,
   branchShare,
-  topCategories,
   branchPerformance,
   getDefaultRange,
 } from "@/lib/analytics";
@@ -18,8 +17,10 @@ import {
   kpiByBranch,
   dailySalesByGroup,
   dailyPlanByGroup,
+  planHierarchy,
 } from "@/lib/analytics-v2";
 import { dailyForecastSeries } from "@/lib/forecast";
+import { computeWriteoffControl } from "@/lib/spisaniya/writeoff-plan";
 import { isoDay, parseDateParam } from "@/lib/date";
 import { canSeeAnalytics } from "@/lib/roles";
 import { scopeSubIds } from "@/lib/scope";
@@ -38,15 +39,17 @@ import { PageHeader } from "@/components/common/page";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PeriodFilter } from "@/components/common/period-filter";
 import {
-  DailySalesChart, DailyCountsChart, BranchShareChart, TopCategoriesChart,
+  DailySalesChart, DailyCountsChart, BranchShareChart,
 } from "@/components/charts";
 import {
   MarjaByBranchWidget,
   MarjaHierarchyWidget,
+  PlanHierarchyWidget,
   ConversionWidget,
   SalesShareWidget,
   GroupSalesDynamicsWidget,
 } from "./widgets";
+import type { WoCell } from "./widgets-impl";
 import { StaggerList, StaggerItem } from "@/components/motion";
 
 // ─── Yordamchi funksiyalar ────────────────────────────────────────────────────
@@ -106,6 +109,14 @@ async function planExecution(
   const totalFact = fact.reduce((s, p) => s + p.value, 0);
   const totalPlan = plan.reduce((s, v) => s + v, 0);
   return totalPlan > 0 ? (totalFact / totalPlan) * 100 : null;
+}
+
+/** Chiqim nazorati tuguni → vidjet yacheykasi (faqat foizlar, summasiz). */
+function toWoCell(
+  level: WoCell["level"],
+  n: { id: number; factPct: number | null; planPct: number | null; status: WoCell["status"] },
+): WoCell {
+  return { level, id: n.id, factPct: n.factPct, planPct: n.planPct, status: n.status };
 }
 
 /** Marja % (vaznli) — marjaBreakdown.byBranch yig'indisidan. */
@@ -313,8 +324,8 @@ async function ChartsSection({
     receipts,
     prevVisits,
     prevReceipts,
-    top,
-    prevTop,
+    planTree,
+    writeoffControl,
     // Faqat qamrovsiz rollar uchun (summa asosidagi bo'limlar)
     dailySales,
     forecast,
@@ -334,8 +345,12 @@ async function ChartsSection({
     dailyReceiptsSeries(range, branchId),
     compareRange ? dailyVisitsSeries(compareRange, branchId) : Promise.resolve(null),
     compareRange ? dailyReceiptsSeries(compareRange, branchId) : Promise.resolve(null),
-    topCategories(range, branchId, 18, scope),
-    compareRange ? topCategories(compareRange, branchId, 18, scope) : Promise.resolve(null),
+    planHierarchy(range, branchId, scope),
+    // Chiqim (spisaniya) reja nazorati — bizbop bazasidan, 5 daq. keshlangan.
+    // Qamrovli menejerga faqat o'z kategoriyalari qatorlari ko'rinadi (daraxt scope'li).
+    // catch: bizbop (bot) bazasi ALOHIDA — u yiqilsa Dashboard butunlay o'chib qolmasin,
+    // shunchaki chiqim ustuni bo'sh ko'rinadi.
+    computeWriteoffControl(range, branchId).catch(() => null),
     full ? dailySalesSeries(range, branchId) : Promise.resolve(null),
     full ? dailyForecastSeries(range, branchId) : Promise.resolve(null),
     full ? branchShare(range) : Promise.resolve(null),
@@ -349,8 +364,6 @@ async function ChartsSection({
     rows?.reduce((sum, r) => sum + r.value, 0) ?? null;
   const sumSales = (rows: { sales: number }[] | null) =>
     rows?.reduce((sum, r) => sum + r.sales, 0) ?? null;
-  const sumFacts = (rows: { fact: number }[] | null) =>
-    rows?.reduce((sum, r) => sum + r.fact, 0) ?? null;
 
   // ── Konversiya vidjeti: filial kartalari + o'tgan davrga nisbatan trend ──
   const pickBranch = (rows: typeof kpiBr) =>
@@ -375,6 +388,16 @@ async function ChartsSection({
   const prevConv = kpiBrPrev ? conversionOf(pickBranch(kpiBrPrev)) : null;
   const conversionTrend =
     curConv != null && prevConv != null ? calcDelta(curConv, prevConv) : null;
+
+  // ── Chiqim nazorati → daraxt qatorlariga biriktiriladigan yacheykalar ──
+  // Faqat foizlar uzatiladi (summalar emas); daraja+id kalit sifatida ishlatiladi,
+  // chunki bo'lim va kategoriya id'lari turli jadvallardan (kesishishi mumkin).
+  const woGroups = writeoffControl?.groups ?? [];
+  const woCells: WoCell[] = [
+    ...woGroups.map((g) => toWoCell("g", g)),
+    ...woGroups.flatMap((g) => g.cats.map((c) => toWoCell("c", c))),
+    ...woGroups.flatMap((g) => g.cats.flatMap((c) => c.subcats.map((s) => toWoCell("s", s)))),
+  ];
 
   // Kunlik son (tashrif + chek) davr yig'indisi — grafik bilan bir manbadan
   const curCount = (sumValues(visits) ?? 0) + (sumValues(receipts) ?? 0);
@@ -455,23 +478,12 @@ async function ChartsSection({
         planDays={groupPlan.days}
       />
 
-      <ExpandableCard
-        title={
-          <ChartTitle
-            title="Top Kategoriyalar"
-            delta={calcDelta(
-              top.reduce((sum, r) => sum + r.fact, 0),
-              sumFacts(prevTop) ?? 0
-            )}
-            compareLabel={compareLabel}
-          />
-        }
-        className="rounded-2xl border-none shadow-sm bg-card overflow-hidden"
-        headerClassName={`${CARD_PT} ${CARD_PAD} pb-3`}
-        contentClassName={`${CARD_PAD} ${CARD_PB}`}
-      >
-        <TopCategoriesChart data={top} />
-      </ExpandableCard>
+      {/* Kategoriyalar — Iyerarxiya bilan bir xil daraxt (bo'lim → kategoriya → subkat) */}
+      <PlanHierarchyWidget
+        data={planTree}
+        writeoff={woCells}
+        writeoffLimitPct={writeoffControl?.totalPlanPct ?? null}
+      />
 
       {full && perf && (
         <ExpandableCard

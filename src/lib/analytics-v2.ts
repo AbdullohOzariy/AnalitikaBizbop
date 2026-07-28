@@ -504,3 +504,157 @@ export const dailyPlanByGroup = (range: DateRange, branchId?: number, scope?: nu
     ["v3_dailyPlanByGroup", ...makeKey(range, branchId, scope ? `s${[...scope].sort((a, b) => a - b).join(",")}` : undefined)],
     { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
   )();
+
+// ============ Reja bajarilishi iyerarxiyasi (bo'lim → kategoriya → subkategoriya) ============
+//
+// Skelet IYERARXIYA jadvalidan quriladi (CategoryGroup → Category(parentId=null) →
+// Category(children)) — Iyerarxiya sahifasi bilan AYNAN bir xil daraxt. Fakt/reja
+// keyin shu skeletga biriktiriladi, shuning uchun savdosi yo'q kategoriya ham
+// ro'yxatdan tushib qolmaydi (0% bo'lib ko'rinadi).
+//   fakt — ProductSales.amount (davr proratsiyasi bilan), SKU → subkat
+//   reja — SalesPlan (oylik) → davr kunlari ulushiga pro-rata; SalesPlan odatda
+//          subkat darajasida, ba'zan to'g'ridan-to'g'ri kategoriyaga kiritiladi.
+
+export type PlanNode = {
+  id: number;
+  name: string;
+  fact: number;
+  plan: number;
+  /** fakt ÷ reja × 100. Reja yo'q bo'lsa null. */
+  planPct: number | null;
+  /** (sotuv − tannarx) / sotuv × 100 (narxdan, vaznli). */
+  marja: number | null;
+};
+export type PlanCategoryNode = PlanNode & { subs: PlanNode[] };
+export type PlanGroupNode = PlanNode & { categories: PlanCategoryNode[] };
+
+type FactAgg = { fact: number; sales: number; cost: number };
+
+async function _planHierarchy(
+  range: DateRange,
+  branchId?: number,
+  scope?: number[] | null
+): Promise<PlanGroupNode[]> {
+  const branchSql = branchId ? Prisma.sql`AND ps."branchId" = ${branchId}` : Prisma.empty;
+  const scopeSql = scope ? Prisma.sql`AND p."categoryId" = ANY(${scope}::int[])` : Prisma.empty;
+  const frac = Prisma.sql`(
+    (LEAST(ps."periodEnd", ${range.end}::date) - GREATEST(ps."periodStart", ${range.start}::date) + 1)::numeric
+    / NULLIF((ps."periodEnd" - ps."periodStart" + 1), 0)::numeric
+  )`;
+  const planBranchSql = branchId ? Prisma.sql`AND sp."branchId" = ${branchId}` : Prisma.empty;
+  const planScopeSql = scope ? Prisma.sql`AND sp."categoryId" = ANY(${scope}::int[])` : Prisma.empty;
+
+  const [tree, factRows, planRows] = await Promise.all([
+    prisma.categoryGroup.findMany({
+      orderBy: { sortOrder: "asc" },
+      select: {
+        id: true,
+        name: true,
+        categories: {
+          where: { parentId: null },
+          orderBy: { sortOrder: "asc" },
+          select: {
+            id: true,
+            name: true,
+            children: { orderBy: { sortOrder: "asc" }, select: { id: true, name: true } },
+          },
+        },
+      },
+    }),
+    // Fakt/marja — SKU darajasidagi ProductSales, subkat (Product.categoryId) bo'yicha
+    prisma.$queryRaw<{ cid: number; fact: number | null; sales: number | null; cost: number | null }[]>`
+      SELECT p."categoryId" AS cid,
+        COALESCE(SUM(ps."amount"::numeric * ${frac}), 0)::float8 AS fact,
+        COALESCE(SUM(COALESCE(ps."salePrice" * ps."soldQty", ps."amount")::numeric * ${frac}), 0)::float8 AS sales,
+        COALESCE(SUM(COALESCE(ps."costPrice" * ps."soldQty", ps."costAmount", 0)::numeric * ${frac}), 0)::float8 AS cost
+      FROM "ProductSales" ps
+      JOIN "Product" p ON p.id = ps."productId"
+      WHERE ps."periodStart" <= ${range.end}::date
+        AND ps."periodEnd"   >= ${range.start}::date
+        AND p."categoryId" IS NOT NULL
+        ${branchSql}
+        ${scopeSql}
+      GROUP BY p."categoryId"
+    `,
+    // Reja — SalesPlan oylik, davr kesimiga pro-rata (kiritilgan kategoriya id'si bo'yicha)
+    prisma.$queryRaw<{ cid: number; plan: number | null }[]>`
+      SELECT sp."categoryId" AS cid,
+        COALESCE(SUM(sp.amount::numeric * (
+          (LEAST(m."end", ${range.end}::date) - GREATEST(m."start", ${range.start}::date) + 1)::numeric
+          / NULLIF((m."end" - m."start" + 1), 0)::numeric
+        )), 0)::float8 AS plan
+      FROM "SalesPlan" sp
+      CROSS JOIN LATERAL (
+        SELECT make_date(sp.year, sp.month, 1) AS "start",
+               (make_date(sp.year, sp.month, 1) + interval '1 month' - interval '1 day')::date AS "end"
+      ) m
+      WHERE m."start" <= ${range.end}::date
+        AND m."end"   >= ${range.start}::date
+        ${planBranchSql}
+        ${planScopeSql}
+      GROUP BY sp."categoryId"
+    `,
+  ]);
+
+  const factMap = new Map<number, FactAgg>();
+  for (const r of factRows) {
+    factMap.set(r.cid, { fact: Number(r.fact ?? 0), sales: Number(r.sales ?? 0), cost: Number(r.cost ?? 0) });
+  }
+  const planMap = new Map<number, number>();
+  for (const r of planRows) planMap.set(r.cid, Number(r.plan ?? 0));
+
+  const inScope = scope ? new Set(scope) : null;
+  const mk = (id: number, name: string, f: FactAgg, plan: number): PlanNode => ({
+    id,
+    name,
+    fact: f.fact,
+    plan,
+    planPct: plan > 0 ? (f.fact / plan) * 100 : null,
+    marja: f.sales > 0 ? ((f.sales - f.cost) / f.sales) * 100 : null,
+  });
+  const zero = (): FactAgg => ({ fact: 0, sales: 0, cost: 0 });
+  const add = (a: FactAgg, b: FactAgg): FactAgg => ({
+    fact: a.fact + b.fact, sales: a.sales + b.sales, cost: a.cost + b.cost,
+  });
+
+  const groups: PlanGroupNode[] = [];
+  for (const g of tree) {
+    let gAgg = zero();
+    let gPlan = 0;
+    const categories: PlanCategoryNode[] = [];
+
+    for (const c of g.categories) {
+      const children = inScope ? c.children.filter((s) => inScope.has(s.id)) : c.children;
+      // Qamrovli menejer: biriktirilmagan kategoriya butunlay ko'rinmaydi
+      if (inScope && children.length === 0) continue;
+
+      // Kategoriyaning O'ZIGA biriktirilgan SKU/reja (subkatsiz kiritilgan holat)
+      let cAgg = inScope ? zero() : factMap.get(c.id) ?? zero();
+      let cPlan = inScope ? 0 : planMap.get(c.id) ?? 0;
+      const subs: PlanNode[] = [];
+
+      for (const s of children) {
+        const sAgg = factMap.get(s.id) ?? zero();
+        const sPlan = planMap.get(s.id) ?? 0;
+        cAgg = add(cAgg, sAgg);
+        cPlan += sPlan;
+        subs.push(mk(s.id, s.name, sAgg, sPlan));
+      }
+
+      gAgg = add(gAgg, cAgg);
+      gPlan += cPlan;
+      categories.push({ ...mk(c.id, c.name, cAgg, cPlan), subs });
+    }
+
+    if (categories.length === 0) continue;
+    groups.push({ ...mk(g.id, g.name, gAgg, gPlan), categories });
+  }
+  return groups;
+}
+
+export const planHierarchy = (range: DateRange, branchId?: number, scope?: number[] | null) =>
+  unstable_cache(
+    () => _planHierarchy(range, branchId, scope),
+    ["v1_planHierarchy", ...makeKey(range, branchId, scope ? `s${[...scope].sort((a, b) => a - b).join(",")}` : undefined)],
+    { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
+  )();
