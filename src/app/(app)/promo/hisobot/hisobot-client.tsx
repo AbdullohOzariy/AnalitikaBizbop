@@ -11,7 +11,7 @@ import { formatUZS, formatDateUZ } from "@/lib/format";
 import { toast } from "sonner";
 import {
   listReportCampaignsAction, promoReportAction,
-  type ReportCampaignOpt, type PromoReport, type ReportItem,
+  type ReportCampaignOpt, type PromoReport, type ReportItem, type MarjaBloki,
 } from "./actions";
 
 const TYPE_LABEL: Record<string, string> = {
@@ -109,6 +109,8 @@ function ReportView({ report }: { report: PromoReport }) {
           tone={t.growthAmountPct} />
       </div>
 
+      {t.marja && <MarjaXulosa m={t.marja} />}
+
       <div className="flex items-start gap-2 rounded-lg bg-amber-500/[0.06] px-3 py-2 text-xs text-muted-foreground">
         <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
         <span>Sotuv yozuvlari import davriga bog'liq (proratsiya bilan hisoblangan) — qisqa aksiyalarda raqamlar taxminiy bo'lishi mumkin.{report.hasAfter ? " Narx ustuni aksiyadan keyingi davr o'rtacha narxiga asoslangan." : " Aksiya hali tugamagani uchun \"narx qaytdimi\" tekshiruvi mavjud emas."}</span>
@@ -124,17 +126,94 @@ function ReportView({ report }: { report: PromoReport }) {
               <th className="px-2 py-2.5 text-right font-semibold">Aksiya davri</th>
               <th className="px-2 py-2.5 text-right font-semibold">Oldingi davr</th>
               <th className="px-2 py-2.5 text-right font-semibold">O&apos;sish</th>
+              <th className="px-2 py-2.5 text-right font-semibold">Marja %</th>
+              <th className="px-2 py-2.5 text-right font-semibold">Yalpi foyda</th>
               {report.hasAfter && <th className="px-2 py-2.5 text-right font-semibold">Narx (keyin)</th>}
               {report.hasAfter && <th className="px-2 py-2.5 text-center font-semibold">Holat</th>}
             </tr>
           </thead>
           <tbody>
             {report.items.length === 0 ? (
-              <tr><td colSpan={report.hasAfter ? 7 : 5} className="px-3 py-8 text-center text-sm text-muted-foreground">Aksiyada SKU yo&apos;q.</td></tr>
+              <tr><td colSpan={report.hasAfter ? 9 : 7} className="px-3 py-8 text-center text-sm text-muted-foreground">Aksiyada SKU yo&apos;q.</td></tr>
             ) : report.items.map((it) => <ItemRow key={it.productId} it={it} hasAfter={report.hasAfter} />)}
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Aksiyaning ASOSIY savoliga javob: sotuv o'sgani marja yo'qotilishini qopladimi?
+ * Chegirma marjani yeydi — foiz emas, SO'MDAGI yalpi foyda hal qiladi.
+ */
+function MarjaXulosa({ m }: { m: MarjaBloki }) {
+  const foyda = m.delta >= 0;
+  return (
+    <div
+      className={cn(
+        "rounded-xl border p-4",
+        foyda
+          ? "border-primary/30 bg-primary/[0.04]"
+          : "border-destructive/30 bg-destructive/[0.04]"
+      )}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        {foyda ? (
+          <TrendingUp className="h-4 w-4 text-primary" />
+        ) : (
+          <TrendingDown className="h-4 w-4 text-destructive" />
+        )}
+        <h3 className="text-sm font-semibold">
+          {foyda ? "Aksiya o'zini oqladi" : "Aksiya o'zini oqlamadi"}
+        </h3>
+        <span className={cn("text-sm font-bold tabular-nums", foyda ? "text-primary" : "text-destructive")}>
+          {foyda ? "+" : ""}{money(m.delta)} so'm
+          {m.deltaPct != null && ` (${m.deltaPct >= 0 ? "+" : ""}${m.deltaPct.toFixed(1)}%)`}
+        </span>
+      </div>
+
+      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+        <div className="rounded-lg bg-card p-2.5">
+          <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Marja %</div>
+          <div className="mt-1 flex items-baseline gap-2 tabular-nums">
+            <span className="text-muted-foreground">{m.basePct?.toFixed(2) ?? "—"}%</span>
+            <span className="text-muted-foreground">→</span>
+            <span className="text-lg font-bold">{m.promoPct?.toFixed(2) ?? "—"}%</span>
+          </div>
+        </div>
+        <div className="rounded-lg bg-card p-2.5">
+          <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+            Yalpi foyda (oldingi davr)
+          </div>
+          <div className="mt-1 text-lg font-bold tabular-nums text-muted-foreground">
+            {money(m.baseProfit)}
+          </div>
+        </div>
+        <div className="rounded-lg bg-card p-2.5">
+          <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+            Yalpi foyda (aksiya davri)
+          </div>
+          <div className={cn("mt-1 text-lg font-bold tabular-nums", foyda ? "text-primary" : "text-destructive")}>
+            {money(m.promoProfit)}
+          </div>
+        </div>
+      </div>
+
+      <p className="mt-3 text-xs text-muted-foreground">
+        {foyda
+          ? "Sotuv hajmining o'sishi chegirmadan yo'qotilgan marjani qopladi — kompaniya ko'proq sotdi va ko'proq foyda oldi."
+          : "Sotuv hajmi oshgan bo'lsa-da, marja pasayishini qoplamadi — ko'proq mahsulot sotilib, kamroq yalpi foyda olindi."}
+        {m.coverage < 0.95 && (
+          <>
+            {" "}
+            <b className="text-amber-600 dark:text-amber-400">
+              Diqqat: sotuvning {(m.coverage * 100).toFixed(0)}% qismidagina tannarx ma'lum —
+              raqamlar shu qism bo'yicha.
+            </b>
+          </>
+        )}
+      </p>
     </div>
   );
 }
@@ -157,6 +236,33 @@ function ItemRow({ it, hasAfter }: { it: ReportItem; hasAfter: boolean }) {
       </td>
       <td className="px-2 py-1.5 text-right tabular-nums">{money(it.promoAmount)}<div className="text-[11px] text-muted-foreground">{money(it.promoQty)} dona</div></td>
       <td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground">{money(it.baseAmount)}<div className="text-[11px]">{money(it.baseQty)} dona</div></td>
+      <td className="px-2 py-1.5 text-right tabular-nums">
+        {it.marja?.promoPct != null ? (
+          <>
+            <span className="font-semibold">{it.marja.promoPct.toFixed(2)}%</span>
+            <div className="text-[11px] text-muted-foreground">
+              oldin: {it.marja.basePct?.toFixed(2) ?? "—"}%
+            </div>
+          </>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </td>
+      <td className="px-2 py-1.5 text-right tabular-nums">
+        {it.marja ? (
+          <>
+            <span className={cn("font-semibold", it.marja.delta >= 0 ? "text-primary" : "text-destructive")}>
+              {it.marja.delta >= 0 ? "+" : ""}
+              {money(it.marja.delta)}
+            </span>
+            <div className="text-[11px] text-muted-foreground">
+              {money(it.marja.baseProfit)} → {money(it.marja.promoProfit)}
+            </div>
+          </>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </td>
       <td className={cn("px-2 py-1.5 text-right tabular-nums font-semibold", growthClass(it.growthAmountPct))}>
         <span className="inline-flex items-center justify-end gap-1">
           {it.growthAmountPct != null && it.growthAmountPct !== 0 && (it.growthAmountPct > 0 ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />)}

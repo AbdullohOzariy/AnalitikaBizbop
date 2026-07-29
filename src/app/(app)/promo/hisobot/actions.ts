@@ -45,6 +45,32 @@ export type ReportItem = {
   // Narx qaytdimi (aksiya tugagandan keyingi davr o'rtacha narxi)
   afterAvgPrice: number | null;
   priceStatus: "returned" | "stuck" | "unknown"; // asliga qaytdi / aksiyada qoldi / ma'lumot yo'q
+  /**
+   * Marja va YALPI FOYDA. Sotuv o'sgani bilan aksiya o'zini oqlaganini bildirmaydi —
+   * chegirma marjani yeydi. Shuning uchun asosiy o'lchov: yalpi foyda (so'mda) oshdimi.
+   * `null` — tannarx (ProductSales.costAmount) ma'lum emas, hisoblab bo'lmaydi.
+   */
+  marja: MarjaBloki | null;
+};
+
+/**
+ * Marja/foyda taqqoslash. Foiz emas, SO'M hal qiluvchi: marja foizi tushib, lekin
+ * hajm shunchalik o'sgan bo'lsa — foyda baribir oshishi mumkin (va aksincha).
+ */
+export type MarjaBloki = {
+  /** Tannarxi MA'LUM bo'lgan sotuv summasi (qamrov) — foiz shundan hisoblanadi. */
+  promoCovered: number;
+  baseCovered: number;
+  promoCost: number;
+  baseCost: number;
+  promoPct: number | null; // marja %
+  basePct: number | null;
+  promoProfit: number; // yalpi foyda (so'm)
+  baseProfit: number;
+  delta: number; // promoProfit - baseProfit
+  deltaPct: number | null;
+  /** Tannarx qamrovi (0..1): 1 dan kichik bo'lsa raqamlar to'liq emas. */
+  coverage: number;
 };
 
 export type PromoReport = {
@@ -58,6 +84,7 @@ export type PromoReport = {
   totals: {
     promoAmount: number; baseAmount: number; growthAmountPct: number | null;
     promoQty: number; baseQty: number; growthQtyPct: number | null;
+    marja: MarjaBloki | null;
   };
 };
 
@@ -79,6 +106,33 @@ export async function listReportCampaignsAction(): Promise<{ ok: true; rows: Rep
 }
 
 const pct = (cur: number, base: number): number | null => (base > 0 ? ((cur - base) / base) * 100 : null);
+
+/**
+ * Marja bloki. Qamrov (`covered`) — tannarxi ma'lum sotuv summasi; foiz va foyda
+ * SHUNDAN hisoblanadi, aks holda tannarxsiz qatorlar marjani ko'tarib yuborardi.
+ */
+function marjaHisobla(
+  promoCovered: number, promoCost: number,
+  baseCovered: number, baseCost: number,
+  promoAmount: number, baseAmount: number
+): MarjaBloki | null {
+  // IKKALA davrda ham tannarxli sotuv bo'lishi SHART. Aks holda taqqoslash yolg'on
+  // xulosa berardi: aksiya bugun boshlanib, sotuv importi hali kelmagan bo'lsa
+  // promoProfit=0 bo'lib "aksiya o'zini oqlamadi" deb ko'rsatilardi.
+  if (promoCovered <= 0 || baseCovered <= 0) return null;
+  const promoProfit = promoCovered - promoCost;
+  const baseProfit = baseCovered - baseCost;
+  const jamiAmount = promoAmount + baseAmount;
+  return {
+    promoCovered, baseCovered, promoCost, baseCost,
+    promoPct: promoCovered > 0 ? (promoProfit / promoCovered) * 100 : null,
+    basePct: baseCovered > 0 ? (baseProfit / baseCovered) * 100 : null,
+    promoProfit, baseProfit,
+    delta: promoProfit - baseProfit,
+    deltaPct: baseProfit > 0 ? ((promoProfit - baseProfit) / baseProfit) * 100 : null,
+    coverage: jamiAmount > 0 ? (promoCovered + baseCovered) / jamiAmount : 0,
+  };
+}
 
 export async function promoReportAction(input: { campaignId: number }): Promise<{ ok: true; report: PromoReport } | Err> {
   try {
@@ -111,7 +165,13 @@ export async function promoReportAction(input: { campaignId: number }): Promise<
     const branchSql = c.branchId ? Prisma.sql`AND ps."branchId" = ${c.branchId}` : Prisma.empty;
 
     // Har SKU bo'yicha 3 davr sotuvi (proratsiya frac bilan). pids bo'sh bo'lsa so'rov yo'q.
-    type Row = { pid: number; promo_qty: number; promo_amt: number; base_qty: number; base_amt: number; after_qty: number; after_amt: number };
+    type Row = {
+      pid: number; promo_qty: number; promo_amt: number; base_qty: number; base_amt: number;
+      after_qty: number; after_amt: number;
+      // Marja: tannarxi MA'LUM qatorlar bo'yicha (costAmount NULL bo'lsa qator hisobga olinmaydi —
+      // aks holda tannarxsiz sotuv marjani 100% qilib ko'rsatardi).
+      promo_cov: number; promo_cost: number; base_cov: number; base_cost: number;
+    };
     const rows: Row[] = pids.length === 0 ? [] : await prisma.$queryRaw<Row[]>`
       SELECT ps."productId" AS pid,
         SUM(ps."soldQty" * fr.f_promo)::float8 AS promo_qty,
@@ -119,7 +179,11 @@ export async function promoReportAction(input: { campaignId: number }): Promise<
         SUM(ps."soldQty" * fr.f_base)::float8  AS base_qty,
         SUM(ps.amount    * fr.f_base)::float8  AS base_amt,
         SUM(ps."soldQty" * fr.f_after)::float8 AS after_qty,
-        SUM(ps.amount    * fr.f_after)::float8 AS after_amt
+        SUM(ps.amount    * fr.f_after)::float8 AS after_amt,
+        SUM(CASE WHEN ps."costAmount" IS NOT NULL THEN ps.amount ELSE 0 END * fr.f_promo)::float8 AS promo_cov,
+        SUM(COALESCE(ps."costAmount", 0) * fr.f_promo)::float8 AS promo_cost,
+        SUM(CASE WHEN ps."costAmount" IS NOT NULL THEN ps.amount ELSE 0 END * fr.f_base)::float8  AS base_cov,
+        SUM(COALESCE(ps."costAmount", 0) * fr.f_base)::float8  AS base_cost
       FROM "ProductSales" ps
       JOIN LATERAL (
         SELECT
@@ -155,13 +219,18 @@ export async function promoReportAction(input: { campaignId: number }): Promise<
         const dPromo = promo > 0 ? Math.abs(afterAvg - promo) / promo : Infinity;
         priceStatus = dReg <= 0.05 ? "returned" : dPromo <= 0.05 ? "stuck" : afterAvg >= reg * 0.95 ? "returned" : "stuck";
       }
+      const marja = marjaHisobla(
+        r ? r.promo_cov : 0, r ? r.promo_cost : 0,
+        r ? r.base_cov : 0, r ? r.base_cost : 0,
+        promoAmount, baseAmount
+      );
       return {
         productId: it.productId, name: it.product.name, code: it.product.code,
         regularPrice: reg, promoPrice: promo,
         nPlusM: isNM ? { buy: it.buyQty!, free: it.freeQty! } : null,
         promoQty, promoAmount, baseQty, baseAmount,
         growthQtyPct: pct(promoQty, baseQty), growthAmountPct: pct(promoAmount, baseAmount),
-        afterAvgPrice: afterAvg, priceStatus,
+        afterAvgPrice: afterAvg, priceStatus, marja,
       };
     });
 
@@ -169,6 +238,13 @@ export async function promoReportAction(input: { campaignId: number }): Promise<
     const tBaseAmt = items.reduce((s, i) => s + i.baseAmount, 0);
     const tPromoQty = items.reduce((s, i) => s + i.promoQty, 0);
     const tBaseQty = items.reduce((s, i) => s + i.baseQty, 0);
+    const tMarja = marjaHisobla(
+      items.reduce((s, i) => s + (i.marja?.promoCovered ?? 0), 0),
+      items.reduce((s, i) => s + (i.marja?.promoCost ?? 0), 0),
+      items.reduce((s, i) => s + (i.marja?.baseCovered ?? 0), 0),
+      items.reduce((s, i) => s + (i.marja?.baseCost ?? 0), 0),
+      tPromoAmt, tBaseAmt
+    );
 
     return {
       ok: true,
@@ -183,6 +259,7 @@ export async function promoReportAction(input: { campaignId: number }): Promise<
         totals: {
           promoAmount: tPromoAmt, baseAmount: tBaseAmt, growthAmountPct: pct(tPromoAmt, tBaseAmt),
           promoQty: tPromoQty, baseQty: tBaseQty, growthQtyPct: pct(tPromoQty, tBaseQty),
+          marja: tMarja,
         },
       },
     };
