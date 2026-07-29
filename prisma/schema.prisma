@@ -244,6 +244,7 @@ model Category {
   botUserCategories BotUserCategory[]
   tgRequests        TgRequest[] // guruhda shu kategoriyadan so'ralgan murojaatlar
   canonProducts     TgCanonProduct[] // shu subkategoriyadagi kanonik mahsulotlar
+  stockdayLimit     StockdayLimit? // maksimal zakaz (zaxira kunlari) chegarasi
 
   @@index([parentId]) // scope filtrlari (subkat → ota-kategoriya) tezligi uchun
   @@index([groupId])
@@ -798,6 +799,29 @@ model WriteoffPlan {
   @@unique([branchId, categoryId])
   @@index([branchId])
   @@index([categoryId])
+}
+
+// MAKSIMAL ZAKAZ nazorati: kategoriya bo'yicha ruxsat etilgan eng katta zaxira kunlari.
+// Zakazga miqdor kiritilganda natijaviy stockday hisoblanadi —
+//   (qoldiq + zakaz miqdori) / kunlik o'rtacha sotuv
+// — va shu chegaradan oshsa qator ogohlantiriladi (bloklanmaydi: mavsum/aksiya uchun
+// ataylab ko'p olinishi mumkin, lekin tasdiqlash so'raladi).
+//
+// Kompaniya bo'yicha UMUMIY standart — AppSetting ("zakaz_max_stockday"); shu jadval
+// faqat ISTISNOLARni saqlaydi (go'sht 10 kun, konserva 90 kun kabi). Eng aniq qoida
+// ustun: subkategoriya → kategoriya → global. WriteoffPlan naqshi bilan bir xil —
+// `categoryId` NOT NULL, global qiymat AppSetting'da (Postgres'da NULL bilan unique
+// indeks `NULLS NOT DISTINCT` talab qilardi, u lokal PG14 da yo'q).
+model StockdayLimit {
+  id         Int      @id @default(autoincrement())
+  categoryId Int // kategoriya YOKI subkategoriya (iyerarxiyaning istalgan darajasi)
+  maxDays    Int // ruxsat etilgan eng katta zaxira kunlari
+  note       String?  @db.VarChar(120) // nega shunday (masalan "muddati qisqa")
+  updatedAt  DateTime @updatedAt
+
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId])
 }
 
 // AI prognoz egri chizig'i — filial × bo'lim × oy uchun kunlik og'irlik (taqsimot shakli).

@@ -7,6 +7,12 @@ import { requireOrderCreator } from "@/lib/auth-helpers";
 import { auth } from "@/auth";
 import { ORDER_STATUSES, canTransition, canEditItems, canEnterFact, hisobMinStock, hisobMaxStock, type OrderStatusT } from "./order-status";
 import { nextOrderDate } from "@/lib/order-days";
+import {
+  getStockdayLimits,
+  limitFor,
+  oshganQatorlar,
+  type OshganQator,
+} from "@/lib/zakaz/stockday-limit";
 import { isSystemAdmin, ordersScopedToOwn } from "@/lib/roles";
 import { actionError } from "@/lib/action-error";
 import { scopeParentIds, scopeProductWhere } from "@/lib/scope";
@@ -71,6 +77,13 @@ export type BuilderItem = {
   purchasePrice: number | null; // oxirgi kelishilgan dona narxi (eslab qolinadi)
   minStock: number | null; // JAMI min (Σ filial); lead yo'q — null
   maxStock: number | null; // JAMI max (Σ filial)
+  /**
+   * MAKSIMAL ZAKAZ chegarasi — ruxsat etilgan eng katta zaxira kunlari (stockday).
+   * Kategoriya/subkategoriya istisnosi yoki global standart; `null` — nazorat yo'q.
+   * Klient natijaviy stockday'ni SHU chegara bilan solishtiradi:
+   *   (qoldiq + kiritilgan miqdor) / kunlik o'rtacha > chegara → ogohlantirish.
+   */
+  stockdayLimit: number | null;
   branches: BranchCell[]; // filial bo'yicha taqsimot (tartib = BuilderBranch tartibi)
   // Iyerarxiya: guruh → kategoriya → subkategoriya (SKU shu yerga tegishli) — daraxt ko'rinishi uchun
   groupId: number | null; groupName: string | null; groupSort: number;
@@ -227,6 +240,7 @@ export async function supplierItemsAction(
       prisma.branch.findMany({ orderBy: { sortOrder: "asc" }, select: { id: true, name: true } }),
     ]);
 
+    const sdLimits = await getStockdayLimits();
     const pids = products.map((p) => p.id);
     const startStr = isoDay(range.start);
     const endStr = isoDay(range.end);
@@ -305,6 +319,8 @@ export async function supplierItemsAction(
         stock: totStock, sold: totSold, suggested: totSug, abc: p.abcClass, xyz: p.xyzClass, lead: p.leadTimeDays,
         arxiv: p.archivedAt != null, dailyAvg: Math.round(totDaily * 10) / 10,
         minStock: anyMin ? totMin : null, maxStock: anyMax ? totMax : null,
+        // Chegara SKU kategoriyasidan olinadi: subkategoriya → ota kategoriya → global
+        stockdayLimit: limitFor(sdLimits, c?.id ?? null, c?.parentId ?? null),
         branches: cells,
         packSize: p.packSize != null ? Number(p.packSize) : null,
         purchasePrice: p.purchasePrice != null ? Number(p.purchasePrice) : null,
@@ -513,11 +529,23 @@ export async function updateOrderItemsAction(
   }
 }
 
-/** Zakaz holatini o'zgartiradi — rol-tranzitsiya matritsasi bilan (order-status.ts). */
+/**
+ * Zakaz holatini o'zgartiradi — rol-tranzitsiya matritsasi bilan (order-status.ts).
+ *
+ * ACCEPTED ga o'tishda MAKSIMAL ZAKAZ nazorati: chegaradan oshgan qatorlar bo'lsa
+ * `needsConfirm` qaytariladi va o'tish BAJARILMAYDI. Klient ro'yxatni ko'rsatib
+ * tasdiq oladi va `confirmExcess: true` bilan qayta yuboradi. Bloklamaydi — mavsum
+ * va aksiya uchun ataylab ko'p olinishi mumkin, lekin ko'r-ko'rona o'tib ketmasin.
+ */
 export async function setOrderStatusAction(
   orderId: number,
-  status: OrderStatusT
-): Promise<{ ok: true } | { ok: false; error: string }> {
+  status: OrderStatusT,
+  opts?: { confirmExcess?: boolean }
+): Promise<
+  | { ok: true }
+  | { ok: false; error: string }
+  | { ok: false; needsConfirm: true; excess: OshganQator[] }
+> {
   try {
     const session = await auth();
     const user = session?.user;
@@ -532,6 +560,11 @@ export async function setOrderStatusAction(
     const isOwner = order.createdById === Number(user.id);
     if (!canTransition(user.roles, order.status as OrderStatusT, st, isOwner)) {
       return { ok: false, error: "Bu o'tish sizning rolingizga ruxsat etilmagan." };
+    }
+
+    if (st === "ACCEPTED" && !opts?.confirmExcess) {
+      const excess = await oshganQatorlar(oid);
+      if (excess.length > 0) return { ok: false, needsConfirm: true, excess };
     }
     // TOCTOU himoyasi: statusni FAQAT hali biz o'qigan holatda bo'lsa o'zgartiramiz.
     // Ikki parallel so'rov (yoki eskirgan sahifa) matritsani chetlab o'tmasin — ikkinchisi

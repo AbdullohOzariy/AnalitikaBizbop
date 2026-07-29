@@ -50,6 +50,26 @@ type SubNode = { id: number; name: string; sort: number; items: BuilderItem[] };
 type CatNode = { id: number; name: string; sort: number; subs: SubNode[]; direct: BuilderItem[] };
 type GroupNode = { id: number; name: string; sort: number; cats: CatNode[]; skuCount: number };
 
+/**
+ * MAKSIMAL ZAKAZ nazorati — natijaviy zaxira kunlari chegaradan oshdimi.
+ * Formula server bilan AYNI (src/lib/zakaz/stockday-limit.ts):
+ *   (qoldiq + kiritilgan miqdor) / kunlik o'rtacha sotuv
+ * `null` — chegara belgilanmagan, sotuv yo'q yoki chegara buzilmagan.
+ */
+function stockdayOgoh(
+  it: BuilderItem,
+  jamiQty: number
+): { natijaviy: number; limit: number; ruxsat: number } | null {
+  if (it.stockdayLimit == null || !(it.dailyAvg > 0) || jamiQty <= 0) return null;
+  const natijaviy = (it.stock + jamiQty) / it.dailyAvg;
+  if (natijaviy <= it.stockdayLimit) return null;
+  return {
+    natijaviy,
+    limit: it.stockdayLimit,
+    ruxsat: Math.max(0, Math.floor(it.stockdayLimit * it.dailyAvg - it.stock)),
+  };
+}
+
 // Filial avto-zakaz — server formulasi (lead'ni jonli o'zgartirsa qayta hisoblanadi).
 function branchAvto(cell: BranchCell, orderGap: number, lead: number | null, xyz: string | null): number {
   const bMin = hisobMinStock(cell.dailyAvg, orderGap, lead, xyz);
@@ -91,6 +111,7 @@ const SkuRow = memo(function SkuRow({
   const price = Number(l.price) || it.purchasePrice || 0;
   const sum = jamiQty * price;
   const picked = jamiQty > 0;
+  const sdOgoh = stockdayOgoh(it, jamiQty); // maksimal zakaz chegarasi buzildimi
   return (
     <TableRow key={it.productId}
       className={cn("text-sm", picked ? "bg-emerald-500/10 hover:bg-emerald-500/15" : skuRowBg(it.abc, it.xyz))}>
@@ -109,6 +130,14 @@ const SkuRow = memo(function SkuRow({
           {it.arxiv && (
             <span className="shrink-0 rounded border border-border bg-muted px-1.5 py-px text-[9px] font-semibold uppercase text-muted-foreground"
               title="Arxivlangan (no-aktiv) — yana sotila boshlasa avtomatik aktivga qaytadi">no aktiv</span>
+          )}
+          {sdOgoh && (
+            <span
+              className="shrink-0 rounded border border-destructive/60 bg-destructive/10 px-1.5 py-px text-[9px] font-bold text-destructive"
+              title={`Kelgandan keyin ${Math.round(sdOgoh.natijaviy)} kunlik zaxira bo'ladi — chegara ${sdOgoh.limit} kun`}
+            >
+              ortiqcha zaxira
+            </span>
           )}
           {pendingQty != null && !picked && (
             <span className="shrink-0 rounded border border-amber-500/60 bg-amber-500/10 px-1.5 py-px text-[9px] font-semibold text-amber-700 dark:text-amber-400"
@@ -184,8 +213,21 @@ const SkuRow = memo(function SkuRow({
           ? (Math.round(jamiBlok * 100) / 100).toLocaleString("uz-UZ", { maximumFractionDigits: 2 })
           : <span className="text-muted-foreground/40">—</span>}
       </TableCell>
-      <TableCell className="text-right tabular-nums text-xs font-semibold" title="Jami dona (filiallar yig'indisi)">
+      <TableCell
+        className={cn("text-right tabular-nums text-xs font-semibold", sdOgoh && "text-destructive")}
+        title={
+          sdOgoh
+            ? `Ortiqcha zakaz: kelgandan keyin ${Math.round(sdOgoh.natijaviy)} kunlik zaxira bo'ladi ` +
+              `(chegara ${sdOgoh.limit} kun). Chegaraga sig'adigan miqdor: ${sdOgoh.ruxsat.toLocaleString("uz-UZ")} dona.`
+            : "Jami dona (filiallar yig'indisi)"
+        }
+      >
         {jamiQty > 0 ? jamiQty.toLocaleString("uz-UZ") : <span className="text-muted-foreground/40">—</span>}
+        {sdOgoh && (
+          <div className="text-[9px] font-bold leading-tight">
+            {Math.round(sdOgoh.natijaviy)} kun › {sdOgoh.limit}
+          </div>
+        )}
       </TableCell>
       <TableCell className="bg-primary/[0.03] px-1.5">
         <Input ref={h.regRef(it.productId, "price")} type="number" inputMode="decimal" value={l.price}

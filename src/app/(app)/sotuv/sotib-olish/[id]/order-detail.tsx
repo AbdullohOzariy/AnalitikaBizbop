@@ -13,7 +13,8 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { Pill } from "@/components/common/page";
-import { Loader2, Save, Send, PackageCheck, RotateCcw, Trash2, Truck, FileDown, Star, Copy } from "lucide-react";
+import { Loader2, Save, Send, PackageCheck, RotateCcw, Trash2, Truck, FileDown, Star, Copy, ShieldAlert } from "lucide-react";
+import type { OshganQator } from "@/lib/zakaz/stockday-limit";
 import { cn } from "@/lib/utils";
 import { formatUZS, formatDateTimeUZ } from "@/lib/format";
 import {
@@ -64,6 +65,12 @@ export function OrderDetail({ order, roles, isOwner }: { order: OrderData; roles
   );
   const [note, setNote] = useState(order.note);
   const [delOpen, setDelOpen] = useState(false);
+  // Maksimal zakaz chegarasidan oshgan qatorlar — ACCEPTED tasdiqlash dialogi uchun
+  const [excess, setExcess] = useState<{
+    rows: OshganQator[];
+    status: OrderStatusT;
+    okMsg: string;
+  } | null>(null);
   const [saving, startSave] = useTransition();
   const [statusing, startStatus] = useTransition();
   const [sending, startSend] = useTransition();
@@ -155,10 +162,25 @@ export function OrderDetail({ order, roles, isOwner }: { order: OrderData; roles
     });
   };
 
-  const changeStatus = (st: OrderStatusT, okMsg: string) =>
+  /**
+   * Holatni o'zgartirish. ACCEPTED da server MAKSIMAL ZAKAZ chegarasidan oshgan
+   * qatorlarni qaytarsa (`needsConfirm`) — ro'yxat ko'rsatiladi va tasdiq so'raladi.
+   * Bloklamaydi: mavsum/aksiya uchun ataylab ko'p olinishi mumkin.
+   */
+  const changeStatus = (st: OrderStatusT, okMsg: string, confirmExcess = false) =>
     startStatus(async () => {
-      const res = await setOrderStatusAction(order.id, st);
-      if (res.ok) { toast.success(okMsg); router.refresh(); } else toast.error(res.error);
+      const res = await setOrderStatusAction(order.id, st, confirmExcess ? { confirmExcess: true } : undefined);
+      if (res.ok) {
+        setExcess(null);
+        toast.success(okMsg);
+        router.refresh();
+        return;
+      }
+      if ("needsConfirm" in res) {
+        setExcess({ rows: res.excess, status: st, okMsg });
+        return;
+      }
+      toast.error(res.error);
     });
 
   const del = () =>
@@ -436,6 +458,77 @@ export function OrderDetail({ order, roles, isOwner }: { order: OrderData; roles
             <Button variant="outline" className="rounded-xl" disabled={busy} onClick={() => setDelOpen(false)}>Bekor</Button>
             <Button variant="destructive" className="rounded-xl" disabled={busy} onClick={del}>
               {statusing ? <Loader2 className="h-4 w-4 animate-spin" /> : "O'chirish"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* MAKSIMAL ZAKAZ nazorati — chegaradan oshgan qatorlar tasdiqlanadi */}
+      <Dialog open={excess != null} onOpenChange={(o) => !o && setExcess(null)}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShieldAlert className="h-4 w-4 text-destructive" />
+              Ortiqcha zaxira — {excess?.rows.length} SKU
+            </DialogTitle>
+            <DialogDescription className="text-sm text-muted-foreground">
+              Bu SKU&apos;larda kelgan tovar belgilangan chegaradan uzoqroq vaqtga yetadi.
+              Mavsum yoki aksiya uchun ataylab shunday olingan bo&apos;lsa — tasdiqlang.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="max-h-72 overflow-y-auto rounded-xl border border-border">
+            <table className="w-full text-sm">
+              <thead className="border-b border-border/60 bg-muted/40 text-[11px] uppercase text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2 text-left font-semibold">SKU</th>
+                  <th className="px-2 py-2 text-right font-semibold">Zakaz</th>
+                  <th className="px-2 py-2 text-right font-semibold">Qoldiq</th>
+                  <th className="px-2 py-2 text-right font-semibold">Zaxira</th>
+                  <th className="px-2 py-2 text-right font-semibold">Sig&apos;adigan</th>
+                </tr>
+              </thead>
+              <tbody>
+                {excess?.rows.map((r) => (
+                  <tr key={r.productId} className="border-b border-border/40 last:border-0">
+                    <td className="px-3 py-1.5">
+                      <div className="max-w-[220px] truncate" title={r.name}>{r.name}</div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {r.code}
+                        {r.kategoriya && ` · ${r.kategoriya}`}
+                      </div>
+                    </td>
+                    <td className="px-2 py-1.5 text-right tabular-nums font-semibold">
+                      {Math.round(r.qty).toLocaleString("uz-UZ")}
+                    </td>
+                    <td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground">
+                      {Math.round(r.stock).toLocaleString("uz-UZ")}
+                    </td>
+                    <td className="px-2 py-1.5 text-right tabular-nums font-bold text-destructive">
+                      {Math.round(r.natijaviy)} kun
+                      <div className="text-[11px] font-normal text-muted-foreground">
+                        chegara {r.limit}
+                      </div>
+                    </td>
+                    <td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground">
+                      {r.ruxsatEtilgan.toLocaleString("uz-UZ")}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" className="rounded-xl" disabled={busy} onClick={() => setExcess(null)}>
+              Bekor — tuzataman
+            </Button>
+            <Button
+              className="rounded-xl"
+              disabled={busy}
+              onClick={() => excess && changeStatus(excess.status, excess.okMsg, true)}
+            >
+              {statusing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Tasdiqlab davom etish"}
             </Button>
           </DialogFooter>
         </DialogContent>

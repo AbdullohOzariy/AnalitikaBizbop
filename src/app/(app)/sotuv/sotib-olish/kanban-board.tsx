@@ -50,9 +50,21 @@ export function KanbanBoard({ cards, roles }: { cards: KanbanCard[]; roles: read
     const label = TRANSITION_LABEL[to] ?? to;
     if ((to === "RETURNED" || to === "DRAFT") && !confirm(`#${card.id} — "${label}"?`)) return;
     start(async () => {
-      const res = await setOrderStatusAction(card.id, to);
+      let res = await setOrderStatusAction(card.id, to);
+      // MAKSIMAL ZAKAZ nazorati: chegaradan oshgan qatorlar bo'lsa tasdiq so'raladi.
+      // Kanbanda joy tor — qisqa xulosa bilan confirm; to'liq ro'yxat zakaz sahifasida.
+      if (!res.ok && "needsConfirm" in res) {
+        const eng = res.excess[0];
+        const ok = confirm(
+          `#${card.id}: ${res.excess.length} SKU chegaradan oshgan.\n` +
+            `Masalan "${eng.name}" — kelgandan keyin ${Math.round(eng.natijaviy)} kunlik zaxira ` +
+            `(chegara ${eng.limit} kun).\n\nShunday bo'lsa ham qabul qilinsinmi?`
+        );
+        if (!ok) return;
+        res = await setOrderStatusAction(card.id, to, { confirmExcess: true });
+      }
       if (res.ok) { toast.success(`#${card.id} → ${ORDER_STATUS_LABEL[to]}`); router.refresh(); }
-      else toast.error(res.error);
+      else if (!("needsConfirm" in res)) toast.error(res.error);
     });
   };
 
