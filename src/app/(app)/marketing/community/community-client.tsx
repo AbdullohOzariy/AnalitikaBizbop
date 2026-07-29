@@ -12,10 +12,10 @@ import {
   RefreshCw,
   Trash2,
   Pencil,
-  ChevronRight,
   Loader2,
 } from "lucide-react";
-import { SectionCard, EmptyState, Pill } from "@/components/common/page";
+import { EmptyState, Pill } from "@/components/common/page";
+import { DataTable, type Ustun } from "@/components/common/data-table";
 import { Button } from "@/components/ui/button";
 import { formatDateTimeUZ } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -44,6 +44,15 @@ const STATUS_NOM: Record<string, string> = {
   NO: "YO'Q",
   UNANSWERED: "JAVOBSIZ",
   UNCLEAR: "NOANIQ",
+};
+const KIND_NOM: Record<string, string> = {
+  PRODUCT: "Mahsulot",
+  PRICE: "Narx",
+  PROMO: "Aksiya",
+  COMPLAINT: "Shikoyat",
+  RETURN: "Qaytarish",
+  SERVICE: "Xizmat",
+  OTHER: "Boshqa",
 };
 
 export function CommunityClient({
@@ -93,6 +102,14 @@ export function CommunityClient({
     });
   }
 
+  const sorovUstunlari = sorovUstunlar({
+    canEdit,
+    pending,
+    onTahrir: setTahrir,
+    onStatus: (id, s) => amal(() => tuzatStatus({ requestId: id, status: s })),
+    onOchir: (id) => amal(() => sorovniOchir(id)),
+  });
+
   return (
     <div className="flex flex-col gap-4">
       <FilialFiltr filiallar={filiallar} joriy={branchId} />
@@ -128,18 +145,22 @@ export function CommunityClient({
         )}
       </div>
 
+      <p className="text-xs text-muted-foreground">
+        Ustun sarlavhasini bosing — saralanadi; yonidagi belgi orqali qiymat bo&apos;yicha
+        filtrlanadi.
+      </p>
+
       {xabar && (
         <div className="rounded-xl border border-border bg-muted/50 px-4 py-2 text-sm">{xabar}</div>
       )}
 
       {tab === "sorovlar" && (
-        <SorovlarJadval
+        <DataTable
           rows={sorovlar}
-          canEdit={canEdit}
-          pending={pending}
-          onTahrir={setTahrir}
-          onStatus={(id, s) => amal(() => tuzatStatus({ requestId: id, status: s }))}
-          onOchir={(id) => amal(() => sorovniOchir(id))}
+          ustunlar={sorovUstunlari}
+          kalit={(r) => r.id}
+          bosh="So'rov yo'q"
+          boshIcon={MessagesSquare}
         />
       )}
 
@@ -150,14 +171,12 @@ export function CommunityClient({
       )}
 
       {tab === "moslanmagan" && (
-        <SorovlarJadval
+        <DataTable
           rows={moslanmagan}
-          canEdit={canEdit}
-          pending={pending}
-          onTahrir={setTahrir}
-          onStatus={(id, s) => amal(() => tuzatStatus({ requestId: id, status: s }))}
-          onOchir={(id) => amal(() => sorovniOchir(id))}
+          ustunlar={sorovUstunlari}
+          kalit={(r) => r.id}
           bosh="Hammasi kanonga bog'langan"
+          boshIcon={MessagesSquare}
         />
       )}
 
@@ -174,6 +193,195 @@ export function CommunityClient({
       )}
     </div>
   );
+}
+
+/** So'rovlar jadvali ustunlari — "So'rovlar" va "Moslanmagan" tablari uchun bir xil. */
+function sorovUstunlar(opts: {
+  canEdit: boolean;
+  pending: boolean;
+  onTahrir: (s: SorovQator) => void;
+  onStatus: (id: number, s: string) => void;
+  onOchir: (id: number) => void;
+}): Ustun<SorovQator>[] {
+  const { canEdit, pending, onTahrir, onStatus, onOchir } = opts;
+
+  const ustunlar: Ustun<SorovQator>[] = [
+    {
+      key: "vaqt",
+      nom: "Vaqt",
+      qiymat: (r) => new Date(r.askedAt).getTime(),
+      render: (r) => (
+        <span className="whitespace-nowrap text-xs text-muted-foreground">
+          {formatDateTimeUZ(r.askedAt)}
+        </span>
+      ),
+    },
+    {
+      key: "sorov",
+      nom: "So'ralgan",
+      qiymat: (r) => r.productText ?? r.kind,
+      render: (r) => (
+        <div>
+          <div className="font-medium">
+            {r.productText || <span className="text-muted-foreground">—</span>}
+          </div>
+          {r.productNorm && <div className="text-[11px] text-muted-foreground">{r.productNorm}</div>}
+        </div>
+      ),
+    },
+    {
+      key: "tur",
+      nom: "Tur",
+      qiymat: (r) => r.kind,
+      filtrlanadi: true,
+      yorliq: (v) => KIND_NOM[v] ?? v,
+      render: (r) => <span className="text-xs">{KIND_NOM[r.kind] ?? r.kind}</span>,
+    },
+    {
+      key: "kanon",
+      nom: "Kanon",
+      qiymat: (r) => r.canonName,
+      filtrlanadi: true,
+      render: (r) =>
+        r.canonName ? (
+          <span className="text-xs font-medium">{r.canonName}</span>
+        ) : (
+          <span className="text-xs text-muted-foreground">bog&apos;lanmagan</span>
+        ),
+    },
+    {
+      key: "kategoriya",
+      nom: "Kategoriya",
+      qiymat: (r) => r.categoryName,
+      filtrlanadi: true,
+      render: (r) => <span className="text-xs text-muted-foreground">{r.categoryName ?? "—"}</span>,
+    },
+    {
+      key: "filial",
+      nom: "Filial",
+      qiymat: (r) => r.branchName,
+      filtrlanadi: true,
+      render: (r) => <span className="text-xs">{r.branchName ?? "—"}</span>,
+    },
+    {
+      key: "moslik",
+      nom: "Moslik",
+      qiymat: (r) => r.matchStatus,
+      filtrlanadi: true,
+      render: (r) =>
+        r.matchStatus === "PENDING" ? (
+          <span className="text-xs text-muted-foreground">—</span>
+        ) : (
+          <Pill
+            tone={
+              r.matchStatus === "MANUAL" ? "violet" : r.matchStatus === "NONE" ? "muted" : "blue"
+            }
+          >
+            {r.matchStatus}
+          </Pill>
+        ),
+    },
+    {
+      key: "holat",
+      nom: "Holat",
+      qiymat: (r) => r.status,
+      filtrlanadi: true,
+      yorliq: (v) => STATUS_NOM[v] ?? v,
+      render: (r) =>
+        canEdit ? (
+          <div className="flex gap-1">
+            {(["YES", "NO", "UNANSWERED"] as const).map((s) => (
+              <button
+                key={s}
+                disabled={pending}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onStatus(r.id, s);
+                }}
+                title={STATUS_NOM[s]}
+                className={cn(
+                  "rounded-lg border p-1 transition",
+                  r.status === s
+                    ? s === "YES"
+                      ? "border-primary/30 bg-primary/10 text-primary"
+                      : s === "NO"
+                        ? "border-destructive/30 bg-destructive/10 text-destructive"
+                        : "border-amber-500/30 bg-amber-500/10 text-amber-600"
+                    : "border-transparent text-muted-foreground hover:bg-muted"
+                )}
+              >
+                {s === "YES" ? (
+                  <Check className="h-3.5 w-3.5" />
+                ) : s === "NO" ? (
+                  <X className="h-3.5 w-3.5" />
+                ) : (
+                  <HelpCircle className="h-3.5 w-3.5" />
+                )}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <Pill tone={STATUS_TONE[r.status] ?? "muted"}>{STATUS_NOM[r.status] ?? r.status}</Pill>
+        ),
+    },
+    {
+      key: "javob",
+      nom: "Javob",
+      ong: true,
+      qiymat: (r) => r.answerMinutes,
+      render: (r) => (
+        <div className="whitespace-nowrap text-xs text-muted-foreground">
+          {r.answerMinutes != null ? (
+            <span className="inline-flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              {r.answerMinutes} daq
+            </span>
+          ) : (
+            "—"
+          )}
+          {r.priceQuoted && <div className="tabular-nums">{r.priceQuoted}</div>}
+        </div>
+      ),
+    },
+  ];
+
+  if (canEdit) {
+    ustunlar.push({
+      key: "amal",
+      nom: "",
+      ong: true,
+      saralanmaydi: true,
+      qiymat: () => null,
+      render: (r) => (
+        <div className="whitespace-nowrap">
+          <button
+            disabled={pending}
+            onClick={(e) => {
+              e.stopPropagation();
+              onTahrir(r);
+            }}
+            className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+            title="Kanon/kategoriyani tuzatish"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+          <button
+            disabled={pending}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (confirm("So'rov o'chirilsinmi? (statistikadan chiqadi)")) onOchir(r.id);
+            }}
+            className="rounded-lg p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+            title="O'chirish"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      ),
+    });
+  }
+
+  return ustunlar;
 }
 
 /**
@@ -206,7 +414,9 @@ function FilialFiltr({
         onClick={() => tanla(null)}
         className={cn(
           "rounded-lg px-2.5 py-1 text-xs font-medium transition",
-          joriy == null ? "bg-foreground text-background" : "bg-muted text-muted-foreground hover:bg-muted/70"
+          joriy == null
+            ? "bg-foreground text-background"
+            : "bg-muted text-muted-foreground hover:bg-muted/70"
         )}
       >
         Barchasi
@@ -217,7 +427,9 @@ function FilialFiltr({
           onClick={() => tanla(b.id)}
           className={cn(
             "rounded-lg px-2.5 py-1 text-xs font-medium transition",
-            joriy === b.id ? "bg-foreground text-background" : "bg-muted text-muted-foreground hover:bg-muted/70"
+            joriy === b.id
+              ? "bg-foreground text-background"
+              : "bg-muted text-muted-foreground hover:bg-muted/70"
           )}
         >
           {b.name}
@@ -227,200 +439,76 @@ function FilialFiltr({
   );
 }
 
-function SorovlarJadval({
-  rows,
-  canEdit,
-  pending,
-  onTahrir,
-  onStatus,
-  onOchir,
-  bosh,
-}: {
-  rows: SorovQator[];
-  canEdit: boolean;
-  pending: boolean;
-  onTahrir: (s: SorovQator) => void;
-  onStatus: (id: number, s: string) => void;
-  onOchir: (id: number) => void;
-  bosh?: string;
-}) {
-  if (rows.length === 0) return <EmptyState icon={MessagesSquare} title={bosh ?? "So'rov yo'q"} />;
-  return (
-    <SectionCard bodyClassName="p-0">
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="border-b border-border/60 text-[11px] uppercase text-muted-foreground">
-            <tr>
-              <th className="px-3 py-2 text-left font-semibold">Vaqt</th>
-              <th className="px-3 py-2 text-left font-semibold">So'ralgan</th>
-              <th className="px-3 py-2 text-left font-semibold">Kanon / kategoriya</th>
-              <th className="px-3 py-2 text-left font-semibold">Filial</th>
-              <th className="px-3 py-2 text-left font-semibold">Holat</th>
-              <th className="px-3 py-2 text-right font-semibold">Javob</th>
-              {canEdit && <th className="px-3 py-2" />}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.id} className="border-b border-border/40 last:border-0 hover:bg-muted/30">
-                <td className="whitespace-nowrap px-3 py-2 text-xs text-muted-foreground">
-                  {formatDateTimeUZ(r.askedAt)}
-                </td>
-                <td className="px-3 py-2">
-                  <div className="font-medium">
-                    {r.productText || <span className="text-muted-foreground">— {r.kind} —</span>}
-                  </div>
-                  {r.productNorm && (
-                    <div className="text-[11px] text-muted-foreground">{r.productNorm}</div>
-                  )}
-                </td>
-                <td className="px-3 py-2">
-                  {r.canonName ? (
-                    <div className="text-xs font-medium">{r.canonName}</div>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">bog&apos;lanmagan</span>
-                  )}
-                  {r.categoryName && (
-                    <div className="text-[11px] text-muted-foreground">{r.categoryName}</div>
-                  )}
-                  {r.matchStatus !== "PENDING" && (
-                    <Pill
-                      tone={
-                        r.matchStatus === "MANUAL"
-                          ? "violet"
-                          : r.matchStatus === "NONE"
-                            ? "muted"
-                            : "blue"
-                      }
-                    >
-                      {r.matchStatus}
-                    </Pill>
-                  )}
-                </td>
-                <td className="px-3 py-2 text-xs">{r.branchName ?? "—"}</td>
-                <td className="px-3 py-2">
-                  {canEdit ? (
-                    <div className="flex gap-1">
-                      {(["YES", "NO", "UNANSWERED"] as const).map((s) => (
-                        <button
-                          key={s}
-                          disabled={pending}
-                          onClick={() => onStatus(r.id, s)}
-                          title={STATUS_NOM[s]}
-                          className={cn(
-                            "rounded-lg border p-1 transition",
-                            r.status === s
-                              ? s === "YES"
-                                ? "border-primary/30 bg-primary/10 text-primary"
-                                : s === "NO"
-                                  ? "border-destructive/30 bg-destructive/10 text-destructive"
-                                  : "border-amber-500/30 bg-amber-500/10 text-amber-600"
-                              : "border-transparent text-muted-foreground hover:bg-muted"
-                          )}
-                        >
-                          {s === "YES" ? (
-                            <Check className="h-3.5 w-3.5" />
-                          ) : s === "NO" ? (
-                            <X className="h-3.5 w-3.5" />
-                          ) : (
-                            <HelpCircle className="h-3.5 w-3.5" />
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <Pill tone={STATUS_TONE[r.status] ?? "muted"}>
-                      {STATUS_NOM[r.status] ?? r.status}
-                    </Pill>
-                  )}
-                </td>
-                <td className="whitespace-nowrap px-3 py-2 text-right text-xs text-muted-foreground">
-                  {r.answerMinutes != null ? (
-                    <span className="inline-flex items-center gap-1">
-                      <Clock className="h-3 w-3" />
-                      {r.answerMinutes} daq
-                    </span>
-                  ) : (
-                    "—"
-                  )}
-                  {r.priceQuoted && <div className="tabular-nums">{r.priceQuoted}</div>}
-                </td>
-                {canEdit && (
-                  <td className="whitespace-nowrap px-3 py-2 text-right">
-                    <button
-                      disabled={pending}
-                      onClick={() => onTahrir(r)}
-                      className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                      title="Kanon/kategoriyani tuzatish"
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      disabled={pending}
-                      onClick={() => {
-                        if (confirm("So'rov o'chirilsinmi? (statistikadan chiqadi)")) onOchir(r.id);
-                      }}
-                      className="rounded-lg p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                      title="O'chirish"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </SectionCard>
-  );
-}
-
 function KategoriyalarJadval({ rows }: { rows: KategoriyaQator[] }) {
   if (rows.length === 0) return <EmptyState icon={MessagesSquare} title="Ma'lumot yo'q" />;
   const max = Math.max(1, ...rows.map((r) => r.jami));
+
+  const ustunlar: Ustun<KategoriyaQator>[] = [
+    {
+      key: "kategoriya",
+      nom: "Subkategoriya",
+      qiymat: (r) => r.nom,
+      filtrlanadi: true,
+      render: (r) => <span className="font-medium">{r.nom}</span>,
+    },
+    {
+      key: "bolim",
+      nom: "Bo'lim",
+      qiymat: (r) => r.parent || null,
+      filtrlanadi: true,
+      render: (r) => <span className="text-xs text-muted-foreground">{r.parent || "—"}</span>,
+    },
+    {
+      key: "ulush",
+      nom: "Ulush",
+      saralanmaydi: true,
+      qiymat: (r) => r.jami,
+      render: (r) => (
+        <div className="flex h-4 w-40 overflow-hidden rounded bg-muted">
+          <div className="h-full bg-primary/70" style={{ width: `${(r.yes / max) * 100}%` }} />
+          <div className="h-full bg-destructive/60" style={{ width: `${(r.no / max) * 100}%` }} />
+          <div
+            className="h-full bg-muted-foreground/25"
+            style={{ width: `${((r.jami - r.yes - r.no) / max) * 100}%` }}
+          />
+        </div>
+      ),
+    },
+    {
+      key: "yes",
+      nom: "Bor",
+      ong: true,
+      qiymat: (r) => r.yes,
+      render: (r) => <span className="tabular-nums text-primary">{r.yes || "—"}</span>,
+    },
+    {
+      key: "no",
+      nom: "Yo'q",
+      ong: true,
+      qiymat: (r) => r.no,
+      render: (r) => <span className="tabular-nums text-destructive">{r.no || "—"}</span>,
+    },
+    {
+      key: "jami",
+      nom: "Jami",
+      ong: true,
+      qiymat: (r) => r.jami,
+      render: (r) => <span className="font-semibold tabular-nums">{r.jami}</span>,
+    },
+  ];
+
   return (
-    <SectionCard
-      title="Kategoriya bo'yicha murojaatlar"
-      description="Mahsulot va narx so'rovlari; katalogda bo'lmagan mahsulot ham kategoriyaga biriktiriladi"
-    >
-      <div className="flex flex-col gap-2">
-        {rows.map((r) => (
-          <div key={r.categoryId ?? "yoq"} className="flex items-center gap-3 text-sm">
-            <div className="w-56 shrink-0 truncate">
-              <span className="font-medium">{r.nom}</span>
-              {r.parent && (
-                <span className="ml-1 text-[11px] text-muted-foreground">{r.parent}</span>
-              )}
-            </div>
-            <div className="flex h-5 flex-1 overflow-hidden rounded bg-muted">
-              <div
-                className="h-full bg-primary/70"
-                style={{ width: `${(r.yes / max) * 100}%` }}
-                title={`HA: ${r.yes}`}
-              />
-              <div
-                className="h-full bg-destructive/60"
-                style={{ width: `${(r.no / max) * 100}%` }}
-                title={`YO'Q: ${r.no}`}
-              />
-              <div
-                className="h-full bg-muted-foreground/25"
-                style={{ width: `${((r.jami - r.yes - r.no) / max) * 100}%` }}
-              />
-            </div>
-            <span className="w-10 shrink-0 text-right font-semibold tabular-nums">{r.jami}</span>
-            <span className="w-24 shrink-0 text-right text-xs text-muted-foreground tabular-nums">
-              {r.yes} / {r.no}
-            </span>
-          </div>
-        ))}
-      </div>
-    </SectionCard>
+    <DataTable
+      rows={rows}
+      ustunlar={ustunlar}
+      kalit={(r) => r.categoryId ?? "yoq"}
+      bosh="Ma'lumot yo'q"
+      boshIcon={MessagesSquare}
+    />
   );
 }
 
-/** "Berilmagan" ro'yxati — qatorni bosganda ochiladigan to'liq tarix bilan. */
+/** "Berilmagan" ro'yxati — qatorni bosganda to'liq tarix ochiladi. */
 function YoqJadval({
   rows,
   from,
@@ -434,22 +522,14 @@ function YoqJadval({
   branchId: number | null;
   canEdit: boolean;
 }) {
-  const [ochiq, setOchiq] = useState<string | null>(null);
   const [kesh, setKesh] = useState<Record<string, TafsilotQator[]>>({});
   const [yuklanmoqda, setYuklanmoqda] = useState<string | null>(null);
 
-  if (rows.length === 0) return <EmptyState icon={MessagesSquare} title="Ma'lumot yo'q" />;
-
   const kalit = (r: MahsulotQator) => (r.canonId != null ? `c${r.canonId}` : `n${r.nom}`);
 
-  async function toggle(r: MahsulotQator) {
+  async function yukla(r: MahsulotQator) {
     const k = kalit(r);
-    if (ochiq === k) {
-      setOchiq(null);
-      return;
-    }
-    setOchiq(k);
-    if (kesh[k] || !canEdit) return; // bir marta yuklanadi
+    if (kesh[k] || !canEdit) return;
     setYuklanmoqda(k);
     try {
       const res = await yoqTafsilotAction({
@@ -465,103 +545,126 @@ function YoqJadval({
     }
   }
 
-  return (
-    <SectionCard
-      title="So'ralgan, lekin berilmagan"
-      description="Assortiment bo'shlig'i. Qatorni bosing — qachon yo'q deyilgani va operator javobi ko'rinadi"
-      bodyClassName="p-0"
-    >
-      <div className="divide-y divide-border/40">
-        {rows.map((r) => {
-          const k = kalit(r);
-          const open = ochiq === k;
-          return (
-            <div key={k}>
-              <button
-                onClick={() => toggle(r)}
-                className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm hover:bg-muted/30"
-              >
-                <ChevronRight
-                  className={cn("h-4 w-4 shrink-0 text-muted-foreground transition", open && "rotate-90")}
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{r.nom}</span>
-                    {!r.yechilgan && (
-                      <Pill tone="muted">yechilmagan</Pill>
-                    )}
-                    {r.yesBor > 0 && <Pill tone="green">keyin bor bo&apos;lgan</Pill>}
-                  </div>
-                  <div className="text-[11px] text-muted-foreground">
-                    {r.kategoriya ?? "kategoriya aniqlanmagan"}
-                    {r.birinchi && (
-                      <>
-                        {" · "}
-                        {r.birinchi === r.oxirgi
-                          ? r.birinchi
-                          : `${r.birinchi} … ${r.oxirgi}`}{" "}
-                        oralig&apos;ida yo&apos;q edi
-                      </>
-                    )}
-                  </div>
-                </div>
-                <div className="shrink-0 text-right">
-                  <div className="font-semibold tabular-nums text-destructive">{r.no || "—"}</div>
-                  <div className="text-[11px] text-muted-foreground">
-                    {r.unanswered > 0 && `${r.unanswered} javobsiz`}
-                  </div>
-                </div>
-                <div className="w-10 shrink-0 text-right font-semibold tabular-nums">{r.jami}</div>
-              </button>
+  const ustunlar: Ustun<MahsulotQator>[] = [
+    {
+      key: "mahsulot",
+      nom: "Mahsulot",
+      qiymat: (r) => r.nom,
+      render: (r) => (
+        <div className="flex items-center gap-2">
+          <span className="font-medium">{r.nom}</span>
+          {!r.yechilgan && <Pill tone="muted">yechilmagan</Pill>}
+          {r.yesBor > 0 && <Pill tone="green">keyin bor bo&apos;lgan</Pill>}
+        </div>
+      ),
+    },
+    {
+      key: "kategoriya",
+      nom: "Kategoriya",
+      qiymat: (r) => r.kategoriya,
+      filtrlanadi: true,
+      render: (r) => (
+        <span className="text-xs text-muted-foreground">{r.kategoriya ?? "aniqlanmagan"}</span>
+      ),
+    },
+    {
+      key: "davr",
+      nom: "Yo'q bo'lgan davr",
+      qiymat: (r) => r.birinchi,
+      render: (r) => (
+        <span className="whitespace-nowrap text-xs text-muted-foreground">
+          {r.birinchi === r.oxirgi ? r.birinchi : `${r.birinchi} … ${r.oxirgi}`}
+        </span>
+      ),
+    },
+    {
+      key: "no",
+      nom: "Yo'q",
+      ong: true,
+      qiymat: (r) => r.no,
+      render: (r) => (
+        <span className="font-semibold tabular-nums text-destructive">{r.no || "—"}</span>
+      ),
+    },
+    {
+      key: "javobsiz",
+      nom: "Javobsiz",
+      ong: true,
+      qiymat: (r) => r.unanswered,
+      render: (r) => (
+        <span className="tabular-nums text-muted-foreground">{r.unanswered || "—"}</span>
+      ),
+    },
+    {
+      key: "jami",
+      nom: "Jami",
+      ong: true,
+      qiymat: (r) => r.jami,
+      render: (r) => <span className="font-semibold tabular-nums">{r.jami}</span>,
+    },
+  ];
 
-              {open && (
-                <div className="bg-muted/20 px-4 py-3">
-                  {yuklanmoqda === k ? (
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" /> yuklanmoqda…
-                    </div>
-                  ) : !canEdit ? (
-                    <p className="text-xs text-muted-foreground">Tafsilot faqat adminlarga ko&apos;rinadi.</p>
-                  ) : (kesh[k] ?? []).length === 0 ? (
-                    <p className="text-xs text-muted-foreground">Tafsilot topilmadi.</p>
-                  ) : (
-                    <div className="flex flex-col gap-2.5">
-                      {(kesh[k] ?? []).map((t) => (
-                        <div key={t.id} className="rounded-xl border border-border/60 bg-card p-2.5">
-                          <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                            <Pill tone={STATUS_TONE[t.status] ?? "muted"}>
-                              {STATUS_NOM[t.status] ?? t.status}
-                            </Pill>
-                            <span>{formatDateTimeUZ(t.askedAt)}</span>
-                            {t.branchName && <span>· {t.branchName}</span>}
-                            {t.answerMinutes != null && <span>· {t.answerMinutes} daq</span>}
-                          </div>
-                          <div className="mt-1 text-sm">{t.productText ?? "—"}</div>
-                          {t.javoblar.length > 0 ? (
-                            <div className="mt-1.5 border-l-2 border-primary/40 pl-2.5">
-                              {t.javoblar.map((j) => (
-                                <div key={j.messageId} className="text-xs text-muted-foreground">
-                                  <span className="font-medium text-foreground">Operator:</span>{" "}
-                                  {j.text || (j.mediaKind ? `[${j.mediaKind}]` : "—")}
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="mt-1.5 text-xs italic text-amber-600 dark:text-amber-400">
-                              javob berilmagan
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
+  return (
+    <DataTable
+      rows={rows}
+      ustunlar={ustunlar}
+      kalit={kalit}
+      bosh="Ma'lumot yo'q"
+      boshIcon={MessagesSquare}
+      onOpen={yukla}
+      expand={(r) => {
+        const k = kalit(r);
+        if (yuklanmoqda === k) {
+          return (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> yuklanmoqda…
             </div>
           );
-        })}
-      </div>
-    </SectionCard>
+        }
+        if (!canEdit) {
+          return (
+            <p className="text-xs text-muted-foreground">
+              Tafsilot faqat adminlarga ko&apos;rinadi.
+            </p>
+          );
+        }
+        const qatorlar = kesh[k] ?? [];
+        if (qatorlar.length === 0) {
+          return <p className="text-xs text-muted-foreground">Tafsilot topilmadi.</p>;
+        }
+        return (
+          <div className="flex flex-col gap-2.5">
+            {qatorlar.map((t) => (
+              <div key={t.id} className="rounded-xl border border-border/60 bg-card p-2.5">
+                <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                  <Pill tone={STATUS_TONE[t.status] ?? "muted"}>
+                    {STATUS_NOM[t.status] ?? t.status}
+                  </Pill>
+                  <span>{formatDateTimeUZ(t.askedAt)}</span>
+                  {t.branchName && <span>· {t.branchName}</span>}
+                  {t.answerMinutes != null && <span>· {t.answerMinutes} daq</span>}
+                </div>
+                <div className="mt-1 text-sm">{t.productText ?? "—"}</div>
+                {t.javoblar.length > 0 ? (
+                  <div className="mt-1.5 border-l-2 border-primary/40 pl-2.5">
+                    {t.javoblar.map((j) => (
+                      <div key={j.messageId} className="text-xs text-muted-foreground">
+                        <span className="font-medium text-foreground">Operator:</span>{" "}
+                        {j.text || (j.mediaKind ? `[${j.mediaKind}]` : "—")}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-1.5 text-xs italic text-amber-600 dark:text-amber-400">
+                    javob berilmagan
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        );
+      }}
+    />
   );
 }
 
@@ -618,8 +721,8 @@ function TahrirOyna({
           {sorov.productNorm && ` (${sorov.productNorm})`}
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
-          Tuzatish shu yozilishdagi <b>barcha</b> so&apos;rovlarga qo&apos;llanadi va
-          kelajakda ham eslab qolinadi.
+          Tuzatish shu yozilishdagi <b>barcha</b> so&apos;rovlarga qo&apos;llanadi va kelajakda ham
+          eslab qolinadi.
         </p>
 
         <div className="mt-4 flex gap-2">
@@ -663,11 +766,7 @@ function TahrirOyna({
         <div className="mt-4 rounded-xl bg-muted/50 p-3 text-sm">
           <div>
             Tanlangan kanon:{" "}
-            {tanlangan ? (
-              <b>{tanlangan.name}</b>
-            ) : (
-              <span className="text-muted-foreground">yo&apos;q</span>
-            )}
+            {tanlangan ? <b>{tanlangan.name}</b> : <span className="text-muted-foreground">yo&apos;q</span>}
             {tanlangan && (
               <button
                 onClick={() => setTanlangan(null)}
@@ -714,9 +813,7 @@ function TahrirOyna({
           <Button
             size="sm"
             disabled={!tanlangan && !yangiNom.trim()}
-            onClick={() =>
-              onSaqla(tanlangan?.id ?? null, tanlangan ? undefined : yangiNom.trim(), catId)
-            }
+            onClick={() => onSaqla(tanlangan?.id ?? null, tanlangan ? undefined : yangiNom.trim(), catId)}
           >
             Saqlash
           </Button>
