@@ -11,3 +11,5 @@ export const TAG_SUPPLIERS = "suppliers";
 export const TAG_BRANCHES = "branches";
 // Strategik hamkorlik (ta'minotchi skorkarti) — yumshoq override saqlanganda invalidatsiya.
 export const TAG_PARTNERSHIP = "partnership";
+// Community (mijozlar guruhi) — AI tahlili yangilanganda yoki qo'lda tuzatilganda.
+export const TAG_COMMUNITY = "community";

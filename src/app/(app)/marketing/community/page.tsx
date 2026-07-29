@@ -1,144 +1,129 @@
 import { redirect } from "next/navigation";
-import { MessagesSquare, Users, CalendarDays, Clock } from "lucide-react";
+import { MessagesSquare, Check, X, HelpCircle, Clock } from "lucide-react";
 import { auth } from "@/auth";
-import { canSeePromo } from "@/lib/roles";
+import { canSeePromo, isSystemAdmin } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { PageHeader, StatCard, SectionCard, EmptyState } from "@/components/common/page";
-import { formatDateTimeUZ } from "@/lib/format";
+import { todayTashkentISO } from "@/lib/date";
+import { tahlilChatId } from "@/lib/community/sozlama";
+import { umumiy, kunlik, kategoriyalar, yoqTop, sorovlar } from "@/lib/community/hisobot";
+import { CommunityClient } from "./community-client";
+import { kategoriyalarRoyxati } from "./actions";
 
 export const metadata = { title: "Community" };
 export const dynamic = "force-dynamic";
 
-export default async function CommunityPage() {
+/** Sana oralig'i: default — oxirgi 30 kun. */
+function davr(sp: Record<string, string | string[] | undefined>): { from: string; to: string } {
+  const bugun = todayTashkentISO();
+  const g = (k: string) => (typeof sp[k] === "string" ? (sp[k] as string) : "");
+  const to = /^\d{4}-\d{2}-\d{2}$/.test(g("to")) ? g("to") : bugun;
+  const from = /^\d{4}-\d{2}-\d{2}$/.test(g("from"))
+    ? g("from")
+    : new Date(new Date(to + "T00:00:00Z").getTime() - 29 * 86_400_000).toISOString().slice(0, 10);
+  return { from, to };
+}
+
+export default async function CommunityPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const session = await auth();
   if (!session?.user || !canSeePromo(session.user.roles)) redirect("/dashboard");
+  const canEdit = isSystemAdmin(session.user.roles);
 
-  const groups = await prisma.tgGroup.findMany({ orderBy: { joinedAt: "asc" } });
+  const sp = await searchParams;
+  const { from, to } = davr(sp);
+  const chatId = await tahlilChatId();
 
-  const [total, byDay, byAuthor, recent] = await Promise.all([
-    prisma.tgGroupMessage.count(),
-    prisma.tgGroupMessage.groupBy({
-      by: ["dayKey"],
-      _count: { _all: true },
-      orderBy: { dayKey: "desc" },
-      take: 14,
-    }),
-    prisma.tgGroupMessage.groupBy({
-      by: ["fromName"],
-      _count: { _all: true },
-      orderBy: { _count: { id: "desc" } },
-      take: 10,
-    }),
-    prisma.tgGroupMessage.findMany({
-      orderBy: { sentAt: "desc" },
-      take: 40,
-      select: {
-        id: true,
-        sentAt: true,
-        fromName: true,
-        text: true,
-        mediaKind: true,
-        replyToId: true,
-        source: true,
-      },
-    }),
+  if (chatId == null) {
+    return (
+      <div className="flex flex-col gap-6">
+        <PageHeader title="Community" description="Mijozlar guruhidagi so'rov va murojaatlar" icon={MessagesSquare} />
+        <EmptyState
+          icon={MessagesSquare}
+          title="Guruh ulanmagan"
+          description="Botni guruhga qo'shing (BotFather'da Privacy mode o'chirilgan bo'lsin) yoki eksportni import qiling."
+        />
+      </div>
+    );
+  }
+
+  const [stat, kunlar, katlar, yoq, royxat, katOpts, xabarSoni] = await Promise.all([
+    umumiy(chatId, from, to),
+    kunlik(chatId, from, to),
+    kategoriyalar(chatId, from, to),
+    yoqTop(chatId, from, to),
+    sorovlar({ chatId, from, to, limit: 300 }),
+    canEdit ? kategoriyalarRoyxati() : Promise.resolve([]),
+    prisma.tgGroupMessage.count({ where: { chatId, dayKey: { gte: from, lte: to } } }),
   ]);
 
-  const authorCount = await prisma.tgGroupMessage
-    .findMany({ distinct: ["fromId"], select: { fromId: true } })
-    .then((r) => r.length);
-
-  const days = byDay.map((d) => d.dayKey).sort();
-  const maxDay = Math.max(1, ...byDay.map((d) => d._count._all));
+  const maxKun = Math.max(1, ...kunlar.map((k) => k.jami));
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Community"
-        description="Mijozlar guruhidagi so'rov va murojaatlar — xom ma'lumot oqimi"
+        description={`Mijozlar guruhidagi so'rovlar — ${from} … ${to}`}
         icon={MessagesSquare}
       />
 
-      {total === 0 ? (
+      {stat.jami === 0 ? (
         <EmptyState
           icon={MessagesSquare}
-          title="Hali xabar yig'ilmagan"
-          description="Botni guruhga qo'shing (BotFather'da Privacy mode o'chirilgan bo'lsin) yoki Telegram Desktop eksportini import qiling: npx tsx scripts/tg-group-import.ts export.json"
+          title="Tahlil qilingan so'rov yo'q"
+          description={
+            xabarSoni > 0
+              ? `Bu davrda ${xabarSoni} ta xabar bor, lekin AI tahlili ishga tushirilmagan.`
+              : "Bu davrda xabar yig'ilmagan."
+          }
         />
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <StatCard label="Xabarlar" value={total.toLocaleString("ru-RU")} icon={MessagesSquare} tone="green" />
-            <StatCard label="Ishtirokchilar" value={authorCount} icon={Users} tone="blue" />
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            <StatCard label="So'rovlar" value={stat.jami} icon={MessagesSquare} tone="violet" hint={`${xabarSoni} xabardan`} />
+            <StatCard label="Bor (HA)" value={stat.yes} icon={Check} tone="green" hint={`${Math.round((stat.yes / stat.jami) * 100)}%`} />
+            <StatCard label="Yo'q" value={stat.no} icon={X} tone="red" hint={`${Math.round((stat.no / stat.jami) * 100)}%`} />
+            <StatCard label="Javobsiz" value={stat.unanswered} icon={HelpCircle} tone="orange" hint={`javob ulushi ${stat.javobUlushi}%`} />
             <StatCard
-              label="Kunlar"
-              value={days.length}
-              icon={CalendarDays}
-              tone="violet"
-              hint={days.length ? `${days[0]} … ${days[days.length - 1]}` : undefined}
-            />
-            <StatCard
-              label="So'nggi xabar"
-              value={recent[0] ? formatDateTimeUZ(recent[0].sentAt) : "—"}
+              label="O'rtacha javob"
+              value={stat.ortachaJavobDaq != null ? `${stat.ortachaJavobDaq} daq` : "—"}
               icon={Clock}
-              tone="orange"
+              tone="blue"
             />
           </div>
 
-          <SectionCard title="Kunlik faollik" description="So'nggi 14 kun">
-            <div className="flex flex-col gap-1.5">
-              {byDay.map((d) => (
-                <div key={d.dayKey} className="flex items-center gap-3 text-xs">
-                  <span className="w-20 shrink-0 text-muted-foreground tabular-nums">{d.dayKey}</span>
-                  <div className="h-4 flex-1 overflow-hidden rounded bg-muted">
-                    <div
-                      className="h-full rounded bg-primary/70"
-                      style={{ width: `${(d._count._all / maxDay) * 100}%` }}
-                    />
-                  </div>
-                  <span className="w-12 shrink-0 text-right font-semibold tabular-nums">{d._count._all}</span>
-                </div>
-              ))}
-            </div>
-          </SectionCard>
-
-          <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
-            <SectionCard title="Eng faol ishtirokchilar">
-              <div className="flex flex-col gap-2">
-                {byAuthor.map((a) => (
-                  <div key={a.fromName ?? "?"} className="flex items-center justify-between gap-2 text-sm">
-                    <span className="truncate">{a.fromName ?? "—"}</span>
-                    <span className="shrink-0 font-semibold tabular-nums text-muted-foreground">
-                      {a._count._all}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </SectionCard>
-
-            <SectionCard title="So'nggi xabarlar" description="Oxirgi 40 ta">
-              <div className="flex flex-col gap-3">
-                {recent.map((m) => (
-                  <div key={m.id} className="border-b border-border/50 pb-2.5 last:border-0 last:pb-0">
-                    <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                      <span className="font-semibold text-foreground">{m.fromName ?? "—"}</span>
-                      <span>{formatDateTimeUZ(m.sentAt)}</span>
-                      {m.replyToId && <span>↩ javob</span>}
-                      {m.mediaKind && <span>[{m.mediaKind}]</span>}
-                      {m.source === "EXPORT" && <span className="opacity-60">eksport</span>}
+          {kunlar.length > 1 && (
+            <SectionCard title="Kunlik dinamika" description="Yashil — bor, qizil — yo'q">
+              <div className="flex flex-col gap-1.5">
+                {kunlar.map((k) => (
+                  <div key={k.dayKey} className="flex items-center gap-3 text-xs">
+                    <span className="w-20 shrink-0 text-muted-foreground tabular-nums">{k.dayKey}</span>
+                    <div className="flex h-4 flex-1 overflow-hidden rounded bg-muted">
+                      <div className="h-full bg-primary/70" style={{ width: `${(k.yes / maxKun) * 100}%` }} />
+                      <div className="h-full bg-destructive/60" style={{ width: `${(k.no / maxKun) * 100}%` }} />
+                      <div
+                        className="h-full bg-muted-foreground/25"
+                        style={{ width: `${((k.jami - k.yes - k.no) / maxKun) * 100}%` }}
+                      />
                     </div>
-                    <p className="mt-0.5 whitespace-pre-wrap text-sm">{m.text || "—"}</p>
+                    <span className="w-10 shrink-0 text-right font-semibold tabular-nums">{k.jami}</span>
                   </div>
                 ))}
               </div>
             </SectionCard>
-          </div>
-
-          {groups.length > 0 && (
-            <p className="text-xs text-muted-foreground">
-              Guruh: {groups.map((g) => `${g.title ?? "(nomsiz)"} (${g.chatId})`).join(", ")}
-            </p>
           )}
+
+          <CommunityClient
+            sorovlar={royxat}
+            kategoriyalar={katlar}
+            yoqTop={yoq}
+            kategoriyaOpts={katOpts}
+            canEdit={canEdit}
+            bugun={todayTashkentISO()}
+          />
         </>
       )}
     </div>

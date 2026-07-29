@@ -79,6 +79,33 @@ const JOBS: CronJob[] = [
       console.log(`[spisaniya-daily] yuborildi: jami ${r.total}`);
     },
   },
+  // 03:30 — Community: KECHAGI kunni AI bilan tahlil qilish (kun yopilgach) va
+  // so'ralgan nomlarni SKU/subkategoriyaga moslashtirish. Faqat YOQILGAN bo'lsa —
+  // aks holda sozlanmagan tizimda har kuni "cron bajarilmadi" alerti kelardi.
+  // 03:00 dagi access-cleanup bilan ustma-ust tushmasin uchun 30 daqiqa surilgan.
+  {
+    name: "community-ai", cron: "30 3 * * *", hour: 3, minute: 30,
+    run: async () => {
+      const { getCommunityConfig, tahlilChatId } = await import("@/lib/community/sozlama");
+      if (!(await getCommunityConfig()).autoEnabled) return;
+      const chatId = await tahlilChatId();
+      if (chatId == null) return;
+
+      const { isoDay, nowTashkent } = await import("@/lib/date");
+      const kecha = isoDay(new Date(nowTashkent().getTime() - 86_400_000));
+
+      const { analizQil } = await import("@/lib/community/analiz");
+      const r = await analizQil({ chatId, dayKey: kecha });
+      const { moslashtir } = await import("@/lib/community/match");
+      const m = await moslashtir({ dayKey: kecha });
+
+      console.log(
+        `[community-ai] ${kecha}: ${r.windows} oyna → ${r.requests} so'rov ` +
+          `(SKU: ${m.matched}, kategoriya: ${m.categorized})`
+      );
+      if (r.errors > 0) throw new Error(`${r.errors} oyna tahlil qilinmadi`);
+    },
+  },
   // 03:00 — kirishlar jurnalini tozalash (1 yildan eskisi). Tunda: paketli
   // DELETE kunduzgi so'rovlarga xalaqit qilmasin.
   {

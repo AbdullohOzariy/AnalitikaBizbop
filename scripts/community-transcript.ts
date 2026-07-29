@@ -63,14 +63,21 @@ async function main() {
     return;
   }
 
-  const ops = new Set(
-    opsRaw
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean)
-      .map((s) => BigInt(s))
-  );
-  if (ops.size === 0) {
+  const opsNames = (process.env.COMMUNITY_OPERATOR_NAMES || "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  const ops = {
+    ids: new Set(
+      opsRaw
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => /^-?\d+$/.test(s))
+        .map((s) => BigInt(s))
+    ),
+    names: new Set(opsNames),
+  };
+  if (ops.ids.size === 0 && ops.names.size === 0) {
     console.warn("⚠️  Operator ID berilmadi (--ops yoki COMMUNITY_OPERATOR_IDS) — hamma MIJOZ deb belgilanadi.\n");
   }
 

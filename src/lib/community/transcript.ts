@@ -118,11 +118,25 @@ function satr(m: Msg, kim: string): string {
 }
 
 /**
+ * Operatorni aniqlash mezoni. ID afzal, LEKIN HTML eksportida foydalanuvchi ID YO'Q —
+ * shuning uchun ism bo'yicha ham (kichik harfda, to'liq moslik) tekshiriladi.
+ */
+export interface Operatorlar {
+  ids: Set<bigint>;
+  names: Set<string>;
+}
+
+export function operatorMi(m: Msg, ops: Operatorlar): boolean {
+  if (m.fromId != null && ops.ids.has(m.fromId)) return true;
+  return !!m.fromName && ops.names.has(m.fromName.trim().toLowerCase());
+}
+
+/**
  * Xabarlarni oynalarga bo'ladi. `messages` BIR KUNGA tegishli va
  * `(sentAt, messageId)` bo'yicha tartiblangan bo'lishi kerak.
  */
-export function buildWindows(messages: Msg[], operatorIds: Set<bigint>): Window[] {
-  const isOp = (m: Msg) => m.fromId != null && operatorIds.has(m.fromId);
+export function buildWindows(messages: Msg[], ops: Operatorlar): Window[] {
+  const isOp = (m: Msg) => operatorMi(m, ops);
   const filtered = messages.filter((m) => !tashlanadi(m, isOp(m)));
   if (filtered.length === 0) return [];
 

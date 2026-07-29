@@ -9,7 +9,7 @@
 import { prisma } from "@/lib/prisma";
 import { callGemini, MODEL_SMART } from "./gemini";
 import { PROMPT_VERSION, SYSTEM, RESPONSE_SCHEMA, type AiResult, type AiRequest } from "./prompt";
-import { buildWindows, normalize, type Msg, type Window } from "./transcript";
+import { buildWindows, normalize, operatorMi, type Msg, type Window, type Operatorlar } from "./transcript";
 import { getCommunityConfig } from "./sozlama";
 import { redactError } from "@/lib/tg-redact";
 
@@ -103,7 +103,7 @@ interface Tayyor {
 export function validatsiya(
   items: AiRequest[],
   w: Window,
-  operatorIds: Set<bigint>,
+  ops: Operatorlar,
   xarita: { id: number; kalitlar: string[] }[]
 ): Tayyor[] {
   const byId = new Map(w.all.map((m) => [m.messageId, m]));
@@ -116,7 +116,7 @@ export function validatsiya(
     const savol = byId.get(it.messageId);
     if (!savol) continue;
     // Operatorning o'z xabari so'rov bo'la olmaydi
-    if (savol.fromId != null && operatorIds.has(savol.fromId)) continue;
+    if (operatorMi(savol, ops)) continue;
 
     const kalit = `${it.messageId}:${it.itemIndex ?? 0}`;
     if (korilgan.has(kalit)) continue; // model dublikat qaytargan
@@ -125,12 +125,7 @@ export function validatsiya(
     // (2) javob ID'lari: oyna ichida + OPERATOR yuborgan + savoldan KEYIN
     const answerIds = (it.answerMessageIds ?? []).filter((id) => {
       const a = byId.get(id);
-      return (
-        !!a &&
-        a.fromId != null &&
-        operatorIds.has(a.fromId) &&
-        a.sentAt.getTime() >= savol.sentAt.getTime()
-      );
+      return !!a && operatorMi(a, ops) && a.sentAt.getTime() >= savol.sentAt.getTime();
     });
 
     // (3) YES/NO da kamida bitta TASDIQLANGAN javob bo'lishi shart
@@ -198,7 +193,7 @@ export async function analizQil(opts: {
 }): Promise<AnalizNatija> {
   const cfg = await getCommunityConfig();
   const model = cfg.model || MODEL_SMART;
-  const operatorIds = new Set(cfg.operatorIds);
+  const ops: Operatorlar = { ids: new Set(cfg.operatorIds), names: new Set(cfg.operatorNames) };
   const log = opts.onProgress ?? (() => {});
 
   const rows = await prisma.tgGroupMessage.findMany({
@@ -228,7 +223,7 @@ export async function analizQil(opts: {
   };
   if (rows.length === 0) return natija;
 
-  const windows = buildWindows(rows as Msg[], operatorIds);
+  const windows = buildWindows(rows as Msg[], ops);
   natija.windows = windows.length;
   if (windows.length === 0) return natija;
 
@@ -265,7 +260,7 @@ export async function analizQil(opts: {
       natija.outTokens += out.outTokens;
 
       const parsed = JSON.parse(out.text) as AiResult;
-      const tayyor = validatsiya(parsed.requests ?? [], w, operatorIds, xarita);
+      const tayyor = validatsiya(parsed.requests ?? [], w, ops, xarita);
 
       await prisma.$transaction(async (tx) => {
         const win = await tx.tgAnalysisWindow.upsert({

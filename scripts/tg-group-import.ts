@@ -1,9 +1,14 @@
 /**
- * Telegram Desktop JSON eksportini `TgGroupMessage` ga yuklaydi (idempotent).
+ * Telegram Desktop eksportini `TgGroupMessage` ga yuklaydi (idempotent).
+ * JSON ham, HTML ham qo'llab-quvvatlanadi — kengaytmaga qarab aniqlanadi.
  *
  *   npx tsx scripts/tg-group-import.ts ~/Downloads/result.json
+ *   npx tsx scripts/tg-group-import.ts "~/Desktop/27.07(CHAT)/messages.html"
  *   npx tsx scripts/tg-group-import.ts result.json --from 2026-07-27   # sanadan boshlab
  *   npx tsx scripts/tg-group-import.ts result.json --dry               # yozmasdan ko'rish
+ *
+ * DIQQAT: HTML eksportida foydalanuvchi ID YO'Q (faqat ism) — `fromId` null bo'ladi.
+ * JSON afzal. HTML uchun guruh ID bazadan olinadi (yoki --chat bilan beriladi).
  *
  * Qayta ishga tushirish xavfsiz: (chatId, messageId) unikal — dublikat o'tkazib yuboriladi.
  */
@@ -12,6 +17,7 @@ import { readFileSync } from "node:fs";
 import { PrismaClient } from "../src/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { parseExport } from "../src/lib/tg-group/import";
+import { parseHtmlExport } from "../src/lib/tg-group/import-html";
 
 const args = process.argv.slice(2);
 const file = args.find((a) => !a.startsWith("--"));
@@ -31,9 +37,52 @@ if (fromDay && !/^\d{4}-\d{2}-\d{2}$/.test(fromDay)) {
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
 
+/** HTML uchun guruh ID: --chat yoki bazadagi birinchi faol guruh. */
+async function htmlChatId(): Promise<bigint> {
+  const idx = args.indexOf("--chat");
+  const raw = idx >= 0 ? args[idx + 1] : "";
+  if (/^-?\d+$/.test(raw)) return BigInt(raw);
+  const g = await prisma.tgGroup.findFirst({
+    where: { active: true },
+    orderBy: { joinedAt: "asc" },
+    select: { chatId: true, title: true },
+  });
+  if (!g) throw new Error("Guruh topilmadi — --chat <chatId> bilan bering.");
+  console.log(`Guruh bazadan: ${g.title ?? "(nomsiz)"} (${g.chatId})`);
+  return g.chatId;
+}
+
 async function main() {
-  const root = JSON.parse(readFileSync(file!, "utf8"));
-  const { chatId, title, messages, skipped } = parseExport(root);
+  const raw = readFileSync(file!, "utf8");
+  const isHtml = /\.html?$/i.test(file!) || raw.trimStart().startsWith("<!DOCTYPE html");
+
+  let chatId: bigint;
+  let title: string | null;
+  let messages: ReturnType<typeof parseExport>["messages"];
+  let skipped: { service?: number; noId?: number; noDate: number; empty: number };
+
+  if (isHtml) {
+    chatId = await htmlChatId();
+    const r = parseHtmlExport(raw, chatId);
+    messages = r.messages;
+    skipped = r.skipped;
+    title = null;
+    console.log("Manba: HTML (fromId YO'Q — operator ISM bo'yicha aniqlanadi)");
+    console.log(
+      "Mualliflar: " +
+        [...r.names.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5)
+          .map(([n, c]) => `${n}(${c})`)
+          .join(", ")
+    );
+  } else {
+    const parsed = parseExport(JSON.parse(raw));
+    chatId = parsed.chatId;
+    title = parsed.title;
+    messages = parsed.messages;
+    skipped = parsed.skipped;
+  }
 
   const rows = fromDay ? messages.filter((m) => m.dayKey >= fromDay) : messages;
 
@@ -41,7 +90,7 @@ async function main() {
   console.log(
     `Xabarlar: ${messages.length} ta o'qildi` +
       (fromDay ? ` → ${rows.length} ta (${fromDay} dan boshlab)` : "") +
-      `  | tashlab ketildi: service=${skipped.service} bo'sh=${skipped.empty} sanasiz=${skipped.noDate}`,
+      `  | tashlab ketildi: service=${skipped.service ?? 0} bo'sh=${skipped.empty} sanasiz=${skipped.noDate}`,
   );
   if (rows.length) {
     const days = [...new Set(rows.map((m) => m.dayKey))].sort();
