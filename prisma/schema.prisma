@@ -195,6 +195,7 @@ model Branch {
   inventoryItems    InventoryItem[] // shu filial uchun belgilangan inventar SKU'lari
   inventoryCounts   InventoryCount[] // shu filialdagi inventarizatsiya sanashlari
   logisticsPoints   LogisticsPoint[] // shu filialga mos reys nuqtasi (odatda bitta)
+  tgRequests        TgRequest[] // guruhda shu filial haqida so'ralgan murojaatlar
 }
 
 model BranchAlias {
@@ -241,6 +242,7 @@ model Category {
   writeoffPlans     WriteoffPlan[]
   spisaniyaLinks    SpisaniyaCategoryLink[]
   botUserCategories BotUserCategory[]
+  tgRequests        TgRequest[] // guruhda shu kategoriyadan so'ralgan murojaatlar
 
   @@index([parentId]) // scope filtrlari (subkat → ota-kategoriya) tezligi uchun
   @@index([groupId])
@@ -412,6 +414,7 @@ model Product {
   promoItems        PromoItem[] // aksiyalardagi qatnashuvi
   inventoryItems    InventoryItem[] // inventarizatsiya ro'yxatidagi o'rinlari (filial kesimida)
   inventoryCounts   InventoryCount[] // inventarizatsiya sanashlari
+  tgRequests        TgRequest[] // guruhda shu SKU so'ralgan murojaatlar
 
   @@index([categoryId])
   @@index([supplierId])
@@ -1573,11 +1576,111 @@ model TgGroupMessage {
   source    String   @db.VarChar(8) // LIVE | EXPORT
   createdAt DateTime @default(now())
 
-  group TgGroup @relation(fields: [chatId], references: [chatId], onDelete: Cascade)
+  group    TgGroup     @relation(fields: [chatId], references: [chatId], onDelete: Cascade)
+  requests TgRequest[] // shu xabardan AI ajratgan so'rovlar
 
   @@unique([chatId, messageId]) // qayta import / dublikat update idempotent bo'lsin
   @@index([chatId, sentAt])
   @@index([chatId, dayKey])
   @@index([chatId, replyToId]) // "shu xabarga javoblar" — zanjir yig'ish
   @@index([fromId])
+}
+
+/// AI tahlil OYNASI — bir kunning deterministik bo'lagi (50 ta CORE xabar).
+/// Qayta tahlil kerak-kerakmasligini `inputHash` + `promptVersion` + `model` hal qiladi:
+/// uchtasi ham o'zgarmagan bo'lsa Gemini CHAQIRILMAYDI (pul va vaqt tejaladi).
+/// Oyna chegarasi QAT'IY 50 talik — jimlik bo'yicha surilmaydi, aks holda EXPORT
+/// backfill bitta eski xabar qo'shsa butun kunning chegaralari siljirdi.
+model TgAnalysisWindow {
+  id             Int      @id @default(autoincrement())
+  chatId         BigInt
+  dayKey         String   @db.VarChar(10) // Toshkent kuni — TgGroupMessage.dayKey bilan bir xil
+  seq            Int // kun ichidagi tartib: 0,1,2…
+  firstMessageId Int // CORE boshi — chegara auditi uchun
+  lastMessageId  Int // CORE oxiri
+  msgCount       Int // CORE'dagi xabarlar soni
+  inputHash      String   @db.Char(64) // sha256(messageId|editedAt|matn …) — matn o'zgarsa qayta tahlil
+  promptVersion  Int // PROMPT_VERSION konstantasi — promptni o'zgartirsangiz oshiring
+  model          String   @db.VarChar(48) // qaysi model bilan olingani (statistika siljishini ko'rish uchun)
+  status         String   @db.VarChar(10) // PENDING | OK | ERROR
+  error          String?  @db.VarChar(300) // redactError'dan o'tgan matn
+  inTokens       Int?
+  outTokens      Int?
+  analyzedAt     DateTime @default(now())
+
+  requests TgRequest[]
+
+  @@unique([chatId, dayKey, seq])
+  @@index([chatId, dayKey])
+  @@index([status]) // qayta urinish kerak bo'lgan oynalarni topish
+}
+
+/// MIJOZ MUROJAATI — AI ajratgan bitta so'rov. Bitta xabarda bir nechta bo'lishi
+/// mumkin ("tarvuz va uzum bormi") — shuning uchun `itemIndex`.
+model TgRequest {
+  id        Int      @id @default(autoincrement())
+  windowId  Int
+  chatId    BigInt
+  messageId Int // TgGroupMessage.messageId — mijoz savoli
+  itemIndex Int      @default(0)
+  dayKey    String   @db.VarChar(10) // denormalizatsiya: kunlik hisobot JOIN'siz ishlasin
+  askedAt   DateTime
+
+  kind        String  @db.VarChar(12) // PRODUCT | PRICE | PROMO | COMPLAINT | RETURN | SERVICE | OTHER
+  status      String  @db.VarChar(12) // YES | NO | UNANSWERED | UNCLEAR
+  answerScope String? @db.VarChar(12) // SAME | OTHER_BRANCH | LINK | UNKNOWN
+  lang        String  @db.VarChar(3) // UZ | RU | MIX
+  asksPrice   Boolean @default(false)
+  asksPhoto   Boolean @default(false)
+
+  productText String?  @db.VarChar(120) // mijoz yozganidek (xom) — audit uchun
+  productNorm String?  @db.VarChar(120) // katalog tilida (ruscha-translit, BOSH HARF) — ASOSIY agregatsiya kaliti
+  searchTerms String[] // trigram qidiruv variantlari (uz / kirill / translit)
+  brand       String?  @db.VarChar(60)
+
+  branchId    Int? // SERVER aniqlaydi (BranchAlias orqali), AI emas
+  productId   Int? // moslashtirilgan SKU
+  categoryId  Int? // subkategoriya — SKU topilmasa ham to'ldiriladi (assortiment bo'shlig'i uchun HAL QILUVCHI)
+  matchStatus String  @default("PENDING") @db.VarChar(10) // PENDING | AUTO | AI | MANUAL | NONE
+  matchScore  Float?
+
+  priceQuoted   Decimal?  @db.Decimal(14, 2) // javobda aytilgan narx (server matndan tasdiqlaydi)
+  priceUnit     String?   @db.VarChar(4) // KG | DONA
+  firstAnswerAt DateTime?
+  answerMinutes Int? // SERVER hisoblaydi — AI ga daqiqa sanatilmaydi
+  answerIds     Int[] // javob xabarlari ID'lari (audit va UI'da ko'rsatish)
+  dupOfId       Int? // 30 daq. ichida shu mijozning ayni so'rovi takrori — statistikadan chiqadi
+  confidence    Float
+  note          String?   @db.VarChar(160) // faqat UNCLEAR bo'lsa sabab
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  window   TgAnalysisWindow @relation(fields: [windowId], references: [id], onDelete: Cascade)
+  message  TgGroupMessage   @relation(fields: [chatId, messageId], references: [chatId, messageId], onDelete: Cascade)
+  product  Product?         @relation(fields: [productId], references: [id], onDelete: SetNull)
+  category Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  branch   Branch?          @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  @@unique([chatId, messageId, itemIndex]) // dublikatning FIZIK to'sig'i
+  @@index([chatId, dayKey, kind])
+  @@index([dayKey, status])
+  @@index([categoryId, dayKey]) // "qaysi kategoriyadan ko'p so'ralyapti"
+  @@index([productNorm]) // "ko'p so'ralgan, lekin YO'Q" TOP ro'yxati
+  @@index([productId])
+  @@index([matchStatus]) // qo'lda hal qilinadiganlar navbati
+}
+
+/// So'rov matni → SKU/subkategoriya KESHI. Bir marta yechilgan nom (avto yoki qo'lda)
+/// keyingi safar LLM ga BORMAYDI — vaqt o'tishi bilan AI chaqiruvi kamayadi.
+model TgProductAlias {
+  id         Int      @id @default(autoincrement())
+  norm       String   @unique @db.VarChar(120) // normalizatsiya qilingan productNorm
+  productId  Int?
+  categoryId Int?
+  source     String   @db.VarChar(6) // AUTO | AI | MANUAL
+  score      Float?
+  hits       Int      @default(0) // necha marta ishlatilgani
+  updatedAt  DateTime @updatedAt
+
+  @@index([categoryId])
 }

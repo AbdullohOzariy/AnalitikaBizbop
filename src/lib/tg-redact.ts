@@ -33,11 +33,19 @@ const RAW_TOKEN = /\b\d{6,}:[A-Za-z0-9_-]{20,}\b/g;
  */
 const URL_CREDENTIALS = /(\/\/)[^/\s:@]+:[^/\s:@]+@/g;
 
+/**
+ * Google API kaliti (Gemini — Community tahlili): `AIza` prefiksi + 35 belgi.
+ * Gemini xatosi tanasida kalit qaytishi mumkin, xato matni esa `CronRun.note` ga,
+ * admin alertiga va UI toast'iga tushadi — Telegram tokeni bilan bir xil yo'l.
+ */
+const GOOGLE_API_KEY = /\bAIza[A-Za-z0-9_-]{10,}\b/g;
+
 /** Matndagi sirlarni `***` bilan almashtiradi. Boshqa hech narsani o'zgartirmaydi. */
 export function redactSecrets(text: string): string {
   return text
     .replace(BOT_URL_TOKEN, "bot***")
     .replace(RAW_TOKEN, "***")
+    .replace(GOOGLE_API_KEY, "AIza***")
     .replace(URL_CREDENTIALS, "$1***:***@");
 }
 
