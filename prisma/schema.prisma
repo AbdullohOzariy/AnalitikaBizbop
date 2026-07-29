@@ -243,6 +243,7 @@ model Category {
   spisaniyaLinks    SpisaniyaCategoryLink[]
   botUserCategories BotUserCategory[]
   tgRequests        TgRequest[] // guruhda shu kategoriyadan so'ralgan murojaatlar
+  canonProducts     TgCanonProduct[] // shu subkategoriyadagi kanonik mahsulotlar
 
   @@index([parentId]) // scope filtrlari (subkat → ota-kategoriya) tezligi uchun
   @@index([groupId])
@@ -414,7 +415,6 @@ model Product {
   promoItems        PromoItem[] // aksiyalardagi qatnashuvi
   inventoryItems    InventoryItem[] // inventarizatsiya ro'yxatidagi o'rinlari (filial kesimida)
   inventoryCounts   InventoryCount[] // inventarizatsiya sanashlari
-  tgRequests        TgRequest[] // guruhda shu SKU so'ralgan murojaatlar
 
   @@index([categoryId])
   @@index([supplierId])
@@ -1639,8 +1639,9 @@ model TgRequest {
   brand       String?  @db.VarChar(60)
 
   branchId    Int? // SERVER aniqlaydi (BranchAlias orqali), AI emas
-  productId   Int? // moslashtirilgan SKU
-  categoryId  Int? // subkategoriya — SKU topilmasa ham to'ldiriladi (assortiment bo'shlig'i uchun HAL QILUVCHI)
+  normKey     String? @db.VarChar(120) // canonKey(productNorm) — SQL'dan guruhlash/updateMany uchun
+  canonId     Int? // KANONIK mahsulot — hisobot AYNAN shu bo'yicha yig'iladi
+  categoryId  Int? // subkategoriya — kanon topilmasa ham to'ldiriladi (assortiment bo'shlig'i uchun HAL QILUVCHI)
   matchStatus String  @default("PENDING") @db.VarChar(10) // PENDING | AUTO | AI | MANUAL | NONE
   matchScore  Float?
 
@@ -1657,7 +1658,7 @@ model TgRequest {
 
   window   TgAnalysisWindow @relation(fields: [windowId], references: [id], onDelete: Cascade)
   message  TgGroupMessage   @relation(fields: [chatId, messageId], references: [chatId, messageId], onDelete: Cascade)
-  product  Product?         @relation(fields: [productId], references: [id], onDelete: SetNull)
+  canon    TgCanonProduct?  @relation(fields: [canonId], references: [id], onDelete: SetNull)
   category Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   branch   Branch?          @relation(fields: [branchId], references: [id], onDelete: SetNull)
 
@@ -1665,22 +1666,83 @@ model TgRequest {
   @@index([chatId, dayKey, kind])
   @@index([dayKey, status])
   @@index([categoryId, dayKey]) // "qaysi kategoriyadan ko'p so'ralyapti"
-  @@index([productNorm]) // "ko'p so'ralgan, lekin YO'Q" TOP ro'yxati
-  @@index([productId])
+  @@index([canonId, dayKey]) // "ko'p so'ralgan, lekin YO'Q" TOP ro'yxati
+  @@index([normKey]) // qo'lda tuzatishni BARCHA bir xil yozuvlarga qo'llash
   @@index([matchStatus]) // qo'lda hal qilinadiganlar navbati
 }
 
-/// So'rov matni → SKU/subkategoriya KESHI. Bir marta yechilgan nom (avto yoki qo'lda)
-/// keyingi safar LLM ga BORMAYDI — vaqt o'tishi bilan AI chaqiruvi kamayadi.
-model TgProductAlias {
-  id         Int      @id @default(autoincrement())
-  norm       String   @unique @db.VarChar(120) // normalizatsiya qilingan productNorm
-  productId  Int?
-  categoryId Int?
-  source     String   @db.VarChar(6) // AUTO | AI | MANUAL
-  score      Float?
-  hits       Int      @default(0) // necha marta ishlatilgani
-  updatedAt  DateTime @updatedAt
+/// KANONIK MAHSULOT — reyestr. "Shaftoli", "шафтоли", "Persik", "Персик", "saftoli"
+/// hammasi SHU yozuvga yig'iladi. Hisobot AYNAN `TgRequest.canonId` bo'yicha agregatsiya
+/// qilinadi. SKU (Product) ga BOG'LIQ EMAS — operator "yo'q" degan mahsulot katalogda ham
+/// yo'q bo'ladi, shuning uchun reyestr MIJOZ TILIDAN quriladi.
+model TgCanonProduct {
+  id       Int    @id @default(autoincrement())
+  name     String @db.VarChar(80) // ko'rinadigan nom: o'zbek lotin, faqat 1-harf katta
+  nameKey  String @unique @db.VarChar(80) // canonKey(name) — DUBLIKATGA QARSHI YAGONA FIZIK KAFOLAT
+  fuzzyKey String @db.VarChar(80) // fuzzyKey(name) — dublikat sweep va nomzod izlash; UNIKAL EMAS
+
+  categoryId Int? // subkategoriya — AI beradi, admin tuzatadi
+  synonyms   String[] // ["Persik","Персик","шафтоли"] — sovuq startda nomzod topishga
+  hits       Int      @default(0) // shu kanonga bog'langan so'rovlar — top-K promptga solish uchun
+
+  source     String    @default("AI") @db.VarChar(6) // AI | MANUAL
+  reviewedAt DateTime? // admin ko'rib chiqqan; null = "yangi kanonlar" navbatida
+
+  /// ≠null → kanon BIRLASHTIRILGAN (tombstone). HECH QACHON o'chirilmaydi:
+  /// `nameKey` band qolishi shart, aks holda o'sha nom qaytadan yaratiladi.
+  mergedIntoId Int?
+  mergedAt     DateTime?
+
+  firstSeenAt DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  category   Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  mergedInto TgCanonProduct?  @relation("CanonMerge", fields: [mergedIntoId], references: [id], onDelete: SetNull)
+  mergedFrom TgCanonProduct[] @relation("CanonMerge")
+  aliases    TgProductAlias[]
+  requests   TgRequest[]
 
   @@index([categoryId])
+  @@index([fuzzyKey])
+  @@index([mergedIntoId])
+  @@index([hits(sort: Desc)])
+  @@index([reviewedAt])
+}
+
+/// VARIANT → KANON ko'prigi. Bir marta yechilgan yozilish shakli keyingi safar
+/// LLM'ga BORMAYDI.
+model TgProductAlias {
+  id        Int      @id @default(autoincrement())
+  normKey   String   @unique @db.VarChar(120) // canonKey(productNorm) — LOOKUP KALITI
+  fuzzyKey  String   @db.VarChar(120)
+  raw       String   @db.VarChar(120) // AI bergan productNorm (audit)
+  canonId   Int
+  source    String   @db.VarChar(6) // EXACT | FUZZY | AI | MANUAL
+  score     Float?
+  hits      Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  canon TgCanonProduct @relation(fields: [canonId], references: [id], onDelete: Cascade)
+
+  @@index([canonId])
+  @@index([fuzzyKey])
+}
+
+/// Kanon birlashtirish JURNALI — merge qaytarib bo'lmaydigan amal.
+model TgCanonMerge {
+  id            Int      @id @default(autoincrement())
+  sourceId      Int
+  targetId      Int
+  sourceName    String   @db.VarChar(80) // SNAPSHOT — keyin nom o'zgarsa ham tarix o'zgarmaydi
+  targetName    String   @db.VarChar(80)
+  movedAliases  Int
+  movedRequests Int
+  userId        Int?
+  createdAt     DateTime @default(now())
+
+  @@index([targetId])
+  @@index([createdAt(sort: Desc)])
 }

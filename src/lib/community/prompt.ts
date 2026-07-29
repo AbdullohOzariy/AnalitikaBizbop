@@ -12,7 +12,7 @@
  */
 
 /** Promptni o'zgartirsangiz OSHIRING. */
-export const PROMPT_VERSION = 1;
+export const PROMPT_VERSION = 2;
 
 export const SYSTEM = `Sen "bizbop" supermarket tarmog'ining Telegram mijozlar chatini tahlil
 qiluvchi klassifikatorsan. Vazifang: MIJOZ so'rovlarini ajratib olish va har biriga
@@ -33,24 +33,23 @@ CHAT HAQIDA
 - Javob MATNSIZ [photo] bo'lishi mumkin — bu ham javob (odatda narx/rasm so'ralganda).
 - Bir mijoz ketma-ket bir necha mahsulot so'rashi mumkin; javob bitta xabarda kelishi mumkin.
 
-KATALOG TILI (MUHIM)
-Bizning SKU nomlarimiz lotin harflarida TRANSLITERATSIYA QILINGAN RUSCHA
-(masalan "FR ARBUZ KG", "OV SVEKLO KG", "ADNAN TESTO 1000GR DLYA SAMSI").
-Shuning uchun har mahsulot so'roviga:
-  productNorm — katalog uslubidagi RUSCHA-TRANSLIT nom, BOSH HARFLARDA;
-  searchTerms — 2..4 variant (o'zbekcha, ruscha kirill, translit).
-Lug'at: tarvuz→ARBUZ · qovun→DINYA · uzum→VINOGRAD · olma→YABLOKO · lavlagi→SVEKLO ·
-sabzi→MARKOVKA · piyoz→LUK · kartoshka→KARTOSHKA · pomidor→POMIDOR · bodring→OGURETS ·
-jo'xori/makkajo'xori→KUKURUZA · xamir→TESTO · non→XLEB · un→MUKA · guruch→RIS ·
-shakar→SAXAR · tuz→SOL · yog'→MASLO · sut→MOLOKO · qatiq→KEFIR · qaymoq→SMETANA ·
-tvorog→TVOROG · pishloq→SIR · tuxum→YAYTSO · go'sht→MYASO · mol go'shti→GOVYADINA ·
-qo'y go'shti→BARANINA · tovuq→KURITSA · baliq→RIBA · kolbasa→KOLBASA · sosiska→SOSISKI ·
-choy→CHAY · kofe→KOFE · suv→VODA · shirinlik→KONFETA · shokolad→SHOKOLAD ·
-pechenye→PECHENE · yong'oq→OREX · ko'mir→UGOL · sovun→MILO · kir kukuni→PORASHOK ·
-shampun→SHAMPUN · tish pastasi→ZUBNAYA PASTA · soch bo'yog'i→KRASKA DLYA VOLOS ·
-salfetka→SALFETKA · pampers→PODGUZNIK · idish yuvish→SREDSTVO DLYA POSUDI.
-Kirill↔lotin: х/x/h · ў/o'/u · қ/q · ғ/g' · ц/ts · ж/j · я/ya · ю/yu · ч/ch · ш/sh.
-SKU KODINI O'YLAB TOPMA — kod boshqa bosqichda topiladi.
+MAHSULOT NOMI (MUHIM)
+Har mahsulot so'roviga UMUMLASHTIRILGAN nom ber:
+  productNorm — O'ZBEK LOTIN, BIRLIK son, o'lchovsiz/brendsiz, faqat 1-harf katta.
+                Bu KANONIK reyestr kaliti: "shaftolilar 1kg" → "Shaftoli",
+                "Персик" → "Shaftoli", "Мazzona somsa xamiri" → "Somsa xamiri".
+  searchTerms — 2..4 muqobil yozilish (o'zbekcha, ruscha kirill, translit) — qidiruv uchun.
+Ruscha↔o'zbekcha bir xil mahsulot BITTA nom oladi (o'zbekchasi tanlanadi):
+арбуз/arbuz→Tarvuz · персик→Shaftoli · виноград→Uzum · яблоко→Olma · свекла→Lavlagi ·
+морковь→Sabzi · лук→Piyoz · картошка→Kartoshka · помидор→Pomidor · огурец→Bodring ·
+кукуруза→Makkajo'xori · тесто→Xamir · хлеб→Non · мука→Un · рис→Guruch · сахар→Shakar ·
+соль→Tuz · масло→Yog' · молоко→Sut · кефир→Qatiq · сметана→Qaymoq · творог→Tvorog ·
+сыр→Pishloq · яйцо→Tuxum · мясо→Go'sht · говядина→Mol go'shti · баранина→Qo'y go'shti ·
+курица→Tovuq · рыба→Baliq · колбаса→Kolbasa · сосиски→Sosiska · чай→Choy · кофе→Kofe ·
+вода→Suv · шоколад→Shokolad · печенье→Pechenye · орех→Yong'oq · уголь→Ko'mir ·
+мыло→Sovun · порошок→Kir kukuni · шампунь→Shampun · подгузник→Pampers.
+TURI boshqa bo'lsa ALOHIDA nom: "Uzum" va "Qora uzum" — alohida; "Tort" va "Bento tort" —
+alohida; "Sut" va "Sutli shokolad" — alohida.
 
 FILIALLAR: mega (Mega Center) · oila (Oila SM) · gold (Gold Mart) · smart (Smart City).
 "goldda", "megada", "oilada" — filial. DIQQAT: "GOLD" so'zi mahsulot brendida ham uchraydi
@@ -87,21 +86,21 @@ MISOLLAR
 529999 18:36 M1 ↩529996: "Assalomu alaykum Goldda mazzonani somsa xamiri bormi"
 530002 18:48 OP ↩529999: "…sotuvda mavjud emas ☺️"
 → {"messageId":529999,"itemIndex":0,"lang":"UZ","kind":"PRODUCT",
-   "productText":"mazzonani somsa xamiri","productNorm":"MAZZONA TESTO DLYA SAMSI",
-   "searchTerms":["MAZZONA TESTO","somsa xamiri","тесто для самсы"],"brand":"Mazzona",
+   "productText":"mazzonani somsa xamiri","productNorm":"Somsa xamiri",
+   "searchTerms":["somsa xamiri","тесто для самсы","testo dlya samsi"],"brand":"Mazzona",
    "branchText":"gold","answerMessageIds":[530002],"answerScope":"SAME",
    "status":"NO","confidence":0.95}
 
 530028 21:01 M11: "Assalom alaykum ecotab bormi narxi bn tashab yuboring"  (javob yo'q)
 → {"messageId":530028,"itemIndex":0,"lang":"UZ","kind":"PRODUCT","productText":"ecotab",
-   "productNorm":"ECOTAB","searchTerms":["ECOTAB"],"brand":"Ecotab","branchText":"",
+   "productNorm":"Ecotab","searchTerms":["ecotab","экотаб"],"brand":"Ecotab","branchText":"",
    "asksPrice":true,"asksPhoto":true,"answerMessageIds":[],"answerScope":"UNKNOWN",
    "status":"UNANSWERED","confidence":0.9}
 
 530030 21:03 M13: "Ассалому алейкум тарвуз канчадан Мегада"
 530031 21:04 OP ↩530030: "…3990so'm/kg"
 → {"messageId":530030,"itemIndex":0,"lang":"RU","kind":"PRICE","productText":"тарвуз",
-   "productNorm":"ARBUZ","searchTerms":["ARBUZ","tarvuz","арбуз"],"brand":"",
+   "productNorm":"Tarvuz","searchTerms":["tarvuz","арбуз","arbuz"],"brand":"",
    "branchText":"mega","asksPrice":true,"answerMessageIds":[530031],"answerScope":"SAME",
    "priceQuoted":3990,"priceUnit":"KG","status":"YES","confidence":0.95}`;
 
@@ -125,7 +124,7 @@ export const RESPONSE_SCHEMA = {
             enum: ["PRODUCT", "PRICE", "PROMO", "COMPLAINT", "RETURN", "SERVICE", "OTHER"],
           },
           productText: { type: "string", description: 'Mijoz yozgani, xom holicha; mahsulot bo\'lmasa ""' },
-          productNorm: { type: "string", description: "Katalog uslubi: RUSCHA-TRANSLIT, BOSH HARF" },
+          productNorm: { type: "string", description: "Umumlashtirilgan nom: O'ZBEK LOTIN, birlik son, o'lchovsiz, 1-harf katta" },
           searchTerms: { type: "array", items: { type: "string" }, maxItems: 4 },
           brand: { type: "string" },
           branchText: { type: "string", description: 'mega|oila|gold|smart yoki ""' },

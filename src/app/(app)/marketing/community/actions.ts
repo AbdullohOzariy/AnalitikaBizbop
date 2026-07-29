@@ -6,36 +6,38 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { actionError, type ActionResult } from "@/lib/action-error";
 import { TAG_COMMUNITY } from "@/lib/cache-tags";
-import { normKalit } from "@/lib/community/match";
 import { analizQil } from "@/lib/community/analiz";
 import { moslashtir } from "@/lib/community/match";
 import { tahlilChatId } from "@/lib/community/sozlama";
+import { bogla, kanonniOlYokiYarat, kanonlarniBirlashtir, ehtimoliyDublikatlar } from "@/lib/community/kanon";
+import { yoqTafsilot, type TafsilotQator } from "@/lib/community/hisobot";
 import { rateLimit } from "@/lib/spisaniya/rate-limit";
 
 /**
  * Tahrirlash — HOZIRCHA FAQAT SYSTEM_ADMIN (`requireAdmin`).
- * AI xato qilishi tabiiy, shuning uchun har bir tuzatish `TgProductAlias` ga MANUAL
- * bo'lib yoziladi: o'sha nom keyingi safar LLM'ga umuman bormaydi va qayta tahlilda
- * ham qo'lda kiritilgan qaror saqlanadi.
+ * AI xato qilishi tabiiy, shuning uchun har bir tuzatish alias sifatida MANUAL bo'lib
+ * yoziladi: o'sha yozilish keyingi safar LLM'ga umuman bormaydi va qayta tahlilda ham
+ * qo'lda kiritilgan qaror saqlanadi.
  */
 
 const StatusSchema = z.enum(["YES", "NO", "UNANSWERED", "UNCLEAR"]);
 
-/** So'rovning SKU/kategoriya mosligini qo'lda tuzatish. */
-export async function tuzatMoslik(input: {
+/** So'rovni kanonga (va subkategoriyaga) qo'lda bog'lash. */
+export async function tuzatKanon(input: {
   requestId: number;
-  productId: number | null;
+  /** Mavjud kanon. `null` + `yangiNom` berilsa yangi kanon yaratiladi. */
+  canonId: number | null;
+  yangiNom?: string;
   categoryId: number | null;
-  hammasigaQoll: boolean;
 }): Promise<ActionResult> {
   try {
     await requireAdmin();
-    const { requestId, productId, categoryId, hammasigaQoll } = z
+    const { requestId, canonId, yangiNom, categoryId } = z
       .object({
         requestId: z.number().int().positive(),
-        productId: z.number().int().positive().nullable(),
+        canonId: z.number().int().positive().nullable(),
+        yangiNom: z.string().trim().max(80).optional(),
         categoryId: z.number().int().positive().nullable(),
-        hammasigaQoll: z.boolean(),
       })
       .parse(input);
 
@@ -43,43 +45,40 @@ export async function tuzatMoslik(input: {
       where: { id: requestId },
       select: { productNorm: true },
     });
-    if (!req) return { ok: false, error: "So'rov topilmadi." };
+    if (!req?.productNorm) return { ok: false, error: "So'rovda mahsulot nomi yo'q." };
 
-    // SKU tanlansa, kategoriya SKU'nikidan olinadi (qo'lda berilmagan bo'lsa)
-    let catId = categoryId;
-    if (productId && catId == null) {
-      const p = await prisma.product.findUnique({
-        where: { id: productId },
-        select: { categoryId: true },
+    let hedef = canonId;
+    if (hedef == null) {
+      if (!yangiNom) return { ok: false, error: "Kanon tanlang yoki yangi nom kiriting." };
+      const yangi = await kanonniOlYokiYarat({
+        name: yangiNom,
+        categoryId,
+        source: "MANUAL",
+        synonym: req.productNorm,
       });
-      catId = p?.categoryId ?? null;
+      hedef = yangi.id;
+    } else if (categoryId != null) {
+      await prisma.tgCanonProduct.update({
+        where: { id: hedef },
+        data: { categoryId, reviewedAt: new Date() },
+      });
     }
 
-    await prisma.tgRequest.update({
-      where: { id: requestId },
-      data: { productId, categoryId: catId, matchStatus: "MANUAL", matchScore: 1 },
+    // Qo'lda tuzatish SHU YOZILISHDAGI BARCHA so'rovlarga qo'llanadi — operator
+    // bir xil ishni "шафтоли"/"Shaftoli"/"saftoli" uchun uch marta qilmasin.
+    await bogla({
+      raw: req.productNorm,
+      canonId: hedef,
+      categoryId,
+      source: "MANUAL",
+      score: 1,
+      hammaga: true,
     });
-
-    // Bir xil nomli barcha so'rovlarga qo'llash + keyingi safar uchun keshga yozish
-    if (req.productNorm) {
-      const norm = normKalit(req.productNorm);
-      await prisma.tgProductAlias.upsert({
-        where: { norm },
-        create: { norm, productId, categoryId: catId, source: "MANUAL", score: 1, hits: 1 },
-        update: { productId, categoryId: catId, source: "MANUAL", score: 1 },
-      });
-      if (hammasigaQoll) {
-        await prisma.tgRequest.updateMany({
-          where: { productNorm: req.productNorm, id: { not: requestId } },
-          data: { productId, categoryId: catId, matchStatus: "MANUAL", matchScore: 1 },
-        });
-      }
-    }
 
     revalidateTag(TAG_COMMUNITY, "max");
     return { ok: true };
   } catch (err) {
-    return actionError(err, "community/tuzatMoslik");
+    return actionError(err, "community/tuzatKanon");
   }
 }
 
@@ -96,8 +95,7 @@ export async function tuzatStatus(input: {
 
     await prisma.tgRequest.update({
       where: { id: requestId },
-      // Qo'lda tasdiqlangan holat — ishonch to'liq
-      data: { status, confidence: 1 },
+      data: { status, confidence: 1 }, // qo'lda tasdiqlangan — ishonch to'liq
     });
     revalidateTag(TAG_COMMUNITY, "max");
     return { ok: true };
@@ -118,24 +116,27 @@ export async function sorovniOchir(requestId: number): Promise<ActionResult> {
   }
 }
 
-export type SkuOpt = { id: number; name: string; categoryId: number | null; categoryName: string | null };
+export type KanonOpt = { id: number; name: string; categoryId: number | null; categoryName: string | null; hits: number };
 
-/** SKU qidirish (tuzatish oynasidagi picker uchun). */
-export async function skuQidir(q: string): Promise<SkuOpt[]> {
+/** Kanon reyestridan qidirish (tuzatish oynasi uchun). */
+export async function kanonQidir(q: string): Promise<KanonOpt[]> {
   await requireAdmin();
   const term = q.trim();
-  if (term.length < 2) return [];
-  const rows = await prisma.product.findMany({
-    where: { archivedAt: null, name: { contains: term, mode: "insensitive" } },
-    select: { id: true, name: true, categoryId: true, category: { select: { name: true } } },
-    take: 25,
-    orderBy: { name: "asc" },
+  const rows = await prisma.tgCanonProduct.findMany({
+    where: {
+      mergedIntoId: null,
+      ...(term.length >= 2 ? { name: { contains: term, mode: "insensitive" as const } } : {}),
+    },
+    select: { id: true, name: true, categoryId: true, hits: true, category: { select: { name: true } } },
+    take: 30,
+    orderBy: term.length >= 2 ? { name: "asc" } : { hits: "desc" },
   });
   return rows.map((r) => ({
     id: r.id,
     name: r.name,
     categoryId: r.categoryId,
     categoryName: r.category?.name ?? null,
+    hits: r.hits,
   }));
 }
 
@@ -150,6 +151,55 @@ export async function kategoriyalarRoyxati(): Promise<KategoriyaOpt[]> {
     orderBy: [{ parentId: "asc" }, { name: "asc" }],
   });
   return rows.map((r) => ({ id: r.id, name: r.name, parent: r.parent?.name ?? "" }));
+}
+
+/** "Yo'q davri" tafsiloti — accordion ochilganda chaqiriladi (oldindan yuklanmaydi). */
+export async function yoqTafsilotAction(input: {
+  canonId: number | null;
+  normKey: string | null;
+  from: string;
+  to: string;
+}): Promise<{ ok: true; qatorlar: TafsilotQator[] } | { ok: false; error: string }> {
+  try {
+    await requireAdmin();
+    const chatId = await tahlilChatId();
+    if (chatId == null) return { ok: false, error: "Guruh topilmadi." };
+    const qatorlar = await yoqTafsilot({
+      chatId,
+      from: input.from,
+      to: input.to,
+      canonId: input.canonId,
+      normKey: input.normKey,
+    });
+    return { ok: true, qatorlar };
+  } catch (err) {
+    return actionError(err, "community/yoqTafsilot");
+  }
+}
+
+/** Ikki kanonni birlashtirish — QAYTARIB BO'LMAYDI, jurnalga yoziladi. */
+export async function kanonlarniBirlashtirAction(input: {
+  sourceId: number;
+  targetId: number;
+}): Promise<ActionResult & { natija?: string }> {
+  try {
+    const user = await requireAdmin();
+    const { sourceId, targetId } = z
+      .object({ sourceId: z.number().int().positive(), targetId: z.number().int().positive() })
+      .parse(input);
+
+    const r = await kanonlarniBirlashtir(sourceId, targetId, Number(user.id) || undefined);
+    revalidateTag(TAG_COMMUNITY, "max");
+    return { ok: true, natija: `${r.movedAliases} alias, ${r.movedRequests} so'rov ko'chirildi` };
+  } catch (err) {
+    return actionError(err, "community/birlashtir");
+  }
+}
+
+/** Ehtimoliy dublikat kanonlar (real vaqtda hisoblanadi). */
+export async function dublikatlarAction() {
+  await requireAdmin();
+  return ehtimoliyDublikatlar();
 }
 
 /** Kunni AI bilan (qayta) tahlil qilish. Cheklangan: qimmat amal. */
@@ -180,7 +230,7 @@ export async function tahlilIshgaTushir(input: {
       natija:
         `${r.windows} oyna (${r.skipped} o'tkazildi) → ${r.requests} so'rov` +
         (r.errors ? `, ${r.errors} xato` : "") +
-        ` | SKU: ${m.matched}, kategoriya: ${m.categorized}`,
+        ` | kanon: ${m.kanon} (yangi ${m.yangiKanon}), kategoriya: ${m.categorized}`,
     };
   } catch (err) {
     return actionError(err, "community/tahlilIshgaTushir");

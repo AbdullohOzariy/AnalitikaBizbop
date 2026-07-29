@@ -123,6 +123,8 @@ export default async function CommunityPage({
             kategoriyaOpts={katOpts}
             canEdit={canEdit}
             bugun={todayTashkentISO()}
+            from={from}
+            to={to}
           />
         </>
       )}

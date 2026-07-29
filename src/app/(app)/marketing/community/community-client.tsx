@@ -11,19 +11,22 @@ import {
   RefreshCw,
   Trash2,
   Pencil,
+  ChevronRight,
+  Loader2,
 } from "lucide-react";
 import { SectionCard, EmptyState, Pill } from "@/components/common/page";
 import { Button } from "@/components/ui/button";
 import { formatDateTimeUZ } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { KategoriyaQator, MahsulotQator, SorovQator } from "@/lib/community/hisobot";
+import type { KategoriyaQator, MahsulotQator, SorovQator, TafsilotQator } from "@/lib/community/hisobot";
 import {
-  tuzatMoslik,
+  tuzatKanon,
   tuzatStatus,
   sorovniOchir,
-  skuQidir,
+  kanonQidir,
   tahlilIshgaTushir,
-  type SkuOpt,
+  yoqTafsilotAction,
+  type KanonOpt,
   type KategoriyaOpt,
 } from "./actions";
 
@@ -49,6 +52,8 @@ export function CommunityClient({
   kategoriyaOpts,
   canEdit,
   bugun,
+  from,
+  to,
 }: {
   sorovlar: SorovQator[];
   kategoriyalar: KategoriyaQator[];
@@ -56,6 +61,8 @@ export function CommunityClient({
   kategoriyaOpts: KategoriyaOpt[];
   canEdit: boolean;
   bugun: string;
+  from: string;
+  to: string;
 }) {
   const [tab, setTab] = useState<Tab>("sorovlar");
   const [tahrir, setTahrir] = useState<SorovQator | null>(null);
@@ -63,13 +70,13 @@ export function CommunityClient({
   const [pending, start] = useTransition();
 
   const moslanmagan = sorovlar.filter(
-    (s) => !s.productId && (s.kind === "PRODUCT" || s.kind === "PRICE")
+    (s) => !s.canonId && (s.kind === "PRODUCT" || s.kind === "PRICE")
   );
 
   const TABS: { k: Tab; nom: string; n?: number }[] = [
     { k: "sorovlar", nom: "So'rovlar", n: sorovlar.length },
     { k: "kategoriyalar", nom: "Kategoriyalar", n: kategoriyalar.length },
-    { k: "yoq", nom: "YO'Q deb javob berilgan", n: yoqTop.length },
+    { k: "yoq", nom: "Berilmagan", n: yoqTop.length },
     { k: "moslanmagan", nom: "Moslanmagan", n: moslanmagan.length },
   ];
 
@@ -130,7 +137,8 @@ export function CommunityClient({
       )}
 
       {tab === "kategoriyalar" && <KategoriyalarJadval rows={kategoriyalar} />}
-      {tab === "yoq" && <YoqJadval rows={yoqTop} />}
+
+      {tab === "yoq" && <YoqJadval rows={yoqTop} from={from} to={to} canEdit={canEdit} />}
 
       {tab === "moslanmagan" && (
         <SorovlarJadval
@@ -140,7 +148,7 @@ export function CommunityClient({
           onTahrir={setTahrir}
           onStatus={(id, s) => amal(() => tuzatStatus({ requestId: id, status: s }))}
           onOchir={(id) => amal(() => sorovniOchir(id))}
-          bosh="Hammasi moslashtirilgan"
+          bosh="Hammasi kanonga bog'langan"
         />
       )}
 
@@ -149,16 +157,9 @@ export function CommunityClient({
           sorov={tahrir}
           kategoriyalar={kategoriyaOpts}
           onYopish={() => setTahrir(null)}
-          onSaqla={(productId, categoryId, hammasiga) => {
+          onSaqla={(canonId, yangiNom, categoryId) => {
             setTahrir(null);
-            amal(() =>
-              tuzatMoslik({
-                requestId: tahrir.id,
-                productId,
-                categoryId,
-                hammasigaQoll: hammasiga,
-              })
-            );
+            amal(() => tuzatKanon({ requestId: tahrir.id, canonId, yangiNom, categoryId }));
           }}
         />
       )}
@@ -183,9 +184,7 @@ function SorovlarJadval({
   onOchir: (id: number) => void;
   bosh?: string;
 }) {
-  if (rows.length === 0) {
-    return <EmptyState icon={MessagesSquare} title={bosh ?? "So'rov yo'q"} />;
-  }
+  if (rows.length === 0) return <EmptyState icon={MessagesSquare} title={bosh ?? "So'rov yo'q"} />;
   return (
     <SectionCard bodyClassName="p-0">
       <div className="overflow-x-auto">
@@ -194,7 +193,7 @@ function SorovlarJadval({
             <tr>
               <th className="px-3 py-2 text-left font-semibold">Vaqt</th>
               <th className="px-3 py-2 text-left font-semibold">So'ralgan</th>
-              <th className="px-3 py-2 text-left font-semibold">SKU / kategoriya</th>
+              <th className="px-3 py-2 text-left font-semibold">Kanon / kategoriya</th>
               <th className="px-3 py-2 text-left font-semibold">Filial</th>
               <th className="px-3 py-2 text-left font-semibold">Holat</th>
               <th className="px-3 py-2 text-right font-semibold">Javob</th>
@@ -208,22 +207,32 @@ function SorovlarJadval({
                   {formatDateTimeUZ(r.askedAt)}
                 </td>
                 <td className="px-3 py-2">
-                  <div className="font-medium">{r.productText || <span className="text-muted-foreground">— {r.kind} —</span>}</div>
+                  <div className="font-medium">
+                    {r.productText || <span className="text-muted-foreground">— {r.kind} —</span>}
+                  </div>
                   {r.productNorm && (
                     <div className="text-[11px] text-muted-foreground">{r.productNorm}</div>
                   )}
                 </td>
                 <td className="px-3 py-2">
-                  {r.productName ? (
-                    <div className="text-xs">{r.productName}</div>
+                  {r.canonName ? (
+                    <div className="text-xs font-medium">{r.canonName}</div>
                   ) : (
-                    <span className="text-xs text-muted-foreground">SKU yo'q</span>
+                    <span className="text-xs text-muted-foreground">bog&apos;lanmagan</span>
                   )}
                   {r.categoryName && (
                     <div className="text-[11px] text-muted-foreground">{r.categoryName}</div>
                   )}
                   {r.matchStatus !== "PENDING" && (
-                    <Pill tone={r.matchStatus === "MANUAL" ? "violet" : r.matchStatus === "NONE" ? "muted" : "blue"}>
+                    <Pill
+                      tone={
+                        r.matchStatus === "MANUAL"
+                          ? "violet"
+                          : r.matchStatus === "NONE"
+                            ? "muted"
+                            : "blue"
+                      }
+                    >
                       {r.matchStatus}
                     </Pill>
                   )}
@@ -260,7 +269,9 @@ function SorovlarJadval({
                       ))}
                     </div>
                   ) : (
-                    <Pill tone={STATUS_TONE[r.status] ?? "muted"}>{STATUS_NOM[r.status] ?? r.status}</Pill>
+                    <Pill tone={STATUS_TONE[r.status] ?? "muted"}>
+                      {STATUS_NOM[r.status] ?? r.status}
+                    </Pill>
                   )}
                 </td>
                 <td className="whitespace-nowrap px-3 py-2 text-right text-xs text-muted-foreground">
@@ -280,7 +291,7 @@ function SorovlarJadval({
                       disabled={pending}
                       onClick={() => onTahrir(r)}
                       className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                      title="SKU/kategoriyani tuzatish"
+                      title="Kanon/kategoriyani tuzatish"
                     >
                       <Pencil className="h-3.5 w-3.5" />
                     </button>
@@ -311,14 +322,16 @@ function KategoriyalarJadval({ rows }: { rows: KategoriyaQator[] }) {
   return (
     <SectionCard
       title="Kategoriya bo'yicha murojaatlar"
-      description="Mahsulot va narx so'rovlari; SKU topilmagan bo'lsa ham kategoriya aniqlanadi"
+      description="Mahsulot va narx so'rovlari; katalogda bo'lmagan mahsulot ham kategoriyaga biriktiriladi"
     >
       <div className="flex flex-col gap-2">
         {rows.map((r) => (
           <div key={r.categoryId ?? "yoq"} className="flex items-center gap-3 text-sm">
             <div className="w-56 shrink-0 truncate">
               <span className="font-medium">{r.nom}</span>
-              {r.parent && <span className="ml-1 text-[11px] text-muted-foreground">{r.parent}</span>}
+              {r.parent && (
+                <span className="ml-1 text-[11px] text-muted-foreground">{r.parent}</span>
+              )}
             </div>
             <div className="flex h-5 flex-1 overflow-hidden rounded bg-muted">
               <div
@@ -347,49 +360,149 @@ function KategoriyalarJadval({ rows }: { rows: KategoriyaQator[] }) {
   );
 }
 
-function YoqJadval({ rows }: { rows: MahsulotQator[] }) {
+/** "Berilmagan" ro'yxati — qatorni bosganda ochiladigan to'liq tarix bilan. */
+function YoqJadval({
+  rows,
+  from,
+  to,
+  canEdit,
+}: {
+  rows: MahsulotQator[];
+  from: string;
+  to: string;
+  canEdit: boolean;
+}) {
+  const [ochiq, setOchiq] = useState<string | null>(null);
+  const [kesh, setKesh] = useState<Record<string, TafsilotQator[]>>({});
+  const [yuklanmoqda, setYuklanmoqda] = useState<string | null>(null);
+
   if (rows.length === 0) return <EmptyState icon={MessagesSquare} title="Ma'lumot yo'q" />;
+
+  const kalit = (r: MahsulotQator) => (r.canonId != null ? `c${r.canonId}` : `n${r.nom}`);
+
+  async function toggle(r: MahsulotQator) {
+    const k = kalit(r);
+    if (ochiq === k) {
+      setOchiq(null);
+      return;
+    }
+    setOchiq(k);
+    if (kesh[k] || !canEdit) return; // bir marta yuklanadi
+    setYuklanmoqda(k);
+    try {
+      const res = await yoqTafsilotAction({
+        canonId: r.canonId,
+        normKey: r.canonId == null ? r.nom : null,
+        from,
+        to,
+      });
+      if (res.ok) setKesh((s) => ({ ...s, [k]: res.qatorlar }));
+    } finally {
+      setYuklanmoqda(null);
+    }
+  }
+
   return (
     <SectionCard
       title="So'ralgan, lekin berilmagan"
-      description="Assortiment bo'shlig'i — eng ko'p YO'Q javobi olgan yoki javobsiz qolgan mahsulotlar"
+      description="Assortiment bo'shlig'i. Qatorni bosing — qachon yo'q deyilgani va operator javobi ko'rinadi"
       bodyClassName="p-0"
     >
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="border-b border-border/60 text-[11px] uppercase text-muted-foreground">
-            <tr>
-              <th className="px-4 py-2 text-left font-semibold">Mahsulot</th>
-              <th className="px-4 py-2 text-left font-semibold">Katalogdagi SKU</th>
-              <th className="px-4 py-2 text-right font-semibold">YO'Q</th>
-              <th className="px-4 py-2 text-right font-semibold">Javobsiz</th>
-              <th className="px-4 py-2 text-right font-semibold">Jami</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.productNorm} className="border-b border-border/40 last:border-0">
-                <td className="px-4 py-2 font-medium">{r.productNorm}</td>
-                <td className="px-4 py-2 text-xs text-muted-foreground">
-                  {r.productName ?? <span className="text-destructive">katalogda yo'q</span>}
-                </td>
-                <td className="px-4 py-2 text-right font-semibold tabular-nums text-destructive">
-                  {r.no || "—"}
-                </td>
-                <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
-                  {r.unanswered || "—"}
-                </td>
-                <td className="px-4 py-2 text-right font-semibold tabular-nums">{r.jami}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="divide-y divide-border/40">
+        {rows.map((r) => {
+          const k = kalit(r);
+          const open = ochiq === k;
+          return (
+            <div key={k}>
+              <button
+                onClick={() => toggle(r)}
+                className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm hover:bg-muted/30"
+              >
+                <ChevronRight
+                  className={cn("h-4 w-4 shrink-0 text-muted-foreground transition", open && "rotate-90")}
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">{r.nom}</span>
+                    {!r.yechilgan && (
+                      <Pill tone="muted">yechilmagan</Pill>
+                    )}
+                    {r.yesBor > 0 && <Pill tone="green">keyin bor bo&apos;lgan</Pill>}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground">
+                    {r.kategoriya ?? "kategoriya aniqlanmagan"}
+                    {r.birinchi && (
+                      <>
+                        {" · "}
+                        {r.birinchi === r.oxirgi
+                          ? r.birinchi
+                          : `${r.birinchi} … ${r.oxirgi}`}{" "}
+                        oralig&apos;ida yo&apos;q edi
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <div className="font-semibold tabular-nums text-destructive">{r.no || "—"}</div>
+                  <div className="text-[11px] text-muted-foreground">
+                    {r.unanswered > 0 && `${r.unanswered} javobsiz`}
+                  </div>
+                </div>
+                <div className="w-10 shrink-0 text-right font-semibold tabular-nums">{r.jami}</div>
+              </button>
+
+              {open && (
+                <div className="bg-muted/20 px-4 py-3">
+                  {yuklanmoqda === k ? (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" /> yuklanmoqda…
+                    </div>
+                  ) : !canEdit ? (
+                    <p className="text-xs text-muted-foreground">Tafsilot faqat adminlarga ko&apos;rinadi.</p>
+                  ) : (kesh[k] ?? []).length === 0 ? (
+                    <p className="text-xs text-muted-foreground">Tafsilot topilmadi.</p>
+                  ) : (
+                    <div className="flex flex-col gap-2.5">
+                      {(kesh[k] ?? []).map((t) => (
+                        <div key={t.id} className="rounded-xl border border-border/60 bg-card p-2.5">
+                          <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                            <Pill tone={STATUS_TONE[t.status] ?? "muted"}>
+                              {STATUS_NOM[t.status] ?? t.status}
+                            </Pill>
+                            <span>{formatDateTimeUZ(t.askedAt)}</span>
+                            {t.branchName && <span>· {t.branchName}</span>}
+                            {t.answerMinutes != null && <span>· {t.answerMinutes} daq</span>}
+                          </div>
+                          <div className="mt-1 text-sm">{t.productText ?? "—"}</div>
+                          {t.javoblar.length > 0 ? (
+                            <div className="mt-1.5 border-l-2 border-primary/40 pl-2.5">
+                              {t.javoblar.map((j) => (
+                                <div key={j.messageId} className="text-xs text-muted-foreground">
+                                  <span className="font-medium text-foreground">Operator:</span>{" "}
+                                  {j.text || (j.mediaKind ? `[${j.mediaKind}]` : "—")}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="mt-1.5 text-xs italic text-amber-600 dark:text-amber-400">
+                              javob berilmagan
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </SectionCard>
   );
 }
 
-/** SKU/kategoriya tuzatish oynasi — SYSTEM_ADMIN uchun. */
+/** Kanon/kategoriya tuzatish oynasi — SYSTEM_ADMIN uchun. */
 function TahrirOyna({
   sorov,
   kategoriyalar,
@@ -399,21 +512,29 @@ function TahrirOyna({
   sorov: SorovQator;
   kategoriyalar: KategoriyaOpt[];
   onYopish: () => void;
-  onSaqla: (productId: number | null, categoryId: number | null, hammasiga: boolean) => void;
+  onSaqla: (canonId: number | null, yangiNom: string | undefined, categoryId: number | null) => void;
 }) {
-  const [q, setQ] = useState(sorov.productNorm ?? "");
-  const [natija, setNatija] = useState<SkuOpt[]>([]);
-  const [tanlangan, setTanlangan] = useState<SkuOpt | null>(
-    sorov.productId ? { id: sorov.productId, name: sorov.productName ?? "", categoryId: sorov.categoryId, categoryName: sorov.categoryName } : null
+  const [q, setQ] = useState("");
+  const [natija, setNatija] = useState<KanonOpt[]>([]);
+  const [tanlangan, setTanlangan] = useState<KanonOpt | null>(
+    sorov.canonId
+      ? {
+          id: sorov.canonId,
+          name: sorov.canonName ?? "",
+          categoryId: sorov.categoryId,
+          categoryName: sorov.categoryName,
+          hits: 0,
+        }
+      : null
   );
+  const [yangiNom, setYangiNom] = useState("");
   const [catId, setCatId] = useState<number | null>(sorov.categoryId);
-  const [hammasiga, setHammasiga] = useState(true);
   const [qidirmoqda, setQidirmoqda] = useState(false);
 
-  async function qidir() {
+  async function qidir(term: string) {
     setQidirmoqda(true);
     try {
-      setNatija(await skuQidir(q));
+      setNatija(await kanonQidir(term));
     } finally {
       setQidirmoqda(false);
     }
@@ -428,21 +549,25 @@ function TahrirOyna({
         className="w-full max-w-2xl rounded-2xl border border-border bg-card p-5 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="text-base font-semibold">Moslikni tuzatish</h3>
+        <h3 className="text-base font-semibold">Kanonik mahsulotga bog&apos;lash</h3>
         <p className="mt-0.5 text-sm text-muted-foreground">
-          Mijoz so'ragan: <b className="text-foreground">{sorov.productText}</b>
+          Mijoz so&apos;ragan: <b className="text-foreground">{sorov.productText}</b>
           {sorov.productNorm && ` (${sorov.productNorm})`}
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Tuzatish shu yozilishdagi <b>barcha</b> so&apos;rovlarga qo&apos;llanadi va
+          kelajakda ham eslab qolinadi.
         </p>
 
         <div className="mt-4 flex gap-2">
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && qidir()}
-            placeholder="SKU nomi bo'yicha qidirish…"
+            onKeyDown={(e) => e.key === "Enter" && qidir(q)}
+            placeholder="Reyestrdan qidirish (bo'sh qoldirsangiz — eng ko'p uchraganlar)…"
             className="flex-1 rounded-xl border border-border bg-background px-3 py-2 text-sm"
           />
-          <Button onClick={qidir} disabled={qidirmoqda} size="sm">
+          <Button onClick={() => qidir(q)} disabled={qidirmoqda} size="sm">
             <Search className="mr-1.5 h-3.5 w-3.5" />
             Qidirish
           </Button>
@@ -455,6 +580,7 @@ function TahrirOyna({
                 key={s.id}
                 onClick={() => {
                   setTanlangan(s);
+                  setYangiNom("");
                   if (s.categoryId) setCatId(s.categoryId);
                 }}
                 className={cn(
@@ -463,7 +589,9 @@ function TahrirOyna({
                 )}
               >
                 <span>{s.name}</span>
-                <span className="shrink-0 text-[11px] text-muted-foreground">{s.categoryName}</span>
+                <span className="shrink-0 text-[11px] text-muted-foreground">
+                  {s.categoryName} {s.hits > 0 && `· ${s.hits}x`}
+                </span>
               </button>
             ))}
           </div>
@@ -471,11 +599,11 @@ function TahrirOyna({
 
         <div className="mt-4 rounded-xl bg-muted/50 p-3 text-sm">
           <div>
-            Tanlangan SKU:{" "}
+            Tanlangan kanon:{" "}
             {tanlangan ? (
               <b>{tanlangan.name}</b>
             ) : (
-              <span className="text-muted-foreground">yo&apos;q (katalogda mavjud emas)</span>
+              <span className="text-muted-foreground">yo&apos;q</span>
             )}
             {tanlangan && (
               <button
@@ -486,8 +614,21 @@ function TahrirOyna({
               </button>
             )}
           </div>
+
+          {!tanlangan && (
+            <label className="mt-2 flex items-center gap-2">
+              <span className="shrink-0 text-xs text-muted-foreground">Yangi kanon nomi:</span>
+              <input
+                value={yangiNom}
+                onChange={(e) => setYangiNom(e.target.value)}
+                placeholder="masalan: Shaftoli"
+                className="flex-1 rounded-lg border border-border bg-background px-2 py-1 text-sm"
+              />
+            </label>
+          )}
+
           <label className="mt-2 flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Subkategoriya:</span>
+            <span className="shrink-0 text-xs text-muted-foreground">Subkategoriya:</span>
             <select
               value={catId ?? ""}
               onChange={(e) => setCatId(e.target.value ? Number(e.target.value) : null)}
@@ -503,21 +644,17 @@ function TahrirOyna({
           </label>
         </div>
 
-        <label className="mt-3 flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={hammasiga}
-            onChange={(e) => setHammasiga(e.target.checked)}
-            className="h-4 w-4"
-          />
-          Shu nomdagi barcha so&apos;rovlarga qo&apos;llansin (kelajakdagilarga ham)
-        </label>
-
         <div className="mt-4 flex justify-end gap-2">
           <Button variant="outline" size="sm" onClick={onYopish}>
             Bekor qilish
           </Button>
-          <Button size="sm" onClick={() => onSaqla(tanlangan?.id ?? null, catId, hammasiga)}>
+          <Button
+            size="sm"
+            disabled={!tanlangan && !yangiNom.trim()}
+            onClick={() =>
+              onSaqla(tanlangan?.id ?? null, tanlangan ? undefined : yangiNom.trim(), catId)
+            }
+          >
             Saqlash
           </Button>
         </div>

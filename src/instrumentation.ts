@@ -101,7 +101,7 @@ const JOBS: CronJob[] = [
 
       console.log(
         `[community-ai] ${kecha}: ${r.windows} oyna → ${r.requests} so'rov ` +
-          `(SKU: ${m.matched}, kategoriya: ${m.categorized})`
+          `(kanon: ${m.kanon}, yangi: ${m.yangiKanon}, kategoriya: ${m.categorized})`
       );
       if (r.errors > 0) throw new Error(`${r.errors} oyna tahlil qilinmadi`);
     },

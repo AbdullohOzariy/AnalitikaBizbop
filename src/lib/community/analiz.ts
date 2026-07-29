@@ -12,6 +12,7 @@ import { PROMPT_VERSION, SYSTEM, RESPONSE_SCHEMA, type AiResult, type AiRequest 
 import { buildWindows, normalize, operatorMi, type Msg, type Window, type Operatorlar } from "./transcript";
 import { getCommunityConfig } from "./sozlama";
 import { redactError } from "@/lib/tg-redact";
+import { canonKey } from "./kanon-kalit";
 
 const KIND = new Set(["PRODUCT", "PRICE", "PROMO", "COMPLAINT", "RETURN", "SERVICE", "OTHER"]);
 const STATUS = new Set(["YES", "NO", "UNANSWERED", "UNCLEAR"]);
@@ -74,6 +75,7 @@ function raqamlar(text: string): number[] {
 
 interface Tayyor {
   messageId: number;
+  normKey: string | null;
   itemIndex: number;
   askedAt: Date;
   kind: string;
@@ -166,6 +168,8 @@ export function validatsiya(
       asksPhoto: !!it.asksPhoto,
       productText: (it.productText ?? "").trim().slice(0, 120) || null,
       productNorm: norm || null,
+      // canonKey — kanon reyestriga bog'lash va "shu nomdagi hammasiga qo'llash" kaliti
+      normKey: canonKey(norm) || null,
       searchTerms: (it.searchTerms ?? []).map((s) => s.trim()).filter(Boolean).slice(0, 4),
       brand: (it.brand ?? "").trim().slice(0, 60) || null,
       branchId,
