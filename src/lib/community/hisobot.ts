@@ -7,6 +7,19 @@
  * hisobot ham shunga tayanadi.
  */
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@/generated/prisma/client";
+
+/** Barcha hisobotlarga umumiy filtr. `branchId` — filial kesimi (null = hammasi). */
+export interface Filtr {
+  chatId: bigint;
+  from: string;
+  to: string;
+  branchId?: number | null;
+}
+
+/** Raw SQL uchun filial sharti — `branchId` berilmasa bo'sh. */
+const branchSql = (b?: number | null) =>
+  b != null ? Prisma.sql`AND r."branchId" = ${b}` : Prisma.empty;
 
 export interface Umumiy {
   jami: number;
@@ -43,10 +56,10 @@ export interface MahsulotQator {
   yesBor: number;
 }
 
-export async function umumiy(chatId: bigint, from: string, to: string): Promise<Umumiy> {
+export async function umumiy({ chatId, from, to, branchId }: Filtr): Promise<Umumiy> {
   const rows = await prisma.tgRequest.groupBy({
     by: ["status"],
-    where: { chatId, dayKey: { gte: from, lte: to } },
+    where: { chatId, dayKey: { gte: from, lte: to }, ...(branchId != null ? { branchId } : {}) },
     _count: { _all: true },
   });
   const n = (s: string) => rows.find((r) => r.status === s)?._count._all ?? 0;
@@ -57,7 +70,12 @@ export async function umumiy(chatId: bigint, from: string, to: string): Promise<
   const jami = yes + no + unanswered + unclear;
 
   const avg = await prisma.tgRequest.aggregate({
-    where: { chatId, dayKey: { gte: from, lte: to }, answerMinutes: { not: null } },
+    where: {
+      chatId,
+      dayKey: { gte: from, lte: to },
+      answerMinutes: { not: null },
+      ...(branchId != null ? { branchId } : {}),
+    },
     _avg: { answerMinutes: true },
   });
 
@@ -73,20 +91,22 @@ export async function umumiy(chatId: bigint, from: string, to: string): Promise<
 }
 
 /** Kunlik dinamika — grafik uchun. */
-export async function kunlik(
-  chatId: bigint,
-  from: string,
-  to: string
-): Promise<{ dayKey: string; jami: number; yes: number; no: number }[]> {
+export async function kunlik({
+  chatId,
+  from,
+  to,
+  branchId,
+}: Filtr): Promise<{ dayKey: string; jami: number; yes: number; no: number }[]> {
   const rows = await prisma.$queryRaw<{ dayKey: string; jami: bigint; yes: bigint; no: bigint }[]>`
-    SELECT "dayKey",
+    SELECT r."dayKey",
            COUNT(*)::bigint AS jami,
-           COUNT(*) FILTER (WHERE status = 'YES')::bigint AS yes,
-           COUNT(*) FILTER (WHERE status = 'NO')::bigint AS no
-    FROM "TgRequest"
-    WHERE "chatId" = ${chatId} AND "dayKey" BETWEEN ${from} AND ${to}
-    GROUP BY "dayKey"
-    ORDER BY "dayKey"
+           COUNT(*) FILTER (WHERE r.status = 'YES')::bigint AS yes,
+           COUNT(*) FILTER (WHERE r.status = 'NO')::bigint AS no
+    FROM "TgRequest" r
+    WHERE r."chatId" = ${chatId} AND r."dayKey" BETWEEN ${from} AND ${to}
+      ${branchSql(branchId)}
+    GROUP BY r."dayKey"
+    ORDER BY r."dayKey"
   `;
   return rows.map((r) => ({
     dayKey: r.dayKey,
@@ -97,11 +117,7 @@ export async function kunlik(
 }
 
 /** Kategoriya (subkategoriya) kesimida — qaysi yo'nalishdan ko'p so'ralyapti. */
-export async function kategoriyalar(
-  chatId: bigint,
-  from: string,
-  to: string
-): Promise<KategoriyaQator[]> {
+export async function kategoriyalar({ chatId, from, to, branchId }: Filtr): Promise<KategoriyaQator[]> {
   const rows = await prisma.$queryRaw<
     { categoryId: number | null; nom: string | null; parent: string | null; jami: bigint; yes: bigint; no: bigint }[]
   >`
@@ -116,6 +132,7 @@ export async function kategoriyalar(
     LEFT JOIN "Category" p ON p.id = c."parentId"
     WHERE r."chatId" = ${chatId} AND r."dayKey" BETWEEN ${from} AND ${to}
       AND r.kind IN ('PRODUCT','PRICE')
+      ${branchSql(branchId)}
     GROUP BY r."categoryId", c.name, p.name
     ORDER BY jami DESC
   `;
@@ -134,9 +151,7 @@ export async function kategoriyalar(
  * bo'shlig'i. Bu butun tahlilning ASOSIY biznes natijasi.
  */
 export async function yoqTop(
-  chatId: bigint,
-  from: string,
-  to: string,
+  { chatId, from, to, branchId }: Filtr,
   limit = 30
 ): Promise<MahsulotQator[]> {
   // Kanon yechilgan bo'lsa canonId bo'yicha, aks holda normKey bo'yicha guruhlanadi —
@@ -169,6 +184,7 @@ export async function yoqTop(
     WHERE r."chatId" = ${chatId} AND r."dayKey" BETWEEN ${from} AND ${to}
       AND r.kind IN ('PRODUCT','PRICE')
       AND (r."canonId" IS NOT NULL OR r."normKey" IS NOT NULL)
+      ${branchSql(branchId)}
     GROUP BY r."canonId", CASE WHEN r."canonId" IS NULL THEN r."normKey" END
     HAVING COUNT(*) FILTER (WHERE r.status IN ('NO','UNANSWERED')) > 0
     ORDER BY no DESC, jami DESC
@@ -208,13 +224,9 @@ export interface TafsilotQator {
  * Javob matnlari `answerIds` massivi orqali olinadi — Prisma relatsiyasi yo'q,
  * shuning uchun BITTA raw so'rov bilan (N+1 emas).
  */
-export async function yoqTafsilot(opts: {
-  chatId: bigint;
-  from: string;
-  to: string;
-  canonId?: number | null;
-  normKey?: string | null;
-}): Promise<TafsilotQator[]> {
+export async function yoqTafsilot(
+  opts: Filtr & { canonId?: number | null; normKey?: string | null }
+): Promise<TafsilotQator[]> {
   const rows = await prisma.$queryRaw<
     {
       id: number;
@@ -244,6 +256,7 @@ export async function yoqTafsilot(opts: {
     LEFT JOIN "Branch" b ON b.id = r."branchId"
     WHERE r."chatId" = ${opts.chatId}
       AND r."dayKey" BETWEEN ${opts.from} AND ${opts.to}
+      ${branchSql(opts.branchId)}
       AND ${opts.canonId ?? null}::int IS NOT DISTINCT FROM r."canonId"
       AND (${opts.canonId ?? null}::int IS NOT NULL OR r."normKey" = ${opts.normKey ?? null})
     ORDER BY r."askedAt" DESC
@@ -286,17 +299,14 @@ export interface SorovQator {
 }
 
 /** So'rovlar ro'yxati (tahrirlash tabi uchun). */
-export async function sorovlar(opts: {
-  chatId: bigint;
-  from: string;
-  to: string;
-  status?: string;
-  limit?: number;
-}): Promise<SorovQator[]> {
+export async function sorovlar(
+  opts: Filtr & { status?: string; limit?: number }
+): Promise<SorovQator[]> {
   const rows = await prisma.tgRequest.findMany({
     where: {
       chatId: opts.chatId,
       dayKey: { gte: opts.from, lte: opts.to },
+      ...(opts.branchId != null ? { branchId: opts.branchId } : {}),
       ...(opts.status ? { status: opts.status } : {}),
     },
     orderBy: [{ askedAt: "desc" }],

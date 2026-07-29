@@ -63,6 +63,14 @@ function branchTop(
   return null;
 }
 
+/**
+ * Javob matnidagi INKOR: "sotuvda mavjud emas", "yo'q", "нету", "tugagan"…
+ * Rasm javobini HA deb hisoblashdan OLDIN shu tekshiriladi — operator ko'pincha
+ * "Gold'da yo'q" deb yozib, keyin BOSHQA filialdagi mahsulot rasmini tashlaydi.
+ */
+const INKOR =
+  /(mavjud\s*emas|yo'?q|yoq\b|tuga(gan|di)|kelmadi|bo'?lmaydi|нет\b|нету|отсутству|не\s*име)/iu;
+
 /** Matndagi raqamlar (narx tasdiqlash uchun): "3990so'm/kg" → [3990]. */
 function raqamlar(text: string): number[] {
   const out: number[] = [];
@@ -106,7 +114,8 @@ export function validatsiya(
   items: AiRequest[],
   w: Window,
   ops: Operatorlar,
-  xarita: { id: number; kalitlar: string[] }[]
+  xarita: { id: number; kalitlar: string[] }[],
+  defaultBranchId: number | null
 ): Tayyor[] {
   const byId = new Map(w.all.map((m) => [m.messageId, m]));
   const out: Tayyor[] = [];
@@ -140,6 +149,14 @@ export function validatsiya(
       .sort((a, b) => a.sentAt.getTime() - b.sentAt.getTime());
     const firstAnswerAt = javoblar[0]?.sentAt ?? null;
 
+    // (3b) RASM = HA. Operator mahsulot rasmini tashlagan bo'lsa — u bor degani.
+    // ISTISNO: javoblardan birida ochiq inkor bo'lsa ("sotuvda mavjud emas") yoki
+    // boshqa filialga yo'naltirilgan bo'lsa — bu "so'ralgan joyda YO'Q" holati.
+    const mediaJavob = javoblar.some((a) => !!a.mediaKind);
+    const inkorBor = javoblar.some((a) => INKOR.test(normalize(a.text)));
+    const boshqaFilial = it.answerScope === "OTHER_BRANCH";
+    if (mediaJavob && !inkorBor && !boshqaFilial && status !== "NO") status = "YES";
+
     // (4) narx: javob matnida RAQAM sifatida uchramasa — ishonmaymiz
     let priceQuoted: number | null = null;
     if (typeof it.priceQuoted === "number" && it.priceQuoted > 0) {
@@ -147,8 +164,9 @@ export function validatsiya(
       if (bor) priceQuoted = it.priceQuoted;
     }
 
-    // (5) filialni SERVER aniqlaydi
-    const branchId = branchTop(it.branchText ?? "", xarita);
+    // (5) filialni SERVER aniqlaydi. Mijoz filial aytmasa — ASOSIY filial
+    // (odatda Mega Center): so'rov baribir biror filialga tegishli bo'ladi.
+    const branchId = branchTop(it.branchText ?? "", xarita) ?? defaultBranchId;
 
     // (6) javob vaqti SERVERDA hisoblanadi — modelga daqiqa sanatilmaydi
     const answerMinutes = firstAnswerAt
@@ -264,7 +282,7 @@ export async function analizQil(opts: {
       natija.outTokens += out.outTokens;
 
       const parsed = JSON.parse(out.text) as AiResult;
-      const tayyor = validatsiya(parsed.requests ?? [], w, ops, xarita);
+      const tayyor = validatsiya(parsed.requests ?? [], w, ops, xarita, cfg.defaultBranchId);
 
       await prisma.$transaction(async (tx) => {
         const win = await tx.tgAnalysisWindow.upsert({

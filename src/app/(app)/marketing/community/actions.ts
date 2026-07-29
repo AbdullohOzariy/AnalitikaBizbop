@@ -159,6 +159,7 @@ export async function yoqTafsilotAction(input: {
   normKey: string | null;
   from: string;
   to: string;
+  branchId?: number | null;
 }): Promise<{ ok: true; qatorlar: TafsilotQator[] } | { ok: false; error: string }> {
   try {
     await requireAdmin();
@@ -170,6 +171,7 @@ export async function yoqTafsilotAction(input: {
       to: input.to,
       canonId: input.canonId,
       normKey: input.normKey,
+      branchId: input.branchId ?? null,
     });
     return { ok: true, qatorlar };
   } catch (err) {

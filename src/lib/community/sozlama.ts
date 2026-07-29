@@ -15,6 +15,7 @@ const K_AUTO = "COMMUNITY_AI_AUTO"; // "1" — kunlik cron yoqilgan
 const K_OPS = "COMMUNITY_OPERATOR_IDS"; // vergul bilan: "7078135077,123456"
 const K_OPN = "COMMUNITY_OPERATOR_NAMES"; // HTML eksport uchun (unda fromId yo'q): "bizbop"
 const K_CHAT = "COMMUNITY_CHAT_ID"; // qaysi guruh tahlil qilinadi (bo'sh = birinchi faol)
+const K_BRANCH = "COMMUNITY_DEFAULT_BRANCH_ID"; // filial aytilmagan so'rov shu filialga yoziladi
 
 export interface CommunityConfig {
   apiKey: string | null;
@@ -24,6 +25,8 @@ export interface CommunityConfig {
   /** Kichik harfda — HTML eksportdan kelgan xabarlar uchun (fromId null). */
   operatorNames: string[];
   chatId: bigint | null;
+  /** Mijoz filial aytmasa — so'rov SHU filialga yoziladi (asosiy filial). */
+  defaultBranchId: number | null;
 }
 
 let cache: { val: CommunityConfig; at: number } | null = null;
@@ -41,11 +44,12 @@ export async function getCommunityConfig(): Promise<CommunityConfig> {
   if (cache && now - cache.at < 5 * 60_000) return cache.val;
 
   const rows = await prisma.appSetting
-    .findMany({ where: { key: { in: [K_KEY, K_MODEL, K_AUTO, K_OPS, K_OPN, K_CHAT] } } })
+    .findMany({ where: { key: { in: [K_KEY, K_MODEL, K_AUTO, K_OPS, K_OPN, K_CHAT, K_BRANCH] } } })
     .catch(() => [] as { key: string; value: string }[]);
   const m = new Map(rows.map((r) => [r.key, r.value?.trim() || ""]));
 
   const chatRaw = (process.env.COMMUNITY_CHAT_ID || m.get(K_CHAT) || "").trim();
+  const branchRaw = (process.env.COMMUNITY_DEFAULT_BRANCH_ID || m.get(K_BRANCH) || "").trim();
   const val: CommunityConfig = {
     apiKey: process.env.GEMINI_API_KEY || m.get(K_KEY) || null,
     model: process.env.GEMINI_MODEL_SMART || m.get(K_MODEL) || null,
@@ -56,6 +60,7 @@ export async function getCommunityConfig(): Promise<CommunityConfig> {
       .map((s) => s.trim().toLowerCase())
       .filter(Boolean),
     chatId: /^-?\d+$/.test(chatRaw) ? BigInt(chatRaw) : null,
+    defaultBranchId: /^\d+$/.test(branchRaw) ? Number(branchRaw) : null,
   };
   cache = { val, at: now };
   return val;
@@ -69,6 +74,7 @@ export async function setCommunityConfig(input: {
   operatorIds: string;
   operatorNames: string;
   chatId: string;
+  defaultBranchId: string;
 }): Promise<void> {
   const upsert = (key: string, value: string) =>
     prisma.appSetting.upsert({ where: { key }, create: { key, value }, update: { value } });
@@ -79,6 +85,7 @@ export async function setCommunityConfig(input: {
   await upsert(K_OPS, input.operatorIds.trim());
   await upsert(K_OPN, input.operatorNames.trim());
   await upsert(K_CHAT, input.chatId.trim());
+  await upsert(K_BRANCH, input.defaultBranchId.trim());
   cache = null;
 }
 

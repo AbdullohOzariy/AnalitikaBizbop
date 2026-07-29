@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   MessagesSquare,
   Check,
@@ -54,6 +55,8 @@ export function CommunityClient({
   bugun,
   from,
   to,
+  branchId,
+  filiallar,
 }: {
   sorovlar: SorovQator[];
   kategoriyalar: KategoriyaQator[];
@@ -63,6 +66,8 @@ export function CommunityClient({
   bugun: string;
   from: string;
   to: string;
+  branchId: number | null;
+  filiallar: { id: number; name: string }[];
 }) {
   const [tab, setTab] = useState<Tab>("sorovlar");
   const [tahrir, setTahrir] = useState<SorovQator | null>(null);
@@ -90,6 +95,8 @@ export function CommunityClient({
 
   return (
     <div className="flex flex-col gap-4">
+      <FilialFiltr filiallar={filiallar} joriy={branchId} />
+
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-1.5">
           {TABS.map((t) => (
@@ -138,7 +145,9 @@ export function CommunityClient({
 
       {tab === "kategoriyalar" && <KategoriyalarJadval rows={kategoriyalar} />}
 
-      {tab === "yoq" && <YoqJadval rows={yoqTop} from={from} to={to} canEdit={canEdit} />}
+      {tab === "yoq" && (
+        <YoqJadval rows={yoqTop} from={from} to={to} branchId={branchId} canEdit={canEdit} />
+      )}
 
       {tab === "moslanmagan" && (
         <SorovlarJadval
@@ -163,6 +172,57 @@ export function CommunityClient({
           }}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * Filial kesimi. Mijoz filial aytmasa so'rov ASOSIY filialga (Mega Center) yoziladi,
+ * shuning uchun filtr "qaysi filialda nima yetishmayapti" savoliga javob beradi.
+ */
+function FilialFiltr({
+  filiallar,
+  joriy,
+}: {
+  filiallar: { id: number; name: string }[];
+  joriy: number | null;
+}) {
+  const router = useRouter();
+  const sp = useSearchParams();
+
+  function tanla(id: number | null) {
+    const q = new URLSearchParams(sp.toString());
+    if (id == null) q.delete("branch");
+    else q.set("branch", String(id));
+    router.push(`?${q.toString()}`);
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="mr-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        Filial
+      </span>
+      <button
+        onClick={() => tanla(null)}
+        className={cn(
+          "rounded-lg px-2.5 py-1 text-xs font-medium transition",
+          joriy == null ? "bg-foreground text-background" : "bg-muted text-muted-foreground hover:bg-muted/70"
+        )}
+      >
+        Barchasi
+      </button>
+      {filiallar.map((b) => (
+        <button
+          key={b.id}
+          onClick={() => tanla(b.id)}
+          className={cn(
+            "rounded-lg px-2.5 py-1 text-xs font-medium transition",
+            joriy === b.id ? "bg-foreground text-background" : "bg-muted text-muted-foreground hover:bg-muted/70"
+          )}
+        >
+          {b.name}
+        </button>
+      ))}
     </div>
   );
 }
@@ -365,11 +425,13 @@ function YoqJadval({
   rows,
   from,
   to,
+  branchId,
   canEdit,
 }: {
   rows: MahsulotQator[];
   from: string;
   to: string;
+  branchId: number | null;
   canEdit: boolean;
 }) {
   const [ochiq, setOchiq] = useState<string | null>(null);
@@ -395,6 +457,7 @@ function YoqJadval({
         normKey: r.canonId == null ? r.nom : null,
         from,
         to,
+        branchId,
       });
       if (res.ok) setKesh((s) => ({ ...s, [k]: res.qatorlar }));
     } finally {

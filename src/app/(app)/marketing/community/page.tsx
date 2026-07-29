@@ -35,6 +35,8 @@ export default async function CommunityPage({
 
   const sp = await searchParams;
   const { from, to } = davr(sp);
+  const branchRaw = typeof sp.branch === "string" ? sp.branch : "";
+  const branchId = /^\d+$/.test(branchRaw) ? Number(branchRaw) : null;
   const chatId = await tahlilChatId();
 
   if (chatId == null) {
@@ -50,14 +52,16 @@ export default async function CommunityPage({
     );
   }
 
-  const [stat, kunlar, katlar, yoq, royxat, katOpts, xabarSoni] = await Promise.all([
-    umumiy(chatId, from, to),
-    kunlik(chatId, from, to),
-    kategoriyalar(chatId, from, to),
-    yoqTop(chatId, from, to),
-    sorovlar({ chatId, from, to, limit: 300 }),
+  const f = { chatId, from, to, branchId };
+  const [stat, kunlar, katlar, yoq, royxat, katOpts, xabarSoni, filiallar] = await Promise.all([
+    umumiy(f),
+    kunlik(f),
+    kategoriyalar(f),
+    yoqTop(f),
+    sorovlar({ ...f, limit: 300 }),
     canEdit ? kategoriyalarRoyxati() : Promise.resolve([]),
     prisma.tgGroupMessage.count({ where: { chatId, dayKey: { gte: from, lte: to } } }),
+    prisma.branch.findMany({ select: { id: true, name: true }, orderBy: { sortOrder: "asc" } }),
   ]);
 
   const maxKun = Math.max(1, ...kunlar.map((k) => k.jami));
@@ -125,6 +129,8 @@ export default async function CommunityPage({
             bugun={todayTashkentISO()}
             from={from}
             to={to}
+            branchId={branchId}
+            filiallar={filiallar}
           />
         </>
       )}
