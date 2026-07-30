@@ -85,16 +85,22 @@ describe("ishonch belgisi", () => {
 });
 
 describe("segmentla — kesimlar", () => {
-  const q = (o: Partial<BahoQatori> & { actual: number; model: number; naive: number }): BahoQatori => ({
-    sinf: "SMOOTH" as Sinf,
-    branchId: 1,
-    katId: 10,
-    subkatId: 100,
-    abc: "A",
-    ishonch: null,
-    ...o,
-    acc: scoreCell(o.actual, o.model, o.naive, 1),
-  });
+  const q = (o: Partial<BahoQatori> & { actual: number; model: number; naive: number; q90?: number }): BahoQatori => {
+    const q90 = o.q90 ?? o.model * 1.5;
+    return {
+      sinf: "SMOOTH" as Sinf,
+      branchId: 1,
+      katId: 10,
+      subkatId: 100,
+      abc: "A",
+      ishonch: null,
+      qopladi: o.actual <= q90,
+      ortiqcha: Math.max(0, q90 - o.actual),
+      kamomad: Math.max(0, o.actual - q90),
+      ...o,
+      acc: scoreCell(o.actual, o.model, o.naive, 1),
+    };
+  };
 
   it("bitta seriya 6 kesimga tushadi", () => {
     const s = segmentla([q({ actual: 10, model: 9, naive: 12 })]);

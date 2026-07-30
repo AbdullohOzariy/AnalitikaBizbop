@@ -905,7 +905,11 @@ model SkuForecastRun {
   weekStart   DateTime @db.Date // ORIGIN: train'ga kirgan oxirgi TO'LIQ hafta (dushanba)
   horizon     Int // prognoz gorizonti, hafta (validatsiyalangan: 4)
   modelKey    String   @db.VarChar(24) // siyosat nomi ("gate-v1"), qatordagi model emas
-  z           Float // q90 uchun ishlatilgan z — kalibrlanganda tarixni qayta o'qish uchun
+  z           Float // MEROS: eski formulaning z'i (q90 endi empirik kvantil bilan)
+  // Kalibratsiya — o'sha yugurishda AYNAN qaysi koeffitsient ishlatilgani. Bu qatorlar
+  // bo'lmasa "nega o'tgan haftada boshqa raqam chiqqan" degan savolga javob yo'q.
+  biasK       Float    @default(1) // global BIAS koeffitsienti (prognoz shunga BO'LINADI)
+  servis      Float    @default(0.9) // maqsad servis darajasi (q90 kvantili)
   panelWeeks  Int // panelda mavjud to'liq haftalar
   seriesTotal Int // paneldagi faol seriyalar (SKU×filial)
   forecasted  Int // prognoz yozilgan seriyalar
@@ -921,6 +925,7 @@ model SkuForecastRun {
   forecasts SkuForecast[]
   accuracy  SkuForecastAccuracy[]
   segments  SkuForecastSegment[]
+  calib     SkuForecastCalib[]
 
   @@unique([weekStart, horizon, modelKey]) // bir hafta × bir siyosat = bitta run (idempotent)
   @@index([scoredAt])
@@ -972,6 +977,9 @@ model SkuForecastAccuracy {
   baseSqErr    Float
   amountWeight Float // fakt × dona narxi (so'mli og'irlik)
   posWeeks     Int // oyna ichida fakt > 0 bo'lgan haftalar
+  // q90 SHU YERDA HAM saqlanadi: prognoz detali 12 haftada tozalanadi, aniqlik esa
+  // 26 hafta yashaydi — aks holda servis darajasi tarixi detal bilan birga yo'qolardi.
+  q90          Float    @default(0)
   // Gorizont ichida qoldiq tugagan: sotuv 0 bo'lgani talab yo'qligini BILDIRMAYDI.
   // Qator baribir saqlanadi (audit uchun), lekin metrikadan CHIQARILADI.
   stockout     Boolean  @default(false)
@@ -1009,11 +1017,33 @@ model SkuForecastSegment {
   ishonchli    Int    @default(0) // WAPE ≤ 30% (oxirgi 4 oyna)
   taxminiy     Int    @default(0) // 30–60%
   ishonchsiz   Int    @default(0) // > 60%
+  // SERVIS iqtisodi: qoplash = qopladi / n. `ortiqcha` va `kamomad` — DONA:
+  // Σmax(0, q90 − fakt) va Σmax(0, fakt − q90). Faqat qoplashni ko'rsatish yetarli
+  // emas — 90% qoplashga har qanday narxda erishish mumkin, savol NARXIDA.
+  qopladi      Int    @default(0)
+  ortiqcha     Float  @default(0)
+  kamomad      Float  @default(0)
 
   run SkuForecastRun @relation(fields: [runId], references: [id], onDelete: Cascade)
 
   @@unique([runId, horizon, scope, key])
   @@index([scope, key])
+}
+
+// Yugurishda ishlatilgan kalibratsiya (sinf kesimida) — provenance. Koeffitsient
+// tarixdan o'rganiladi, ya'ni har hafta o'zgaradi; qaysi raqam qachon ishlatilgani
+// saqlanmasa, o'tgan haftaning prognozini qayta tushuntirib bo'lmaydi.
+model SkuForecastCalib {
+  id      Int    @id @default(autoincrement())
+  runId   Int
+  sinf    String @db.VarChar(12)
+  quantC  Float // √-masshtab kvantil koeffitsienti: q90 = p50 + c·√(p50+1)
+  n       Int // necha baho qatoridan o'rganildi (0 — sovuq start qiymati)
+  sovuq   Boolean @default(false) // tarix yo'q edi, o'lchangan default ishlatildi
+
+  run SkuForecastRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, sinf])
 }
 
 // ─── Yetkazib beruvchi anketasi (supplier.oilagroup.uz) ──────────────────────────────

@@ -12,10 +12,21 @@
 
 export type ModelKey = "naive1" | "ma4" | "ma8" | "combo50";
 
+/**
+ * MANFIY PROGNOZ BO'LMAYDI — barcha model funksiyalari shu to'siqdan o'tadi.
+ *
+ * `ProductSales.soldQty` MANFIY bo'lishi mumkin (qaytim sotuvdan ko'p bo'lgan hafta):
+ * jonli bazada 418 549 seriya-haftadan 40 tasi manfiy, eng kichigi p50 = −12 885.
+ * To'sib qo'yilmasa bu qiymatlar oqib ketadi va `√(p50+1)` kabi har qanday masshtab
+ * hisobi NaN beradi — o'lchovda AYNAN shu yuz berdi va butun sinf qatorini buzdi.
+ * Qaytim tarixning o'zida QOLADI (u haqiqiy ma'lumot), faqat CHIQISH nolda to'xtaydi.
+ */
+const nolgaTushir = (v: number) => (Number.isFinite(v) && v > 0 ? v : 0);
+
 /** Oxirgi to'liq hafta fakti × gorizont. Skrinshotdagi "повтор последней недели". */
 export function naive1(train: number[], h: number): number {
   const last = train.length > 0 ? train[train.length - 1] : 0;
-  return last * h;
+  return nolgaTushir(last * h);
 }
 
 /** Oxirgi `k` haftaning o'rtachasi × gorizont. */
@@ -23,7 +34,7 @@ export function movingAvg(train: number[], h: number, k: number): number {
   if (train.length === 0) return 0;
   const oyna = train.slice(-k);
   const ort = oyna.reduce((s, v) => s + v, 0) / oyna.length;
-  return ort * h;
+  return nolgaTushir(ort * h);
 }
 
 /**
@@ -100,11 +111,11 @@ export function scaleMse(train: number[]): number | null {
  * kvantil (backtest xatolar taqsimotidan), formula emas.
  */
 export function q90(p50: number, train: number[], h: number, z: number): number {
-  if (train.length < 2) return p50;
+  if (train.length < 2) return nolgaTushir(p50);
   const ort = train.reduce((s, v) => s + v, 0) / train.length;
   const variansa = train.reduce((s, v) => s + (v - ort) ** 2, 0) / (train.length - 1);
   const sigma = Math.sqrt(Math.max(0, variansa));
-  return p50 + z * sigma * Math.sqrt(h);
+  return nolgaTushir(p50 + z * sigma * Math.sqrt(h));
 }
 
 /** Gorizont ichida nol bo'lish ehtimoli (LUMPY sinfda P50 o'rniga ko'rsatiladi). */

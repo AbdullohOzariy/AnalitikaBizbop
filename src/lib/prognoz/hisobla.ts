@@ -27,7 +27,20 @@ import {
   type SeriyaRow,
   type Sinf,
 } from "./panel";
-import { forecast, modelniTanla, naive1, nolEhtimoli, q90 } from "./model";
+import { forecast, modelniTanla, naive1, nolEhtimoli } from "./model";
+import {
+  C_MAX,
+  C_MIN,
+  C_SOVUQ,
+  KALIB_OYNA,
+  SERVIS,
+  biasKoeff,
+  kalibrla,
+  qisqart,
+  siqilganC,
+  sovuqKalib,
+  type Kalibratsiya,
+} from "./kalibr";
 import { MIN_TRAIN } from "./backtest";
 import { haftaDate, haftaFarq, haftaQosh, kutilganOrigin } from "./hafta";
 import { scoreCell } from "./metrics";
@@ -48,10 +61,9 @@ export const GORIZONT = 4;
 export const SIYOSAT = "gate-v1";
 
 /**
- * q90 uchun z — HALI KALIBRLANMAGAN. Faza 1 o'lchovida normal taqsimotning 1.2816
- * qiymati bilan haqiqiy qoplash 87–89% chiqdi (maqsad 90%), ya'ni z biroz kattaroq
- * bo'lishi kerak. Har run o'z z'ini saqlaydi — kalibrlangach eski tarixni qaysi z
- * bilan o'lchaganimiz bilinib turadi.
+ * MEROS: eski (Faza 2) q90 formulasining z'i. Endi q90 EMPIRIK kvantil bilan
+ * hisoblanadi (`kalibr.ts`) — bu qiymat faqat run qatorida tarix uchun saqlanadi,
+ * chunki Faza 2 da yozilgan prognozlar aynan shu z bilan chiqarilgan edi.
  */
 export const Z_XOM = 1.28;
 
@@ -92,6 +104,9 @@ export interface YugurNatija {
   baholanganRun: number;
   baholanganQator: number;
   tozalandi: { prognoz: number; aniqlik: number };
+  /** Ishlatilgan kalibratsiya — haftalik cron logida ko'rinib turishi uchun. */
+  biasK: number;
+  biasN: number;
 }
 
 const kalit = (pid: number, bid: number) => `${pid}:${bid}`;
@@ -144,7 +159,8 @@ async function konteksOqi(now: Date): Promise<Kontekst> {
 function qatorlarniQur(
   ctx: Kontekst,
   arxiv: Set<number>,
-  originIdx: number
+  originIdx: number,
+  kal: Kalibratsiya
 ): { yozuvlar: Prisma.SkuForecastCreateManyInput[]; skippedKam: number; skippedArch: number; sinfStat: Map<Sinf, number> } {
   const origin = ctx.haftalar[originIdx];
   const targetFrom = haftaDate(haftaQosh(origin, 1));
@@ -170,7 +186,10 @@ function qatorlarniQur(
       continue;
     }
     const modelKey = modelniTanla(sinf);
-    const p50 = forecast(modelKey, train, GORIZONT);
+    // Kalibratsiya: BIAS tuzatish + empirik kvantil. `baseline` esa ATAYLAB XOM
+    // naive1 bo'lib qoladi — FVA sanoat standarti bo'lgan "toza naive" ga nisbatan
+    // o'lchanadi, aks holda baseline'ni ham "yaxshilab" FVA'ni bo'yab qo'yardik.
+    const { p50, q90 } = kalibrla(forecast(modelKey, train, GORIZONT), sinf, kal);
     yozuvlar.push({
       runId: 0, // yozishdan oldin to'ldiriladi
       productId: s.pid,
@@ -178,7 +197,7 @@ function qatorlarniQur(
       sinf,
       modelKey,
       p50,
-      q90: q90(p50, train, GORIZONT, Z_XOM),
+      q90,
       baseline: naive1(train, GORIZONT),
       zeroProb: nolEhtimoli(train),
       lastQty: train[train.length - 1],
@@ -194,6 +213,60 @@ function qatorlarniQur(
   return { yozuvlar, skippedKam, skippedArch, sinfStat };
 }
 
+/**
+ * Kalibratsiyani baho tarixidan o'qiydi. `originISO` — prognoz origin'i: FAQAT o'sha
+ * kunga qadar YOPILGAN oynalar olinadi (`targetTo <= origin`). Bu shart backfill uchun
+ * kritik — aks holda model o'z kelajagidan o'rganib, aniqlik soxta yaxshi chiqardi.
+ *
+ * Kvantil Postgres ichida (`percentile_cont`) hisoblanadi: 130 ming qatorni Node'ga
+ * uzatib saralashning ma'nosi yo'q.
+ */
+async function kalibOqi(originISO: string, servis = SERVIS): Promise<Kalibratsiya> {
+  const kal = sovuqKalib(servis);
+  const r = await pgPool.query<{
+    sinf: string | null;
+    c: number | null;
+    sf: number | null;
+    sa: number | null;
+    n: number;
+  }>(
+    `WITH oynalar AS (
+       SELECT DISTINCT "targetTo" tt FROM "SkuForecastAccuracy"
+       WHERE stockout = false AND "targetTo" <= $1::date
+       ORDER BY tt DESC LIMIT $2
+     )
+     SELECT sinf,
+            percentile_cont($3::float8) WITHIN GROUP (
+              ORDER BY (actual - forecast) / sqrt(greatest(forecast, 0) + 1)
+            )::float8 c,
+            sum(forecast)::float8 sf, sum(actual)::float8 sa, count(*)::int n
+     FROM "SkuForecastAccuracy"
+     WHERE stockout = false AND "targetTo" IN (SELECT tt FROM oynalar)
+     GROUP BY GROUPING SETS ((sinf), ())`,
+    [originISO, KALIB_OYNA, servis]
+  );
+
+  for (const row of r.rows) {
+    const n = Number(row.n) || 0;
+    if (row.sinf == null) {
+      // GROUPING SETS'ning `()` to'plami — global BIAS koeffitsienti
+      if (n > 0 && row.sf != null && row.sa != null) {
+        kal.biasK = biasKoeff(Number(row.sf), Number(row.sa), n);
+        kal.biasN = n;
+      }
+      continue;
+    }
+    if (n > 0 && row.c != null) {
+      const sovuq = C_SOVUQ[row.sinf as Sinf] ?? 0;
+      kal.sinf.set(row.sinf as Sinf, {
+        c: siqilganC(qisqart(Number(row.c), C_MIN, C_MAX), sovuq, n),
+        n,
+      });
+    }
+  }
+  return kal;
+}
+
 /** 1-QADAM: origin haftasi uchun prognoz. Run mavjud bo'lsa (va `force` emas) — o'tkazadi. */
 async function prognozYaz(
   ctx: Kontekst,
@@ -201,22 +274,41 @@ async function prognozYaz(
   force: boolean,
   originIdx: number,
   note?: string
-): Promise<{ runId: number; yangi: boolean; forecasted: number; skippedKam: number; skippedArch: number }> {
+): Promise<{
+  runId: number;
+  yangi: boolean;
+  forecasted: number;
+  skippedKam: number;
+  skippedArch: number;
+  biasK: number;
+  biasN: number;
+}> {
   const weekStart = haftaDate(ctx.haftalar[originIdx]);
   const kalitObj = { weekStart_horizon_modelKey: { weekStart, horizon: GORIZONT, modelKey: SIYOSAT } };
 
   const mavjud = await prisma.skuForecastRun.findUnique({ where: kalitObj });
   if (mavjud && !force) {
-    return { runId: mavjud.id, yangi: false, forecasted: mavjud.forecasted, skippedKam: mavjud.skippedKam, skippedArch: mavjud.skippedArch };
+    return {
+      runId: mavjud.id,
+      yangi: false,
+      forecasted: mavjud.forecasted,
+      skippedKam: mavjud.skippedKam,
+      skippedArch: mavjud.skippedArch,
+      biasK: mavjud.biasK,
+      biasN: 0,
+    };
   }
 
-  const { yozuvlar, skippedKam, skippedArch } = qatorlarniQur(ctx, arxiv, originIdx);
+  const kal = await kalibOqi(ctx.haftalar[originIdx]);
+  const { yozuvlar, skippedKam, skippedArch } = qatorlarniQur(ctx, arxiv, originIdx, kal);
 
   const run = mavjud
     ? await prisma.skuForecastRun.update({
         where: { id: mavjud.id },
         data: {
           z: Z_XOM,
+          biasK: kal.biasK,
+          servis: kal.servis,
           panelWeeks: ctx.haftalar.length,
           seriesTotal: ctx.seriyalar.length,
           forecasted: yozuvlar.length,
@@ -236,6 +328,8 @@ async function prognozYaz(
           horizon: GORIZONT,
           modelKey: SIYOSAT,
           z: Z_XOM,
+          biasK: kal.biasK,
+          servis: kal.servis,
           panelWeeks: ctx.haftalar.length,
           seriesTotal: ctx.seriyalar.length,
           forecasted: yozuvlar.length,
@@ -251,7 +345,15 @@ async function prognozYaz(
     await prisma.skuForecast.deleteMany({ where: { runId: run.id } });
     await prisma.skuForecastAccuracy.deleteMany({ where: { runId: run.id } });
     await prisma.skuForecastSegment.deleteMany({ where: { runId: run.id } });
+    await prisma.skuForecastCalib.deleteMany({ where: { runId: run.id } });
   }
+
+  // Provenance: qaysi koeffitsient ishlatilgani. Kalibratsiya har hafta o'zgaradi,
+  // shuning uchun "o'tgan haftada nega boshqa raqam chiqqan" savoliga javob shu yerda.
+  await prisma.skuForecastCalib.createMany({
+    data: [...kal.sinf].map(([sinf, v]) => ({ runId: run.id, sinf, quantC: v.c, n: v.n, sovuq: v.n === 0 })),
+    skipDuplicates: true,
+  });
 
   for (let i = 0; i < yozuvlar.length; i += BOLAK) {
     const bolak = yozuvlar.slice(i, i + BOLAK).map((y) => ({ ...y, runId: run.id }));
@@ -259,7 +361,15 @@ async function prognozYaz(
   }
   await prisma.skuForecastRun.update({ where: { id: run.id }, data: { finishedAt: new Date() } });
 
-  return { runId: run.id, yangi: true, forecasted: yozuvlar.length, skippedKam, skippedArch };
+  return {
+    runId: run.id,
+    yangi: true,
+    forecasted: yozuvlar.length,
+    skippedKam,
+    skippedArch,
+    biasK: kal.biasK,
+    biasN: kal.biasN,
+  };
 }
 
 /** SKU meta — kesimlar uchun (bir marta o'qiladi, baholanadigan run bo'lsa). */
@@ -321,7 +431,7 @@ async function ishonchXaritasi(targetToISO: string): Promise<Map<string, Ishonch
 }
 
 /** 2-QADAM: fakti kelgan (pishgan) run'larni baholash. */
-async function baholaPishganlar(ctx: Kontekst): Promise<{ runlar: number; qatorlar: number }> {
+async function baholaPishganlar(ctx: Kontekst, metaKesh?: Meta): Promise<{ runlar: number; qatorlar: number }> {
   const kutayotgan = await prisma.skuForecastRun.findMany({
     where: { scoredAt: null, horizon: GORIZONT, status: "ok" },
     orderBy: { weekStart: "asc" },
@@ -333,7 +443,7 @@ async function baholaPishganlar(ctx: Kontekst): Promise<{ runlar: number; qatorl
   );
   if (pishgan.length === 0) return { runlar: 0, qatorlar: 0 };
 
-  const meta = await metaOqi();
+  const meta = metaKesh ?? (await metaOqi());
   let qatorlar = 0;
 
   for (const run of pishgan) {
@@ -349,7 +459,16 @@ async function baholaPishganlar(ctx: Kontekst): Promise<{ runlar: number; qatorl
 
     const targetToISO = haftaQosh(isoDay(run.weekStart), run.horizon);
     /** Bir seriyaning bahosi — ishonch belgisi keyin qo'shiladi (u DB'dan o'qiladi). */
-    const baholar: { pid: number; bid: number; sinf: Sinf; stockout: boolean; acc: ReturnType<typeof scoreCell> }[] = [];
+    const baholar: {
+      pid: number;
+      bid: number;
+      sinf: Sinf;
+      stockout: boolean;
+      acc: ReturnType<typeof scoreCell>;
+      qopladi: boolean;
+      ortiqcha: number;
+      kamomad: number;
+    }[] = [];
     const aniqlik: Prisma.SkuForecastAccuracyCreateManyInput[] = [];
 
     for (const f of fs) {
@@ -389,11 +508,23 @@ async function baholaPishganlar(ctx: Kontekst): Promise<{ runlar: number; qatorl
         baseSqErr: acc.baseSqErr,
         amountWeight: acc.amountWeight,
         posWeeks,
+        q90: f.q90,
         stockout,
         targetTo: f.targetTo,
       });
 
-      baholar.push({ pid: f.productId, bid: f.branchId, sinf: f.sinf as Sinf, stockout, acc });
+      baholar.push({
+        pid: f.productId,
+        bid: f.branchId,
+        sinf: f.sinf as Sinf,
+        stockout,
+        acc,
+        // SERVIS iqtisodi: faqat "qopladimi" yetarli emas — 90% qoplashga har qanday
+        // narxda erishish mumkin. Ortiqcha va kamomad DONA hisobida yozilib boradi.
+        qopladi: actual <= f.q90,
+        ortiqcha: Math.max(0, f.q90 - actual),
+        kamomad: Math.max(0, actual - f.q90),
+      });
     }
 
     for (let i = 0; i < aniqlik.length; i += BOLAK) {
@@ -418,6 +549,9 @@ async function baholaPishganlar(ctx: Kontekst): Promise<{ runlar: number; qatorl
         abc: meta.abc.get(b.pid) ?? null,
         acc: b.acc,
         ishonch: ishonch.get(kalit(b.pid, b.bid)) ?? null,
+        qopladi: b.qopladi,
+        ortiqcha: b.ortiqcha,
+        kamomad: b.kamomad,
       }));
 
     const segmentlar = segmentla(bahoQatorlari);
@@ -441,6 +575,9 @@ async function baholaPishganlar(ctx: Kontekst): Promise<{ runlar: number; qatorl
       ishonchli: s.ishonchli,
       taxminiy: s.taxminiy,
       ishonchsiz: s.ishonchsiz,
+      qopladi: s.qopladi,
+      ortiqcha: s.ortiqcha,
+      kamomad: s.kamomad,
     }));
     for (let i = 0; i < segYozuv.length; i += BOLAK) {
       await prisma.skuForecastSegment.createMany({
@@ -504,12 +641,25 @@ export async function prognozQuruq(opts: { now?: Date } = {}): Promise<{
   skippedKam: number;
   skippedArch: number;
   sinfStat: Record<string, number>;
+  kalib: {
+    biasK: number;
+    biasN: number;
+    servis: number;
+    sinf: Record<string, { c: number; n: number }>;
+  };
   namuna: Prisma.SkuForecastCreateManyInput[];
 }> {
   const ctx = await konteksOqi(opts.now ?? nowTashkent());
   const arxiv = await arxivOqi();
-  const q = qatorlarniQur(ctx, arxiv, ctx.haftalar.length - 1);
+  const kal = await kalibOqi(ctx.origin);
+  const q = qatorlarniQur(ctx, arxiv, ctx.haftalar.length - 1, kal);
   return {
+    kalib: {
+      biasK: +kal.biasK.toFixed(4),
+      biasN: kal.biasN,
+      servis: kal.servis,
+      sinf: Object.fromEntries([...kal.sinf].map(([k, v]) => [k, { c: +v.c.toFixed(2), n: v.n }])),
+    },
     origin: ctx.origin,
     panelWeeks: ctx.haftalar.length,
     kechikish: ctx.kechikish,
@@ -526,6 +676,12 @@ export async function prognozQuruq(opts: { now?: Date } = {}): Promise<{
  * BACKFILL — o'tgan origin'lar uchun "go'yo o'sha paytda" prognoz yozadi, keyin ularni
  * darhol baholaydi. Shunda sifat tarixi 5 hafta kutmasdan, birinchi kundan to'ladi.
  *
+ * TARTIB MUHIM: har origin PROGNOZ → darhol BAHO tartibida ishlanadi, hammasi birdan
+ * emas. Sababi kalibratsiya: origin i uchun koeffitsient o'zidan oldingi YOPILGAN
+ * oynalardan o'qiladi. Agar avval hamma prognoz yozilsa, `--force` eski bahoni
+ * o'chirib tashlagani uchun kalibratsiya bo'sh tarixdan (sovuq start) o'qilardi va
+ * backfill jonli jarayonni AKS ETTIRMASDI.
+ *
  * TRAIN QAT'IY KESILADI (`qatorlarniQur` da) — kelajak ko'rinmaydi, ya'ni aniqlik
  * haqiqiy out-of-sample. Ikki KICHIK yon ta'sir bor va ular ataylab qabul qilingan:
  *   • arxiv ro'yxati BUGUNGI holat (o'sha paytda faol bo'lgan, hozir arxivlangan SKU
@@ -541,8 +697,10 @@ export async function backfill(opts: { force?: boolean } = {}): Promise<YugurNat
   // Origin shartlari: train ≥ MIN_TRAIN hafta VA oyna to'liq yopilgan (fakt bor).
   const boshIdx = MIN_TRAIN - 1;
   const oxirIdx = ctx.haftalar.length - 1 - GORIZONT;
+  const meta = await metaOqi(); // 13 marta qayta o'qimaslik uchun bir marta
   for (let i = boshIdx; i <= oxirIdx; i++) {
     const p = await prognozYaz(ctx, arxiv, opts.force ?? false, i, "backfill");
+    const b = await baholaPishganlar(ctx, meta);
     natija.push({
       origin: ctx.haftalar[i],
       panelWeeks: ctx.haftalar.length,
@@ -552,18 +710,16 @@ export async function backfill(opts: { force?: boolean } = {}): Promise<YugurNat
       forecasted: p.forecasted,
       skippedKam: p.skippedKam,
       skippedArch: p.skippedArch,
-      baholanganRun: 0,
-      baholanganQator: 0,
+      baholanganRun: b.runlar,
+      baholanganQator: b.qatorlar,
       tozalandi: { prognoz: 0, aniqlik: 0 },
+      biasK: p.biasK,
+      biasN: p.biasN,
     });
-    console.log(`[backfill] origin ${ctx.haftalar[i]}: ${p.yangi ? `${p.forecasted} prognoz` : "mavjud"}`);
-  }
-
-  const b = await baholaPishganlar(ctx);
-  console.log(`[backfill] baho: ${b.runlar} run / ${b.qatorlar} qator`);
-  if (natija.length > 0) {
-    natija[natija.length - 1].baholanganRun = b.runlar;
-    natija[natija.length - 1].baholanganQator = b.qatorlar;
+    console.log(
+      `[backfill] origin ${ctx.haftalar[i]}: ${p.yangi ? `${p.forecasted} prognoz` : "mavjud"}` +
+        (b.runlar > 0 ? ` · baho ${b.runlar} run / ${b.qatorlar} qator` : "")
+    );
   }
   return natija;
 }
@@ -590,5 +746,7 @@ export async function prognozYugur(opts: { force?: boolean; now?: Date } = {}): 
     baholanganRun: b.runlar,
     baholanganQator: b.qatorlar,
     tozalandi: t,
+    biasK: p.biasK,
+    biasN: p.biasN,
   };
 }

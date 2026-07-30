@@ -89,6 +89,20 @@ describe("model — gorizont JAMISI qaytaradi", () => {
     expect(combo50([], 4)).toBe(0);
   });
 
+  it("MANFIY prognoz bo'lmaydi — qaytim (soldQty < 0) nolda to'xtaydi", () => {
+    // Jonli bazada 40 seriya-hafta manfiy (qaytim sotuvdan ko'p). To'silmasa
+    // p50 = −12 885 saqlanib, √(p50+1) NaN berardi va butun kesimni buzardi.
+    expect(naive1([5, 5, -100], 4)).toBe(0);
+    expect(movingAvg([-10, -10, -10, -10], 4, 4)).toBe(0);
+    expect(combo50([2, 2, 2, -50], 4)).toBe(0);
+    expect(q90(-5, [1, -100, 2], 4, 1.28)).toBeGreaterThanOrEqual(0);
+  });
+
+  it("nolda to'xtatish MUSBAT qiymatlarga tegmaydi", () => {
+    expect(naive1([1, 2, 3], 4)).toBe(12);
+    expect(movingAvg([2, 2, 2, 2], 2, 4)).toBe(4);
+  });
+
   it("scaleMse: o'zgarmas seriyada null (nolga bo'linishni oldini oladi)", () => {
     expect(scaleMse([5, 5, 5, 5])).toBeNull();
     expect(scaleMse([1])).toBeNull();

@@ -24,6 +24,11 @@ async function main() {
     console.log(`origin: ${r.origin} | panelda ${r.panelWeeks} to'liq hafta | kechikish ${r.kechikish} hafta`);
     console.log(`seriyalar: ${n(r.seriesTotal)} → prognoz ${n(r.forecasted)} (KAM ${n(r.skippedKam)}, arxiv ${n(r.skippedArch)})`);
     console.log("sinf tarkibi:", r.sinfStat);
+    console.log(
+      `kalibratsiya: BIAS k = ${r.kalib.biasK} (${n(r.kalib.biasN)} qatordan), ` +
+        `servis ${(r.kalib.servis * 100).toFixed(0)}%`
+    );
+    console.log("  kvantil c:", r.kalib.sinf);
     console.log("\nnamuna (5 qator):");
     for (const y of r.namuna) {
       console.log(
@@ -40,7 +45,10 @@ async function main() {
     const rs = await backfill({ force });
     const oxirgi = rs[rs.length - 1];
     console.log(`\n${rs.length} ta origin qamrandi (${rs[0]?.origin} … ${oxirgi?.origin})`);
-    console.log(`baho: ${oxirgi?.baholanganRun} run / ${n(oxirgi?.baholanganQator ?? 0)} qator`);
+    console.log(
+      `baho: ${rs.reduce((s, x) => s + x.baholanganRun, 0)} run / ` +
+        `${n(rs.reduce((s, x) => s + x.baholanganQator, 0))} qator`
+    );
     console.log(`\n${Date.now() - t0} ms`);
     return;
   }
