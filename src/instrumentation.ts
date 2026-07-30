@@ -4,8 +4,20 @@
  */
 import { nowTashkent } from "@/lib/date";
 
-/** Kunlik cron ishlari — nomi, jadvali (Toshkent soat:daqiqa) va bajaruvchisi. */
-type CronJob = { name: string; cron: string; hour: number; minute: number; run: () => Promise<void> };
+/**
+ * Cron ishlari — nomi, jadvali (Toshkent soat:daqiqa) va bajaruvchisi.
+ * `weekday` (0=yakshanba … 6=shanba) — HAFTALIK ish uchun SHART: `runCron` dedup'i
+ * kun bo'yicha ishlaydi, shuning uchun weekday'siz haftalik ish catch-up'da har kuni
+ * qayta ishga tushib ketardi.
+ */
+type CronJob = {
+  name: string;
+  cron: string;
+  hour: number;
+  minute: number;
+  weekday?: number;
+  run: () => Promise<void>;
+};
 
 const JOBS: CronJob[] = [
   // 14:00 — inventarizatsiya: so'nggi kun bo'yicha muammoli (qoldiq 0/minus, sotuvi bor) tovarlar.
@@ -106,6 +118,24 @@ const JOBS: CronJob[] = [
       if (r.errors > 0) throw new Error(`${r.errors} oyna tahlil qilinmadi`);
     },
   },
+  // SESHANBA 05:00 — SKU talab prognozi (haftalik). Nega seshanba: origin — yakshanba
+  // bilan tugagan TO'LIQ hafta, uning oxirgi kuni importi dushanba kuni keladi. Dushanba
+  // ertalab yuritilsa panel hali chala bo'lib, prognoz bir hafta eski origin'dan chiqardi.
+  // Og'ir ish (≈45 ming seriya o'qish, ≈27 ming qator yozish) — kunduzgi yukdan oldin.
+  {
+    name: "prognoz-weekly", cron: "0 5 * * 2", hour: 5, minute: 0, weekday: 2,
+    run: async () => {
+      const { prognozYugur } = await import("@/lib/prognoz/hisobla");
+      const r = await prognozYugur();
+      console.log(
+        `[prognoz-weekly] origin ${r.origin} (${r.panelWeeks} hafta): ` +
+          `${r.yangi ? `${r.forecasted} prognoz` : "allaqachon hisoblangan"}, ` +
+          `KAM ${r.skippedKam}, arxiv ${r.skippedArch}; ` +
+          `baho: ${r.baholanganRun} run / ${r.baholanganQator} qator; ` +
+          `tozalandi: ${r.tozalandi.prognoz}/${r.tozalandi.aniqlik}`
+      );
+    },
+  },
   // 03:00 — kirishlar jurnalini tozalash (1 yildan eskisi). Tunda: paketli
   // DELETE kunduzgi so'rovlarga xalaqit qilmasin.
   {
@@ -202,6 +232,7 @@ export async function register() {
       const now = nowTashkent();
       const nowMin = now.getUTCHours() * 60 + now.getUTCMinutes();
       for (const job of JOBS) {
+        if (job.weekday != null && now.getUTCDay() !== job.weekday) continue; // haftalik ish — faqat o'z kunida
         if (nowMin >= job.hour * 60 + job.minute) {
           void runCron(job.name, job.run).catch((e) =>
             console.error(`[cron:${job.name}] catch-up xato:`, e instanceof Error ? e.message : e)

@@ -45,6 +45,15 @@ function makePool() {
 
 const pool = globalForPrisma.pgPool ?? makePool();
 
+/**
+ * AYNI shu pool — og'ir raw o'qishlar uchun. Prisma'ning `$queryRaw` qatlami Postgres
+ * MASSIV ustunlarini (`float8[]`, `bool[]`) qaytarganda qotib qoladi (o'lchandi: 200
+ * qator ham 7 daqiqada tugamadi, pg orqali ayni so'rov 13 s). Shu sabab prognoz
+ * paneli `pgPool.query` bilan o'qiladi. Yangi ulanish OCHILMAYDI — pool bitta.
+ * Oddiy so'rovlar uchun ishlatmang: `prisma` tip xavfsizligini beradi.
+ */
+export const pgPool = pool;
+
 const adapter = new PrismaPg(pool);
 
 export const prisma =

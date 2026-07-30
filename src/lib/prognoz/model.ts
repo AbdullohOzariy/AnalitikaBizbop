@@ -54,6 +54,21 @@ export function forecast(key: ModelKey, train: number[], h: number): number {
   }
 }
 
+/** FVA darvozasi: model naive'dan kamida shuncha (nisbiy) yaxshi bo'lishi shart. */
+export const FVA_GATE = 0.02;
+
+/**
+ * SINF BO'YICHA MODEL TANLOVI — Faza 1 da jonli bazada o'lchangan FVA (h=4):
+ *   ERRATIC +8.8% · INTERMITTENT +7.7% · SMOOTH +3.6% → darvoza O'TDI → combo50
+ *   LUMPY   +0.9% → darvoza O'TMADI → naive1 (shovqinga murakkablik qo'shmaymiz)
+ *
+ * Bu sozlama EMAS: o'lchov natijasi. Backtest qayta yuritilib raqam o'zgarsa —
+ * shu funksiya o'zgaradi, kod bilan birga sabab ham ko'rinib turadi.
+ */
+export function modelniTanla(sinf: "SMOOTH" | "ERRATIC" | "INTERMITTENT" | "LUMPY" | "KAM"): ModelKey {
+  return sinf === "LUMPY" || sinf === "KAM" ? "naive1" : "combo50";
+}
+
 /**
  * RMSSE masshtabi: train'dagi qo'shni haftalar farqining kvadratik o'rtachasi
  * (M5 standarti). `null` — train juda qisqa yoki seriya butunlay o'zgarmas.
@@ -77,6 +92,12 @@ export function scaleMse(train: number[]): number | null {
  * NEGA q90, P50 EMAS: zakaz qarorida kam-zaxira narxi ortiqcha-zaxiradan qimmat
  * (sotuv yo'qoladi, mijoz ketadi). P10 esa UMUMAN ishlatilmaydi — o'lchovda uning
  * qoplashi 28–73% chiqdi (maqsad 10%), ya'ni mutlaqo kalibrsiz.
+ *
+ * ⚠️ ZAKAZGA ULANMASIN (Faza 3 gacha): jonli bazada q90/p50 nisbati o'lchandi —
+ * SMOOTH 2.6× · INTERMITTENT 2.5× · ERRATIC 5.2×. Ya'ni normal taqsimot formulasi
+ * siyrak/notekis talabda q90'ni bir necha barobar shishiradi (taqsimot qiyshiq,
+ * σ esa cho'qqilardan katta chiqadi). Bu yerda kerak bo'lgan narsa — EMPIRIK
+ * kvantil (backtest xatolar taqsimotidan), formula emas.
  */
 export function q90(p50: number, train: number[], h: number, z: number): number {
   if (train.length < 2) return p50;

@@ -21,15 +21,31 @@
  * qoldiq tarixi yo'q (`WarehouseStock` faqat markaziy ombor).
  */
 
-/** Zichlashtirilgan haftalik panel: seriya (SKU×filial) × to'liq hafta. */
-export const WEEKLY_PANEL_SQL = /* sql */ `
-WITH wkall AS (
+/**
+ * Hafta lug'ati — panel va hafta ro'yxati AYNI ta'rifdan chiqishi uchun ajratilgan.
+ * Ikki joyda takrorlansa, birida "7 kunlik" filtri o'zgarib boshqasida qolib ketardi va
+ * `i` indeksi ikki xil ma'no olardi (backtest origin'i bilan prognoz origin'i siljiydi).
+ */
+const WKS_CTE = /* sql */ `
+wkall AS (
   SELECT date_trunc('week', "periodStart")::date w, count(DISTINCT "periodStart")::int days
   FROM "ProductSales" GROUP BY 1
 ), wks AS (
   -- Faqat 7 kunlik haftalar; "i" — ketma-ket tartib raqami (backtest origin'lari uchun)
   SELECT w, row_number() OVER (ORDER BY w)::int i FROM wkall WHERE days = 7
-), raw AS (
+)`;
+
+/**
+ * To'liq haftalar ro'yxati (indeks → dushanba sanasi).
+ * Sana ATAYLAB `::text` — `date` tipini drayver mahalliy yarim tunga aylantirib
+ * qo'yishi mumkin (pg `parseDate`), natijada hafta bir kunga siljib prognoz oynasi
+ * mos kelmay qoladi. Matn ko'rinishida noaniqlik yo'q.
+ */
+export const WEEKS_SQL = /* sql */ `WITH ${WKS_CTE} SELECT w::text w, i FROM wks ORDER BY i`;
+
+/** Zichlashtirilgan haftalik panel: seriya (SKU×filial) × to'liq hafta. */
+export const WEEKLY_PANEL_SQL = /* sql */ `
+WITH ${WKS_CTE}, raw AS (
   SELECT ps."productId" pid, ps."branchId" bid,
          date_trunc('week', ps."periodStart")::date w,
          SUM(COALESCE(ps."soldQty", 0))::float8 qty,
@@ -78,6 +94,45 @@ export interface Seriya {
   qty: number[];
   stockout: boolean[];
   hadNoRow: boolean[];
+}
+
+/**
+ * SERIYA-DARAJALI o'qish — haftalik cron uchun. Panelni Postgres ichida massivga
+ * yig'adi: katak-darajali `WEEKLY_PANEL_SQL` 1.3 mln qator qaytaradi (o'lchandi:
+ * SQL ~4.5 s, lekin Node'ga uzatish 94 s), bu esa ~45 ming qator. Ta'rif AYNI —
+ * ustidan `array_agg`, ya'ni panel qoidalari (nol-to'ldirish, faqat 7 kunlik hafta,
+ * stockout sharti) bir joyda qoladi.
+ */
+export const WEEKLY_SERIES_SQL = /* sql */ `
+WITH panel AS (${WEEKLY_PANEL_SQL})
+SELECT pid, bid, unit_price,
+       array_agg(qty ORDER BY i)        qty,
+       array_agg(stockout ORDER BY i)   stockout,
+       array_agg(had_no_row ORDER BY i) had_no_row
+FROM panel
+GROUP BY pid, bid, unit_price
+`;
+
+/** `WEEKLY_SERIES_SQL` qatori (massivlar hafta tartibida). */
+export interface SeriyaRow {
+  pid: number;
+  bid: number;
+  unit_price: number | null;
+  qty: number[];
+  stockout: boolean[];
+  had_no_row: boolean[];
+}
+
+/** SQL massiv shaklini `Seriya` ga o'giradi. */
+export function seriyalarQatordan(rows: SeriyaRow[]): Seriya[] {
+  return rows.map((r) => ({
+    pid: Number(r.pid),
+    bid: Number(r.bid),
+    unitPrice: Number(r.unit_price) || 0,
+    qty: r.qty.map((v) => Number(v) || 0),
+    stockout: r.stockout.map(Boolean),
+    hadNoRow: r.had_no_row.map(Boolean),
+  }));
 }
 
 /** Panel kataklarini seriyalarga guruhlaydi (haftalar tartibi saqlanadi). */
