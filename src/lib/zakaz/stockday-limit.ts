@@ -15,6 +15,8 @@
  * ataylab shu yerda turadi.
  */
 import { prisma } from "@/lib/prisma";
+import { getDefaultRange } from "@/lib/analytics";
+import { isoDay } from "@/lib/date";
 
 /** Global standart (AppSetting kaliti). Sozlanmagan bo'lsa nazorat O'CHIQ. */
 export const K_GLOBAL_MAX_STOCKDAY = "zakaz_max_stockday";
@@ -132,6 +134,14 @@ export async function oshganQatorlar(orderId: number): Promise<OshganQator[]> {
   // Chegara umuman sozlanmagan bo'lsa — tekshiruv ham yo'q (bekorga SQL urmaymiz)
   if (limits.global == null && limits.byCategory.size === 0) return [];
 
+  // Kunlik o'rtacha AYNI davrdan olinishi SHART — zakaz formasi ham `getDefaultRange()`
+  // (joriy oy) ishlatadi (actions.ts: supplierItemsAction). Davr farq qilsa formada
+  // signal chiqmay, ACCEPTED'da chiqib chalkashlik bo'lardi: bazada 210 kunlik tarix bor,
+  // mavsumiy tovarda oylik va yillik o'rtacha bir necha barobar farq qiladi.
+  const range = await getDefaultRange();
+  const startStr = isoDay(range.start);
+  const endStr = isoDay(range.end);
+
   const rows = await prisma.$queryRaw<
     {
       productId: number;
@@ -162,11 +172,13 @@ export async function oshganQatorlar(orderId: number): Promise<OshganQator[]> {
       GROUP BY s."productId"
     ),
     daily AS (
-      -- Kunlik o'rtacha = davr sotuvi / kuzatilgan kunlar (snapshot-reports.ts bilan ayni)
+      -- Kunlik o'rtacha = davr sotuvi / kuzatilgan kunlar (snapshot-reports.ts bilan ayni).
+      -- Davr — joriy oy (getDefaultRange), zakaz formasi bilan BIR XIL.
       SELECT ps."productId",
              (COALESCE(SUM(ps."soldQty"), 0) / NULLIF(COUNT(DISTINCT ps."periodStart"), 0))::float8 AS "dailyAvg"
       FROM "ProductSales" ps
       JOIN oi ON oi."productId" = ps."productId"
+      WHERE ps."periodStart" >= ${startStr}::date AND ps."periodEnd" <= ${endStr}::date
       GROUP BY ps."productId"
     )
     SELECT p.id AS "productId", p.code, p.name, p."categoryId", c."parentId",
