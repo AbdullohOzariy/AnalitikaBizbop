@@ -26,7 +26,7 @@
  * Ikki joyda takrorlansa, birida "7 kunlik" filtri o'zgarib boshqasida qolib ketardi va
  * `i` indeksi ikki xil ma'no olardi (backtest origin'i bilan prognoz origin'i siljiydi).
  */
-const WKS_CTE = /* sql */ `
+export const WKS_CTE = /* sql */ `
 wkall AS (
   SELECT date_trunc('week', "periodStart")::date w, count(DISTINCT "periodStart")::int days
   FROM "ProductSales" GROUP BY 1
@@ -111,6 +111,29 @@ SELECT pid, bid, unit_price,
        array_agg(had_no_row ORDER BY i) had_no_row
 FROM panel
 GROUP BY pid, bid, unit_price
+`;
+
+/**
+ * BITTA seriyaning haftalik tarixi (UI grafigi uchun). Panel bilan AYNI qoidalar —
+ * faqat to'liq haftalar, nol-to'ldirilgan, stockout sharti bir xil.
+ *
+ * NEGA ALOHIDA SO'ROV: to'liq panelni hisoblab keyin bitta seriyani filtrlash
+ * 1.3 mln qatorlik CROSS JOIN'ni materializatsiya qiladi (~5 s har sahifa ochilganda).
+ * Bu yerda filtr `raw` ichida — SKU×filial bo'yicha indeks ishlaydi.
+ */
+export const SERIYA_TARIX_SQL = /* sql */ `
+WITH ${WKS_CTE}, raw AS (
+  SELECT date_trunc('week', ps."periodStart")::date w,
+         SUM(COALESCE(ps."soldQty", 0))::float8 qty,
+         MIN(ps."stockQty")::float8 min_stock
+  FROM "ProductSales" ps
+  WHERE ps."productId" = $1 AND ps."branchId" = $2
+  GROUP BY 1
+)
+SELECT k.w::text w, COALESCE(r.qty, 0)::float8 qty,
+       (r.min_stock IS NOT NULL AND r.min_stock <= 0) stockout
+FROM wks k LEFT JOIN raw r ON r.w = k.w
+ORDER BY k.i
 `;
 
 /** `WEEKLY_SERIES_SQL` qatori (massivlar hafta tartibida). */

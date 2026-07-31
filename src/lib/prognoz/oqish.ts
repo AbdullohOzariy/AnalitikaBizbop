@@ -187,12 +187,11 @@ export interface HaftaNuqta {
  * faqat to'liq haftalar va nol-to'ldirilgan.
  */
 export async function seriyaTarixi(productId: number, branchId: number): Promise<HaftaNuqta[]> {
-  const { WEEKLY_PANEL_SQL } = await import("./panel");
-  const r = await pgPool.query<{ w: string; qty: number; stockout: boolean }>(
-    `SELECT w::text w, qty, stockout FROM (${WEEKLY_PANEL_SQL}) p
-     WHERE pid = $1 AND bid = $2 ORDER BY i`,
-    [productId, branchId]
-  );
+  const { SERIYA_TARIX_SQL } = await import("./panel");
+  const r = await pgPool.query<{ w: string; qty: number; stockout: boolean }>(SERIYA_TARIX_SQL, [
+    productId,
+    branchId,
+  ]);
   return r.rows.map((x) => ({ hafta: x.w, qty: Number(x.qty) || 0, stockout: !!x.stockout }));
 }
 
