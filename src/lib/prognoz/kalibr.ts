@@ -59,6 +59,20 @@ export const SERVIS = 0.9;
  */
 export const KALIB_OYNA = 4;
 
+/**
+ * KVANTIL uchun xotira — BIAS'nikidan UZUN, va bu ataylab.
+ *
+ * Ikkalasi boshqa-boshqa narsa: BIAS — SILJIB turadigan joylashuv parametri (uzun
+ * xotira orqada qoladi, o'lchandi), kvantil esa TAQSIMOT SHAKLI — unga namuna kerak.
+ * `abc×band` kaliti ~30 bandga bo'linadi; 4 oyna bilan `B|1k+` (n = 11) yoki
+ * `C|100-300` (n = 59) kabi bandlar `C_MIN_N` to'siqdan o'tolmay ota-kesimga tushadi —
+ * ya'ni aynan eng katta yutuq kutilgan joyda kalibratsiya band darajasiga qaytadi.
+ * Jonli natija: A sinf 86.5% (kengayuvchi xotirali o'lchovda 89.9% edi).
+ *
+ * 12 oyna: `SkuForecastAccuracy` 26 hafta saqlanadi, ya'ni oyna doim mavjud.
+ */
+export const KVANT_OYNA = 12;
+
 /** Shrinkage: BIAS koeffitsienti kichik namunada 1 ga tortiladi. */
 export const SHRINK_N = 2_000;
 

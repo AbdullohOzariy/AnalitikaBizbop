@@ -34,6 +34,7 @@ import {
   C_MIN,
   C_MIN_N,
   KALIB_OYNA,
+  KVANT_OYNA,
   SERVIS,
   bandCaseSQL,
   biasKoeff,
@@ -262,26 +263,33 @@ async function kalibOqi(originISO: string, servis = SERVIS): Promise<Kalibratsiy
     sf: number | null;
     sa: number | null;
     n: number;
+    n_bias: number;
   }>(
     `WITH oynalar AS (
        SELECT DISTINCT "targetTo" tt FROM "SkuForecastAccuracy"
        WHERE stockout = false AND "targetTo" <= $1::date
-       ORDER BY tt DESC LIMIT $2
+       ORDER BY tt DESC LIMIT $5
      ), baho AS (
        SELECT coalesce(p."abcClass", $4) abc, ${bandCaseSQL('a.forecast')} band,
-              a.actual, a.forecast
+              a.actual, a.forecast, a."targetTo" tt
        FROM "SkuForecastAccuracy" a
        JOIN "Product" p ON p.id = a."productId"
        WHERE a.stockout = false AND a."targetTo" IN (SELECT tt FROM oynalar)
+     ), yaqin AS (
+       -- BIAS uchun FAQAT oxirgi $2 oyna: u siljib turadi, uzun xotira orqada qoladi
+       SELECT tt FROM (SELECT DISTINCT tt FROM baho ORDER BY tt DESC LIMIT $2) x
      )
      SELECT abc, band,
             percentile_cont($3::float8) WITHIN GROUP (
               ORDER BY (actual - forecast) / sqrt(greatest(forecast, 0) + 1)
             )::float8 c,
-            sum(forecast)::float8 sf, sum(actual)::float8 sa, count(*)::int n
+            sum(forecast) FILTER (WHERE tt IN (SELECT tt FROM yaqin))::float8 sf,
+            sum(actual)   FILTER (WHERE tt IN (SELECT tt FROM yaqin))::float8 sa,
+            count(*)::int n,
+            count(*) FILTER (WHERE tt IN (SELECT tt FROM yaqin))::int n_bias
      FROM baho
      GROUP BY GROUPING SETS ((abc, band), (band), ())`,
-    [originISO, KALIB_OYNA, servis, ABC_YOQ]
+    [originISO, KALIB_OYNA, servis, ABC_YOQ, KVANT_OYNA]
   );
 
   // Kesim O'Z kvantilini ishlatadi (n >= C_MIN_N); aks holda `cUchun` ota-kesimga
@@ -289,10 +297,12 @@ async function kalibOqi(originISO: string, servis = SERVIS): Promise<Kalibratsiy
   for (const row of r.rows) {
     const n = Number(row.n) || 0;
     if (row.band == null) {
-      // `()` to'plami — global BIAS koeffitsienti (o'lchovda eng barqarori)
-      if (n > 0 && row.sf != null && row.sa != null) {
-        kal.biasK = biasKoeff(Number(row.sf), Number(row.sa), n);
-        kal.biasN = n;
+      // `()` to'plami — global BIAS koeffitsienti (o'lchovda eng barqarori).
+      // BIAS FAQAT yaqin oynalardan (`n_bias`), kvantil esa uzunroq tarixdan.
+      const nb = Number(row.n_bias) || 0;
+      if (nb > 0 && row.sf != null && row.sa != null) {
+        kal.biasK = biasKoeff(Number(row.sf), Number(row.sa), nb);
+        kal.biasN = nb;
       }
       continue;
     }
