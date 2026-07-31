@@ -317,6 +317,83 @@ async function main() {
     if (k) console.log(`    ${s.padEnd(14)} mult ${k.m.toFixed(2).padStart(6)}   additiv ${k.a.toFixed(1).padStart(7)}   sqrt c ${k.c.toFixed(2).padStart(6)}`);
   }
 
+  // ── 5. XOTIRA UZUNLIGI — kalibratsiya necha oxirgi oynadan o'rganishi kerak ─────
+  // Kodda 6 oyna qo'yilgan edi, lekin 2-bo'lim KENGAYUVCHI xotira bilan o'lchangan.
+  // Qisqa xotira tez moslashadi, lekin teskari aloqa tufayli TEBRANADI.
+  console.log("\n═══ 5. BIAS XOTIRASI — qancha oyna eslab qolish kerak ═══");
+  console.log("  XOTIRA".padEnd(12) + "WAPE".padStart(9) + "BIAS".padStart(9) + "FVA".padStart(9) + "|BIAS| tarqoq".padStart(15));
+  for (const xotira of [2, 4, 6, 12, 999]) {
+    let acc = EMPTY;
+    const oynaBias: number[] = [];
+    const tarix: ErrAcc[] = []; // oyna bo'yicha (eng yangi oxirida)
+    for (const oyna of oynalar) {
+      const paket = rows.filter((x) => x.tt === oyna);
+      const oxirgilar = tarix.slice(-xotira);
+      const jam = oxirgilar.reduce((a, b) => add(a, b), EMPTY);
+      const k = qisqart(siqilgan(koeff(jam) ?? 1, jam.n));
+      let oynaAcc = EMPTY;
+      for (const x of paket) {
+        oynaAcc = add(oynaAcc, scoreCell(x.actual, x.forecast / k, x.baseline, x.unitPrice));
+      }
+      acc = add(acc, oynaAcc);
+      const b = bias(oynaAcc);
+      if (b != null && tarix.length >= 1) oynaBias.push(b);
+      tarix.push(paket.reduce((a, x) => add(a, scoreCell(x.actual, x.forecast, x.baseline, x.unitPrice)), EMPTY));
+    }
+    const ort = oynaBias.reduce((s, v) => s + Math.abs(v), 0) / Math.max(1, oynaBias.length);
+    console.log(
+      `  ${(xotira === 999 ? "kengayuvchi" : `${xotira} oyna`).padEnd(10)}${pc(wape(acc)).padStart(9)}` +
+        `${pc(bias(acc)).padStart(9)}${pc(fvaRel(acc)).padStart(9)}${pc(ort).padStart(15)}`
+    );
+  }
+
+  // ── 6. KVANTIL KALIBRATSIYASI: sinf vs sinf×ABC vs sinf×hajm ──────────────────
+  // Jonli natijada A sinf servis 78.9%, C sinf 95.1% — bitta √ darajasi hajm bo'ylab
+  // ishlamaydi. Uch kalit variantini teng shartda solishtiramiz.
+  console.log("\n═══ 6. KVANTIL KALITI — servis darajasi bir tekis taqsimlanadimi ═══");
+  const hajmGuruh = (p50: number) => (p50 < 5 ? "kichik" : p50 < 50 ? "orta" : p50 < 500 ? "katta" : "juda-katta");
+  const kalitlar: Record<string, (x: Qator) => string> = {
+    sinf: (x) => x.sinf,
+    "sinf×abc": (x) => `${x.sinf}|${x.abc ?? "—"}`,
+    "sinf×hajm": (x) => `${x.sinf}|${hajmGuruh(x.forecast)}`,
+  };
+  for (const [nom, kf] of Object.entries(kalitlar)) {
+    const tarixQ = new Map<string, number[]>();
+    const abcStat = new Map<string, { n: number; q: number; o: number; k: number }>();
+    for (const oyna of oynalar) {
+      const paket = rows.filter((x) => x.tt === oyna);
+      const c = new Map<string, number>();
+      for (const [k, arr] of tarixQ) c.set(k, kvantil([...arr].sort((a, b) => a - b), 0.9) ?? 0);
+      for (const x of paket) {
+        const cv = c.get(kf(x));
+        if (cv == null) continue;
+        const q = x.forecast + cv * masshtab(x.forecast);
+        const key = x.abc ?? "—";
+        const st = abcStat.get(key) ?? { n: 0, q: 0, o: 0, k: 0 };
+        st.n++;
+        if (x.actual <= q) st.q++;
+        st.o += Math.max(0, q - x.actual);
+        st.k += Math.max(0, x.actual - q);
+        abcStat.set(key, st);
+      }
+      for (const x of paket) {
+        const k = kf(x);
+        const arr = tarixQ.get(k) ?? [];
+        arr.push((x.actual - x.forecast) / masshtab(x.forecast));
+        tarixQ.set(k, arr);
+      }
+    }
+    const qatorlar = [...abcStat].sort();
+    const servislar = qatorlar.filter(([k]) => k !== "—").map(([, v]) => v.q / v.n);
+    const tarqoq = Math.max(...servislar) - Math.min(...servislar);
+    console.log(
+      `  ${nom.padEnd(11)} ` +
+        qatorlar.map(([k, v]) => `${k}: ${pc(v.q / v.n)} (${(v.o / v.n).toFixed(0)}/${(v.k / v.n).toFixed(1)})`).join("  ") +
+        `   → ABC tarqoqligi ${pc(tarqoq)}`
+    );
+  }
+  console.log("  (qavsda: ortiqcha/kamomad dona; tarqoqlik kichik = servis bir tekis)");
+
   console.log("\n═══ XULOSA ═══");
   const eng = variantlar
     .map((v) => ({ v, w: wape(natija.get(v)!)! }))

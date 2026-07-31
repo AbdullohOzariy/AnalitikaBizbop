@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  ABC_YOQ,
   C_SOVUQ,
   K_MAX,
   K_MIN,
@@ -8,6 +9,7 @@ import {
   biasKoeff,
   cUchun,
   kalibrla,
+  kvantKalit,
   masshtab,
   qisqart,
   siqilgan,
@@ -26,7 +28,7 @@ describe("BIAS koeffitsienti", () => {
   it("prognoz k ga BO'LINADI — ya'ni k > 1 prognozni kamaytiradi", () => {
     const kal = sovuqKalib();
     kal.biasK = 1.08;
-    const { p50 } = kalibrla(108, "SMOOTH", kal);
+    const { p50 } = kalibrla(108, "SMOOTH", null, kal);
     expect(p50).toBeCloseTo(100, 5);
   });
 
@@ -63,8 +65,8 @@ describe("empirik kvantil (√-masshtab)", () => {
 
   it("q90 = p50 + c·√(p50+1)", () => {
     const kal = sovuqKalib();
-    kal.sinf.set("SMOOTH", { c: 4, n: 100_000 });
-    const { p50, q90 } = kalibrla(99, "SMOOTH", kal);
+    kal.kvantSinf.set("SMOOTH", { c: 4, n: 100_000 });
+    const { p50, q90 } = kalibrla(99, "SMOOTH", null, kal);
     expect(p50).toBe(99);
     expect(q90).toBeCloseTo(99 + 4 * 10, 5);
   });
@@ -73,16 +75,16 @@ describe("empirik kvantil (√-masshtab)", () => {
     // INTERMITTENT/LUMPY'da oynalarning 29% va 56% ida p50 = 0. m·0 = 0 hech qachon
     // qoplamaydi; additiv shakl esa qoplaydi (LUMPY: 74.9% → 91.0%).
     const kal = sovuqKalib();
-    kal.sinf.set("LUMPY", { c: 8.4, n: 100_000 });
-    const { p50, q90 } = kalibrla(0, "LUMPY", kal);
+    kal.kvantSinf.set("LUMPY", { c: 8.4, n: 100_000 });
+    const { p50, q90 } = kalibrla(0, "LUMPY", null, kal);
     expect(p50).toBe(0);
     expect(q90).toBeCloseTo(8.4, 5);
   });
 
   it("q90 hech qachon p50'dan kichik emas", () => {
     const kal = sovuqKalib();
-    kal.sinf.set("SMOOTH", { c: -5, n: 100_000 }); // manfiy c (nazariy)
-    const { p50, q90 } = kalibrla(10, "SMOOTH", kal);
+    kal.kvantSinf.set("SMOOTH", { c: -5, n: 100_000 }); // manfiy c (nazariy)
+    const { p50, q90 } = kalibrla(10, "SMOOTH", null, kal);
     expect(q90).toBeGreaterThanOrEqual(p50);
   });
 
@@ -97,18 +99,61 @@ describe("empirik kvantil (√-masshtab)", () => {
   });
 });
 
+describe("kvantil kaliti: sinf×ABC → sinf → sovuq", () => {
+  it("ABC kesimi bo'lsa AYNAN u ishlatiladi", () => {
+    const kal = sovuqKalib();
+    kal.kvantSinf.set("SMOOTH", { c: 4, n: 100_000 });
+    kal.kvant.set(kvantKalit("SMOOTH", "A"), { c: 9, n: 50_000 });
+    expect(cUchun(kal, "SMOOTH", "A")).toBe(9);
+    expect(cUchun(kal, "SMOOTH", "C")).toBe(4); // C uchun kesim yo'q → sinf darajasi
+  });
+
+  it("ikkisi ham yo'q bo'lsa sovuq start", () => {
+    expect(cUchun(sovuqKalib(), "ERRATIC", "B")).toBe(C_SOVUQ.ERRATIC);
+  });
+
+  it("ABC sinfi yo'q SKU o'z kalitiga tushadi (bo'sh satr emas)", () => {
+    const kal = sovuqKalib();
+    kal.kvant.set(kvantKalit("LUMPY", null), { c: 2, n: 10_000 });
+    expect(cUchun(kal, "LUMPY", null)).toBe(2);
+    expect(cUchun(kal, "LUMPY", "")).toBe(2); // bo'sh satr ham AYNI kalit
+    expect(kvantKalit("LUMPY", null)).toBe(`LUMPY|${ABC_YOQ}`);
+  });
+
+  it("shrinkage PRIOR ga tortadi — ABC bandi uchun prior sinfning O'RGANILGAN qiymati", () => {
+    // Konstantaga (C_SOVUQ) tortilsa A sinf buferi pasayib ketardi: o'lchovda
+    // A 85.0% / C 92.5% — hali tengsiz. Iyerarxik prior shuni tuzatadi.
+    const sinfOrganilgan = 12;
+    const kichikNamuna = siqilganC(20, sinfOrganilgan, 100);
+    expect(kichikNamuna).toBeGreaterThan(C_SOVUQ.SMOOTH); // konstantaga TUSHIB ketmaydi
+    expect(kichikNamuna).toBeCloseTo(sinfOrganilgan, 0);
+  });
+
+  it("A sinfda bufer C dan KATTA bo'lishi kutiladi (o'lchovda shunday chiqdi)", () => {
+    // Sinf darajasida kalibrlanganda A 79% qoplanardi, C 95% — ya'ni A ga kattaroq
+    // bufer kerak. Bu test kalit tanlovining MA'NOSINI qulflaydi, raqamni emas.
+    const kal = sovuqKalib();
+    kal.kvant.set(kvantKalit("SMOOTH", "A"), { c: 9, n: 50_000 });
+    kal.kvant.set(kvantKalit("SMOOTH", "C"), { c: 2, n: 50_000 });
+    const a = kalibrla(100, "SMOOTH", "A", kal);
+    const c = kalibrla(100, "SMOOTH", "C", kal);
+    expect(a.p50).toBe(c.p50); // p50 AYNI — faqat bufer farq qiladi
+    expect(a.q90).toBeGreaterThan(c.q90);
+  });
+});
+
 describe("sovuq start", () => {
   it("tarix yo'q — o'lchangan default qiymatlar, tuzatish yo'q", () => {
     const kal = sovuqKalib();
     expect(kal.biasK).toBe(1);
     expect(kal.biasN).toBe(0);
     expect(kal.servis).toBe(SERVIS);
-    expect(cUchun(kal, "SMOOTH")).toBe(C_SOVUQ.SMOOTH);
-    expect(cUchun(kal, "LUMPY")).toBe(C_SOVUQ.LUMPY);
+    expect(cUchun(kal, "SMOOTH", null)).toBe(C_SOVUQ.SMOOTH);
+    expect(cUchun(kal, "LUMPY", null)).toBe(C_SOVUQ.LUMPY);
   });
 
   it("KAM sinfda bufer 0 (u sinfda prognoz yozilmaydi)", () => {
-    expect(cUchun(sovuqKalib(), "KAM")).toBe(0);
+    expect(cUchun(sovuqKalib(), "KAM", null)).toBe(0);
   });
 });
 
@@ -116,8 +161,8 @@ describe("kalibrla — tartib va manfiylik", () => {
   it("avval BIAS, keyin bufer (aks holda bufer ham qisqarardi)", () => {
     const kal = sovuqKalib();
     kal.biasK = 2;
-    kal.sinf.set("SMOOTH", { c: 3, n: 100_000 });
-    const { p50, q90 } = kalibrla(200, "SMOOTH", kal);
+    kal.kvantSinf.set("SMOOTH", { c: 3, n: 100_000 });
+    const { p50, q90 } = kalibrla(200, "SMOOTH", null, kal);
     expect(p50).toBe(100); // 200 / 2
     // bufer TUZATILGAN p50 ustiga: 100 + 3·√101 ≈ 130.1
     expect(q90).toBeCloseTo(100 + 3 * Math.sqrt(101), 5);
@@ -125,8 +170,8 @@ describe("kalibrla — tartib va manfiylik", () => {
 
   it("manfiy xom prognoz nolga tushadi", () => {
     const kal = sovuqKalib();
-    kal.sinf.set("INTERMITTENT", { c: 3, n: 100_000 });
-    const { p50, q90 } = kalibrla(-500, "INTERMITTENT", kal);
+    kal.kvantSinf.set("INTERMITTENT", { c: 3, n: 100_000 });
+    const { p50, q90 } = kalibrla(-500, "INTERMITTENT", null, kal);
     expect(p50).toBe(0);
     expect(q90).toBeCloseTo(3, 5);
   });

@@ -35,10 +35,22 @@ import type { Sinf } from "./panel";
 export const SERVIS = 0.9;
 
 /**
- * Kalibratsiya necha oxirgi baho oynasidan o'rganadi. 6 oyna ≈ yarim yil talab tarixi;
- * `SkuForecastAccuracy` 26 hafta saqlanadi, ya'ni oyna har doim mavjud.
+ * Kalibratsiya necha oxirgi baho oynasidan o'rganadi.
+ *
+ * O'LCHANGAN (13 oyna, BIAS tuzatish xotirasi):
+ *   2 oyna  BIAS −0.3% · oyna |BIAS| tarqoqligi 5.1%
+ *   4 oyna  BIAS −1.0% · 5.7%
+ *   6 oyna  BIAS −1.8% · 6.2%
+ *   12/kengayuvchi  BIAS −2.9% · 7.1%
+ * WAPE hamma variantda 46.5–46.6% (farq shovqin darajasida). Ya'ni BIAS SILJIB
+ * TURADI — uzun xotira o'tmishga yopishib qoladi va tuzatishni orqada qoldiradi.
+ *
+ * 4 tanlandi: o'lchovda 2 bilan farqi ajratib bo'lmaydigan darajada kichik (0.7 pp
+ * BIAS, 0.6 pp tarqoqlik — 13 oyna buni hal qilmaydi), lekin 2 oyna bitta anomal
+ * haftaga (bayram, katta aksiya) yarim vaznda bog'lanib qolardi. Bu — o'lchov ikki
+ * variantni teng ko'rsatganda qilingan MUHANDISLIK tanlovi, taxmin emas.
  */
-export const KALIB_OYNA = 6;
+export const KALIB_OYNA = 4;
 
 /** Shrinkage: namuna kichik bo'lsa tuzatishni 1 ga tortadi. */
 export const SHRINK_N = 2_000;
@@ -92,35 +104,57 @@ export interface SinfKalib {
   n: number;
 }
 
+/** ABC sinfi yo'q SKU uchun kalit (bo'sh satr emas — ko'rinadigan belgi). */
+export const ABC_YOQ = "-";
+
+export const kvantKalit = (sinf: Sinf, abc: string | null) => `${sinf}|${abc || ABC_YOQ}`;
+
 export interface Kalibratsiya {
   /** Global BIAS koeffitsienti (prognoz shunga BO'LINADI). */
   biasK: number;
   biasN: number;
-  sinf: Map<Sinf, SinfKalib>;
+  /** Kvantil koeffitsienti, kalit `sinf|abc` — ASOSIY daraja. */
+  kvant: Map<string, SinfKalib>;
+  /** Zaxira daraja: faqat sinf bo'yicha (abc kesimida tarix yetmasa). */
+  kvantSinf: Map<Sinf, SinfKalib>;
   /** Maqsad servis darajasi. */
   servis: number;
 }
 
 /** Sovuq start kalibratsiyasi — tarix yo'q. */
 export function sovuqKalib(servis = SERVIS): Kalibratsiya {
-  const sinf = new Map<Sinf, SinfKalib>();
-  for (const [k, c] of Object.entries(C_SOVUQ)) sinf.set(k as Sinf, { c, n: 0 });
-  return { biasK: 1, biasN: 0, sinf, servis };
+  const kvantSinf = new Map<Sinf, SinfKalib>();
+  for (const [k, c] of Object.entries(C_SOVUQ)) kvantSinf.set(k as Sinf, { c, n: 0 });
+  return { biasK: 1, biasN: 0, kvant: new Map(), kvantSinf, servis };
 }
 
 /**
- * Kvantil koeffitsientini sovuq start qiymatiga tortadi (namuna kichik bo'lsa).
- * Kvantil o'rtachadan ko'ra shovqinliroq — 200 qatorli sinfda 90-protsentil
- * bitta cho'qqiga ilinib qolishi mumkin.
+ * Kvantil koeffitsientini PRIOR ga tortadi (namuna kichik bo'lsa). Kvantil
+ * o'rtachadan shovqinliroq — 200 qatorli kesimda 90-protsentil bitta cho'qqiga
+ * ilinib qolishi mumkin.
+ *
+ * PRIOR IYERARXIK bo'lishi SHART: sinf×ABC bandi uchun prior — o'sha sinfning
+ * O'RGANILGAN qiymati, sovuq-start konstantasi EMAS. Konstantaga tortilganda A sinf
+ * (unga eng katta bufer kerak) sinf o'rtachasiga qarab pasayib ketadi va servis
+ * darajasi ABC bo'ylab tengsiz qoladi (o'lchandi: A 85.0% / C 92.5%).
  */
-export function siqilganC(c: number, cSovuq: number, n: number): number {
+export function siqilganC(c: number, prior: number, n: number): number {
   const w = n / (n + SHRINK_N);
-  return qisqart(cSovuq + w * (c - cSovuq), C_MIN, C_MAX);
+  return qisqart(prior + w * (c - prior), C_MIN, C_MAX);
 }
 
-/** Sinf koeffitsienti (yo'q bo'lsa sovuq start qiymati). */
-export function cUchun(kal: Kalibratsiya, s: Sinf): number {
-  return kal.sinf.get(s)?.c ?? C_SOVUQ[s] ?? 0;
+/**
+ * Kvantil koeffitsienti: `sinf|abc` → `sinf` → sovuq start.
+ *
+ * NEGA ABC KESIMI: faqat sinf bo'yicha kalibrlansa servis darajasi ABC bo'ylab
+ * TENGSIZ taqsimlanadi — o'lchandi: A 79.0% · B 87.3% · C 95.2% (tarqoqlik 16.2 pp),
+ * ya'ni eng ko'p sotiladigan tovarlar eng kam qoplanadi va yo'qotilgan sotuv aynan
+ * o'sha yerda to'planadi (A: 18.8 dona/oyna, C: 0.4). `sinf×abc` bilan A 90.6% ·
+ * B 90.4% · C 90.9% (tarqoqlik 0.5 pp). Hajm guruhi bo'yicha kalibrlash ISHLAMADI
+ * (15.4 pp) — ABC joriy hajmda yo'q ma'lumotni (talab barqarorligini) tashiydi.
+ */
+export function cUchun(kal: Kalibratsiya, s: Sinf, abc: string | null): number {
+  return kal.kvant.get(kvantKalit(s, abc))?.c ?? kal.kvantSinf.get(s)?.c ?? C_SOVUQ[s] ?? 0;
 }
 
 /**
@@ -128,8 +162,13 @@ export function cUchun(kal: Kalibratsiya, s: Sinf): number {
  * Tartib MUHIM: avval BIAS tuzatiladi, keyin kvantil buferi qo'shiladi — bufer
  * tuzatilgan p50 ustiga qo'yilishi kerak, aks holda ikki tuzatish bir-birini yeydi.
  */
-export function kalibrla(raw: number, sinf: Sinf, kal: Kalibratsiya): { p50: number; q90: number } {
+export function kalibrla(
+  raw: number,
+  sinf: Sinf,
+  abc: string | null,
+  kal: Kalibratsiya
+): { p50: number; q90: number } {
   const p50 = Math.max(0, raw / kal.biasK);
-  const c = cUchun(kal, sinf);
+  const c = cUchun(kal, sinf, abc);
   return { p50, q90: Math.max(p50, p50 + c * masshtab(p50)) };
 }
