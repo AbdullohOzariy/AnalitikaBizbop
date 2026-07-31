@@ -480,7 +480,8 @@ async function ChartsSection({
 
       {/* Kategoriyalar — Iyerarxiya bilan bir xil daraxt (bo'lim → kategoriya → subkat) */}
       <PlanHierarchyWidget
-        data={planTree}
+        data={planTree.groups}
+        branches={planTree.branches}
         writeoff={woCells}
         writeoffLimitPct={writeoffControl?.totalPlanPct ?? null}
       />

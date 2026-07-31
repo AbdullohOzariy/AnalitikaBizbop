@@ -515,6 +515,14 @@ export const dailyPlanByGroup = (range: DateRange, branchId?: number, scope?: nu
 //   reja — SalesPlan (oylik) → davr kunlari ulushiga pro-rata; SalesPlan odatda
 //          subkat darajasida, ba'zan to'g'ridan-to'g'ri kategoriyaga kiritiladi.
 
+/** Bitta filialning shu tugundagi reja bajarilishi. */
+export type PlanBranchCell = {
+  branchId: number;
+  fact: number;
+  plan: number;
+  planPct: number | null;
+};
+
 export type PlanNode = {
   id: number;
   name: string;
@@ -524,9 +532,21 @@ export type PlanNode = {
   planPct: number | null;
   /** (sotuv − tannarx) / sotuv × 100 (narxdan, vaznli). */
   marja: number | null;
+  /**
+   * Filial kesimi — FAQAT "barcha filiallar" tanlanganda to'ldiriladi (bitta filial
+   * tanlangan bo'lsa ustun jamining nusxasi bo'lib, foydasiz joy egallardi).
+   * Tartib `branches` ro'yxati bilan bir xil.
+   */
+  byBranch?: PlanBranchCell[];
 };
 export type PlanCategoryNode = PlanNode & { subs: PlanNode[] };
 export type PlanGroupNode = PlanNode & { categories: PlanCategoryNode[] };
+
+/** Daraxt + ustun sarlavhalari uchun filial ro'yxati (bo'sh — filial kesimi yo'q). */
+export type PlanHierarchy = {
+  groups: PlanGroupNode[];
+  branches: { id: number; name: string }[];
+};
 
 type FactAgg = { fact: number; sales: number; cost: number };
 
@@ -534,7 +554,7 @@ async function _planHierarchy(
   range: DateRange,
   branchId?: number,
   scope?: number[] | null
-): Promise<PlanGroupNode[]> {
+): Promise<PlanHierarchy> {
   const branchSql = branchId ? Prisma.sql`AND ps."branchId" = ${branchId}` : Prisma.empty;
   const scopeSql = scope ? Prisma.sql`AND p."categoryId" = ANY(${scope}::int[])` : Prisma.empty;
   const frac = Prisma.sql`(
@@ -544,7 +564,11 @@ async function _planHierarchy(
   const planBranchSql = branchId ? Prisma.sql`AND sp."branchId" = ${branchId}` : Prisma.empty;
   const planScopeSql = scope ? Prisma.sql`AND sp."categoryId" = ANY(${scope}::int[])` : Prisma.empty;
 
-  const [tree, factRows, planRows] = await Promise.all([
+  // Filial kesimi FAQAT "barchasi" tanlanganda kerak — bitta filialda ustun jamining
+  // nusxasi bo'lardi. Bu bayroq SQL'ni ham, natija hajmini ham boshqaradi.
+  const filialKesimi = !branchId;
+
+  const [tree, factRows, planRows, branches] = await Promise.all([
     prisma.categoryGroup.findMany({
       orderBy: { sortOrder: "asc" },
       select: {
@@ -562,8 +586,8 @@ async function _planHierarchy(
       },
     }),
     // Fakt/marja — SKU darajasidagi ProductSales, subkat (Product.categoryId) bo'yicha
-    prisma.$queryRaw<{ cid: number; fact: number | null; sales: number | null; cost: number | null }[]>`
-      SELECT p."categoryId" AS cid,
+    prisma.$queryRaw<{ cid: number; bid: number; fact: number | null; sales: number | null; cost: number | null }[]>`
+      SELECT p."categoryId" AS cid, ps."branchId" AS bid,
         COALESCE(SUM(ps."amount"::numeric * ${frac}), 0)::float8 AS fact,
         COALESCE(SUM(COALESCE(ps."salePrice" * ps."soldQty", ps."amount")::numeric * ${frac}), 0)::float8 AS sales,
         COALESCE(SUM(COALESCE(ps."costPrice" * ps."soldQty", ps."costAmount", 0)::numeric * ${frac}), 0)::float8 AS cost
@@ -574,11 +598,11 @@ async function _planHierarchy(
         AND p."categoryId" IS NOT NULL
         ${branchSql}
         ${scopeSql}
-      GROUP BY p."categoryId"
+      GROUP BY p."categoryId", ps."branchId"
     `,
     // Reja — SalesPlan oylik, davr kesimiga pro-rata (kiritilgan kategoriya id'si bo'yicha)
-    prisma.$queryRaw<{ cid: number; plan: number | null }[]>`
-      SELECT sp."categoryId" AS cid,
+    prisma.$queryRaw<{ cid: number; bid: number; plan: number | null }[]>`
+      SELECT sp."categoryId" AS cid, sp."branchId" AS bid,
         COALESCE(SUM(sp.amount::numeric * (
           (LEAST(m."end", ${range.end}::date) - GREATEST(m."start", ${range.start}::date) + 1)::numeric
           / NULLIF((m."end" - m."start" + 1), 0)::numeric
@@ -592,35 +616,83 @@ async function _planHierarchy(
         AND m."end"   >= ${range.start}::date
         ${planBranchSql}
         ${planScopeSql}
-      GROUP BY sp."categoryId"
+      GROUP BY sp."categoryId", sp."branchId"
     `,
+    filialKesimi
+      ? prisma.branch.findMany({ orderBy: { sortOrder: "asc" }, select: { id: true, name: true } })
+      : Promise.resolve([] as { id: number; name: string }[]),
   ]);
 
+  // Kategoriya jamlanmasi + filial kesimi bir xil qatorlardan quriladi — ustunlar
+  // yig'indisi jamiga TENG bo'lishi kafolatlanadi (ikki xil so'rov bo'lsa farq chiqardi).
   const factMap = new Map<number, FactAgg>();
+  const factBranch = new Map<string, FactAgg>(); // "cid:bid"
   for (const r of factRows) {
-    factMap.set(r.cid, { fact: Number(r.fact ?? 0), sales: Number(r.sales ?? 0), cost: Number(r.cost ?? 0) });
+    const v: FactAgg = { fact: Number(r.fact ?? 0), sales: Number(r.sales ?? 0), cost: Number(r.cost ?? 0) };
+    const bor = factMap.get(r.cid);
+    factMap.set(r.cid, bor ? { fact: bor.fact + v.fact, sales: bor.sales + v.sales, cost: bor.cost + v.cost } : v);
+    if (filialKesimi) factBranch.set(`${r.cid}:${r.bid}`, v);
   }
   const planMap = new Map<number, number>();
-  for (const r of planRows) planMap.set(r.cid, Number(r.plan ?? 0));
+  const planBranch = new Map<string, number>();
+  for (const r of planRows) {
+    const v = Number(r.plan ?? 0);
+    planMap.set(r.cid, (planMap.get(r.cid) ?? 0) + v);
+    if (filialKesimi) planBranch.set(`${r.cid}:${r.bid}`, v);
+  }
 
   const inScope = scope ? new Set(scope) : null;
-  const mk = (id: number, name: string, f: FactAgg, plan: number): PlanNode => ({
+  const zero = (): FactAgg => ({ fact: 0, sales: 0, cost: 0 });
+  const add = (a: FactAgg, b: FactAgg): FactAgg => ({
+    fact: a.fact + b.fact, sales: a.sales + b.sales, cost: a.cost + b.cost,
+  });
+
+  /** Filial kesimi akkumulyatori: bid → {fact, plan}. Daraxt bo'ylab yig'iladi. */
+  type BAcc = Map<number, { fact: number; plan: number }>;
+  const bZero = (): BAcc => new Map();
+  const bAdd = (a: BAcc, b: BAcc): BAcc => {
+    for (const [bid, v] of b) {
+      const bor = a.get(bid);
+      if (bor) { bor.fact += v.fact; bor.plan += v.plan; }
+      else a.set(bid, { fact: v.fact, plan: v.plan });
+    }
+    return a;
+  };
+  /** Bitta kategoriya id uchun filial kesimi (fakt + reja). */
+  const bOf = (cid: number): BAcc => {
+    const m: BAcc = new Map();
+    if (!filialKesimi) return m;
+    for (const b of branches) {
+      const f = factBranch.get(`${cid}:${b.id}`);
+      const pl = planBranch.get(`${cid}:${b.id}`) ?? 0;
+      if (!f && pl === 0) continue;
+      m.set(b.id, { fact: f?.fact ?? 0, plan: pl });
+    }
+    return m;
+  };
+  const bCells = (m: BAcc): PlanBranchCell[] | undefined => {
+    if (!filialKesimi) return undefined;
+    return branches.map((b) => {
+      const v = m.get(b.id) ?? { fact: 0, plan: 0 };
+      return { branchId: b.id, fact: v.fact, plan: v.plan, planPct: v.plan > 0 ? (v.fact / v.plan) * 100 : null };
+    });
+  };
+
+  const mk = (id: number, name: string, f: FactAgg, plan: number, b?: BAcc): PlanNode => ({
     id,
     name,
     fact: f.fact,
     plan,
     planPct: plan > 0 ? (f.fact / plan) * 100 : null,
     marja: f.sales > 0 ? ((f.sales - f.cost) / f.sales) * 100 : null,
-  });
-  const zero = (): FactAgg => ({ fact: 0, sales: 0, cost: 0 });
-  const add = (a: FactAgg, b: FactAgg): FactAgg => ({
-    fact: a.fact + b.fact, sales: a.sales + b.sales, cost: a.cost + b.cost,
+    byBranch: b ? bCells(b) : undefined,
   });
 
   const groups: PlanGroupNode[] = [];
   for (const g of tree) {
     let gAgg = zero();
     let gPlan = 0;
+    const gB = bZero();
     const categories: PlanCategoryNode[] = [];
 
     for (const c of g.categories) {
@@ -631,25 +703,29 @@ async function _planHierarchy(
       // Kategoriyaning O'ZIGA biriktirilgan SKU/reja (subkatsiz kiritilgan holat)
       let cAgg = inScope ? zero() : factMap.get(c.id) ?? zero();
       let cPlan = inScope ? 0 : planMap.get(c.id) ?? 0;
+      const cB = inScope ? bZero() : bOf(c.id);
       const subs: PlanNode[] = [];
 
       for (const s of children) {
         const sAgg = factMap.get(s.id) ?? zero();
         const sPlan = planMap.get(s.id) ?? 0;
+        const sB = bOf(s.id);
         cAgg = add(cAgg, sAgg);
         cPlan += sPlan;
-        subs.push(mk(s.id, s.name, sAgg, sPlan));
+        bAdd(cB, sB);
+        subs.push(mk(s.id, s.name, sAgg, sPlan, sB));
       }
 
       gAgg = add(gAgg, cAgg);
       gPlan += cPlan;
-      categories.push({ ...mk(c.id, c.name, cAgg, cPlan), subs });
+      bAdd(gB, cB);
+      categories.push({ ...mk(c.id, c.name, cAgg, cPlan, cB), subs });
     }
 
     if (categories.length === 0) continue;
-    groups.push({ ...mk(g.id, g.name, gAgg, gPlan), categories });
+    groups.push({ ...mk(g.id, g.name, gAgg, gPlan, gB), categories });
   }
-  return groups;
+  return { groups, branches };
 }
 
 export const planHierarchy = (range: DateRange, branchId?: number, scope?: number[] | null) =>
