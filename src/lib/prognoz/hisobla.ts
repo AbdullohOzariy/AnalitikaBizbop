@@ -32,14 +32,14 @@ import {
   ABC_YOQ,
   C_MAX,
   C_MIN,
-  C_SOVUQ,
+  C_MIN_N,
   KALIB_OYNA,
   SERVIS,
+  bandCaseSQL,
   biasKoeff,
   kalibrla,
   kvantKalit,
   qisqart,
-  siqilganC,
   sovuqKalib,
   type Kalibratsiya,
 } from "./kalibr";
@@ -250,13 +250,14 @@ function qatorlarniQur(
  */
 async function kalibOqi(originISO: string, servis = SERVIS): Promise<Kalibratsiya> {
   const kal = sovuqKalib(servis);
-  // Uch daraja BITTA so'rovda (GROUPING SETS): sinf×abc (asosiy), sinf (zaxira),
+  // Uch daraja BITTA so'rovda (GROUPING SETS): abc×band (asosiy), band (zaxira),
   // () — global BIAS. `abcClass` Product'dan olinadi: u vaqt bo'yicha o'zgaruvchan
   // atribut, ya'ni tarixiy qatorlar BUGUNGI ABC bilan kalitlanadi. 4 oynalik
   // (≈1 oy) oyna uchun bu farq ahamiyatsiz, `abcClass` esa choraklik hisoblanadi.
+  // Band `forecast` (o'sha paytdagi p50) dan olinadi — qo'llashda ham AYNI ta'rif.
   const r = await pgPool.query<{
-    sinf: string | null;
     abc: string | null;
+    band: string | null;
     c: number | null;
     sf: number | null;
     sa: number | null;
@@ -267,28 +268,27 @@ async function kalibOqi(originISO: string, servis = SERVIS): Promise<Kalibratsiy
        WHERE stockout = false AND "targetTo" <= $1::date
        ORDER BY tt DESC LIMIT $2
      ), baho AS (
-       SELECT a.sinf, coalesce(p."abcClass", $4) abc, a.actual, a.forecast
+       SELECT coalesce(p."abcClass", $4) abc, ${bandCaseSQL('a.forecast')} band,
+              a.actual, a.forecast
        FROM "SkuForecastAccuracy" a
        JOIN "Product" p ON p.id = a."productId"
        WHERE a.stockout = false AND a."targetTo" IN (SELECT tt FROM oynalar)
      )
-     SELECT sinf, abc,
+     SELECT abc, band,
             percentile_cont($3::float8) WITHIN GROUP (
               ORDER BY (actual - forecast) / sqrt(greatest(forecast, 0) + 1)
             )::float8 c,
             sum(forecast)::float8 sf, sum(actual)::float8 sa, count(*)::int n
      FROM baho
-     GROUP BY GROUPING SETS ((sinf, abc), (sinf), ())`,
+     GROUP BY GROUPING SETS ((abc, band), (band), ())`,
     [originISO, KALIB_OYNA, servis, ABC_YOQ]
   );
 
-  // IKKI O'TISH — shrinkage IYERARXIK bo'lishi uchun: ABC bandi o'z sinfining
-  // O'RGANILGAN qiymatiga tortiladi, sovuq-start konstantasiga emas. Aks holda A sinf
-  // (bufer katta kerak) sinf o'rtachasiga qarab pasayib ketadi va servis darajasi
-  // ABC bo'ylab tengsiz qoladi — o'lchandi: konstantaga tortganda A 85.0% / C 92.5%.
+  // Kesim O'Z kvantilini ishlatadi (n >= C_MIN_N); aks holda `cUchun` ota-kesimga
+  // tushadi. Kvantil SIQILMAYDI — buning sababi `C_MIN_N` izohida.
   for (const row of r.rows) {
     const n = Number(row.n) || 0;
-    if (row.sinf == null) {
+    if (row.band == null) {
       // `()` to'plami — global BIAS koeffitsienti (o'lchovda eng barqarori)
       if (n > 0 && row.sf != null && row.sa != null) {
         kal.biasK = biasKoeff(Number(row.sf), Number(row.sa), n);
@@ -296,22 +296,10 @@ async function kalibOqi(originISO: string, servis = SERVIS): Promise<Kalibratsiy
       }
       continue;
     }
-    if (row.abc != null || n === 0 || row.c == null) continue;
-    const sinf = row.sinf as Sinf;
-    kal.kvantSinf.set(sinf, {
-      c: siqilganC(qisqart(Number(row.c), C_MIN, C_MAX), C_SOVUQ[sinf] ?? 0, n),
-      n,
-    });
-  }
-  for (const row of r.rows) {
-    const n = Number(row.n) || 0;
-    if (row.sinf == null || row.abc == null || n === 0 || row.c == null) continue;
-    const sinf = row.sinf as Sinf;
-    const prior = kal.kvantSinf.get(sinf)?.c ?? C_SOVUQ[sinf] ?? 0;
-    kal.kvant.set(kvantKalit(sinf, row.abc), {
-      c: siqilganC(qisqart(Number(row.c), C_MIN, C_MAX), prior, n),
-      n,
-    });
+    if (n < C_MIN_N || row.c == null) continue;
+    const kv = { c: qisqart(Number(row.c), C_MIN, C_MAX), n };
+    if (row.abc == null) kal.kvantBand.set(row.band, kv);
+    else kal.kvant.set(kvantKalit(row.abc, row.band), kv);
   }
   return kal;
 }
@@ -401,15 +389,14 @@ async function prognozYaz(
   // shuning uchun "o'tgan haftada nega boshqa raqam chiqqan" savoliga javob shu yerda.
   await prisma.skuForecastCalib.createMany({
     data: [
-      // Zaxira daraja ("*") — sinf bo'yicha; ABC kesimida tarix yetmasa shu ishlatiladi
-      ...[...kal.kvantSinf].map(([sinf, v]) => ({
-        runId: run.id, sinf, abc: "*", quantC: v.c, n: v.n, sovuq: v.n === 0,
+      // Zaxira daraja — faqat band (ABC kesimida tarix yetmasa shu ishlatiladi)
+      ...[...kal.kvantBand].map(([band, v]) => ({
+        runId: run.id, kalit: band, quantC: v.c, n: v.n, sovuq: v.n === 0,
       })),
-      // Asosiy daraja — sinf×ABC
-      ...[...kal.kvant].map(([k, v]) => {
-        const [sinf, abc] = k.split("|");
-        return { runId: run.id, sinf, abc, quantC: v.c, n: v.n, sovuq: false };
-      }),
+      // Asosiy daraja — ABC × band
+      ...[...kal.kvant].map(([kalit, v]) => ({
+        runId: run.id, kalit, quantC: v.c, n: v.n, sovuq: false,
+      })),
     ],
     skipDuplicates: true,
   });
@@ -705,8 +692,8 @@ export async function prognozQuruq(opts: { now?: Date } = {}): Promise<{
     biasK: number;
     biasN: number;
     servis: number;
-    sinf: Record<string, { c: number; n: number }>;
-    abc: Record<string, { c: number; n: number }>;
+    band: Record<string, { c: number; n: number }>;
+    abcBand: Record<string, { c: number; n: number }>;
   };
   namuna: Prisma.SkuForecastCreateManyInput[];
 }> {
@@ -719,8 +706,8 @@ export async function prognozQuruq(opts: { now?: Date } = {}): Promise<{
       biasK: +kal.biasK.toFixed(4),
       biasN: kal.biasN,
       servis: kal.servis,
-      sinf: Object.fromEntries([...kal.kvantSinf].map(([k, v]) => [k, { c: +v.c.toFixed(2), n: v.n }])),
-      abc: Object.fromEntries([...kal.kvant].map(([k, v]) => [k, { c: +v.c.toFixed(2), n: v.n }])),
+      band: Object.fromEntries([...kal.kvantBand].map(([k, v]) => [k, { c: +v.c.toFixed(2), n: v.n }])),
+      abcBand: Object.fromEntries([...kal.kvant].map(([k, v]) => [k, { c: +v.c.toFixed(2), n: v.n }])),
     },
     origin: ctx.origin,
     panelWeeks: ctx.haftalar.length,

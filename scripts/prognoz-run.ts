@@ -28,7 +28,8 @@ async function main() {
       `kalibratsiya: BIAS k = ${r.kalib.biasK} (${n(r.kalib.biasN)} qatordan), ` +
         `servis ${(r.kalib.servis * 100).toFixed(0)}%`
     );
-    console.log("  kvantil c:", r.kalib.sinf);
+    console.log("  kvantil c (band):", r.kalib.band);
+    console.log("  kvantil c (ABC×band):", r.kalib.abcBand);
     console.log("\nnamuna (5 qator):");
     for (const y of r.namuna) {
       console.log(

@@ -15,19 +15,26 @@
  *    koeffitsientda ma'lumot eng ko'p — shuning uchun eng barqaror.
  *
  * 2. q90 — EMPIRIK KVANTIL, formula EMAS. Talab SANOQ tabiatiga ega (σ ∝ √o'rtacha),
- *    shuning uchun qoldiq √(p50+1) ga normalizatsiya qilinadi. To'rt qoida o'lchandi
+ *    shuning uchun qoldiq √(p50+1) ga normalizatsiya qilinadi. To'rt SHAKL o'lchandi
  *    (qoplash / ortiqcha dona / kamomad dona, seriya-oynasiga):
  *      formula (p50+z·σ·√h)   84.5% · 22.8 · 2.8   ← maqsad 90% edi, YETMAYDI
  *      multiplikativ (m·p50)  84.6% · 56.6 · 2.2   ← LUMPY'da 74.9% (p50=0 qoplanmaydi)
  *      additiv (p50+a)        90.6% · 17.8 · 4.5
  *      √-masshtab             90.7% · 20.9 · 3.7   ← g'olib
- *    √-masshtab har sinfda 90% ga tegadi (SMOOTH 89.8 · ERRATIC 90.5 · INTERMITTENT
- *    90.8 · LUMPY 91.0) va savdo to'plangan sinflarda additivdan kam kamomad beradi
- *    (SMOOTH: 9.7 vs 11.8 dona) — SMOOTH seriyalar savdoning 52.5%i.
  *
- * MUHIM CHEKLOV: multiplikativ qoida INTERMITTENT/LUMPY'da PRINSIPIAL ishlamaydi —
- * bu sinflarda p50 = 0 bo'lgan oynalar 29% va 56%, `m · 0 = 0` esa hech qachon
- * qoplamaydi. Shu sabab qoida ADDITIV shaklda (p50 + c·√(p50+1)) qurilgan.
+ *    MUHIM CHEKLOV: multiplikativ qoida INTERMITTENT/LUMPY'da PRINSIPIAL ishlamaydi —
+ *    bu sinflarda p50 = 0 bo'lgan oynalar 29% va 56%, `m · 0 = 0` esa hech qachon
+ *    qoplamaydi. Shu sabab qoida ADDITIV shaklda: q90 = p50 + c·√(p50+1).
+ *
+ * 3. KALIT — `ABC × kattalik bandi` (Faza 3.1). Shakl to'g'ri bo'lsa ham, `c` ni
+ *    QAYSI kesimda o'rganish alohida savol va u ham o'lchandi:
+ *      sinf×abc      JAMI 90.7% · A 85.1% · C 92.6%   ← A tizimli tanqis
+ *      band          JAMI 90.3% · A 79.8% · C 95.7%   ← ABC'siz bo'lmaydi
+ *      abc×band      JAMI 91.2% · A 89.9% · C 91.2%
+ *      abc×band √    JAMI 91.2% · A 89.9% · C 91.0%   ← g'olib (kamomad eng kam)
+ *    `sinf×abc×band` ham sinaldi — `abc×band` bilan TENG (A 89.9%), demak soddaroq
+ *    kalit tanlandi. Eng katta yutuq `1k+` bandda: qoplash 76.1% → 89.8%, kamomad
+ *    344 → 217 dona/oyna.
  */
 import type { Sinf } from "./panel";
 
@@ -52,16 +59,37 @@ export const SERVIS = 0.9;
  */
 export const KALIB_OYNA = 4;
 
-/** Shrinkage: namuna kichik bo'lsa tuzatishni 1 ga tortadi. */
+/** Shrinkage: BIAS koeffitsienti kichik namunada 1 ga tortiladi. */
 export const SHRINK_N = 2_000;
+
+/**
+ * Kvantil uchun MINIMAL namuna. Kesim shundan kam qator bilan o'rganilgan bo'lsa —
+ * o'z qiymati ishlatilmaydi, ota-kesimga tushiladi.
+ *
+ * NEGA SHRINKAGE EMAS: kvantilni ota-kesim qiymatiga "tortish" o'lchangan
+ * yaxshilanishni BEKOR QILDI. `SHRINK_N = 2000` bilan `A|1k+` bandi (n = 143) o'z
+ * signalining atigi 6.7% ini saqlab qolardi va natija band-darajali kalibratsiyaga
+ * aylanib qolardi: jonli o'lchovda A sinf 85.1% → 83.2% (kutilgan 89.9% o'rniga).
+ * O'lchov qanday o'tkazilgan bo'lsa — SHUNDAY qo'llanadi: `n ≥ 50` bo'lsa kesimning
+ * O'Z kvantili, aks holda ota-kesim. O'rtacha bilan kvantil bir xil emas: o'rtachani
+ * siqish uni barqarorlashtiradi, kvantilni siqish esa uning MA'NOSINI yo'qotadi.
+ */
+export const C_MIN_N = 50;
 
 /** BIAS koeffitsienti chegaralari — kalibratsiya modelni buzib yubormasin. */
 export const K_MIN = 0.75;
 export const K_MAX = 1.35;
 
-/** √-masshtab koeffitsienti chegaralari (dona / √dona). */
+/**
+ * √-masshtab koeffitsienti chegaralari (dona / √dona).
+ *
+ * `C_MAX` 20 dan 40 ga ko'tarildi: band kaliti kiritilgach `A|1k+` uchun HAQIQIY
+ * o'rganilgan qiymat 18.7 chiqdi — eski chegara qonuniy qiymatlarni kesa boshlagan
+ * edi. Chegara faqat "aqldan ozgan" qiymatga qarshi qorovul bo'lishi kerak, hisobni
+ * belgilamasligi kerak. Katta seriyalarda bufer baribir `√(p50)` bilan cheklangan.
+ */
 export const C_MIN = 0;
-export const C_MAX = 20;
+export const C_MAX = 40;
 
 /**
  * SOVUQ START qiymatlari — baho tarixi hali yo'q bo'lganda (yangi baza). Bular ham
@@ -107,54 +135,77 @@ export interface SinfKalib {
 /** ABC sinfi yo'q SKU uchun kalit (bo'sh satr emas — ko'rinadigan belgi). */
 export const ABC_YOQ = "-";
 
-export const kvantKalit = (sinf: Sinf, abc: string | null) => `${sinf}|${abc || ABC_YOQ}`;
+/**
+ * P50 KATTALIK BANDLARI — kvantil kalitining ikkinchi o'lchovi.
+ *
+ * NEGA KERAK: faqat sinf×ABC bo'yicha kalibrlanganda qoplash p50 kattaligi bo'ylab
+ * MONOTON pasayadi (o'lchandi): 3–10 bandda 93.1%, 100–300 da 89.2%, 300–1k da 87.0%,
+ * `1k+` da atigi **76.1%** — kamomad 344 dona/oyna. Ya'ni eng yirik seriyalar eng
+ * yomon qoplanadi va yo'qotilgan sotuv aynan o'sha yerda to'planadi.
+ *
+ * Chegaralar logarifmik: talab taqsimoti ham shunday cho'ziladi, teng qadamli band
+ * yuqori uchida bo'sh, pastida haddan tashqari zich bo'lardi.
+ */
+export const BANDLAR: readonly [number, string][] = [
+  [0, "0"], [1, "0-1"], [3, "1-3"], [10, "3-10"], [30, "10-30"],
+  [100, "30-100"], [300, "100-300"], [1000, "300-1k"], [Infinity, "1k+"],
+];
+
+export function bandNomi(p50: number): string {
+  if (!(p50 > 0)) return "0";
+  for (const [chek, nom] of BANDLAR) if (p50 <= chek) return nom;
+  return "1k+";
+}
+
+/** SQL tomonda AYNI bandlarni qurish uchun CASE (ta'rif ikkiga bo'linmasin). */
+export function bandCaseSQL(ustun: string): string {
+  const shartlar = BANDLAR.filter(([c]) => Number.isFinite(c))
+    .map(([chek, nom]) => `WHEN ${ustun} <= ${chek} THEN '${nom}'`)
+    .join(" ");
+  return `CASE WHEN NOT (${ustun} > 0) THEN '0' ${shartlar} ELSE '1k+' END`;
+}
+
+/** Kvantil kaliti: ABC × kattalik bandi. Sinf ATAYLAB yo'q — o'lchovda `sinf×abc×band`
+ *  bilan `abc×band` teng chiqdi (A 89.9% ikkalasida), keyingisi esa soddaroq va
+ *  bandiga ko'proq ma'lumot tushadi. */
+export const kvantKalit = (abc: string | null, band: string) => `${abc || ABC_YOQ}|${band}`;
 
 export interface Kalibratsiya {
   /** Global BIAS koeffitsienti (prognoz shunga BO'LINADI). */
   biasK: number;
   biasN: number;
-  /** Kvantil koeffitsienti, kalit `sinf|abc` — ASOSIY daraja. */
+  /** Kvantil koeffitsienti, kalit `abc|band` — ASOSIY daraja. */
   kvant: Map<string, SinfKalib>;
-  /** Zaxira daraja: faqat sinf bo'yicha (abc kesimida tarix yetmasa). */
-  kvantSinf: Map<Sinf, SinfKalib>;
+  /** Zaxira daraja: faqat band bo'yicha (ABC kesimida tarix yetmasa). */
+  kvantBand: Map<string, SinfKalib>;
   /** Maqsad servis darajasi. */
   servis: number;
 }
 
 /** Sovuq start kalibratsiyasi — tarix yo'q. */
 export function sovuqKalib(servis = SERVIS): Kalibratsiya {
-  const kvantSinf = new Map<Sinf, SinfKalib>();
-  for (const [k, c] of Object.entries(C_SOVUQ)) kvantSinf.set(k as Sinf, { c, n: 0 });
-  return { biasK: 1, biasN: 0, kvant: new Map(), kvantSinf, servis };
+  return { biasK: 1, biasN: 0, kvant: new Map(), kvantBand: new Map(), servis };
 }
 
 /**
- * Kvantil koeffitsientini PRIOR ga tortadi (namuna kichik bo'lsa). Kvantil
- * o'rtachadan shovqinliroq — 200 qatorli kesimda 90-protsentil bitta cho'qqiga
- * ilinib qolishi mumkin.
+ * Kvantil koeffitsienti: `abc|band` → `band` → sovuq start (sinf bo'yicha).
  *
- * PRIOR IYERARXIK bo'lishi SHART: sinf×ABC bandi uchun prior — o'sha sinfning
- * O'RGANILGAN qiymati, sovuq-start konstantasi EMAS. Konstantaga tortilganda A sinf
- * (unga eng katta bufer kerak) sinf o'rtachasiga qarab pasayib ketadi va servis
- * darajasi ABC bo'ylab tengsiz qoladi (o'lchandi: A 85.0% / C 92.5%).
+ * KALIT IKKI O'LCHOVLI bo'lishi SHART — ikkalasi ham o'lchangan:
+ *   • ABC'siz (faqat band): A 79.8% · C 95.7% — tengsiz, ya'ni ABC kerak.
+ *   • Bandsiz (faqat sinf×abc): qoplash p50 bo'ylab siljiydi — 3–10 bandda 93.1%,
+ *     `1k+` da 76.1%. Ya'ni band ham kerak.
+ *   • `abc×band` √: JAMI 91.2% · A 89.9% · B 90.3% · C 91.0%, `1k+` 89.8%.
+ * `sinf×abc×band` ham sinaldi — `abc×band` bilan TENG chiqdi (A ikkalasida 89.9%),
+ * shuning uchun soddaroq kalit tanlandi (bandga ko'proq ma'lumot tushadi).
  */
-export function siqilganC(c: number, prior: number, n: number): number {
-  const w = n / (n + SHRINK_N);
-  return qisqart(prior + w * (c - prior), C_MIN, C_MAX);
-}
-
-/**
- * Kvantil koeffitsienti: `sinf|abc` → `sinf` → sovuq start.
- *
- * NEGA ABC KESIMI: faqat sinf bo'yicha kalibrlansa servis darajasi ABC bo'ylab
- * TENGSIZ taqsimlanadi — o'lchandi: A 79.0% · B 87.3% · C 95.2% (tarqoqlik 16.2 pp),
- * ya'ni eng ko'p sotiladigan tovarlar eng kam qoplanadi va yo'qotilgan sotuv aynan
- * o'sha yerda to'planadi (A: 18.8 dona/oyna, C: 0.4). `sinf×abc` bilan A 90.6% ·
- * B 90.4% · C 90.9% (tarqoqlik 0.5 pp). Hajm guruhi bo'yicha kalibrlash ISHLAMADI
- * (15.4 pp) — ABC joriy hajmda yo'q ma'lumotni (talab barqarorligini) tashiydi.
- */
-export function cUchun(kal: Kalibratsiya, s: Sinf, abc: string | null): number {
-  return kal.kvant.get(kvantKalit(s, abc))?.c ?? kal.kvantSinf.get(s)?.c ?? C_SOVUQ[s] ?? 0;
+export function cUchun(kal: Kalibratsiya, sinf: Sinf, abc: string | null, p50: number): number {
+  const band = bandNomi(p50);
+  return (
+    kal.kvant.get(kvantKalit(abc, band))?.c ??
+    kal.kvantBand.get(band)?.c ??
+    C_SOVUQ[sinf] ?? // sovuq start — tarix yig'ilgunicha sinf bo'yicha
+    0
+  );
 }
 
 /**
@@ -169,6 +220,7 @@ export function kalibrla(
   kal: Kalibratsiya
 ): { p50: number; q90: number } {
   const p50 = Math.max(0, raw / kal.biasK);
-  const c = cUchun(kal, sinf, abc);
+  // Band TUZATILGAN p50 dan olinadi — bufer ham aynan shu qiymat ustiga qo'yiladi.
+  const c = cUchun(kal, sinf, abc, p50);
   return { p50, q90: Math.max(p50, p50 + c * masshtab(p50)) };
 }

@@ -1034,20 +1034,20 @@ model SkuForecastSegment {
 // tarixdan o'rganiladi, ya'ni har hafta o'zgaradi; qaysi raqam qachon ishlatilgani
 // saqlanmasa, o'tgan haftaning prognozini qayta tushuntirib bo'lmaydi.
 model SkuForecastCalib {
-  id     Int    @id @default(autoincrement())
-  runId  Int
-  sinf   String @db.VarChar(12)
-  // ABC sinfi: kvantil AYNAN sinf×ABC kesimida kalibrlanadi (faqat sinf bo'yicha
-  // kalibrlash servis darajasini A 79% / C 95% qilib tengsiz taqsimlagan edi).
-  // "*" — sinf darajasidagi zaxira qiymat, "-" — ABC sinfi yo'q SKU'lar.
-  abc    String @default("*") @db.VarChar(2)
+  id    Int    @id @default(autoincrement())
+  runId Int
+  // Kalibratsiya kaliti. Hozirgi sxema: "<ABC>|<p50 bandi>" (masalan "A|300-1k"),
+  // zaxira daraja — faqat band ("300-1k"). Kalit ATAYLAB erkin matn: kesim sxemasi
+  // o'lchov natijasiga qarab o'zgarib turadi (sinf → sinf×abc → abc×band), har
+  // safar migratsiya yozish esa provenance jadvali uchun ortiqcha.
+  kalit  String @db.VarChar(32)
   quantC Float // √-masshtab kvantil koeffitsienti: q90 = p50 + c·√(p50+1)
   n      Int // necha baho qatoridan o'rganildi (0 — sovuq start qiymati)
   sovuq  Boolean @default(false) // tarix yo'q edi, o'lchangan default ishlatildi
 
   run SkuForecastRun @relation(fields: [runId], references: [id], onDelete: Cascade)
 
-  @@unique([runId, sinf, abc])
+  @@unique([runId, kalit])
 }
 
 // ─── Yetkazib beruvchi anketasi (supplier.oilagroup.uz) ──────────────────────────────

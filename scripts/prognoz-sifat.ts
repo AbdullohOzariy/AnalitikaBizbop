@@ -104,17 +104,15 @@ async function main() {
       `oxirgi BIAS k = ${Number(m.biask).toFixed(4)} · maqsad servis ${(Number(m.servis) * 100).toFixed(0)}%`
   );
 
-  const kal = await pgPool.query<{ sinf: string; quantc: number; n: number; sovuq: boolean }>(`
-    SELECT c.sinf, c."quantC" quantc, c.n, c.sovuq FROM "SkuForecastCalib" c
+  const kal = await pgPool.query<{ kalit: string; quantc: number; n: number }>(`
+    SELECT c.kalit, c."quantC" quantc, c.n FROM "SkuForecastCalib" c
     WHERE c."runId" = (SELECT id FROM "SkuForecastRun" ORDER BY "weekStart" DESC LIMIT 1)
-    ORDER BY c.sinf`);
+      AND c.kalit LIKE '%|%'
+    ORDER BY c.kalit`);
   if (kal.rows.length > 0) {
     console.log(
-      "oxirgi kvantil c: " +
-        kal.rows
-          .filter((x) => x.sinf !== "KAM")
-          .map((x) => `${x.sinf} ${Number(x.quantc).toFixed(2)}${x.sovuq ? " (sovuq)" : ""}`)
-          .join(" · ")
+      "oxirgi kvantil c (ABC|band): " +
+        kal.rows.map((x) => `${x.kalit} ${Number(x.quantc).toFixed(1)}`).join(" · ")
     );
   }
 

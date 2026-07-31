@@ -394,6 +394,132 @@ async function main() {
   }
   console.log("  (qavsda: ortiqcha/kamomad dona; tarqoqlik kichik = servis bir tekis)");
 
+  // ── 7. FAZA 3.1: qoplash p50 KATTALIGI bo'ylab siljiydimi ────────────────────
+  // Jonli natijada A sinf 85.1%, C 92.6%. Ikki gipoteza (shrinkage prior'i, C_MAX
+  // chegarasi) tekshirilib rad etilgan edi. Uchinchisi: `√(p50)` shaklining o'zi
+  // katta seriyalarda yetarli emas. Avval buni KO'RAMIZ, keyin qoida qidiramiz.
+  const BAND: [number, string][] = [
+    [0, "0"], [1, "0–1"], [3, "1–3"], [10, "3–10"], [30, "10–30"],
+    [100, "30–100"], [300, "100–300"], [1000, "300–1k"], [Infinity, "1k+"],
+  ];
+  const bandNomi = (p50: number) => {
+    if (p50 <= 0) return "0";
+    for (const [chek, nom] of BAND) if (p50 <= chek) return nom;
+    return "1k+";
+  };
+
+  console.log("\n═══ 7. QOPLASH p50 KATTALIGI BO'YLAB (hozirgi √ qoidasi) ═══");
+  console.log("  BAND".padEnd(10) + "n".padStart(9) + "qoplash".padStart(9) + "ortiqcha".padStart(10) + "kamomad".padStart(9));
+  const bandStat = new Map<string, { n: number; q: number; o: number; k: number }>();
+  for (const x of rows) {
+    const b = bandNomi(x.forecast);
+    const st = bandStat.get(b) ?? { n: 0, q: 0, o: 0, k: 0 };
+    st.n++;
+    if (x.actual <= x.q90) st.q++;
+    st.o += Math.max(0, x.q90 - x.actual);
+    st.k += Math.max(0, x.actual - x.q90);
+    bandStat.set(b, st);
+  }
+  for (const [, nom] of BAND) {
+    const st = bandStat.get(nom);
+    if (!st) continue;
+    console.log(
+      `  ${nom.padEnd(8)}${String(st.n).padStart(9)}${pc(st.q / st.n).padStart(9)}` +
+        `${(st.o / st.n).toFixed(1).padStart(10)}${(st.k / st.n).toFixed(1).padStart(9)}`
+    );
+  }
+
+  // ── 8. Qoida variantlari (rolling, sizib chiqishsiz) ──────────────────────────
+  // Band ichida p50 tor diapazonda — shuning uchun XOM qoldiq kvantili olinadi
+  // (masshtablashga hojat yo'q). Kichik bandda ota-kalitga tushamiz.
+  console.log("\n═══ 8. QOIDA VARIANTLARI — kalit qanchalik mayda bo'lishi kerak ═══");
+  const MIN_N = 50; // shundan kam tarixli band ota-kalitga tushadi
+  type Q2 = "hozirgi √" | "sinf×abc×band" | "abc×band" | "band" | "abc×band √";
+  const Q2LAR: Q2[] = ["hozirgi √", "sinf×abc×band", "abc×band", "band", "abc×band √"];
+  const kalit2: Record<Exclude<Q2, "hozirgi √" | "abc×band √">, (x: Qator) => string[]> = {
+    // Kalit zanjiri: eng maydadan eng yirikga (birinchi yetarli tarixlisi olinadi)
+    "sinf×abc×band": (x) => [`${x.sinf}|${x.abc ?? "—"}|${bandNomi(x.forecast)}`, `${x.abc ?? "—"}|${bandNomi(x.forecast)}`, bandNomi(x.forecast)],
+    "abc×band": (x) => [`${x.abc ?? "—"}|${bandNomi(x.forecast)}`, bandNomi(x.forecast)],
+    band: (x) => [bandNomi(x.forecast)],
+  };
+  const st2 = new Map<string, { n: number; q: number; o: number; k: number }>();
+  const yoz2 = (q: Q2, x: Qator, qq: number) => {
+    for (const kk of [`${q}|JAMI`, `${q}|ABC:${x.abc ?? "—"}`, `${q}|BAND:${bandNomi(x.forecast)}`]) {
+      const s = st2.get(kk) ?? { n: 0, q: 0, o: 0, k: 0 };
+      s.n++;
+      if (x.actual <= qq) s.q++;
+      s.o += Math.max(0, qq - x.actual);
+      s.k += Math.max(0, x.actual - qq);
+      st2.set(kk, s);
+    }
+  };
+  const tarix2 = new Map<string, number[]>(); // kalit → xom qoldiq (fakt − p50)
+  const tarixSq = new Map<string, number[]>(); // kalit → qoldiq / √(p50+1)
+  for (const oyna of oynalar) {
+    const paket = rows.filter((x) => x.tt === oyna);
+    const d = new Map<string, number>();
+    for (const [k, arr] of tarix2) {
+      if (arr.length >= MIN_N) d.set(k, kvantil([...arr].sort((a, b) => a - b), 0.9) ?? 0);
+    }
+    const dSqrt = new Map<string, number>();
+    for (const [k, arr] of tarixSq) {
+      if (arr.length >= MIN_N) dSqrt.set(k, kvantil([...arr].sort((a, b) => a - b), 0.9) ?? 0);
+    }
+    for (const x of paket) {
+      yoz2("hozirgi √", x, x.q90);
+      // √ shakli BAND ICHIDA: tekis (additiv) bufer band chetlarida notekis —
+      // 300–1k bandda p50=300 uchun bufer 83%, p50=1000 uchun 25% bo'lib qoladi.
+      const sq = dSqrt.get(`${x.abc ?? "—"}|${bandNomi(x.forecast)}`) ?? dSqrt.get(bandNomi(x.forecast));
+      if (sq != null) yoz2("abc×band √", x, x.forecast + sq * masshtab(x.forecast));
+      for (const q of ["sinf×abc×band", "abc×band", "band"] as const) {
+        let dv: number | undefined;
+        for (const k of kalit2[q](x)) {
+          dv = d.get(k);
+          if (dv != null) break;
+        }
+        if (dv == null) continue; // tarix yo'q — o'lchovga kirmaydi
+        yoz2(q, x, x.forecast + dv);
+      }
+    }
+    for (const x of paket) {
+      const qoldiq = x.actual - x.forecast;
+      for (const k of new Set([
+        `${x.sinf}|${x.abc ?? "—"}|${bandNomi(x.forecast)}`,
+        `${x.abc ?? "—"}|${bandNomi(x.forecast)}`,
+        bandNomi(x.forecast),
+      ])) {
+        const arr = tarix2.get(k) ?? [];
+        arr.push(qoldiq);
+        tarix2.set(k, arr);
+      }
+      for (const k of new Set([`${x.abc ?? "—"}|${bandNomi(x.forecast)}`, bandNomi(x.forecast)])) {
+        const arr = tarixSq.get(k) ?? [];
+        arr.push(qoldiq / masshtab(x.forecast));
+        tarixSq.set(k, arr);
+      }
+    }
+  }
+  const kors = (q: Q2, kesim: string) => {
+    const s = st2.get(`${q}|${kesim}`);
+    return s ? `${pc(s.q / s.n)} (${(s.o / s.n).toFixed(1)}/${(s.k / s.n).toFixed(1)})` : "—";
+  };
+  console.log("  QOIDA".padEnd(16) + "JAMI".padStart(20) + "A".padStart(20) + "B".padStart(20) + "C".padStart(20));
+  for (const q of Q2LAR) {
+    console.log(
+      `  ${q.padEnd(14)}${kors(q, "JAMI").padStart(20)}${kors(q, "ABC:A").padStart(20)}` +
+        `${kors(q, "ABC:B").padStart(20)}${kors(q, "ABC:C").padStart(20)}`
+    );
+  }
+  console.log("  (qoplash (ortiqcha/kamomad dona) — maqsad 90%, ABC bo'ylab TENG)");
+  console.log("\n  Katta bandlar bo'yicha (eng ko'p zaxira shu yerda):");
+  console.log("  QOIDA".padEnd(16) + "30–100".padStart(20) + "100–300".padStart(20) + "300–1k".padStart(20) + "1k+".padStart(20));
+  for (const q of Q2LAR) {
+    console.log(
+      `  ${q.padEnd(14)}${kors(q, "BAND:30–100").padStart(20)}${kors(q, "BAND:100–300").padStart(20)}` +
+        `${kors(q, "BAND:300–1k").padStart(20)}${kors(q, "BAND:1k+").padStart(20)}`
+    );
+  }
+
   console.log("\n═══ XULOSA ═══");
   const eng = variantlar
     .map((v) => ({ v, w: wape(natija.get(v)!)! }))
