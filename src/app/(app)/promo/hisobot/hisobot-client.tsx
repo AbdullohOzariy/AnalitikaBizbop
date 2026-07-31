@@ -91,14 +91,58 @@ export function HisobotClient() {
 
 function ReportView({ report }: { report: PromoReport }) {
   const t = report.totals;
+
+  // Aksiyaning birorta kuni ham TO'LIQ import qilinmagan. Ilgari bunday holatda
+  // hisobot barcha raqamlarni nol qilib ko'rsatib, "aksiya ishlamadi" degan yolg'on
+  // taassurot berardi — endi ochiq aytiladi.
+  if (report.days === 0) {
+    return (
+      <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/[0.07] px-4 py-3 text-sm">
+        <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+        <div className="space-y-1">
+          <p className="font-medium">Hisobot uchun ma'lumot hali yo'q</p>
+          <p className="text-muted-foreground">
+            Aksiya <b className="text-foreground">{formatDateUZ(report.periodStart)}</b> da boshlangan, sotuv
+            ma'lumoti esa <b className="text-foreground">{formatDateUZ(report.dataThrough)}</b> gacha to'liq
+            (keyingi kunlarda ba'zi filiallar importi kelmagan). Import yetib kelgach hisobot avtomatik to'ladi.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       {/* Davr konteksti + granularlik ogohlantirishi */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-xl border border-border/60 bg-muted/20 px-4 py-2.5 text-xs text-muted-foreground">
         <span>Aksiya davri: <b className="text-foreground">{formatDateUZ(report.periodStart)} – {formatDateUZ(report.periodEnd)}</b>{!report.campaign.endDate && " (davom etmoqda)"}</span>
         <span>Taqqos davri: <b className="text-foreground">{formatDateUZ(report.baseStart)} – {formatDateUZ(report.baseEnd)}</b></span>
+        <span>Taqqoslangan: <b className="text-foreground">{report.days} kun</b></span>
         <span>Filial: <b className="text-foreground">{report.campaign.branchName ?? "Barcha"}</b></span>
       </div>
+
+      {/* Davr KESILGAN bo'lsa ochiq aytiladi: teng bo'lmagan oynalarni taqqoslash
+          aksiya natijasini bir necha barobar buzib ko'rsatardi. */}
+      {report.truncated && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/[0.07] px-3 py-2 text-xs">
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+          <span className="text-muted-foreground">
+            {report.campaign.endDate && report.campaign.endDate > report.dataThrough ? (
+              <>
+                Aksiya <b className="text-foreground">{formatDateUZ(report.campaign.endDate)}</b> gacha rejalashtirilgan,
+                lekin sotuv ma'lumoti <b className="text-foreground">{formatDateUZ(report.dataThrough)}</b> gacha mavjud.
+              </>
+            ) : (
+              <>
+                Sotuv ma'lumoti <b className="text-foreground">{formatDateUZ(report.dataThrough)}</b> gacha to'liq
+                (keyingi kunlarda ba'zi filiallar importi hali kelmagan).
+              </>
+            )}{" "}
+            Shu sabab hisobot <b className="text-foreground">{report.days} kunlik</b> aksiya davrini AYNI shuncha kunlik
+            taqqos davri bilan solishtiryapti — natija to'liq davrniki emas, oraliq holat.
+          </span>
+        </div>
+      )}
 
       {/* Umumiy kartalar */}
       <div className="grid gap-3 sm:grid-cols-3">
@@ -148,29 +192,44 @@ function ReportView({ report }: { report: PromoReport }) {
  * Chegirma marjani yeydi — foiz emas, SO'MDAGI yalpi foyda hal qiladi.
  */
 function MarjaXulosa({ m }: { m: MarjaBloki }) {
-  const foyda = m.delta >= 0;
+  // `delta === null` — baza davrida tannarxli sotuv yo'q (butun aksiya yangi
+  // assortimentdan iborat). Bunda "oqladi/oqlamadi" degan hukm chiqarib bo'lmaydi,
+  // lekin aksiya davri foydasi o'lchangan va ko'rsatiladi.
+  const taqqoslanadi = m.delta != null;
+  const foyda = (m.delta ?? 0) >= 0;
   return (
     <div
       className={cn(
         "rounded-xl border p-4",
-        foyda
-          ? "border-primary/30 bg-primary/[0.04]"
-          : "border-destructive/30 bg-destructive/[0.04]"
+        !taqqoslanadi
+          ? "border-border bg-muted/40"
+          : foyda
+            ? "border-primary/30 bg-primary/[0.04]"
+            : "border-destructive/30 bg-destructive/[0.04]"
       )}
     >
       <div className="flex flex-wrap items-center gap-2">
-        {foyda ? (
-          <TrendingUp className="h-4 w-4 text-primary" />
-        ) : (
-          <TrendingDown className="h-4 w-4 text-destructive" />
-        )}
+        {taqqoslanadi &&
+          (foyda ? (
+            <TrendingUp className="h-4 w-4 text-primary" />
+          ) : (
+            <TrendingDown className="h-4 w-4 text-destructive" />
+          ))}
         <h3 className="text-sm font-semibold">
-          {foyda ? "Aksiya o'zini oqladi" : "Aksiya o'zini oqlamadi"}
+          {!taqqoslanadi
+            ? "Taqqoslash uchun baza yo'q — yangi assortiment"
+            : foyda
+              ? "Aksiya o'zini oqladi"
+              : "Aksiya o'zini oqlamadi"}
         </h3>
-        <span className={cn("text-sm font-bold tabular-nums", foyda ? "text-primary" : "text-destructive")}>
-          {foyda ? "+" : ""}{money(m.delta)} so'm
-          {m.deltaPct != null && ` (${m.deltaPct >= 0 ? "+" : ""}${m.deltaPct.toFixed(1)}%)`}
-        </span>
+        {taqqoslanadi ? (
+          <span className={cn("text-sm font-bold tabular-nums", foyda ? "text-primary" : "text-destructive")}>
+            {foyda ? "+" : ""}{money(m.delta ?? 0)} so'm
+            {m.deltaPct != null && ` (${m.deltaPct >= 0 ? "+" : ""}${m.deltaPct.toFixed(1)}%)`}
+          </span>
+        ) : (
+          <span className="text-sm font-bold tabular-nums">{money(m.promoProfit)} so'm yalpi foyda</span>
+        )}
       </div>
 
       <div className="mt-3 grid gap-3 sm:grid-cols-3">
@@ -249,7 +308,16 @@ function ItemRow({ it, hasAfter }: { it: ReportItem; hasAfter: boolean }) {
         )}
       </td>
       <td className="px-2 py-1.5 text-right tabular-nums">
-        {it.marja ? (
+        {it.marja == null ? (
+          <span className="text-muted-foreground">—</span>
+        ) : it.marja.delta == null ? (
+          // Baza yo'q — taqqoslash mumkin emas, LEKIN foyda o'lchangan. "—" qo'yilsa
+          // qator sotilmagandek o'qilardi (aynan shu xato aksiya 29 da topilgan).
+          <>
+            <span className="font-semibold">{money(it.marja.promoProfit)}</span>
+            <div className="text-[11px] text-muted-foreground">yangi — baza yo'q</div>
+          </>
+        ) : (
           <>
             <span className={cn("font-semibold", it.marja.delta >= 0 ? "text-primary" : "text-destructive")}>
               {it.marja.delta >= 0 ? "+" : ""}
@@ -259,14 +327,16 @@ function ItemRow({ it, hasAfter }: { it: ReportItem; hasAfter: boolean }) {
               {money(it.marja.baseProfit)} → {money(it.marja.promoProfit)}
             </div>
           </>
-        ) : (
-          <span className="text-muted-foreground">—</span>
         )}
       </td>
       <td className={cn("px-2 py-1.5 text-right tabular-nums font-semibold", growthClass(it.growthAmountPct))}>
         <span className="inline-flex items-center justify-end gap-1">
           {it.growthAmountPct != null && it.growthAmountPct !== 0 && (it.growthAmountPct > 0 ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />)}
-          {growthLabel(it.growthAmountPct)}
+          {it.growthAmountPct == null && it.promoQty > 0 ? (
+            <span className="text-xs font-normal text-muted-foreground">yangi</span>
+          ) : (
+            growthLabel(it.growthAmountPct)
+          )}
         </span>
       </td>
       {hasAfter && <td className="px-2 py-1.5 text-right tabular-nums">{it.afterAvgPrice != null ? money(it.afterAvgPrice) : "—"}</td>}

@@ -56,6 +56,13 @@ export type ReportItem = {
 /**
  * Marja/foyda taqqoslash. Foiz emas, SO'M hal qiluvchi: marja foizi tushib, lekin
  * hajm shunchalik o'sgan bo'lsa — foyda baribir oshishi mumkin (va aksincha).
+ *
+ * MUTLAQ raqamlar (promoProfit/promoPct) TAQQOSLASHDAN ajratilgan. Ilgari baza
+ * davrida sotuv bo'lmasa butun blok `null` qilinardi va bu ikki xatoga olib kelardi:
+ * (1) yangi assortiment (aksiya bilan chiqarilgan tovar) jadvalda "—" bo'lib
+ * SOTILMAGANDEK ko'rinardi; (2) uning sotuvi kampaniya JAMISIGA ham kirmasdi —
+ * o'lchandi: aksiya 29 da 11 SKU, 1.68 mln so'm foyda hisobidan jimgina tushib
+ * qolgan edi. Endi faqat TAQQOSLASH maydonlari (`delta`, `basePct`) null bo'ladi.
  */
 export type MarjaBloki = {
   /** Tannarxi MA'LUM bo'lgan sotuv summasi (qamrov) — foiz shundan hisoblanadi. */
@@ -63,20 +70,32 @@ export type MarjaBloki = {
   baseCovered: number;
   promoCost: number;
   baseCost: number;
-  promoPct: number | null; // marja %
+  promoPct: number | null; // marja % (aksiya davri) — bazaga BOG'LIQ EMAS
   basePct: number | null;
-  promoProfit: number; // yalpi foyda (so'm)
+  promoProfit: number; // yalpi foyda (so'm) — bazaga BOG'LIQ EMAS
   baseProfit: number;
-  delta: number; // promoProfit - baseProfit
+  /** `null` — baza davrida tannarxli sotuv yo'q, taqqoslab bo'lmaydi (yangi tovar). */
+  delta: number | null;
   deltaPct: number | null;
   /** Tannarx qamrovi (0..1): 1 dan kichik bo'lsa raqamlar to'liq emas. */
   coverage: number;
+  /** Yangi assortiment: baza davrida sotuv yo'q. Sotuvi JAMIGA baribir kiradi. */
+  bazaYoq: boolean;
 };
 
 export type PromoReport = {
   campaign: ReportCampaignOpt & { branchName: string | null };
   periodStart: string;
-  periodEnd: string; // effektiv (endDate yoki bugun)
+  /** EFFEKTIV tugash — rejalashtirilgan sana emas, oxirgi TO'LIQ import kuni bilan kesilgan. */
+  periodEnd: string;
+  /** Rejalashtirilgan tugash (null — doimiy). Effektivdan farq qilsa hisobot chala. */
+  plannedEnd: string | null;
+  /** Ma'lumot qaysi kungacha to'liq mavjud. */
+  dataThrough: string;
+  /** Aksiya davri kesilganmi (davom etyapti yoki import kechikkan). */
+  truncated: boolean;
+  /** Taqqoslangan kunlar soni (aksiya ham, baza ham SHUNCHA kun). */
+  days: number;
   baseStart: string;
   baseEnd: string;
   hasAfter: boolean; // aksiya tugaganmi (after davri mavjudmi)
@@ -108,6 +127,30 @@ export async function listReportCampaignsAction(): Promise<{ ok: true; rows: Rep
 const pct = (cur: number, base: number): number | null => (base > 0 ? ((cur - base) / base) * 100 : null);
 
 /**
+ * Oxirgi TO'LIQ import kuni — barcha filiallar ma'lumot bergan eng so'nggi kun.
+ *
+ * NEGA "to'liq": kunlik import filialma-filial keladi va bittasi kechikishi mumkin.
+ * Jonli misol: 2026-07-30 da Mega Center (eng katta filial, kuniga ~235 mln so'm)
+ * umuman yo'q edi — o'sha kunni hisobga qo'shish aksiya sotuvini ~55% ga kamaytirib
+ * ko'rsatardi. "Norma" — oxirgi 30 kundagi eng katta filial soni.
+ */
+async function oxirgiToliqKun(branchId: number | null): Promise<string | null> {
+  // Filialga xos aksiyada "to'liq" — AYNI o'sha filial ma'lumot bergan kun
+  // (boshqa filial kelib, shu filial kechiksa, kun to'liq HISOBLANMAYDI).
+  const rows = await prisma.$queryRaw<{ kun: string | null }[]>`
+    WITH kunlar AS (
+      SELECT "periodStart" d, count(DISTINCT "branchId")::int filiallar
+      FROM "ProductSales"
+      WHERE "periodStart" >= (SELECT max("periodStart") FROM "ProductSales") - 30
+        AND (${branchId}::int IS NULL OR "branchId" = ${branchId}::int)
+      GROUP BY 1
+    ), norma AS (SELECT max(filiallar) m FROM kunlar)
+    SELECT max(d)::text AS kun FROM kunlar, norma WHERE kunlar.filiallar >= norma.m
+  `;
+  return rows[0]?.kun ?? null;
+}
+
+/**
  * Marja bloki. Qamrov (`covered`) — tannarxi ma'lum sotuv summasi; foiz va foyda
  * SHUNDAN hisoblanadi, aks holda tannarxsiz qatorlar marjani ko'tarib yuborardi.
  */
@@ -116,21 +159,25 @@ function marjaHisobla(
   baseCovered: number, baseCost: number,
   promoAmount: number, baseAmount: number
 ): MarjaBloki | null {
-  // IKKALA davrda ham tannarxli sotuv bo'lishi SHART. Aks holda taqqoslash yolg'on
-  // xulosa berardi: aksiya bugun boshlanib, sotuv importi hali kelmagan bo'lsa
-  // promoProfit=0 bo'lib "aksiya o'zini oqlamadi" deb ko'rsatilardi.
-  if (promoCovered <= 0 || baseCovered <= 0) return null;
+  // FAQAT aksiya davrida tannarxli sotuv bo'lmasa — o'lchanadigan narsa yo'q.
+  // (Asl holat: aksiya bugun boshlangan, sotuv importi hali kelmagan — u paytda
+  // promoProfit = 0 bo'lib "aksiya o'zini oqlamadi" degan yolg'on xulosa chiqardi.)
+  if (promoCovered <= 0) return null;
+  const bazaYoq = baseCovered <= 0;
   const promoProfit = promoCovered - promoCost;
   const baseProfit = baseCovered - baseCost;
   const jamiAmount = promoAmount + baseAmount;
   return {
     promoCovered, baseCovered, promoCost, baseCost,
-    promoPct: promoCovered > 0 ? (promoProfit / promoCovered) * 100 : null,
-    basePct: baseCovered > 0 ? (baseProfit / baseCovered) * 100 : null,
-    promoProfit, baseProfit,
-    delta: promoProfit - baseProfit,
-    deltaPct: baseProfit > 0 ? ((promoProfit - baseProfit) / baseProfit) * 100 : null,
+    promoPct: (promoProfit / promoCovered) * 100,
+    basePct: bazaYoq ? null : (baseProfit / baseCovered) * 100,
+    promoProfit,
+    baseProfit,
+    // Taqqoslash FAQAT ikkala davrda ham o'lchov bo'lganda
+    delta: bazaYoq ? null : promoProfit - baseProfit,
+    deltaPct: !bazaYoq && baseProfit > 0 ? ((promoProfit - baseProfit) / baseProfit) * 100 : null,
     coverage: jamiAmount > 0 ? (promoCovered + baseCovered) / jamiAmount : 0,
+    bazaYoq,
   };
 }
 
@@ -150,16 +197,44 @@ export async function promoReportAction(input: { campaignId: number }): Promise<
     if (!c) return { ok: false, error: "Aksiya topilmadi." };
 
     const start = isoDay(c.startDate);
-    // Effektiv tugash: endDate yoki bugun (doimiy aksiya uchun). Bugun — Toshkent (UTC+5).
     const todayStr = todayTashkentISO();
-    const end = c.endDate ? isoDay(c.endDate) : todayStr;
+    const plannedEnd = c.endDate ? isoDay(c.endDate) : null;
 
-    const len = Math.max(1, diffDays(start, end) + 1); // davr uzunligi (kun)
+    // EFFEKTIV tugash = reja va MA'LUMOT bor kunning kichigi. Ilgari rejalashtirilgan
+    // sana o'zgarishsiz olinardi: davom etayotgan aksiyada 1 kunlik sotuv 8 kunlik baza
+    // bilan solishtirilib, pasayish ~4 barobar oshib ko'rinardi (jonli misol: aksiya 36).
+    const dataThrough = (await oxirgiToliqKun(c.branchId)) ?? todayStr;
+    const rejaEnd = plannedEnd ?? todayStr;
+    const end = rejaEnd < dataThrough ? rejaEnd : dataThrough;
+    const truncated = end < rejaEnd;
+
+    // Ma'lumot aksiya boshlanishidan oldin tugagan bo'lsa — o'lchaydigan narsa yo'q.
+    if (end < start) {
+      return {
+        ok: true,
+        report: {
+          campaign: {
+            id: c.id, title: c.title, type: c.type, status: c.status,
+            startDate: start, endDate: plannedEnd, branchName: c.branch?.name ?? null,
+          },
+          periodStart: start, periodEnd: start, plannedEnd, dataThrough, truncated: true, days: 0,
+          baseStart: start, baseEnd: start, hasAfter: false, items: [],
+          totals: {
+            promoAmount: 0, baseAmount: 0, growthAmountPct: null,
+            promoQty: 0, baseQty: 0, growthQtyPct: null, marja: null,
+          },
+        },
+      };
+    }
+
+    // Baza AYNI uzunlikda — teng bo'lmagan oynalarni taqqoslash asosiy xato edi
+    const len = Math.max(1, diffDays(start, end) + 1);
     const baseStart = addDays(start, -len);
     const baseEnd = addDays(start, -1);
     const afterStart = addDays(end, 1);
     const afterEnd = addDays(end, len);
-    const hasAfter = c.endDate != null && end < todayStr; // aksiya tugagan
+    // "Narx qaytdimi" faqat aksiya TUGAGAN va keyingi davrda ma'lumot bo'lsa
+    const hasAfter = plannedEnd != null && plannedEnd < dataThrough;
 
     const pids = c.items.map((i) => i.productId);
     const branchSql = c.branchId ? Prisma.sql`AND ps."branchId" = ${c.branchId}` : Prisma.empty;
@@ -238,11 +313,14 @@ export async function promoReportAction(input: { campaignId: number }): Promise<
     const tBaseAmt = items.reduce((s, i) => s + i.baseAmount, 0);
     const tPromoQty = items.reduce((s, i) => s + i.promoQty, 0);
     const tBaseQty = items.reduce((s, i) => s + i.baseQty, 0);
+    // JAMI — XOM qatorlardan. Ilgari `i.marja?.x ?? 0` dan yig'ilardi, ya'ni marja
+    // bloki `null` bo'lgan SKU (bazasi yo'q yangi tovar) jamiga NOL qo'shardi va
+    // uning haqiqiy sotuvi kampaniya foydasidan jimgina tushib qolardi.
     const tMarja = marjaHisobla(
-      items.reduce((s, i) => s + (i.marja?.promoCovered ?? 0), 0),
-      items.reduce((s, i) => s + (i.marja?.promoCost ?? 0), 0),
-      items.reduce((s, i) => s + (i.marja?.baseCovered ?? 0), 0),
-      items.reduce((s, i) => s + (i.marja?.baseCost ?? 0), 0),
+      rows.reduce((s, r) => s + (Number(r.promo_cov) || 0), 0),
+      rows.reduce((s, r) => s + (Number(r.promo_cost) || 0), 0),
+      rows.reduce((s, r) => s + (Number(r.base_cov) || 0), 0),
+      rows.reduce((s, r) => s + (Number(r.base_cost) || 0), 0),
       tPromoAmt, tBaseAmt
     );
 
@@ -251,10 +329,11 @@ export async function promoReportAction(input: { campaignId: number }): Promise<
       report: {
         campaign: {
           id: c.id, title: c.title, type: c.type, status: c.status,
-          startDate: start, endDate: c.endDate ? isoDay(c.endDate) : null,
+          startDate: start, endDate: plannedEnd,
           branchName: c.branch?.name ?? null,
         },
-        periodStart: start, periodEnd: end, baseStart, baseEnd, hasAfter,
+        periodStart: start, periodEnd: end, plannedEnd, dataThrough, truncated, days: len,
+        baseStart, baseEnd, hasAfter,
         items,
         totals: {
           promoAmount: tPromoAmt, baseAmount: tBaseAmt, growthAmountPct: pct(tPromoAmt, tBaseAmt),
