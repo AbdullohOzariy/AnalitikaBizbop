@@ -399,6 +399,36 @@ async function ChartsSection({
     ...woGroups.flatMap((g) => g.cats.flatMap((c) => c.subcats.map((s) => toWoCell("s", s)))),
   ];
 
+  // Filial kesimi: "barcha filiallar" ko'rinishida savdo rejasi filiallar bo'yicha
+  // ajratilgan, chiqim esa faqat jamida edi — reja buzilgan filialni topib bo'lmasdi.
+  // Har filial uchun alohida nazorat hisoblanadi; `computeProfitTree` branchId bo'yicha
+  // KESHLANGAN (5 daq.), shuning uchun bu 4 ta qo'shimcha so'rov emas — kesh o'qishi.
+  // WriteoffPlan ham filialga xos: jamida o'rtacha olinadi, bu yerda esa o'z rejasi.
+  if (!branchId && planTree.branches.length > 0) {
+    const perBranch = await Promise.all(
+      planTree.branches.map((b) =>
+        computeWriteoffControl(range, b.id)
+          .then((wc) => ({ branchId: b.id, wc }))
+          .catch(() => ({ branchId: b.id, wc: null }))
+      )
+    );
+    const xarita = new Map(woCells.map((c) => [`${c.level}:${c.id}`, c]));
+    const qoy = (bid: number, level: WoCell["level"], n: { id: number; factPct: number | null; planPct: number | null; status: WoCell["status"] }) => {
+      const cell = xarita.get(`${level}:${n.id}`);
+      if (!cell) return;
+      (cell.byBranch ??= []).push({ branchId: bid, factPct: n.factPct, planPct: n.planPct, status: n.status });
+    };
+    for (const { branchId: bid, wc } of perBranch) {
+      for (const g of wc?.groups ?? []) {
+        qoy(bid, "g", g);
+        for (const c of g.cats) {
+          qoy(bid, "c", c);
+          for (const sc of c.subcats) qoy(bid, "s", sc);
+        }
+      }
+    }
+  }
+
   // Kunlik son (tashrif + chek) davr yig'indisi — grafik bilan bir manbadan
   const curCount = (sumValues(visits) ?? 0) + (sumValues(receipts) ?? 0);
   const prevCount =
