@@ -28,7 +28,9 @@ import { getInventoryReportConfig } from "@/lib/inventory-report/sozlama";
 import { MarginReportEditor } from "./margin-report-editor";
 import { getMarginReportConfig } from "@/lib/margin-report/sozlama";
 import { DeliveryAlertEditor } from "./delivery-alert-editor";
+import { ExpiryAlertEditor } from "./expiry-alert-editor";
 import { getDeliveryAlertConfig } from "@/lib/delivery-alert/sozlama";
+import { getExpiryAlertConfig } from "@/lib/expiry-alert/sozlama";
 import { ZakazPdfEditor } from "./zakaz-pdf-editor";
 import { getZakazPdfConfig } from "@/lib/zakaz-pdf/sozlama";
 import { SpisaniyaDailyEditor } from "./spisaniya-daily-editor";
@@ -168,7 +170,7 @@ async function ZakazTab() {
 // ─── Yetkazib berish kechikishi signali ───────────────────────────────────────
 
 async function YetkazishTab() {
-  const cfg = await getDeliveryAlertConfig();
+  const [cfg, expCfg] = await Promise.all([getDeliveryAlertConfig(), getExpiryAlertConfig()]);
   return (
     <div className="space-y-5">
       <SectionCard
@@ -181,6 +183,19 @@ async function YetkazishTab() {
           chatId={cfg.chatId ?? ""}
           topicId={cfg.topicId != null ? String(cfg.topicId) : ""}
           autoEnabled={cfg.autoEnabled}
+        />
+      </SectionCard>
+
+      <SectionCard
+        title="Muddat (yaroqlilik) signali"
+        description="Har kuni 10:30 (Toshkent) — muddati o'tgan va kritik (≤3 kun) partiyalar"
+        actions={<MessageSquare className="h-4 w-4 text-muted-foreground" />}
+      >
+        <ExpiryAlertEditor
+          tokenSet={!!expCfg.token}
+          chatId={expCfg.chatId ?? ""}
+          topicId={expCfg.topicId != null ? String(expCfg.topicId) : ""}
+          autoEnabled={expCfg.autoEnabled}
         />
       </SectionCard>
     </div>

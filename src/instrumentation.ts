@@ -136,6 +136,22 @@ const JOBS: CronJob[] = [
       );
     },
   },
+  // 10:30 — muddat (yaroqlilik) signali: muddati o'tgan va kritik partiyalar.
+  // Faqat YOQILGAN bo'lsa va shoshilinch partiya BO'LSA yuboriladi — aks holda
+  // har kuni "hammasi joyida" xabari kelib, signal o'qilmay qo'yardi.
+  // 10:00 dagi delivery-alert bilan ustma-ust tushmasin uchun 30 daqiqa surilgan.
+  {
+    name: "expiry-alert", cron: "30 10 * * *", hour: 10, minute: 30,
+    run: async () => {
+      const { getExpiryAlertConfig } = await import("@/lib/expiry-alert/sozlama");
+      if (!(await getExpiryAlertConfig()).autoEnabled) return;
+      const { sendExpiryAlert } = await import("@/lib/expiry-alert/report");
+      const r = await sendExpiryAlert({ skipIfEmpty: true });
+      if (!r.ok) throw new Error(r.error || "yuborilmadi");
+      if (r.skipped) console.log("[expiry-alert] shoshilinch partiya yo'q — o'tkazib yuborildi");
+      else console.log(`[expiry-alert] yuborildi: ${r.count} ta partiya`);
+    },
+  },
   // 03:00 — kirishlar jurnalini tozalash (1 yildan eskisi). Tunda: paketli
   // DELETE kunduzgi so'rovlarga xalaqit qilmasin.
   {
