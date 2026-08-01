@@ -29,8 +29,10 @@ import { MarginReportEditor } from "./margin-report-editor";
 import { getMarginReportConfig } from "@/lib/margin-report/sozlama";
 import { DeliveryAlertEditor } from "./delivery-alert-editor";
 import { ExpiryAlertEditor } from "./expiry-alert-editor";
+import { PromoAlertEditor } from "./promo-alert-editor";
 import { getDeliveryAlertConfig } from "@/lib/delivery-alert/sozlama";
 import { getExpiryAlertConfig } from "@/lib/expiry-alert/sozlama";
+import { getPromoAlertConfig } from "@/lib/promo-alert/sozlama";
 import { ZakazPdfEditor } from "./zakaz-pdf-editor";
 import { getZakazPdfConfig } from "@/lib/zakaz-pdf/sozlama";
 import { SpisaniyaDailyEditor } from "./spisaniya-daily-editor";
@@ -170,7 +172,11 @@ async function ZakazTab() {
 // ─── Yetkazib berish kechikishi signali ───────────────────────────────────────
 
 async function YetkazishTab() {
-  const [cfg, expCfg] = await Promise.all([getDeliveryAlertConfig(), getExpiryAlertConfig()]);
+  const [cfg, expCfg, promoCfg] = await Promise.all([
+    getDeliveryAlertConfig(),
+    getExpiryAlertConfig(),
+    getPromoAlertConfig(),
+  ]);
   return (
     <div className="space-y-5">
       <SectionCard
@@ -196,6 +202,19 @@ async function YetkazishTab() {
           chatId={expCfg.chatId ?? ""}
           topicId={expCfg.topicId != null ? String(expCfg.topicId) : ""}
           autoEnabled={expCfg.autoEnabled}
+        />
+      </SectionCard>
+
+      <SectionCard
+        title="Aksiya signali"
+        description="Har kuni 08:00 (Toshkent) — bugun boshlanadigan va tugaydigan aksiyalar"
+        actions={<MessageSquare className="h-4 w-4 text-muted-foreground" />}
+      >
+        <PromoAlertEditor
+          tokenSet={!!promoCfg.token}
+          chatId={promoCfg.chatId ?? ""}
+          topicId={promoCfg.topicId != null ? String(promoCfg.topicId) : ""}
+          autoEnabled={promoCfg.autoEnabled}
         />
       </SectionCard>
     </div>

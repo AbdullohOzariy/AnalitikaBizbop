@@ -79,6 +79,21 @@ const JOBS: CronJob[] = [
       if (n > 0) console.log(`[promo-end] ${n} ta muddati o'tgan aksiya ENDED qilindi`);
     },
   },
+  // 08:00 — bugun BOSHLANADIGAN va TUGAYDIGAN aksiyalar (narx yorlig'i ishi).
+  // Ish kuni boshida: do'kon ochilishidan oldin yorliqlar tayyor bo'lsin.
+  // Faqat YOQILGAN bo'lsa va bugun shunday aksiya BO'LSA yuboriladi.
+  {
+    name: "promo-alert", cron: "0 8 * * *", hour: 8, minute: 0,
+    run: async () => {
+      const { getPromoAlertConfig } = await import("@/lib/promo-alert/sozlama");
+      if (!(await getPromoAlertConfig()).autoEnabled) return;
+      const { sendPromoAlert } = await import("@/lib/promo-alert/report");
+      const r = await sendPromoAlert({ skipIfEmpty: true });
+      if (!r.ok) throw new Error(r.error || "yuborilmadi");
+      if (r.skipped) console.log("[promo-alert] bugun aksiya boshlanmaydi/tugamaydi — o'tkazib yuborildi");
+      else console.log(`[promo-alert] yuborildi: ${r.count} ta aksiya`);
+    },
+  },
   // 09:30 — spisaniya kunlik indikatori (kechagi kun bo'yicha). Faqat YOQILGAN bo'lsa.
   {
     name: "spisaniya-daily", cron: "30 9 * * *", hour: 9, minute: 30,
