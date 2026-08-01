@@ -9,7 +9,15 @@ import { TAG_COMMUNITY } from "@/lib/cache-tags";
 import { analizQil } from "@/lib/community/analiz";
 import { moslashtir } from "@/lib/community/match";
 import { tahlilChatId } from "@/lib/community/sozlama";
-import { bogla, kanonniOlYokiYarat, kanonlarniBirlashtir, ehtimoliyDublikatlar } from "@/lib/community/kanon";
+import {
+  bogla,
+  kanonniOlYokiYarat,
+  kanonlarniBirlashtir,
+  ehtimoliyDublikatlar,
+  kanonReyestr,
+  kanonTahrirla,
+  type ReyestrNatija,
+} from "@/lib/community/kanon";
 import { yoqTafsilot, type TafsilotQator } from "@/lib/community/hisobot";
 import { rateLimit } from "@/lib/spisaniya/rate-limit";
 
@@ -236,5 +244,48 @@ export async function tahlilIshgaTushir(input: {
     };
   } catch (err) {
     return actionError(err, "community/tahlilIshgaTushir");
+  }
+}
+
+// ─── KANON REYESTRI ────────────────────────────────────────────────────────────
+
+/** Reyestrni o'qish (qidiruv/filtr bilan). Ko'rish huquqi sahifa bilan bir xil. */
+export async function kanonReyestrAction(input: {
+  q?: string;
+  faqatYangi?: boolean;
+}): Promise<{ ok: true; data: ReyestrNatija } | { ok: false; error: string }> {
+  try {
+    await requireAdmin();
+    const p = z.object({ q: z.string().max(80).optional(), faqatYangi: z.boolean().optional() }).parse(input);
+    return { ok: true, data: await kanonReyestr(p) };
+  } catch (err) {
+    return actionError(err);
+  }
+}
+
+/** Kanonni tahrirlash: nom, subkategoriya, sinonimlar yoki "ko'rib chiqildi". */
+export async function kanonTahrirlaAction(input: {
+  id: number;
+  name?: string;
+  categoryId?: number | null;
+  synonyms?: string[];
+  korildi?: boolean;
+}): Promise<ActionResult> {
+  try {
+    await requireAdmin();
+    const p = z
+      .object({
+        id: z.number().int().positive(),
+        name: z.string().min(2).max(80).optional(),
+        categoryId: z.number().int().positive().nullable().optional(),
+        synonyms: z.array(z.string().max(80)).max(30).optional(),
+        korildi: z.boolean().optional(),
+      })
+      .parse(input);
+    await kanonTahrirla(p);
+    revalidateTag(TAG_COMMUNITY, "max");
+    return { ok: true };
+  } catch (err) {
+    return actionError(err);
   }
 }

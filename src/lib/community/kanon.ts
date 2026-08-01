@@ -306,3 +306,117 @@ export async function ehtimoliyDublikatlar(
   `;
   return rows.map((r) => ({ ...r, sim: Number(r.sim) }));
 }
+
+
+// ─── REYESTR (admin sahifasi) ──────────────────────────────────────────────────
+
+export type KanonQator = {
+  id: number;
+  name: string;
+  synonyms: string[];
+  categoryId: number | null;
+  categoryName: string | null;
+  hits: number;
+  /** Shu kanonga bog'langan so'rovlar soni (hits'dan farqli — real hisob). */
+  sorovlar: number;
+  source: string;
+  reviewedAt: string | null;
+  firstSeenAt: string;
+  lastSeenAt: string;
+};
+
+export type ReyestrNatija = {
+  rows: KanonQator[];
+  jami: number;
+  /** Ko'rib chiqilmagan (yangi) kanonlar soni — navbat. */
+  yangi: number;
+};
+
+/**
+ * Kanon reyestri. Birlashtirilgan (tombstone) kanonlar ATAYLAB ko'rsatilmaydi:
+ * ular `nameKey` ni band qilib turish uchun saqlanadi, ro'yxatda esa "o'chirilgan"
+ * yozuv bo'lib chalg'itardi.
+ */
+export async function kanonReyestr(opts: {
+  q?: string;
+  /** Faqat ko'rib chiqilmaganlar (yangi kanonlar navbati). */
+  faqatYangi?: boolean;
+  limit?: number;
+}): Promise<ReyestrNatija> {
+  const q = (opts.q ?? "").trim();
+  const limit = Math.min(500, Math.max(1, opts.limit ?? 200));
+
+  const where = {
+    mergedIntoId: null,
+    ...(opts.faqatYangi ? { reviewedAt: null } : {}),
+    ...(q
+      ? {
+          OR: [
+            { name: { contains: q, mode: "insensitive" as const } },
+            { synonyms: { has: q } },
+          ],
+        }
+      : {}),
+  };
+
+  const [rows, jami, yangi] = await Promise.all([
+    prisma.tgCanonProduct.findMany({
+      where,
+      orderBy: [{ hits: "desc" }, { name: "asc" }],
+      take: limit,
+      select: {
+        id: true, name: true, synonyms: true, categoryId: true, hits: true,
+        source: true, reviewedAt: true, firstSeenAt: true, lastSeenAt: true,
+        category: { select: { name: true } },
+        _count: { select: { requests: true } },
+      },
+    }),
+    prisma.tgCanonProduct.count({ where: { mergedIntoId: null } }),
+    prisma.tgCanonProduct.count({ where: { mergedIntoId: null, reviewedAt: null } }),
+  ]);
+
+  return {
+    jami,
+    yangi,
+    rows: rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      synonyms: r.synonyms,
+      categoryId: r.categoryId,
+      categoryName: r.category?.name ?? null,
+      hits: r.hits,
+      sorovlar: r._count.requests,
+      source: r.source,
+      reviewedAt: r.reviewedAt ? r.reviewedAt.toISOString() : null,
+      firstSeenAt: r.firstSeenAt.toISOString(),
+      lastSeenAt: r.lastSeenAt.toISOString(),
+    })),
+  };
+}
+
+/** Kanonni tahrirlash: nom, subkategoriya, sinonimlar, "ko'rib chiqildi" belgisi. */
+export async function kanonTahrirla(input: {
+  id: number;
+  name?: string;
+  categoryId?: number | null;
+  synonyms?: string[];
+  korildi?: boolean;
+}): Promise<void> {
+  const data: Record<string, unknown> = {};
+
+  if (input.name != null) {
+    const nom = input.name.trim();
+    if (nom.length < 2) throw new Error("Nom juda qisqa.");
+    // nameKey/fuzzyKey nom bilan BIRGA yangilanadi — aks holda dublikat qorovuli
+    // eski nomni qo'riqlab qolardi va yangi nom bilan ikkinchi kanon yaratilardi.
+    data.name = nom;
+    data.nameKey = canonKey(nom);
+    data.fuzzyKey = fuzzyKey(nom);
+  }
+  if (input.categoryId !== undefined) data.categoryId = input.categoryId;
+  if (input.synonyms) data.synonyms = [...new Set(input.synonyms.map((x) => x.trim()).filter(Boolean))];
+  if (input.korildi != null) data.reviewedAt = input.korildi ? new Date() : null;
+  if (Object.keys(data).length === 0) return;
+
+  await prisma.tgCanonProduct.update({ where: { id: input.id }, data });
+}

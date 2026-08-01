@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { EmptyState, Pill } from "@/components/common/page";
 import { DataTable, type Ustun } from "@/components/common/data-table";
+import { KanonReyestr } from "./kanon-reyestr";
 import { Button } from "@/components/ui/button";
 import { formatDateTimeUZ } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -31,7 +32,7 @@ import {
   type KategoriyaOpt,
 } from "./actions";
 
-type Tab = "sorovlar" | "kategoriyalar" | "yoq" | "moslanmagan";
+type Tab = "sorovlar" | "kategoriyalar" | "yoq" | "moslanmagan" | "kanonlar";
 
 const STATUS_TONE: Record<string, "green" | "red" | "amber" | "muted"> = {
   YES: "green",
@@ -92,6 +93,9 @@ export function CommunityClient({
     { k: "kategoriyalar", nom: "Kategoriyalar", n: kategoriyalar.length },
     { k: "yoq", nom: "Berilmagan", n: yoqTop.length },
     { k: "moslanmagan", nom: "Moslanmagan", n: moslanmagan.length },
+    // Kanon reyestri — davr filtriga BOG'LIQ EMAS (reyestr butun bazaga tegishli),
+    // shuning uchun soni ko'rsatilmaydi: sarlavhadagi raqamlar davrga oid.
+    { k: "kanonlar", nom: "Kanonlar" },
   ];
 
   function amal(fn: () => Promise<{ ok: boolean; error?: string; natija?: string }>) {
@@ -169,6 +173,8 @@ export function CommunityClient({
       {tab === "yoq" && (
         <YoqJadval rows={yoqTop} from={from} to={to} branchId={branchId} canEdit={canEdit} />
       )}
+
+      {tab === "kanonlar" && <KanonReyestr canEdit={canEdit} kategoriyalar={kategoriyaOpts} />}
 
       {tab === "moslanmagan" && (
         <DataTable
