@@ -3,11 +3,12 @@
 import { Fragment, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ChevronRight, ChevronDown, Loader2, Info, Search, X } from "lucide-react";
+import { ChevronRight, ChevronDown, Loader2, Info, Search, X, Package } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatUZS } from "@/lib/format";
 import type { ScorecardResult, ScorecardRow } from "@/lib/partnership";
 import { savePartnershipOverride, type SavePartnershipInput } from "./actions";
+import { SkuPanel } from "./sku-panel";
 
 /** Tahrirlanadigan yumshoq ustunlar → PartnershipScorecard maydoni. */
 type EditField = "promoCompPct" | "rassrochkaPct" | "bonusPct" | "spisaniyePct" | "abcOverride";
@@ -40,6 +41,18 @@ export function ScorecardTable({
   const [draft, setDraft] = useState("");
   const [q, setQ] = useState("");
   const query = q.trim().toLowerCase();
+  // Ochilgan SKU panellari — kalit `${supplierId}:${agentId ?? "s"}`. Ta'minotchi va
+  // uning brendlari MUSTAQIL ochiladi (biri ikkinchisini yopmaydi).
+  const [skuOchiq, setSkuOchiq] = useState<Set<string>>(new Set());
+  const skuKey = (row: ScorecardRow) => `${row.supplierId}:${row.agentId ?? "s"}`;
+  const skuToggle = (row: ScorecardRow) =>
+    setSkuOchiq((p) => {
+      const n = new Set(p);
+      const k = skuKey(row);
+      if (n.has(k)) n.delete(k);
+      else n.add(k);
+      return n;
+    });
 
   // Qidiruv: ta'minotchi nomi mos kelsa — butun qator (barcha brendlar bilan).
   // Faqat brend mos kelsa — ta'minotchi mos brendlar bilan + avto-yoyiladi.
@@ -178,6 +191,17 @@ export function ScorecardTable({
             <span className={cn("truncate", isChild ? "text-xs text-muted-foreground" : "font-medium")}>
               {isChild ? row.brandName : row.supplierName}
             </span>
+            <button
+              type="button"
+              onClick={() => skuToggle(row)}
+              title="SKU kesimi: oylik savdo, o'tgan oy/yilga nisbatan o'zgarish"
+              className={cn(
+                "ml-1 shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground",
+                skuOchiq.has(skuKey(row)) && "bg-muted text-foreground"
+              )}
+            >
+              <Package className="h-3.5 w-3.5" />
+            </button>
           </div>
         </td>
         <td className="px-2 py-1.5 text-xs text-muted-foreground">
@@ -282,8 +306,30 @@ export function ScorecardTable({
             {shownRows.map((row, i) => (
               <Fragment key={row.supplierId}>
                 {renderRow(row, i + 1, false)}
+                {skuOchiq.has(skuKey(row)) && (
+                  <SkuPanel
+                    supplierId={row.supplierId}
+                    agentId={null}
+                    periodStart={periodStart}
+                    periodEnd={periodEnd}
+                    colSpan={14}
+                  />
+                )}
                 {(expanded.has(row.supplierId) || forceExpand.has(row.supplierId)) &&
-                  row.children?.map((c) => renderRow(c, null, true))}
+                  row.children?.map((c) => (
+                    <Fragment key={`${c.supplierId}:${c.agentId ?? "s"}`}>
+                      {renderRow(c, null, true)}
+                      {skuOchiq.has(skuKey(c)) && (
+                        <SkuPanel
+                          supplierId={c.supplierId}
+                          agentId={c.agentId}
+                          periodStart={periodStart}
+                          periodEnd={periodEnd}
+                          colSpan={14}
+                        />
+                      )}
+                    </Fragment>
+                  ))}
               </Fragment>
             ))}
           </tbody>

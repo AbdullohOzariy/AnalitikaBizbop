@@ -7,6 +7,8 @@ import { auth } from "@/auth";
 import { isSupplyChain, isSystemAdmin } from "@/lib/roles";
 import { actionError, type ActionResult } from "@/lib/action-error";
 import { TAG_PARTNERSHIP } from "@/lib/cache-tags";
+import { canSeeAnalytics } from "@/lib/roles";
+import { supplierSkuBreakdown, type SkuNatija } from "@/lib/partnership-sku";
 
 /** Yumshoq ustunlarni tahrirlash — SUPPLYCHAIN yoki SYSTEM_ADMIN. */
 async function requireEdit() {
@@ -79,5 +81,32 @@ export async function savePartnershipOverride(input: SavePartnershipInput): Prom
     return { ok: true };
   } catch (err) {
     return actionError(err, "savePartnershipOverride");
+  }
+}
+
+/**
+ * SKU kesimini LAZY yuklaydi (qator yoyilganda). Ko'rish huquqi skorkart bilan bir
+ * xil — tahrir emas, faqat o'qish.
+ */
+export async function skuBreakdownAction(input: {
+  supplierId: number;
+  agentId: number | null;
+  periodStart: string;
+  periodEnd: string;
+}): Promise<{ ok: true; data: SkuNatija } | { ok: false; error: string }> {
+  try {
+    const s = await auth();
+    if (!s?.user || !canSeeAnalytics(s.user.roles)) throw new Error("Ruxsat yo'q");
+    const p = z
+      .object({
+        supplierId: z.number().int().positive(),
+        agentId: z.number().int().positive().nullable(),
+        periodStart: isoDate,
+        periodEnd: isoDate,
+      })
+      .parse(input);
+    return { ok: true, data: await supplierSkuBreakdown(p) };
+  } catch (err) {
+    return actionError(err);
   }
 }
