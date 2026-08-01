@@ -121,6 +121,29 @@ export function OrderDetail({ order, roles, isOwner }: { order: OrderData; roles
   const sumBq = (l: Line | undefined) => order.branches.reduce((s, b) => s + (Number(l?.bq[b.id]) || 0), 0);
   const lineQty = (l: Line | undefined) => (perBranch ? sumBq(l) : Number(l?.qty) || 0);
 
+  /**
+   * FAKTNI OMMAVIY TO'LDIRISH — bu ustunning ishlatilmayotganining asosiy sababi
+   * qatorma-qator terish edi: jonli bazada 2 666 zakaz qatoridan 0 tasida fakt
+   * kiritilgan, holbuki 131 ta zakaz allaqachon "Qabul qilindi" holatida va
+   * ta'minotchi ishonchliligi (fill rate) hisoboti aynan shu ustunga tayanadi.
+   * Endi "hammasi to'liq keldi" bir bosishda, farqlisi qo'lda tuzatiladi.
+   */
+  const fillAllFacts = () =>
+    setFacts(() => {
+      const n = new Map<number, string>();
+      for (const i of items) {
+        const l = lines.get(i.productId);
+        const q = lineQty(l);
+        n.set(i.productId, q > 0 ? String(q) : "");
+      }
+      return n;
+    });
+  const clearFacts = () => setFacts(() => new Map(items.map((i) => [i.productId, ""])));
+
+  /** Nechta qator to'ldirilgan (tugma yorlig'i va ogohlantirish uchun). */
+  const factTold = items.reduce((n, i) => n + ((facts.get(i.productId) ?? "").trim() !== "" ? 1 : 0), 0);
+
+
   const total = useMemo(() => {
     let t = 0;
     for (const i of items) { const l = lines.get(i.productId); t += lineQty(l) * (Number(l?.price) || 0); }
@@ -275,6 +298,22 @@ export function OrderDetail({ order, roles, isOwner }: { order: OrderData; roles
         </div>
       </div>
 
+      {/* Fakt kiritilmagan bo'lsa — nima uchun kerakligi bilan birga eslatma.
+          Jimgina bo'sh ustun turgani uchun bu ma'lumot umuman yig'ilmayotgan edi. */}
+      {factMode && factTold === 0 && !order.items.some((i) => i.factQty != null) && (
+        <div className="flex flex-wrap items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/[0.07] px-4 py-3 text-sm">
+          <PackageCheck className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <div className="flex-1 space-y-1">
+            <p className="font-medium">Fakt miqdor kiritilmagan</p>
+            <p className="text-muted-foreground">
+              Ta&apos;minotchi qancha va&apos;da qilib, qancha keltirgani shu ustundan o&apos;lchanadi
+              (Logistika → ta&apos;minotchi hisobotidagi &quot;fill rate&quot;). To&apos;liq kelgan bo&apos;lsa —
+              &quot;Hammasi to&apos;liq keldi&quot; tugmasi, farq bo&apos;lgan qatorlarnigina tuzatasiz.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Yetkazib berish bahosi (1..5) — ACCEPTED/RECEIVED bosqichida yoki baholangan bo'lsa */}
       {(factMode || order.rating != null) && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-border bg-card px-4 py-3">
@@ -422,9 +461,21 @@ export function OrderDetail({ order, roles, isOwner }: { order: OrderData; roles
           <span className="text-sm"><span className="text-muted-foreground">Jami:</span> <span className="font-bold tabular-nums">{formatUZS(total)}</span></span>
           <span className="flex gap-1.5">
             {factMode && (
-              <Button size="sm" variant="outline" className="h-8 gap-1.5" disabled={busy} onClick={saveFacts}>
-                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PackageCheck className="h-3.5 w-3.5" />} Faktni saqlash
-              </Button>
+              <>
+                <Button size="sm" variant="ghost" className="h-8 gap-1.5 text-xs" disabled={busy} onClick={fillAllFacts}
+                  title="Har qatorga zakaz miqdorini qo'yadi — farq bo'lgan qatorlarnigina tuzatasiz">
+                  <PackageCheck className="h-3.5 w-3.5" /> Hammasi to&apos;liq keldi
+                </Button>
+                {factTold > 0 && (
+                  <Button size="sm" variant="ghost" className="h-8 gap-1.5 text-xs text-muted-foreground" disabled={busy} onClick={clearFacts}>
+                    Tozalash
+                  </Button>
+                )}
+                <Button size="sm" variant="outline" className="h-8 gap-1.5" disabled={busy} onClick={saveFacts}>
+                  {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PackageCheck className="h-3.5 w-3.5" />}
+                  Faktni saqlash{factTold > 0 ? ` (${factTold}/${items.length})` : ""}
+                </Button>
+              </>
             )}
             {editable && (
               <Button size="sm" className="h-8 gap-1.5" disabled={busy} onClick={saveItems}>
