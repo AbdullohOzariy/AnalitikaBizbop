@@ -55,8 +55,26 @@ export async function GET(req: NextRequest) {
     return asos;
   });
 
+  // JAMI qatori BIRINCHI: u SKU qatorlari yig'indisi EMAS (jadval 2000 SKU bilan
+  // cheklangan), balki ta'minotchi/brendning to'liq dinamikasi. Faylni ochgan odam
+  // pastdagi qatorlarni qo'shib jamiga solishtirmasin uchun nomi ochiq yozilgan.
+  const jamiQator: Record<string, string | number | null> = {
+    "Kod": "",
+    "Nomi": "JAMI (barcha SKU)",
+    "Brend": "",
+    "Savdo (davr)": null,
+    "Ulush %": 100,
+    "Marja %": null,
+  };
+  for (const o of natija.jami.oylar) jamiQator[o.oy] = Math.round(o.savdo);
+  jamiQator["O'tgan oy"] = natija.jami.otganOySavdo != null ? Math.round(natija.jami.otganOySavdo) : null;
+  jamiQator["O'tgan oyga %"] = natija.jami.momPct != null ? +natija.jami.momPct.toFixed(1) : null;
+  jamiQator["O'tgan yil (ayni oy)"] =
+    natija.jami.otganYilSavdo != null ? Math.round(natija.jami.otganYilSavdo) : null;
+  jamiQator["O'tgan yilga %"] = natija.jami.yoyPct != null ? +natija.jami.yoyPct.toFixed(1) : null;
+
   const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.json_to_sheet(rows);
+  const ws = XLSX.utils.json_to_sheet([jamiQator, ...rows]);
   // Sarlavha ostiga izoh qo'ymaymiz — fayl mashina o'qishi uchun ham ishlatiladi;
   // kontekst fayl NOMIDA (ta'minotchi + davr).
   XLSX.utils.book_append_sheet(wb, ws, "SKU");

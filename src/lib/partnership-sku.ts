@@ -43,6 +43,23 @@ export type SkuQator = {
   yoyPct: number | null;
 };
 
+/**
+ * TA'MINOTCHI (yoki brend) JAMISI — SKU qatorlari yig'indisi EMAS.
+ *
+ * Farqi muhim: `rows` eng katta 500 SKU bilan cheklangan (jadval klient tomonda
+ * saralanadi), jami esa BARCHA SKU'dan hisoblanadi. Ikkalasini qo'shib chiqarish
+ * "jami qatorlar yig'indisiga teng emas" degan savolni tug'dirardi.
+ */
+export type JamiOylik = {
+  oylar: OyNuqta[];
+  oxirgiOy: string | null;
+  oxirgiOySavdo: number;
+  otganOySavdo: number | null;
+  momPct: number | null;
+  otganYilSavdo: number | null;
+  yoyPct: number | null;
+};
+
 export type SkuNatija = {
   supplierId: number;
   agentId: number | null;
@@ -53,6 +70,8 @@ export type SkuNatija = {
   oylar: string[];
   /** O'tgan yil ustuni uchun ma'lumot bormi (yo'q bo'lsa UI izoh ko'rsatadi). */
   yoyBor: boolean;
+  /** Ta'minotchi/brend darajasidagi oylik dinamika (cheklovsiz, barcha SKU). */
+  jami: JamiOylik;
 };
 
 const oyKey = (d: Date) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
@@ -143,7 +162,7 @@ export async function supplierSkuBreakdown(opts: {
   const oldingiOy = oxirgiOy ? oyQosh(oxirgiOy, -1) : null;
   const yilOldin = oxirgiOy ? oyQosh(oxirgiOy, -12) : null;
 
-  const jami = davr.reduce((s, r) => s + Number(r.savdo), 0);
+  const davrJami = davr.reduce((s, r) => s + Number(r.savdo), 0);
   let yoyBor = false;
 
   const rows: SkuQator[] = davr.map((r) => {
@@ -166,7 +185,7 @@ export async function supplierSkuBreakdown(opts: {
       brandName: r.brand,
       savdo,
       marjaPct: sales > 0 ? ((sales - cost) / sales) * 100 : null,
-      ulushPct: jami > 0 ? (savdo / jami) * 100 : 0,
+      ulushPct: davrJami > 0 ? (savdo / davrJami) * 100 : 0,
       oylar: oylar.map((oy) => ({ oy, savdo: m?.get(oy) ?? 0 })),
       oxirgiOy,
       oxirgiOySavdo,
@@ -177,5 +196,24 @@ export async function supplierSkuBreakdown(opts: {
     };
   });
 
-  return { supplierId, agentId, periodStart, periodEnd, rows, oylar, yoyBor };
+  // JAMI — `oylik` so'rovining BARCHA qatoridan (limit qo'llanmagan), ya'ni
+  // `rows` kesilgan bo'lsa ham ta'minotchi dinamikasi to'liq ko'rinadi.
+  const jamiOy = new Map<string, number>();
+  for (const r of oylik) jamiOy.set(r.oy, (jamiOy.get(r.oy) ?? 0) + (Number(r.savdo) || 0));
+  const jOxirgi = oxirgiOy ? (jamiOy.get(oxirgiOy) ?? 0) : 0;
+  const jOldingi = oldingiOy ? (jamiOy.get(oldingiOy) ?? null) : null;
+  const jYil = yilOldin ? (jamiOy.get(yilOldin) ?? null) : null;
+  if (jYil != null) yoyBor = true;
+
+  const jami: JamiOylik = {
+    oylar: oylar.map((oy) => ({ oy, savdo: jamiOy.get(oy) ?? 0 })),
+    oxirgiOy,
+    oxirgiOySavdo: jOxirgi,
+    otganOySavdo: jOldingi,
+    momPct: foiz(jOxirgi, jOldingi),
+    otganYilSavdo: jYil,
+    yoyPct: foiz(jOxirgi, jYil),
+  };
+
+  return { supplierId, agentId, periodStart, periodEnd, rows, oylar, yoyBor, jami };
 }

@@ -80,6 +80,55 @@ export function SkuPanel({
           <p className="text-xs text-muted-foreground">Bu davrda sotuv bo'lmagan.</p>
         ) : (
           <div className="space-y-2">
+            {/* TA'MINOTCHI (yoki brend) DINAMIKASI — SKU jadvalidan OLDIN.
+                Bu qatorlar yig'indisi emas: jadval eng katta 500 SKU bilan
+                cheklangan, bu yerdagi raqamlar esa BARCHA SKU'dan. */}
+            <div className="rounded-lg border border-border/60 bg-background/60 p-2.5">
+              <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+                <span className="text-xs font-semibold">Oylik dinamika</span>
+                <span className="flex items-center gap-1 text-xs">
+                  <span className="text-muted-foreground">o&apos;tgan oyga:</span>
+                  <span className={cn("font-semibold tabular-nums", delta(data.jami.momPct).klass)}>
+                    {delta(data.jami.momPct).matn}
+                  </span>
+                </span>
+                <span className="flex items-center gap-1 text-xs">
+                  <span className="text-muted-foreground">o&apos;tgan yilga:</span>
+                  <span className={cn("font-semibold tabular-nums", delta(data.jami.yoyPct).klass)}>
+                    {delta(data.jami.yoyPct).matn}
+                  </span>
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {data.jami.oylar.map((o) => {
+                  const eng = Math.max(...data.jami.oylar.map((x) => x.savdo), 1);
+                  const oxirgimi = o.oy === data.jami.oxirgiOy;
+                  return (
+                    <div
+                      key={o.oy}
+                      className={cn(
+                        "min-w-[76px] flex-1 rounded-md border px-2 py-1.5",
+                        oxirgimi ? "border-primary/40 bg-primary/[0.06]" : "border-border/50"
+                      )}
+                      title={`${o.oy}: ${formatUZS(o.savdo)}`}
+                    >
+                      <div className="text-[10px] text-muted-foreground">{oyNomi(o.oy)}</div>
+                      <div className="text-xs font-semibold tabular-nums">
+                        {formatUZS(o.savdo, { compact: true })}
+                      </div>
+                      {/* Ustunlar nisbati — raqamlarni solishtirmasdan tendensiya ko'rinsin */}
+                      <div className="mt-1 h-1 overflow-hidden rounded-full bg-muted">
+                        <div
+                          className={cn("h-full rounded-full", oxirgimi ? "bg-primary" : "bg-muted-foreground/40")}
+                          style={{ width: `${Math.max(2, (o.savdo / eng) * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="flex items-center gap-1.5 text-xs font-semibold">
                 <Package className="h-3.5 w-3.5" />
