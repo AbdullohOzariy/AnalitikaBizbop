@@ -14,7 +14,8 @@ import {
   Table2,
   PanelLeftClose,
   PanelLeftOpen,
-  ChevronDown,
+  ChevronRight,
+  ArrowLeft,
   Database,
   Footprints,
   PackageMinus,
@@ -40,6 +41,7 @@ import {
   Megaphone,
   Zap,
   BarChart2,
+  BarChart3,
   ScanSearch,
   Boxes,
   Handshake,
@@ -69,6 +71,8 @@ type NavItem = {
 
 type NavGroup = {
   label: string;
+  /** Parent qatorda ko'rinadigan ikonka (drill-down menyu). */
+  icon: React.ComponentType<{ className?: string }>;
   items: NavItem[];
   /** Agar rol predikati berilsa, guruh faqat shu predikat true qaytargandagina ko'rinadi. */
   guard?: (role: Role) => boolean;
@@ -92,37 +96,20 @@ function getCollapsedSnapshot() {
   return localStorage.getItem("sidebar-collapsed") === "true";
 }
 
-// foldedGroups — default: HAMMASI YIG'IQ (barcha guruh nomlari)
-const EMPTY_FOLDED = new Set<string>();
-let _allFolded: Set<string> | null = null;
-function getAllFolded(): Set<string> {
-  if (!_allFolded) _allFolded = new Set(NAV_GROUPS.map((g) => g.label));
-  return _allFolded;
-}
-let foldedCache: { raw: string | null; set: Set<string> } = { raw: undefined as unknown as null, set: EMPTY_FOLDED };
-function getFoldedSnapshot(): Set<string> {
-  const raw = localStorage.getItem("sidebar-folded-groups");
-  if (raw === foldedCache.raw) return foldedCache.set;
-  let set: Set<string>;
-  if (raw === null) {
-    set = getAllFolded();
-  } else {
-    set = EMPTY_FOLDED;
-    try { set = new Set(JSON.parse(raw) as string[]); } catch { set = EMPTY_FOLDED; }
-  }
-  foldedCache = { raw, set };
-  return set;
-}
-
 // ─── Navigatsiya tuzilmasi ───────────────────────────────────────────────────
 const A = "ADMIN" as const;        // read-only admin
 const SA = "SYSTEM_ADMIN" as const; // to'liq admin
 
+/** Guruhsiz, eng yuqori darajadagi bo'limlar. */
+const ROOT_ITEMS: NavItem[] = [
+  { href: "/dashboard", label: "Bosh sahifa", icon: LayoutDashboard, roles: [SA, A, "CAT_MANAGER", "CEO", "SUPPLYCHAIN", "HEAD_CAT_MANAGER"] },
+];
+
 const NAV_GROUPS: NavGroup[] = [
   {
     label: "Analitika",
+    icon: BarChart3,
     items: [
-      { href: "/dashboard",       label: "Dashboard",       icon: LayoutDashboard, roles: [SA, A, "CAT_MANAGER", "CEO", "SUPPLYCHAIN", "HEAD_CAT_MANAGER"] },
       { href: "/sotuv-dashboard", label: "Sotuv Dashboard", icon: Target,          roles: [SA, A, "CEO", "SUPPLYCHAIN"] },
       { href: "/oos",             label: "OOS",             icon: PackageX,        roles: [SA, A, "CAT_MANAGER", "CEO", "SUPPLYCHAIN", "HEAD_CAT_MANAGER"] },
       { href: "/stockday",        label: "Stockday",        icon: Hourglass,       roles: [SA, A, "CAT_MANAGER", "CEO", "SUPPLYCHAIN", "HEAD_CAT_MANAGER"] },
@@ -137,6 +124,7 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     label: "Sotuv",
+    icon: ShoppingCart,
     items: [
       { href: "/sotuv/bugun",       label: "Bugun",       icon: CalendarCheck, roles: [SA, A, "CAT_MANAGER", "SUPPLYCHAIN", "HEAD_CAT_MANAGER"] },
       { href: "/sotuv/sotib-olish", label: "Sotib olish", icon: ShoppingCart, roles: [SA, A, "CAT_MANAGER", "SUPPLYCHAIN", "HEAD_CAT_MANAGER", "CEO"] },
@@ -149,6 +137,7 @@ const NAV_GROUPS: NavGroup[] = [
     // LOGIST izolatsiyasi: bu rol faqat shu guruh item'larida bor (auth.config unga
     // /logistika prefiksini ochadi) — boshqa bo'limlar ko'rinmaydi.
     label: "Logistika",
+    icon: Truck,
     items: [
       { href: "/logistika/hozir",      label: "Hozir",       icon: Gauge,     roles: [SA, A, "CEO", "SUPPLYCHAIN", "LOGIST"] },
       { href: "/logistika/statistika", label: "Statistika",  icon: ChartPie,  roles: [SA, A, "CEO", "SUPPLYCHAIN", "LOGIST"] },
@@ -157,6 +146,7 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     label: "Hisobdan chiqarish",
+    icon: PackageMinus,
     items: [
       { href: "/chiqim",            label: "Chiqimlar",        icon: PackageMinus, roles: [SA, A, "CAT_MANAGER", "CEO", "SUPPLYCHAIN", "HEAD_CAT_MANAGER", "OPERATOR"] },
       { href: "/chiqim/statistika", label: "Statistika",       icon: ChartPie,     roles: [SA, A, "CAT_MANAGER", "CEO", "SUPPLYCHAIN", "HEAD_CAT_MANAGER", "OPERATOR"] },
@@ -170,6 +160,7 @@ const NAV_GROUPS: NavGroup[] = [
     // INVENTORY izolatsiyasi: bu rol faqat shu guruh item'larida bor (+ auth.config
     // unga /sotuv-dashboard'ni ochadi) — boshqa bo'limlar ko'rinmaydi.
     label: "Inventarizatsiya",
+    icon: ClipboardList,
     items: [
       { href: "/inventarizatsiya",         label: "SKU ro'yxati", icon: ClipboardList, roles: [SA, A, "CEO", "INVENTORY"] },
       { href: "/inventarizatsiya/hisobot", label: "Hisobot",      icon: BarChart2,     roles: [SA, A, "CEO", "INVENTORY"] },
@@ -177,6 +168,7 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     label: "Baza",
+    icon: Database,
     items: [
       { href: "/baza/sotuv",         label: "Sotuv",             icon: Database,      roles: [SA, A, "INVENTORY"] },
       { href: "/baza/qoldiq",        label: "Qoldiq",            icon: Boxes,         roles: [SA, A] },
@@ -191,6 +183,7 @@ const NAV_GROUPS: NavGroup[] = [
     // Boshqa guruhlarning har biri o'z roles[] massiviga ega bo'lib, MERCHANDISER
     // u massiвlarda yo'q — shuning uchun Promo'dan boshqa hech bir guruh ko'rinmaydi.
     label: "Marketing",
+    icon: Megaphone,
     guard: canSeePromo,
     items: [
       { href: "/promo/doimiy",         label: "Doimiy aksiyalar", icon: Megaphone,      roles: [SA, A, "CAT_MANAGER", "CEO", "HEAD_CAT_MANAGER", "MERCHANDISER"] },
@@ -201,6 +194,7 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     label: "Tizim",
+    icon: Settings,
     items: [
       { href: "/branches",          label: "Filiallar",        icon: Building2, roles: [SA] },
       { href: "/admin/upload",      label: "Fayllar",          icon: Upload,    roles: [SA] },
@@ -212,28 +206,90 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
+/** Bitta navigatsiya qatori (link yoki "soon" holati). */
+function NavRow({
+  item,
+  active,
+  collapsed,
+  onNavigate,
+}: {
+  item: NavItem;
+  active: boolean;
+  collapsed?: boolean;
+  onNavigate?: () => void;
+}) {
+  const Icon = item.icon;
+
+  if (item.disabled) {
+    return (
+      <div
+        title="Vaqtinchalik ish faoliyatida emas"
+        className={cn(
+          "relative flex cursor-not-allowed items-center rounded-xl text-sm font-medium text-muted-foreground opacity-50",
+          collapsed ? "justify-center px-0 py-2.5" : "gap-3 px-3 py-2.5"
+        )}
+      >
+        <Icon className="h-4 w-4 shrink-0 opacity-70" />
+        {!collapsed && (
+          <span className="flex items-center gap-1.5">
+            {item.label}
+            <span className="rounded bg-muted px-1 py-px text-[9px] font-semibold uppercase tracking-wide text-muted-foreground/70">soon</span>
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="transition-transform duration-150 hover:scale-[1.01] active:scale-[0.98]">
+      <Link
+        href={item.href}
+        onClick={onNavigate}
+        aria-current={active ? "page" : undefined}
+        title={collapsed ? item.label : undefined}
+        className={cn(
+          "relative isolate flex items-center rounded-xl text-sm font-medium transition-colors duration-150 overflow-hidden",
+          collapsed ? "justify-center px-0 py-2.5" : "gap-3 px-3 py-2.5",
+          active
+            ? "text-primary-foreground shadow-sm"
+            : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+        )}
+      >
+        {active && (
+          <span
+            className="absolute inset-0 rounded-xl bg-brand-gradient shadow-brand"
+            style={{ zIndex: -1 }}
+          />
+        )}
+        <Icon className={cn("h-4 w-4 shrink-0", active ? "opacity-100" : "opacity-70")} />
+        {!collapsed && item.label}
+      </Link>
+    </div>
+  );
+}
+
 function SidebarNav({
   role,
   roles,
   collapsed,
   onToggle,
+  onExpand,
   onNavigate,
 }: {
   role: Role; // asosiy rol — pastdagi yorliq uchun
   roles: Role[]; // barcha rollar (union) — ko'rinish/ruxsat uchun
   collapsed?: boolean;
   onToggle?: () => void;
+  onExpand?: () => void; // yig'iq holatda parent bosilganda sidebar'ni ochish
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
 
-  const foldedGroups = useSyncExternalStore(subscribePref, getFoldedSnapshot, getAllFolded);
-  const toggleGroup = (label: string) => {
-    const next = new Set(foldedGroups);
-    if (next.has(label)) next.delete(label); else next.add(label);
-    localStorage.setItem("sidebar-folded-groups", JSON.stringify([...next]));
-    emitPref();
-  };
+  const visibleRootItems = ROOT_ITEMS.filter((i) => {
+    if (i.adminOnly && !roles.includes("SYSTEM_ADMIN")) return false;
+    if (i.roles && !i.roles.some((r) => roles.includes(r))) return false;
+    return true;
+  });
 
   const visibleGroups = NAV_GROUPS.filter((g) => {
     // Guruh darajasidagi guard (predikat funksiya) — rollardan birortasi o'tsa ko'rinadi.
@@ -248,10 +304,26 @@ function SidebarNav({
     }),
   })).filter((g) => g.items.length > 0);
 
-  const activeHref = visibleGroups
-    .flatMap((g) => g.items)
+  const activeHref = [...visibleRootItems, ...visibleGroups.flatMap((g) => g.items)]
     .filter((i) => pathname === i.href || pathname.startsWith(i.href + "/"))
     .sort((a, b) => b.href.length - a.href.length)[0]?.href;
+
+  const activeGroupLabel =
+    visibleGroups.find((g) => g.items.some((i) => i.href === activeHref))?.label ?? null;
+
+  // Ochiq parent: standart holat — joriy sahifaning guruhi. Foydalanuvchi menyuda
+  // yursa (parent bosdi / orqaga qaytdi) — override ishlaydi, lekin faqat o'sha yo'l
+  // uchun: pathname o'zgarishi bilan override eskiradi va yana avtomatikka qaytadi.
+  // (Effekt ham, render paytida setState ham yo'q — sof derive.)
+  const [override, setOverride] = useState<{ path: string; open: string | null } | null>(null);
+  const openLabel = override && override.path === pathname ? override.open : activeGroupLabel;
+  const openGroup = visibleGroups.find((g) => g.label === openLabel) ?? null;
+
+  const openParent = (label: string) => {
+    setOverride({ path: pathname, open: label });
+    onExpand?.(); // yig'iq bo'lsa — kengaytiramiz, aks holda no-op
+  };
+  const goBack = () => setOverride({ path: pathname, open: null });
 
   return (
     <>
@@ -292,88 +364,86 @@ function SidebarNav({
         )}
       </div>
 
-      {/* Nav items */}
-      <nav className="flex-1 p-2 space-y-3 overflow-y-auto">
-        {visibleGroups.map((group, gi) => {
-          const folded = foldedGroups.has(group.label);
-          return (
-            <div
-              key={group.label}
-              className={cn(
-                "space-y-0.5",
-                collapsed && gi > 0 && "mt-3 border-t border-border/60 pt-3"
-              )}
+      {/* Nav — drill-down: ildiz ro'yxati yoki bitta bo'lim ichi */}
+      <nav className="flex-1 overflow-y-auto overflow-x-hidden p-2">
+        {openGroup && !collapsed ? (
+          <div
+            key={openGroup.label}
+            className="space-y-0.5 duration-200 animate-in fade-in slide-in-from-right-3"
+          >
+            <button
+              type="button"
+              onClick={goBack}
+              className="mb-1 flex w-full items-center gap-2 rounded-md px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
             >
-              {!collapsed && (
-                <button
-                  type="button"
-                  onClick={() => toggleGroup(group.label)}
-                  title={folded ? "Ochish" : "Yig'ish"}
-                  className="flex w-full items-center justify-between rounded-md px-3 pb-1 pt-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
+              <ArrowLeft className="h-4 w-4 shrink-0" />
+              <span className="truncate">{openGroup.label}</span>
+            </button>
+            {openGroup.items.map((item) => (
+              <NavRow
+                key={item.href}
+                item={item}
+                active={item.href === activeHref}
+                onNavigate={onNavigate}
+              />
+            ))}
+          </div>
+        ) : (
+          <div
+            key="root"
+            className={cn(
+              "space-y-0.5 duration-200 animate-in fade-in",
+              !collapsed && "slide-in-from-left-3"
+            )}
+          >
+            {visibleRootItems.map((item) => (
+              <NavRow
+                key={item.href}
+                item={item}
+                active={item.href === activeHref}
+                collapsed={collapsed}
+                onNavigate={onNavigate}
+              />
+            ))}
+
+            {visibleRootItems.length > 0 && visibleGroups.length > 0 && (
+              <div className="!my-2 border-t border-border/60" />
+            )}
+
+            {visibleGroups.map((group) => {
+              const Icon = group.icon;
+              const activeParent = group.label === activeGroupLabel;
+              return (
+                <div
+                  key={group.label}
+                  className="transition-transform duration-150 hover:scale-[1.01] active:scale-[0.98]"
                 >
-                  <span>{group.label}</span>
-                  <ChevronDown
+                  <button
+                    type="button"
+                    onClick={() => openParent(group.label)}
+                    title={collapsed ? group.label : undefined}
+                    aria-expanded={false}
                     className={cn(
-                      "h-3.5 w-3.5 shrink-0 text-muted-foreground/70 transition-transform duration-200",
-                      folded && "-rotate-90"
+                      "flex w-full items-center rounded-xl text-sm font-medium transition-colors duration-150",
+                      collapsed ? "justify-center px-0 py-2.5" : "gap-3 px-3 py-2.5",
+                      activeParent
+                        ? "bg-secondary text-foreground"
+                        : "text-muted-foreground hover:bg-secondary hover:text-foreground"
                     )}
-                  />
-                </button>
-              )}
-              {(collapsed || !folded) &&
-                group.items.map((item) => {
-                  const Icon = item.icon;
-                  const active = item.href === activeHref;
-                  if (item.disabled) {
-                    return (
-                      <div key={item.href} title="Vaqtinchalik ish faoliyatida emas"
-                        className={cn(
-                          "relative flex cursor-not-allowed items-center rounded-xl text-sm font-medium text-muted-foreground opacity-50",
-                          collapsed ? "justify-center px-0 py-2.5" : "gap-3 px-3 py-2.5"
-                        )}>
-                        <Icon className="h-4 w-4 shrink-0 opacity-70" />
-                        {!collapsed && (
-                          <span className="flex items-center gap-1.5">
-                            {item.label}
-                            <span className="rounded bg-muted px-1 py-px text-[9px] font-semibold uppercase tracking-wide text-muted-foreground/70">soon</span>
-                          </span>
-                        )}
-                      </div>
-                    );
-                  }
-                  return (
-                    <div
-                      key={item.href}
-                      className="transition-transform duration-150 hover:scale-[1.01] active:scale-[0.98]"
-                    >
-                      <Link
-                        href={item.href}
-                        onClick={onNavigate}
-                        aria-current={active ? "page" : undefined}
-                        title={collapsed ? item.label : undefined}
-                        className={cn(
-                          "relative isolate flex items-center rounded-xl text-sm font-medium transition-colors duration-150 overflow-hidden",
-                          collapsed ? "justify-center px-0 py-2.5" : "gap-3 px-3 py-2.5",
-                          active
-                            ? "text-primary-foreground shadow-sm"
-                            : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                        )}
-                      >
-                        {active && (
-                          <span
-                            className="absolute inset-0 rounded-xl bg-brand-gradient shadow-brand"
-                            style={{ zIndex: -1 }}
-                          />
-                        )}
-                        <Icon className={cn("h-4 w-4 shrink-0", active ? "opacity-100" : "opacity-70")} />
-                        {!collapsed && item.label}
-                      </Link>
-                    </div>
-                  );
-                })}
-            </div>
-          );
-        })}
+                  >
+                    <Icon className={cn("h-4 w-4 shrink-0", activeParent ? "opacity-100" : "opacity-70")} />
+                    {!collapsed && (
+                      <>
+                        <span className="flex-1 truncate text-left">{group.label}</span>
+                        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/60" />
+                      </>
+                    )}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </nav>
 
       {/* Footer */}
@@ -405,8 +475,8 @@ function SidebarNav({
 export function Sidebar({ role, roles }: { role: Role; roles: Role[] }) {
   const collapsed = useSyncExternalStore(subscribePref, getCollapsedSnapshot, () => false);
 
-  const toggle = () => {
-    localStorage.setItem("sidebar-collapsed", String(!collapsed));
+  const setCollapsed = (v: boolean) => {
+    localStorage.setItem("sidebar-collapsed", String(v));
     emitPref();
   };
 
@@ -417,7 +487,13 @@ export function Sidebar({ role, roles }: { role: Role; roles: Role[] }) {
         collapsed ? "w-[60px]" : "w-64"
       )}
     >
-      <SidebarNav role={role} roles={roles} collapsed={collapsed} onToggle={toggle} />
+      <SidebarNav
+        role={role}
+        roles={roles}
+        collapsed={collapsed}
+        onToggle={() => setCollapsed(!collapsed)}
+        onExpand={() => { if (collapsed) setCollapsed(false); }}
+      />
     </aside>
   );
 }
