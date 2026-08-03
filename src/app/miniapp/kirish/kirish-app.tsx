@@ -11,11 +11,12 @@ import { useEffect, useRef, useState } from "react";
 type Holat =
   | { t: "loading" }
   | { t: "denied"; id: number | null }
-  | { t: "choose"; spis: boolean; sverka: boolean; driver: boolean };
+  | { t: "choose"; spis: boolean; sverka: boolean; driver: boolean; moliya: boolean };
 
 const SPISANIYA_URL = "/miniapp/index.html?via=kirish";
 const SVERKA_URL = "/miniapp/sverka";
 const LOGISTIKA_URL = "/miniapp/logistika";
+const MOLIYA_URL = "/miniapp/moliya";
 
 function go(url: string) {
   window.location.replace(url + window.location.hash);
@@ -64,19 +65,21 @@ export function KirishApp() {
           headers: { "x-telegram-init-data": tg?.initData ?? "" },
         });
         const j = (await res.json()) as {
-          allowed: boolean; sverka: boolean; driver: boolean; user: { id: number } | null;
+          allowed: boolean; sverka: boolean; driver: boolean; moliya: boolean; user: { id: number } | null;
         };
         const spis = !!j.allowed;
         const sverka = !!j.sverka;
         const driver = !!j.driver;
+        const moliya = !!j.moliya;
         // Haydovchi TEKSHIRUVI birinchi: u kun bo'yi shu ilovada ishlaydi, boshqa
         // ro'yxatda ham turgan bo'lsa ham to'g'ridan reys ekraniga tushishi kerak.
         // Bir nechta rol bo'lsagina tanlov ekrani ko'rsatiladi.
-        const rollar = [spis, sverka, driver].filter(Boolean).length;
-        if (rollar > 1) setSt({ t: "choose", spis, sverka, driver });
+        const rollar = [spis, sverka, driver, moliya].filter(Boolean).length;
+        if (rollar > 1) setSt({ t: "choose", spis, sverka, driver, moliya });
         else if (driver) go(LOGISTIKA_URL);
         else if (spis) go(SPISANIYA_URL);
         else if (sverka) go(SVERKA_URL);
+        else if (moliya) go(MOLIYA_URL);
         else setSt({ t: "denied", id: j.user?.id ?? null });
       } catch {
         setSt({ t: "denied", id: null });
@@ -144,6 +147,17 @@ export function KirishApp() {
               <span className="tl">
                 <b>Sverka</b>
                 <small>Nakladnoy bilan solishtirish</small>
+              </span>
+              <span className="arr">›</span>
+            </button>
+          )}
+
+          {st.moliya && (
+            <button className="tile" onClick={() => go(MOLIYA_URL)}>
+              <span className="chip" style={{ background: "rgba(168,85,247,.14)" }}>💵</span>
+              <span className="tl">
+                <b>Kassa</b>
+                <small>Kirim va chiqim yozuvi</small>
               </span>
               <span className="arr">›</span>
             </button>

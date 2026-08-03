@@ -7,19 +7,10 @@ import { prisma } from "@/lib/prisma";
 import { AuthorizationError } from "@/lib/auth-helpers";
 import { actionError, BusinessError, type ActionResult } from "@/lib/action-error";
 import { canEnterCash } from "@/lib/roles";
-import { isoDay, nowTashkent, parseDateParam, TASHKENT_OFFSET_MS } from "@/lib/date";
+import { parseDateParam } from "@/lib/date";
+import { kassaYozuvYarat, resolveMoment, hisobRuxsati } from "@/lib/moliya/yozuv";
 
 const PATH = "/moliya/kassa";
-
-/** Yirik to'lov chegarasi — undan katta summada kontragent MAJBURIY.
- *  Manbadagi muammo: to'lovlarning 72% ida kontragent bo'sh edi. */
-const DEFAULT_LARGE_PAYMENT = 5_000_000;
-
-async function largePaymentThreshold(): Promise<number> {
-  const row = await prisma.appSetting.findUnique({ where: { key: "moliya_large_payment_uzs" } });
-  const n = row ? Number(row.value) : NaN;
-  return Number.isFinite(n) && n > 0 ? n : DEFAULT_LARGE_PAYMENT;
-}
 
 /** Kassa yozuvini kiritish huquqi — SYSTEM_ADMIN va FINANCE.
  *  Read-only ADMIN/CEO bu yerdan O'TMAYDI. */
@@ -32,20 +23,6 @@ async function requireCashEntry() {
   const user = Number.isInteger(id) ? await prisma.user.findUnique({ where: { id } }) : null;
   if (!user) throw new AuthorizationError("Sessiyangiz eskirgan. Tizimdan chiqib, qaytadan kiring.");
   return user;
-}
-
-/** Foydalanuvchi shu hisobga yozuv kirita oladimi.
- *  UserCashAccount bo'sh bo'lsa — cheklov yo'q (UserBranch naqshi). */
-async function assertAccountAllowed(userId: number, ...accountIds: number[]) {
-  const scope = await prisma.userCashAccount.findMany({
-    where: { userId },
-    select: { accountId: true },
-  });
-  if (scope.length === 0) return;
-  const allowed = new Set(scope.map((s) => s.accountId));
-  for (const id of accountIds) {
-    if (!allowed.has(id)) throw new AuthorizationError("Bu hisobga yozuv kiritish huquqingiz yo'q.");
-  }
 }
 
 /**
@@ -64,15 +41,6 @@ async function assertKunOchiq(accountId: number, businessDate: Date, accountName
       `${kun} kuni${accountName ? ` «${accountName}» bo'yicha` : ""} allaqachon yopilgan — bu sanaga yozuv kiritib bo'lmaydi.`
     );
   }
-}
-
-/** Sana + vaqt. Bugungi kun bo'lsa hozirgi vaqt, o'tgan kun bo'lsa kun o'rtasi.
- *  occurredAt kun ichidagi TARTIBNI saqlaydi — manbadagi "qoldiq manfiyga tushadi"
- *  muammosi aynan tartib yo'qolganidan kelib chiqqan. */
-function resolveMoment(businessDate: Date): Date {
-  const now = nowTashkent();
-  if (isoDay(now) === isoDay(businessDate)) return new Date();
-  return new Date(businessDate.getTime() + 12 * 3_600_000 - TASHKENT_OFFSET_MS);
 }
 
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Sana noto'g'ri.");
@@ -107,59 +75,25 @@ export async function yozuvQoshAction(input: {
   try {
     const user = await requireCashEntry();
     const d = txnSchema.parse(input);
-    await assertAccountAllowed(user.id, d.accountId);
 
     const businessDate = parseDateParam(d.businessDate);
     if (!businessDate) return { ok: false, error: "Sana noto'g'ri." };
 
-    const article = await prisma.cashFlowArticle.findUnique({
-      where: { id: d.articleId },
-      select: { isActive: true, isTransfer: true, direction: true, name: true },
+    // BARCHA biznes qoidalari src/lib/moliya/yozuv.ts da — miniapp ham AYNAN
+    // shu funksiyani chaqiradi, shuning uchun tekshiruvlar bir xil bo'ladi.
+    const res = await kassaYozuvYarat({
+      businessDate,
+      accountId: d.accountId,
+      articleId: d.articleId,
+      direction: d.direction,
+      amount: d.amount,
+      counterpartyId: d.counterpartyId ?? null,
+      costCenterId: d.costCenterId ?? null,
+      note: d.note ?? null,
+      source: "MANUAL",
+      createdById: user.id,
     });
-    if (!article) return { ok: false, error: "Modda topilmadi." };
-    if (!article.isActive) return { ok: false, error: "Bu modda nofaol — tanlash mumkin emas." };
-
-    // Transfer moddasi oddiy yozuv sifatida kiritilmaydi: aks holda bir tomonlama
-    // yozuv paydo bo'ladi va kassa qoldig'i buziladi (manbadagi asosiy muammo).
-    if (article.isTransfer) {
-      return {
-        ok: false,
-        error: `«${article.name}» — ko'chirish moddasi. «Ko'chirish» formasidan foydalaning (qarshi hisob majburiy).`,
-      };
-    }
-
-    // Modda yo'nalishi bilan moslik: kirim moddasini chiqimga yozib bo'lmaydi.
-    if (article.direction === "IN_ONLY" && d.direction !== "IN")
-      return { ok: false, error: `«${article.name}» faqat KIRIM moddasi.` };
-    if (article.direction === "OUT_ONLY" && d.direction !== "OUT")
-      return { ok: false, error: `«${article.name}» faqat CHIQIM moddasi.` };
-
-    await assertKunOchiq(d.accountId, businessDate);
-
-    // Yirik summada kontragent majburiy.
-    const threshold = await largePaymentThreshold();
-    if (d.amount >= threshold && !d.counterpartyId) {
-      return {
-        ok: false,
-        error: `${threshold.toLocaleString("uz-UZ")} so'mdan katta summada kontragent ko'rsatilishi shart.`,
-      };
-    }
-
-    await prisma.cashTxn.create({
-      data: {
-        occurredAt: resolveMoment(businessDate),
-        businessDate,
-        accountId: d.accountId,
-        articleId: d.articleId,
-        direction: d.direction,
-        amount: d.amount,
-        counterpartyId: d.counterpartyId ?? null,
-        costCenterId: d.costCenterId ?? null,
-        note: d.note || null,
-        source: "MANUAL",
-        createdById: user.id,
-      },
-    });
+    if (!res.ok) return { ok: false, error: res.error };
 
     revalidatePath(PATH);
     return { ok: true };
@@ -194,7 +128,8 @@ export async function kochirishQoshAction(input: {
     if (d.fromAccountId === d.toAccountId)
       return { ok: false, error: "Qaysi hisobdan va qaysi hisobga — bir xil bo'lmasin." };
 
-    await assertAccountAllowed(user.id, d.fromAccountId);
+    if (!(await hisobRuxsati(user.id, d.fromAccountId)))
+      throw new AuthorizationError("Bu hisobga yozuv kiritish huquqingiz yo'q.");
 
     const businessDate = parseDateParam(d.businessDate);
     if (!businessDate) return { ok: false, error: "Sana noto'g'ri." };
@@ -279,7 +214,8 @@ export async function yozuvOchirAction(id: number): Promise<ActionResult> {
     if (txn.isLocked || txn.source === "IMPORT")
       return { ok: false, error: "Ko'chirilgan tarix qulflangan — o'chirib bo'lmaydi." };
 
-    await assertAccountAllowed(user.id, txn.accountId);
+    if (!(await hisobRuxsati(user.id, txn.accountId)))
+      throw new AuthorizationError("Bu hisobga yozuv kiritish huquqingiz yo'q.");
     await assertKunOchiq(txn.accountId, txn.businessDate);
 
     // Transferning bir tomonini o'chirish qoldiqni buzadi — butun juftlik o'chadi

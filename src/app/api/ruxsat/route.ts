@@ -8,6 +8,7 @@ import { ruxsatBormi } from "@/lib/spisaniya/db";
 import { verifyInitData } from "@/lib/spisaniya/telegram-auth";
 import { sverkaRuxsatBormi } from "@/lib/sverka/ruxsat";
 import { driverRuxsatBormi } from "@/lib/logistika/ruxsat";
+import { moliyaRuxsatBormi } from "@/lib/moliya/ruxsat";
 import { rateLimit, clientIp } from "@/lib/spisaniya/rate-limit";
 import { logAccessEvent, touchAccess } from "@/lib/access-log/log";
 
@@ -32,7 +33,7 @@ export async function POST(req: Request) {
       throttle: { key: clientIp(req), ms: 10 * 60_000 },
     });
     return NextResponse.json(
-      { allowed: false, sverka: false, driver: false, user: null },
+      { allowed: false, sverka: false, driver: false, moliya: false, user: null },
       { status: 200 }
     );
   }
@@ -40,12 +41,13 @@ export async function POST(req: Request) {
   // .catch(() => false) bilan yutilardi — Neon idle uzilishida xodim "Ruxsat
   // yo'q — ID'ni adminga yuboring" terminal ekraniga tushardi va u yerdan
   // chiqa olmasdi. 503 esa miniappda "Ulanib bo'lmadi + Qayta urinish" beradi.
-  let allowed: boolean, sverka: boolean, driver: boolean;
+  let allowed: boolean, sverka: boolean, driver: boolean, moliya: boolean;
   try {
-    [allowed, sverka, driver] = await Promise.all([
+    [allowed, sverka, driver, moliya] = await Promise.all([
       ruxsatBormi(user.id),
       sverkaRuxsatBormi(user.id),
       driverRuxsatBormi(user.id),
+      moliyaRuxsatBormi(user.id),
     ]);
   } catch {
     return NextResponse.json({ xato: "Ulanib bo'lmadi" }, { status: 503 });
@@ -58,7 +60,10 @@ export async function POST(req: Request) {
   if (allowed) touchAccess({ ...asos, surface: "BOT_SPISANIYA", openEvent: "LOGIN_OK" });
   if (sverka) touchAccess({ ...asos, surface: "BOT_SVERKA", openEvent: "LOGIN_OK" });
   if (driver) touchAccess({ ...asos, surface: "BOT_LOGISTIKA", openEvent: "LOGIN_OK" });
-  if (!allowed && !sverka && !driver) {
+  // Moliya uchun alohida AccessSurface yo'q — WEB sifatida yoziladi (u platforma
+  // foydalanuvchisi, oq ro'yxat emas).
+  if (moliya) touchAccess({ ...asos, surface: "WEB", openEvent: "LOGIN_OK" });
+  if (!allowed && !sverka && !driver && !moliya) {
     // Ro'yxatda yo'q ID — adminlar uchun "kim ruxsat so'rayapti" signali.
     // Throttle: miniapp qayta-qayta ochilaverishi mumkin.
     logAccessEvent({
@@ -70,5 +75,5 @@ export async function POST(req: Request) {
     });
   }
 
-  return NextResponse.json({ allowed, sverka, driver, user: { id: user.id, ism } });
+  return NextResponse.json({ allowed, sverka, driver, moliya, user: { id: user.id, ism } });
 }

@@ -41,6 +41,7 @@ export const authConfig = {
         "/api/taminotchilar",
         "/api/import", // 1C avto sotuv importi — IMPORT_TOKEN bilan himoyalangan (sessiyasiz)
         "/api/miniapp-sotuv", // BizbopSotuv mini app — initData HMAC + User.telegramId bilan himoyalangan
+        "/api/miniapp-moliya", // Moliya mini app — initData HMAC + User.telegramId + canEnterCash
         "/api/sverka", // sverka mini app API'lari — o'zi initData HMAC + SverkaXodim bilan himoyalangan
 
         // Logistika miniapp (haydovchi) — initData HMAC + Driver jadvali bilan himoyalangan.
