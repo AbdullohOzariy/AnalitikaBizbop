@@ -10,6 +10,7 @@ import { Telegraf, Markup } from "telegraf";
 import { ruxsatBormi } from "./db";
 import { sverkaRuxsatBormi } from "@/lib/sverka/ruxsat";
 import { driverRuxsatBormi } from "@/lib/logistika/ruxsat";
+import { moliyaRuxsatBormi } from "@/lib/moliya/ruxsat";
 
 /**
  * Telegram webhook `secret_token` — BOT_TOKEN'dan hosil qilingan barqaror qiymat
@@ -24,6 +25,29 @@ export function webhookSecret(): string | null {
 type G = typeof globalThis & { __spisaniyaBot?: Telegraf | null };
 const g = globalThis as G;
 
+/**
+ * Doimiy menyu tugmasi — FAQAT shu chat uchun (chat_id berilgani uchun).
+ * Global default o'zgarmaydi, ya'ni ruxsatsiz odam menyusida bo'lim tugmasi
+ * paydo bo'lmaydi: har kim /start bosganda o'zining ruxsatiga mos tugmani oladi.
+ */
+type MenuCtx = { chat?: { id: number }; telegram: Telegraf["telegram"] };
+
+async function setMenuButton(ctx: MenuCtx, text: string, url: string): Promise<void> {
+  const chatId = ctx.chat?.id;
+  if (!chatId) return;
+  await ctx.telegram.setChatMenuButton({
+    chatId,
+    menuButton: { type: "web_app", text, web_app: { url } },
+  });
+}
+
+/** Ruxsat yo'q — menyu tugmasi standart holatga (buyruqlar ro'yxati) qaytariladi. */
+async function resetMenuButton(ctx: MenuCtx): Promise<void> {
+  const chatId = ctx.chat?.id;
+  if (!chatId) return;
+  await ctx.telegram.setChatMenuButton({ chatId, menuButton: { type: "commands" } });
+}
+
 function buildBot(): Telegraf | null {
   const token = process.env.BOT_TOKEN;
   if (!token) return null;
@@ -37,22 +61,47 @@ function buildBot(): Telegraf | null {
     // Rollar ID bo'yicha oldindan beriladi: spisaniya (bot bazasi, eski tartib),
     // sverka (asosiy baza, ERP Sverka sahifasida) va haydovchi (Driver jadvali,
     // ERP Logistika → Ma'lumotlar → Haydovchilar).
-    const [allowed, sverkaAllowed, driverAllowed] = id
+    // moliya — User.telegramId + canEnterCash (boshqalari o'z oq ro'yxatidan).
+    // Ilgari bu tekshiruv YO'Q edi: sof moliyachi /start bosganda "Ruxsat yo'q"
+    // olardi, holbuki /api/ruxsat uni o'tkazardi.
+    const [allowed, sverkaAllowed, driverAllowed, moliyaAllowed] = id
       ? await Promise.all([
           ruxsatBormi(id),
           sverkaRuxsatBormi(id).catch(() => false),
           driverRuxsatBormi(id).catch(() => false),
+          moliyaRuxsatBormi(id).catch(() => false),
         ])
-      : [false, false, false];
-    if (allowed || sverkaAllowed || driverAllowed) {
-      // Bitta kirish nuqtasi — rolga qarab avtomatik yo'naltiradi
-      // (ikkala rol bo'lsa app ichida tanlov ekrani chiqadi)
+      : [false, false, false, false];
+
+    if (allowed || sverkaAllowed || driverAllowed || moliyaAllowed) {
       const base = (process.env.WEBHOOK_URL || "").replace(/\/$/, "");
+      // Yagona ruxsat bo'lsa — tugma TO'G'RIDAN o'sha bo'limni ochadi va nomi ham
+      // shunga mos bo'ladi. Bir nechta bo'lsa — /miniapp/kirish tanlov so'raydi.
+      const bittasi =
+        [allowed, sverkaAllowed, driverAllowed, moliyaAllowed].filter(Boolean).length === 1;
+      const [matn, yol] = !bittasi
+        ? ["🚀 Boshlash", "/miniapp/kirish"]
+        : driverAllowed
+        ? ["🚚 Reys", "/miniapp/logistika"]
+        : allowed
+        ? ["📝 Spisaniya", "/miniapp/index.html"]
+        : sverkaAllowed
+        ? ["📑 Sverka", "/miniapp/sverka"]
+        : ["💵 Kassa", "/miniapp/moliya"];
+
+      // Doimiy menyu tugmasi (xabar maydoni yonida) — har safar /start yozmasin.
+      // Xato bo'lsa jim o'tamiz: tugma qulaylik, javobning o'zi emas.
+      await setMenuButton(ctx, matn, `${base}${yol}`).catch(() => undefined);
+
       return ctx.reply(
         `Salom, ${ism}!\n🆔 Sizning ID: ${id}\n\nBoshlash uchun tugmani bosing.`,
-        Markup.inlineKeyboard([[Markup.button.webApp("🚀 Boshlash", `${base}/miniapp/kirish`)]])
+        Markup.inlineKeyboard([[Markup.button.webApp(matn, `${base}${yol}`)]])
       );
     }
+
+    // Ruxsat olib qo'yilgan bo'lishi mumkin — doimiy tugmani ham qaytarib olamiz,
+    // aks holda u eski bo'limni ochib turaverardi.
+    await resetMenuButton(ctx).catch(() => undefined);
 
     // Ruxsat yo'q — foydalanuvchi ID'sini xabar qilamiz (adminga yuborish uchun).
     return ctx.reply(
