@@ -26,9 +26,12 @@ const ROLE_CONFIG: Record<
   CAT_MANAGER:  { label: "Kategoriya menejeri", tone: "blue",   icon: "K" },
   SUPPLYCHAIN:  { label: "Supplychain",         tone: "blue",   icon: "S" },
   HEAD_CAT_MANAGER: { label: "Kat. menejerlari boshi", tone: "blue", icon: "H" },
-  MERCHANDISER: { label: "Merchandayzer",       tone: "blue",   icon: "M" },
+  MARKETING:    { label: "Marketing",           tone: "blue",   icon: "M" },
+  FINANCE:      { label: "Moliyachi",           tone: "blue",   icon: "F" },
   OPERATOR:     { label: "Operator",            tone: "muted",  icon: "O" },
   INVENTORY:    { label: "Inventar xodim",      tone: "muted",  icon: "I" },
+  LOGIST:       { label: "Logist",              tone: "muted",  icon: "L" },
+  DRIVER:       { label: "Haydovchi",           tone: "muted",  icon: "H" },
   VIEWER:       { label: "Ko'ruvchi",           tone: "muted",  icon: "V" },
 };
 

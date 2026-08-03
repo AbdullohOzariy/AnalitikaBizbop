@@ -17,7 +17,7 @@ import {
   canEditPromo,
   canSeeChiqim,
   canSeeSverka,
-  isMerchandiser,
+  isMarketing,
   isOperator,
   isInventoryRole,
   canSeeInventory,
@@ -84,12 +84,18 @@ describe("ADMIN — read-only (ko'radi, o'zgartira olmaydi)", () => {
   });
 });
 
-describe("MERCHANDISER — izolatsiyalangan (faqat Promo)", () => {
-  const r = "MERCHANDISER";
-  it("faqat promo predikatlaridan o'tadi", () => {
-    expect(isMerchandiser(r)).toBe(true);
+describe("MARKETING — izolatsiyalangan (Marketing bo'limi to'liq)", () => {
+  const r = "MARKETING";
+  it("Marketing predikatlaridan o'tadi", () => {
+    expect(isMarketing(r)).toBe(true);
     expect(canSeePromo(r)).toBe(true);
     expect(canEditPromo(r)).toBe(true);
+  });
+  it("eski MERCHANDISER nomi endi HECH QANDAY huquq bermaydi", () => {
+    // Enum qiymati qayta nomlangan (migratsiya 20260803120000). Eski JWT'da
+    // "MERCHANDISER" qolgan bo'lsa — foydalanuvchi qayta login qilishi shart.
+    expect(isMarketing("MERCHANDISER")).toBe(false);
+    expect(canSeePromo("MERCHANDISER")).toBe(false);
   });
   it("boshqa HECH BIR bo'limga kira olmaydi", () => {
     for (const pred of [
@@ -167,7 +173,7 @@ describe("Inventarizatsiya kirish matritsasi", () => {
     expect(canManageInventoryItems("ADMIN")).toBe(false);
   });
   it("boshqa rollar (CAT_MANAGER, SUPPLYCHAIN, OPERATOR) umuman kira olmaydi", () => {
-    for (const role of ["CAT_MANAGER", "SUPPLYCHAIN", "OPERATOR", "MERCHANDISER"]) {
+    for (const role of ["CAT_MANAGER", "SUPPLYCHAIN", "OPERATOR", "MARKETING"]) {
       expect(canSeeInventory(role), role).toBe(false);
     }
   });

@@ -1,0 +1,11 @@
+-- MERCHANDISER → MARKETING
+--
+-- ALTER TYPE ... RENAME VALUE ishlatiladi (PostgreSQL 10+): enum qiymatining
+-- O'ZI qayta nomlanadi, shuning uchun "User"."role" va "User"."extraRoles"[]
+-- dagi mavjud qiymatlar AVTOMATIK ko'chadi — hech qanday UPDATE kerak emas
+-- va bironta foydalanuvchi rolsiz qolmaydi.
+--
+-- DIQQAT: rol JWT ichida saqlanadi. Shu roldagi foydalanuvchilar migratsiyadan
+-- keyin QAYTA LOGIN qilishi shart, aks holda tokenida eski "MERCHANDISER"
+-- qiymati qoladi va u endi hech bir predikatga mos kelmaydi.
+ALTER TYPE "Role" RENAME VALUE 'MERCHANDISER' TO 'MARKETING';

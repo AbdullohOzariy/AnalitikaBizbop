@@ -65,7 +65,7 @@ export const authConfig = {
         if (isLoggedIn) {
           const role = (auth as { user?: { role?: string } })?.user?.role;
           const dest =
-            role === "MERCHANDISER"
+            role === "MARKETING"
               ? "/promo/doimiy"
               : role === "OPERATOR"
               ? "/chiqim"
@@ -82,21 +82,21 @@ export const authConfig = {
       }
       // IZOLATSIYA (ko'p-rol): faqat foydalanuvchining BARCHA rollari izolatsiyalangan
       // bo'lsa cheklov qoladi. Bittasi ham normal rol bo'lsa — to'liq kirish (union).
-      // MERCHANDISER → /promo, /marketing/community (+/api/promo); OPERATOR → /chiqim,/sverka (+/api/*).
+      // MARKETING → /promo, /marketing (+/api/*); OPERATOR → /chiqim,/sverka (+/api/*).
       // Ikki izolatsiyalangan rol birga bo'lsa — ruxsat etilgan yo'llar birlashadi.
       if (isLoggedIn) {
         const u = (auth as { user?: { role?: string; roles?: string[] } })?.user;
         const roles = u?.roles ?? (u?.role ? [u.role] : []);
-        const ISOLATED = new Set(["MERCHANDISER", "OPERATOR", "INVENTORY", "LOGIST"]);
+        const ISOLATED = new Set(["MARKETING", "OPERATOR", "INVENTORY", "LOGIST"]);
         const allIsolated = roles.length > 0 && roles.every((r) => ISOLATED.has(r));
         if (allIsolated) {
           const allowed: string[] = [];
-          // "/marketing/community" — sidebar'da MERCHANDISER'ga ALLAQACHON ko'rinardi,
-          // lekin bu yerda ochilmagani uchun havola bosilganda /promo/doimiy ga
-          // qaytarib yuborilardi. Sahifa guard'i canSeePromo (uni o'tkazadi) va
-          // tahrir faqat SYSTEM_ADMIN'da — ya'ni bu sof o'qish ruxsati.
-          // Sahifa server action ishlatadi (alohida /api prefiksi kerak emas).
-          if (roles.includes("MERCHANDISER")) allowed.push("/promo", "/api/promo", "/marketing/community");
+          // MARKETING — Marketing bo'limi TO'LIQ ochiq: /promo (aksiyalar) va butun
+          // /marketing prefiksi (hozircha community, keyin qo'shiladiganlar ham).
+          // Ilgari bu yerda faqat "/promo" turardi — sidebar'da Community ko'rinsa ham
+          // bosilganda /promo/doimiy ga qaytarib yuborilardi.
+          if (roles.includes("MARKETING"))
+            allowed.push("/promo", "/api/promo", "/marketing", "/api/marketing");
           if (roles.includes("OPERATOR")) allowed.push("/chiqim", "/sverka", "/api/chiqim", "/api/sverka");
           // LOGIST — logistika nazoratchisi: faqat reyslar bo'limi (ma'lumotnoma + fors-major).
           if (roles.includes("LOGIST")) allowed.push("/logistika", "/api/logistika");
@@ -105,7 +105,7 @@ export const authConfig = {
           if (roles.includes("INVENTORY")) allowed.push("/sotuv-dashboard", "/inventarizatsiya", "/baza/sotuv", "/api/baza/sotuv");
           const ok = allowed.some((p) => pathname === p || pathname.startsWith(p + "/"));
           if (!ok) {
-            const dest = roles.includes("MERCHANDISER")
+            const dest = roles.includes("MARKETING")
               ? "/promo/doimiy"
               : roles.includes("OPERATOR")
               ? "/chiqim"

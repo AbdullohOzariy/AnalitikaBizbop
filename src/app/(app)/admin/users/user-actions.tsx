@@ -33,9 +33,11 @@ const ROLE_OPTS = [
   { v: "CAT_MANAGER",  l: "Kategoriya menejeri", d: "O'z kategoriyalari" },
   { v: "SUPPLYCHAIN",  l: "Supplychain", d: "Analitika ko'rish + Yetkazib beruvchilar boshqaruvi" },
   { v: "CEO",          l: "CEO", d: "Ko'rish (Dashboard V1+V2)" },
-  { v: "MERCHANDISER", l: "Merchandayzer", d: "Faqat Promo (Aksiyalar)" },
+  { v: "MARKETING",    l: "Marketing", d: "Marketing bo'limi to'liq — Aksiyalar + Community" },
+  { v: "FINANCE",      l: "Moliyachi", d: "Moliya bo'limi to'liq + analitika ko'rish" },
   { v: "OPERATOR",     l: "Operator", d: "Faqat Hisobdan chiqarish + Sverka (kuzatuv)" },
   { v: "INVENTORY",    l: "Inventar xodim", d: "Faqat Sotuv dashboard + Inventarizatsiya (mini app)" },
+  { v: "LOGIST",       l: "Logist", d: "Faqat Logistika (reyslar nazorati)" },
 ] as const;
 const ROLE_LABEL: Record<string, string> = Object.fromEntries(ROLE_OPTS.map((o) => [o.v, o.l]));
 

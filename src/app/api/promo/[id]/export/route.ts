@@ -1,7 +1,7 @@
 /**
  * Aksiya ro'yxatini yuklab olish — Excel (.xlsx) yoki PDF.
  *   GET /api/promo/{id}/export?format=excel|pdf
- * Ko'rish huquqi: canSeePromo (Promo bo'limini ko'radiganlar; MERCHANDISER ham).
+ * Ko'rish huquqi: canSeePromo (Promo bo'limini ko'radiganlar; MARKETING ham).
  */
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";

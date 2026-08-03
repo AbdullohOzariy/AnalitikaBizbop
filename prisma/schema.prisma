@@ -18,7 +18,7 @@ enum Role {
   CEO
   SUPPLYCHAIN // ta'minot zanjiri: analitika/sotuv/spisaniya ko'radi + yetkazib beruvchilarni boshqaradi
   HEAD_CAT_MANAGER // kategoriya menejerlari boshi: BARCHA kategoriyalar bo'yicha menejer ishi + yetkazib beruvchilarni ko'rish
-  MERCHANDISER // merchandayzer — faqat Promo (Aksiyalar) bo'limini ko'radi/tahrirlaydi
+  MARKETING // marketing xodimi — Marketing bo'limini TO'LIQ ko'radi/tahrirlaydi (Promo + Community). Ilgari MERCHANDISER deb atalgan.
   OPERATOR // operator — faqat Hisobdan chiqarish va Sverkani KUZATADI (read-only)
   INVENTORY // inventar xodimi — sotuv hisobot (dashboard) + Inventarizatsiya bo'limi; miniapp'da sanash kiritadi
   LOGIST // logistika nazoratchisi — reyslarni kuzatadi; fors-major holatda haydovchi nomidan tuzatadi

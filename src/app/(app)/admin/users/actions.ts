@@ -10,7 +10,10 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { actionError } from "@/lib/action-error";
 
-const ROLE_VALUES = ["SYSTEM_ADMIN", "ADMIN", "CAT_MANAGER", "CEO", "SUPPLYCHAIN", "HEAD_CAT_MANAGER", "MERCHANDISER", "OPERATOR", "INVENTORY"] as const;
+// LOGIST va FINANCE ro'yxatda YO'Q edi — ya'ni enum'da bor, sahifa guard'lari
+// ularni kutadi, lekin admin panelidan TAYINLAB BO'LMASDI. DRIVER ataylab yo'q:
+// u faqat miniapp roli va Driver jadvali orqali beriladi.
+const ROLE_VALUES = ["SYSTEM_ADMIN", "ADMIN", "CAT_MANAGER", "CEO", "SUPPLYCHAIN", "HEAD_CAT_MANAGER", "MARKETING", "OPERATOR", "INVENTORY", "LOGIST", "FINANCE"] as const;
 const roleEnum = z.enum(ROLE_VALUES);
 
 // Telegram ID: bo'sh satr = bog'lanmagan (null), aks holda 5–15 xonali raqam → BigInt

@@ -51,7 +51,7 @@ export async function requireOrderCreator() {
 /**
  * Promo (Aksiyalar)ni KO'RISH huquqi — sahifa server-componentlarida ishlatiladi.
  * canSeePromo bilan mos: SYSTEM_ADMIN, ADMIN (read-only), CAT_MANAGER, CEO,
- * HEAD_CAT_MANAGER, MERCHANDISER. Read-only ADMIN ham o'tadi (faqat ko'rish).
+ * HEAD_CAT_MANAGER, MARKETING. Read-only ADMIN ham o'tadi (faqat ko'rish).
  */
 export async function requirePromoView() {
   const session = await auth();
@@ -64,7 +64,7 @@ export async function requirePromoView() {
 /**
  * Promo (Aksiyalar)ni TAHRIRLASH huquqi — Promo server-actionlari uchun.
  * canEditPromo bilan mos: SYSTEM_ADMIN, CAT_MANAGER, CEO, HEAD_CAT_MANAGER,
- * MERCHANDISER. Read-only ADMIN bu yerdan O'TMAYDI.
+ * MARKETING. Read-only ADMIN bu yerdan O'TMAYDI.
  * Qaytaradi: sessiyadagi user (createdById uchun `Number(user.id)` ishlatilsin —
  * requireOrderCreator naqshidagi kabi). Yozuv yaratishda eskirgan JWT xavfi bo'lsa
  * (foydalanuvchi o'chirilgan/qayta seed), requireAdminUser kabi baza tekshiruvi qo'shilishi mumkin.

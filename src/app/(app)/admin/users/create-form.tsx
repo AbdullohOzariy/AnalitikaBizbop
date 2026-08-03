@@ -49,9 +49,11 @@ const ROLE_OPTIONS = [
   { value: "CEO",          label: "CEO",                 desc: "Dashboard V1+V2, Spisaniya, OOS — faqat ko'rish" },
   { value: "ADMIN",        label: "Bo'lim boshlig'i",    desc: "Hammasini ko'radi (Tizimsiz) + anketalarni tasdiqlaydi" },
   { value: "HEAD_CAT_MANAGER", label: "Kategoriya menejerlari boshi", desc: "BARCHA kategoriyalar bo'yicha menejer ishi + yetkazib beruvchilarni ko'rish" },
-  { value: "MERCHANDISER", label: "Merchandayzer",       desc: "Faqat Promo (Aksiyalar) — ko'rish va tahrirlash" },
+  { value: "MARKETING",    label: "Marketing",           desc: "Marketing bo'limi to'liq — Aksiyalar + Community (ko'rish va tahrirlash)" },
+  { value: "FINANCE",      label: "Moliyachi",           desc: "Moliya bo'limi to'liq (kassa, moddalar, harajatlar) + analitika ko'rish" },
   { value: "OPERATOR",     label: "Operator",            desc: "Faqat Hisobdan chiqarish + Sverka — kuzatish (read-only)" },
   { value: "INVENTORY",    label: "Inventar xodim",      desc: "Faqat Sotuv dashboard + Inventarizatsiya (mini app)" },
+  { value: "LOGIST",       label: "Logist",              desc: "Faqat Logistika — reyslar nazorati" },
   { value: "SYSTEM_ADMIN", label: "System Admin",        desc: "To'liq huquq — barcha tahrir + Tizim bo'limi" },
 ] as const;
 

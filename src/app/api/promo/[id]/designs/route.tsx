@@ -2,7 +2,7 @@
  * Aksiyaning BARCHA dizayn bannerlarini bitta ZIP arxiv qilib yuklab olish.
  *   GET /api/promo/{id}/designs?format=both|a4|instagram&scope=prepared|all
  * Default: ikkala format + faqat rasm yuklangan dizaynlar. Node runtime (fs — shrift).
- * Ko'rish huquqi: canSeePromo (MERCHANDISER ham).
+ * Ko'rish huquqi: canSeePromo (MARKETING ham).
  */
 import { NextResponse } from "next/server";
 import { ImageResponse } from "next/og";

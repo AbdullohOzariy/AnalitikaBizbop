@@ -96,21 +96,23 @@ export const isLogist = (r: Roles): boolean => hasRole(r, "LOGIST");
 export const canSeeAnalyze = (r: Roles): boolean =>
   hasRole(r, "SYSTEM_ADMIN", "ADMIN", "SUPPLYCHAIN", "CAT_MANAGER", "HEAD_CAT_MANAGER");
 
-// ─── Promo (Aksiyalar) ────────────────────────────────────────────────────
-// MERCHANDISER — IZOLATSIYALANGAN rol: FAQAT Promo bo'limini ko'radi/tahrirlaydi.
+// ─── Marketing (Aksiyalar + Community) ────────────────────────────────────
+// MARKETING — IZOLATSIYALANGAN rol: Marketing bo'limini TO'LIQ ko'radi/tahrirlaydi
+// (Promo: doimiy/flash/hisobot + Community). Ilgari MERCHANDISER deb atalgan va
+// faqat Promo bilan chegaralangan edi.
 // Yuqoridagi hech bir canSee*/canEdit*/canManage*/isAdminTier predikatida
-// "MERCHANDISER" yo'q — shuning uchun u boshqa hech bir bo'limga kira olmaydi.
+// "MARKETING" yo'q — shuning uchun u boshqa hech bir bo'limga kira olmaydi.
 
-/** Merchandiser roli (yordamchi — redirect/izolatsiya tekshiruvlari uchun). */
-export const isMerchandiser = (r: Roles): boolean => hasRole(r, "MERCHANDISER");
+/** Marketing roli (yordamchi — redirect/izolatsiya tekshiruvlari uchun). */
+export const isMarketing = (r: Roles): boolean => hasRole(r, "MARKETING");
 
 /** Promo (Aksiyalar) bo'limini KO'RA oladiganlar — read-only ADMIN ham ko'radi. */
 export const canSeePromo = (r: Roles): boolean =>
-  hasRole(r, "SYSTEM_ADMIN", "ADMIN", "CAT_MANAGER", "CEO", "HEAD_CAT_MANAGER", "MERCHANDISER");
+  hasRole(r, "SYSTEM_ADMIN", "ADMIN", "CAT_MANAGER", "CEO", "HEAD_CAT_MANAGER", "MARKETING");
 
 /** Promo (Aksiyalar)ni TAHRIRLAY oladiganlar — read-only ADMIN bundan MUSTASNO. */
 export const canEditPromo = (r: Roles): boolean =>
-  hasRole(r, "SYSTEM_ADMIN", "CAT_MANAGER", "CEO", "HEAD_CAT_MANAGER", "MERCHANDISER");
+  hasRole(r, "SYSTEM_ADMIN", "CAT_MANAGER", "CEO", "HEAD_CAT_MANAGER", "MARKETING");
 
 // ─── Operator (Hisobdan chiqarish + Sverka kuzatuvchisi) ──────────────────────
 // OPERATOR — IZOLATSIYALANGAN rol: FAQAT Hisobdan chiqarish (chiqim) va Sverkani
@@ -189,6 +191,6 @@ export function landingPathFor(r: Roles): string {
   if (isInventoryRole(r)) return "/sotuv-dashboard";
   if (isOperator(r)) return "/chiqim";
   if (isLogist(r)) return "/logistika/hozir";
-  if (isMerchandiser(r)) return "/promo/doimiy";
+  if (isMarketing(r)) return "/promo/doimiy";
   return "/login";
 }
