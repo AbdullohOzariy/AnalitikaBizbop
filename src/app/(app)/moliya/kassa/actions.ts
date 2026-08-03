@@ -8,7 +8,7 @@ import { AuthorizationError } from "@/lib/auth-helpers";
 import { actionError, BusinessError, type ActionResult } from "@/lib/action-error";
 import { canEnterCash } from "@/lib/roles";
 import { parseDateParam } from "@/lib/date";
-import { kassaYozuvYarat, resolveMoment, hisobRuxsati } from "@/lib/moliya/yozuv";
+import { kassaYozuvYarat, kassaKochirishYarat, hisobRuxsati } from "@/lib/moliya/yozuv";
 
 const PATH = "/moliya/kassa";
 
@@ -125,72 +125,21 @@ export async function kochirishQoshAction(input: {
     const user = await requireCashEntry();
     const d = transferSchema.parse(input);
 
-    if (d.fromAccountId === d.toAccountId)
-      return { ok: false, error: "Qaysi hisobdan va qaysi hisobga — bir xil bo'lmasin." };
-
-    if (!(await hisobRuxsati(user.id, d.fromAccountId)))
-      throw new AuthorizationError("Bu hisobga yozuv kiritish huquqingiz yo'q.");
-
     const businessDate = parseDateParam(d.businessDate);
     if (!businessDate) return { ok: false, error: "Sana noto'g'ri." };
 
-    const article = await prisma.cashFlowArticle.findUnique({
-      where: { id: d.articleId },
-      select: { isActive: true, isTransfer: true, name: true },
+    // Qoidalar src/lib/moliya/yozuv.ts da — miniapp ham shu funksiyani chaqiradi.
+    const res = await kassaKochirishYarat({
+      businessDate,
+      fromAccountId: d.fromAccountId,
+      toAccountId: d.toAccountId,
+      articleId: d.articleId,
+      amount: d.amount,
+      note: d.note ?? null,
+      source: "MANUAL",
+      createdById: user.id,
     });
-    if (!article) return { ok: false, error: "Modda topilmadi." };
-    if (!article.isActive) return { ok: false, error: "Bu modda nofaol." };
-    if (!article.isTransfer)
-      return { ok: false, error: `«${article.name}» ko'chirish moddasi emas.` };
-
-    // Ikkala tomon ham ochiq bo'lishi shart — biri yopiq bo'lsa transfer nomutanosib qolardi.
-    await assertKunOchiq(d.fromAccountId, businessDate);
-    await assertKunOchiq(d.toAccountId, businessDate);
-
-    const occurredAt = resolveMoment(businessDate);
-
-    // Ikki yozuv bitta tranzaksiyada — yetim (juftlanmagan) yozuv bo'lishi mumkin emas.
-    await prisma.$transaction(async (tx) => {
-      const transfer = await tx.cashTransfer.create({
-        data: {
-          fromAccountId: d.fromAccountId,
-          toAccountId: d.toAccountId,
-          amount: d.amount,
-          occurredAt,
-          businessDate,
-          note: d.note || null,
-          createdById: user.id,
-        },
-      });
-      await tx.cashTxn.createMany({
-        data: [
-          {
-            occurredAt,
-            businessDate,
-            accountId: d.fromAccountId,
-            articleId: d.articleId,
-            direction: "OUT",
-            amount: d.amount,
-            note: d.note || null,
-            transferId: transfer.id,
-            source: "MANUAL",
-            createdById: user.id,
-          },
-          {
-            occurredAt,
-            businessDate,
-            accountId: d.toAccountId,
-            articleId: d.articleId,
-            direction: "IN",
-            amount: d.amount,
-            note: d.note || null,
-            transferId: transfer.id,
-            source: "MANUAL",
-            createdById: user.id,
-          },
-        ],
-      });
-    });
+    if (!res.ok) return { ok: false, error: res.error };
 
     revalidatePath(PATH);
     return { ok: true };

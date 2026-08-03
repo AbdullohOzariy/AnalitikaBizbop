@@ -16,12 +16,19 @@ export async function GET(req: Request) {
   if ("fail" in a) return a.fail;
   const { user } = a;
 
-  const [accounts, articles, counterparties, costCenters] = await Promise.all([
+  const [accounts, allAccounts, articles, transferArticles, counterparties, costCenters] = await Promise.all([
     prisma.cashAccount.findMany({
       where: {
         isActive: true,
         ...(user.accountIds.length > 0 ? { id: { in: user.accountIds } } : {}),
       },
+      orderBy: { sortOrder: "asc" },
+      select: { id: true, name: true, kind: true },
+    }),
+    // Ko'chirishning QABUL QILUVCHI tomoni foydalanuvchi qamrovida bo'lishi shart
+    // emas (masalan bank hisobi) — shuning uchun to'liq ro'yxat.
+    prisma.cashAccount.findMany({
+      where: { isActive: true },
       orderBy: { sortOrder: "asc" },
       select: { id: true, name: true, kind: true },
     }),
@@ -35,6 +42,11 @@ export async function GET(req: Request) {
         isNeutral: true,
         group: { select: { name: true, section: true } },
       },
+    }),
+    prisma.cashFlowArticle.findMany({
+      where: { isActive: true, isTransfer: true },
+      orderBy: { sortOrder: "asc" },
+      select: { id: true, name: true },
     }),
     prisma.counterparty.findMany({
       where: { isActive: true },
@@ -62,6 +74,8 @@ export async function GET(req: Request) {
     user: { name: user.name },
     bugun: isoDay(bugun),
     accounts,
+    allAccounts,
+    transferArticles,
     articles: articles.map((x) => ({
       id: x.id,
       name: x.name,

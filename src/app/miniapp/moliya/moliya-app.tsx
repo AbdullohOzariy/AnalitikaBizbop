@@ -25,7 +25,10 @@ type Malumot = {
   user: { name: string };
   bugun: string;
   accounts: Account[];
+  /** Ko'chirishning qabul qiluvchi tomoni — qamrovdan qat'i nazar barcha hisoblar. */
+  allAccounts: Account[];
   articles: Article[];
+  transferArticles: { id: number; name: string }[];
   counterparties: Ref[];
   costCenters: Ref[];
   closed: { accountId: number; onDate: string }[];
@@ -95,7 +98,7 @@ export function MoliyaApp() {
         </div>
       )}
 
-      {st.t === "ready" && <Forma d={st.d} />}
+      {st.t === "ready" && <Ekran d={st.d} />}
 
       <style>{`
         body { background: var(--tg-theme-bg-color, #F2F3F7); }
@@ -148,10 +151,36 @@ export function MoliyaApp() {
           font-weight: 700; font-family: inherit; background: var(--brand); color: #fff; }
         .save button[disabled] { opacity: .45; }
 
+        .tabs { display: flex; gap: 6px; padding: 4px; border-radius: 13px; margin-bottom: 14px;
+          background: var(--tg-theme-secondary-bg-color, #fff); border: 1px solid var(--line); }
+        .tabs button { flex: 1; padding: 10px 0; border: 0; border-radius: 10px; background: transparent;
+          color: inherit; font-size: 14px; font-weight: 600; font-family: inherit; }
+        .tabs button.on { background: var(--brand); color: #fff; }
+
         .okc { text-align: center; padding: 36px 16px; }
         .okc .tick { font-size: 44px; }
       `}</style>
     </div>
+  );
+}
+
+function Ekran({ d }: { d: Malumot }) {
+  const [rejim, setRejim] = useState<"yozuv" | "kochirish">("yozuv");
+  // Ko'chirish moddasi umuman bo'lmasa tabni ko'rsatmaymiz — bosilganda
+  // "modda yo'q" deyishdan ko'ra, tanlov bermaslik tozaroq.
+  if (d.transferArticles.length === 0) return <Forma d={d} />;
+  return (
+    <>
+      <div className="tabs">
+        <button className={rejim === "yozuv" ? "on" : ""} onClick={() => setRejim("yozuv")}>
+          Kirim / chiqim
+        </button>
+        <button className={rejim === "kochirish" ? "on" : ""} onClick={() => setRejim("kochirish")}>
+          Ko&apos;chirish
+        </button>
+      </div>
+      {rejim === "yozuv" ? <Forma d={d} /> : <Kochirish d={d} />}
+    </>
   );
 }
 
@@ -368,6 +397,164 @@ function Forma({ d }: { d: Malumot }) {
       <div className="save">
         <button disabled={!tayyor || saqlanmoqda} onClick={saqla}>
           {saqlanmoqda ? "Saqlanmoqda…" : "Saqlash"}
+        </button>
+      </div>
+    </>
+  );
+}
+
+/** Hisoblararo ko'chirish — inkassa, perebros, obmen. */
+function Kochirish({ d }: { d: Malumot }) {
+  const [sana, setSana] = useState(d.bugun);
+  const [fromId, setFromId] = useState(d.accounts[0]?.id ?? 0);
+  const [toId, setToId] = useState(0);
+  const [articleId, setArticleId] = useState(d.transferArticles[0]?.id ?? 0);
+  const [amount, setAmount] = useState("");
+  const [note, setNote] = useState("");
+  const [saqlanmoqda, setSaqlanmoqda] = useState(false);
+  const [xato, setXato] = useState<string | null>(null);
+  const [muvaffaq, setMuvaffaq] = useState(false);
+
+  const summa = Number(amount.replace(/\D/g, "")) || 0;
+  // Ikkala tomon ham ochiq bo'lishi shart — biri yopiq bo'lsa transfer nomutanosib qolardi.
+  const fromYopiq = d.closed.some((c) => c.accountId === fromId && c.onDate === sana);
+  const toYopiq = d.closed.some((c) => c.accountId === toId && c.onDate === sana);
+  const tayyor = fromId > 0 && toId > 0 && fromId !== toId && articleId > 0 && summa > 0 && !fromYopiq && !toYopiq;
+
+  const saqla = async () => {
+    setSaqlanmoqda(true);
+    setXato(null);
+    try {
+      const r = await fetch("/api/miniapp-moliya/kochirish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-telegram-init-data": initData() },
+        body: JSON.stringify({
+          businessDate: sana,
+          fromAccountId: fromId,
+          toAccountId: toId,
+          articleId,
+          amount: summa,
+          note: note.trim() || undefined,
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok || !j.ok) {
+        setXato(j.xato ?? "Saqlanmadi.");
+        window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred("error");
+      } else {
+        window.Telegram?.WebApp?.HapticFeedback?.notificationOccurred("success");
+        setMuvaffaq(true);
+      }
+    } catch {
+      setXato("Tarmoq xatosi. Qayta urinib ko'ring.");
+    } finally {
+      setSaqlanmoqda(false);
+    }
+  };
+
+  if (muvaffaq) {
+    const from = d.accounts.find((a) => a.id === fromId)?.name ?? "";
+    const to = d.allAccounts.find((a) => a.id === toId)?.name ?? "";
+    return (
+      <div className="card okc">
+        <div className="tick">✅</div>
+        <h2>Ko&apos;chirildi</h2>
+        <p className="muted">
+          {from} → {to}
+          <br />
+          {uz(summa)} so&apos;m
+        </p>
+        <div className="save">
+          <button
+            onClick={() => {
+              setMuvaffaq(false);
+              setAmount("");
+              setNote("");
+            }}
+          >
+            Yana ko&apos;chirish
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="note info">
+        ⚪ Ko&apos;chirish daromad ham, xarajat ham emas — ikkita bog&apos;langan yozuv yaratiladi.
+      </div>
+
+      <div className="f">
+        <label>Sana</label>
+        <input type="date" value={sana} max={d.bugun} onChange={(e) => setSana(e.target.value)} />
+      </div>
+
+      <div className="f">
+        <label>Qaysi hisobdan</label>
+        <select value={fromId} onChange={(e) => setFromId(Number(e.target.value))}>
+          {d.accounts.length === 0 && <option value={0}>— hisob biriktirilmagan —</option>}
+          {d.accounts.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="f">
+        <label>Qaysi hisobga</label>
+        <select value={toId} onChange={(e) => setToId(Number(e.target.value))}>
+          <option value={0}>— tanlang —</option>
+          {d.allAccounts
+            .filter((a) => a.id !== fromId)
+            .map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+                {a.kind === "BANK" ? " (bank)" : a.kind === "CARD" ? " (plastik)" : ""}
+              </option>
+            ))}
+        </select>
+      </div>
+
+      {(fromYopiq || toYopiq) && (
+        <div className="note bad">
+          🔒 {fromYopiq ? "Chiqim" : "Kirim"} hisobi bo&apos;yicha bu kun yopilgan — boshqa sana tanlang.
+        </div>
+      )}
+
+      <div className="f">
+        <label>Modda</label>
+        <select value={articleId} onChange={(e) => setArticleId(Number(e.target.value))}>
+          {d.transferArticles.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="f">
+        <label>Summa (so&apos;m)</label>
+        <input
+          className="amount"
+          inputMode="numeric"
+          value={amount ? uz(summa) : ""}
+          onChange={(e) => setAmount(e.target.value)}
+          placeholder="0"
+        />
+      </div>
+
+      <div className="f">
+        <label>Izoh</label>
+        <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
+      </div>
+
+      {xato && <div className="note bad">⚠️ {xato}</div>}
+
+      <div className="save">
+        <button disabled={!tayyor || saqlanmoqda} onClick={saqla}>
+          {saqlanmoqda ? "Saqlanmoqda…" : "Ko'chirish"}
         </button>
       </div>
     </>

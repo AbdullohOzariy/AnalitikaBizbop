@@ -136,3 +136,83 @@ export async function kassaYozuvYarat(input: YozuvKirish): Promise<YozuvNatija> 
 
   return { ok: true, id: txn.id };
 }
+
+// ─── Hisoblararo ko'chirish (Инкасса / Переброс / Обмен) ─────────────────────
+
+export type KochirishKirish = {
+  businessDate: Date;
+  fromAccountId: number;
+  toAccountId: number;
+  articleId: number;
+  amount: number;
+  note?: string | null;
+  source: "MANUAL" | "MINIAPP";
+  createdById: number;
+};
+
+/**
+ * Ko'chirish AYNAN ikki bog'langan yozuv yaratadi (double-entry).
+ * Bir tomonlama yozuv bo'lishi MUMKIN EMAS — manbadagi asosiy nuqson shu edi
+ * va u kassa qoldig'ini butunlay buzgan (Офис −30.2 mlrd).
+ */
+export async function kassaKochirishYarat(
+  input: KochirishKirish
+): Promise<{ ok: true; id: number } | { ok: false; error: string }> {
+  if (!(input.amount > 0)) return { ok: false, error: "Summa noldan katta bo'lsin." };
+  if (input.fromAccountId === input.toAccountId)
+    return { ok: false, error: "Qaysi hisobdan va qaysi hisobga — bir xil bo'lmasin." };
+
+  // Faqat CHIQIM tomoni foydalanuvchining qamrovida bo'lishi shart: pul uning
+  // hisobidan chiqadi. Qabul qiluvchi hisob (masalan bank) boshqa odamniki bo'lishi normal.
+  if (!(await hisobRuxsati(input.createdById, input.fromAccountId)))
+    return { ok: false, error: "Bu hisobdan ko'chirish huquqingiz yo'q." };
+
+  const article = await prisma.cashFlowArticle.findUnique({
+    where: { id: input.articleId },
+    select: { isActive: true, isTransfer: true, name: true },
+  });
+  if (!article) return { ok: false, error: "Modda topilmadi." };
+  if (!article.isActive) return { ok: false, error: "Bu modda nofaol." };
+  if (!article.isTransfer)
+    return { ok: false, error: `«${article.name}» ko'chirish moddasi emas.` };
+
+  // Ikkala tomon ham ochiq bo'lishi shart — biri yopiq bo'lsa transfer nomutanosib qolardi.
+  if (await kunYopiqmi(input.fromAccountId, input.businessDate))
+    return { ok: false, error: `${isoDay(input.businessDate)} kuni chiqim hisobi bo'yicha yopilgan.` };
+  if (await kunYopiqmi(input.toAccountId, input.businessDate))
+    return { ok: false, error: `${isoDay(input.businessDate)} kuni kirim hisobi bo'yicha yopilgan.` };
+
+  const occurredAt = resolveMoment(input.businessDate);
+  const umumiy = {
+    occurredAt,
+    businessDate: input.businessDate,
+    articleId: input.articleId,
+    amount: input.amount,
+    note: input.note || null,
+    source: input.source,
+    createdById: input.createdById,
+  };
+
+  const transfer = await prisma.$transaction(async (tx) => {
+    const t = await tx.cashTransfer.create({
+      data: {
+        fromAccountId: input.fromAccountId,
+        toAccountId: input.toAccountId,
+        amount: input.amount,
+        occurredAt,
+        businessDate: input.businessDate,
+        note: input.note || null,
+        createdById: input.createdById,
+      },
+    });
+    await tx.cashTxn.createMany({
+      data: [
+        { ...umumiy, accountId: input.fromAccountId, direction: "OUT", transferId: t.id },
+        { ...umumiy, accountId: input.toAccountId, direction: "IN", transferId: t.id },
+      ],
+    });
+    return t;
+  });
+
+  return { ok: true, id: transfer.id };
+}
