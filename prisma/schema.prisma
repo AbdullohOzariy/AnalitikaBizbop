@@ -23,6 +23,7 @@ enum Role {
   INVENTORY // inventar xodimi — sotuv hisobot (dashboard) + Inventarizatsiya bo'limi; miniapp'da sanash kiritadi
   LOGIST // logistika nazoratchisi — reyslarni kuzatadi; fors-major holatda haydovchi nomidan tuzatadi
   DRIVER // haydovchi — faqat miniapp: mashina tanlaydi, yo'lga chiqish / yetib borishni belgilaydi
+  FINANCE // moliyachi — Moliya bo'limi to'liq + analitika/sotuvni ko'radi (izolyatsiyalanmagan)
 }
 
 // Promo (Aksiyalar) turi — har biri odatiy davom etish muddatiga ega
@@ -136,6 +137,9 @@ model User {
   inventoryCounts   InventoryCount[] // kiritgan sanashlari (countedBy)
   actedTrips        Trip[] // fors-major holatda haydovchi nomidan kiritgan reyslari
   scorecards        PartnershipScorecard[] // tahrirlagan strategik hamkorlik skorkartalari (updatedBy)
+  cashTxns          CashTxn[] // kiritgan kassa yozuvlari (createdBy)
+  cashTransfers     CashTransfer[] // kiritgan kassalararo ko'chirishlari
+  cashAccounts      UserCashAccount[] // yozuv kirita oladigan hisoblari — bo'sh = cheklovsiz
 }
 
 // Foydalanuvchi ↔ filial (ko'p-ko'p): miniapp'da dashboard/inventar shu filiallar bilan
@@ -198,6 +202,8 @@ model Branch {
   tgRequests        TgRequest[] // guruhda shu filial haqida so'ralgan murojaatlar
   skuForecasts      SkuForecast[] // haftalik SKU talab prognozi
   skuForecastAcc    SkuForecastAccuracy[] // prognoz aniqligi baholari
+  cashAccounts      CashAccount[] // shu filialning kassa/bank hisoblari (bo'lmasligi ham mumkin)
+  costCenters       CostCenter[] // shu filialga mos xarajat markazi
 }
 
 model BranchAlias {
@@ -405,9 +411,9 @@ model Product {
   imageData      String?   @db.Text // promo dizayn banner master rasmi — item saqlanganda shu yerga ham yoziladi, yangi aksiyada meros
   imageZoom      Float     @default(1) // master rasm kattalashtirish (x1..x2)
 
-  category          Category?            @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  supplier          Supplier?            @relation(fields: [supplierId], references: [id], onDelete: SetNull)
-  agent             Agent?               @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  category          Category?             @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  supplier          Supplier?             @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  agent             Agent?                @relation(fields: [agentId], references: [id], onDelete: SetNull)
   sales             ProductSales[]
   nameMismatch      ProductNameMismatch?
   orderItems        PurchaseOrderItem[]
@@ -483,6 +489,7 @@ model Supplier {
   agents         Agent[]
   branchProfiles SupplierBranchProfile[] // filial bo'yicha profil ma'lumotlari
   scorecards     PartnershipScorecard[] // strategik hamkorlik skorkartalari (orqa-marja override'lar)
+  counterparties Counterparty[] // moliya kontragent reyestridagi mos yozuvlar
 }
 
 // Yetkazib beruvchi × filial profil ma'lumotlari (✓ per-filial maydonlar)
@@ -901,25 +908,25 @@ model ForecastRun {
 //     saqlab keyin o'rtachalash ikki xil raqam beradi.
 
 model SkuForecastRun {
-  id          Int      @id @default(autoincrement())
-  weekStart   DateTime @db.Date // ORIGIN: train'ga kirgan oxirgi TO'LIQ hafta (dushanba)
+  id          Int       @id @default(autoincrement())
+  weekStart   DateTime  @db.Date // ORIGIN: train'ga kirgan oxirgi TO'LIQ hafta (dushanba)
   horizon     Int // prognoz gorizonti, hafta (validatsiyalangan: 4)
-  modelKey    String   @db.VarChar(24) // siyosat nomi ("gate-v1"), qatordagi model emas
+  modelKey    String    @db.VarChar(24) // siyosat nomi ("gate-v1"), qatordagi model emas
   z           Float // MEROS: eski formulaning z'i (q90 endi empirik kvantil bilan)
   // Kalibratsiya — o'sha yugurishda AYNAN qaysi koeffitsient ishlatilgani. Bu qatorlar
   // bo'lmasa "nega o'tgan haftada boshqa raqam chiqqan" degan savolga javob yo'q.
-  biasK       Float    @default(1) // global BIAS koeffitsienti (prognoz shunga BO'LINADI)
-  servis      Float    @default(0.9) // maqsad servis darajasi (q90 kvantili)
+  biasK       Float     @default(1) // global BIAS koeffitsienti (prognoz shunga BO'LINADI)
+  servis      Float     @default(0.9) // maqsad servis darajasi (q90 kvantili)
   panelWeeks  Int // panelda mavjud to'liq haftalar
   seriesTotal Int // paneldagi faol seriyalar (SKU×filial)
   forecasted  Int // prognoz yozilgan seriyalar
-  skippedKam  Int      @default(0) // "KAM" sinf — tarix yetarli emas, model qurilmaydi
-  skippedArch Int      @default(0) // arxivlangan SKU
-  scoredRows  Int      @default(0) // shu run keyinchalik necha seriyada baholandi
+  skippedKam  Int       @default(0) // "KAM" sinf — tarix yetarli emas, model qurilmaydi
+  skippedArch Int       @default(0) // arxivlangan SKU
+  scoredRows  Int       @default(0) // shu run keyinchalik necha seriyada baholandi
   scoredAt    DateTime? // fakt kelib, aniqlik o'lchangan payt (null — hali pishmagan)
-  status      String   @default("ok") @db.VarChar(8) // ok | error
-  note        String?  @db.VarChar(300)
-  startedAt   DateTime @default(now())
+  status      String    @default("ok") @db.VarChar(8) // ok | error
+  note        String?   @db.VarChar(300)
+  startedAt   DateTime  @default(now())
   finishedAt  DateTime?
 
   forecasts SkuForecast[]
@@ -998,11 +1005,11 @@ model SkuForecastAccuracy {
 // Kesim agregati — "Prognoz sifati" sahifasi shu jadvalni o'qiydi (detal tozalangandan
 // keyin ham tarix qoladi). scope+key: ALL/*, SINF/SMOOTH, BRANCH/3, KAT/12, ABC/A.
 model SkuForecastSegment {
-  id           Int    @id @default(autoincrement())
+  id           Int     @id @default(autoincrement())
   runId        Int
   horizon      Int
-  scope        String @db.VarChar(12)
-  key          String @db.VarChar(48)
+  scope        String  @db.VarChar(12)
+  key          String  @db.VarChar(48)
   label        String? @db.VarChar(160) // ko'rsatish uchun nom (filial/kategoriya)
   seriya       Int
   n            Int
@@ -1014,15 +1021,15 @@ model SkuForecastSegment {
   baseAbsErr   Float
   baseSqErr    Float
   amountWeight Float
-  ishonchli    Int    @default(0) // WAPE ≤ 30% (oxirgi 4 oyna)
-  taxminiy     Int    @default(0) // 30–60%
-  ishonchsiz   Int    @default(0) // > 60%
+  ishonchli    Int     @default(0) // WAPE ≤ 30% (oxirgi 4 oyna)
+  taxminiy     Int     @default(0) // 30–60%
+  ishonchsiz   Int     @default(0) // > 60%
   // SERVIS iqtisodi: qoplash = qopladi / n. `ortiqcha` va `kamomad` — DONA:
   // Σmax(0, q90 − fakt) va Σmax(0, fakt − q90). Faqat qoplashni ko'rsatish yetarli
   // emas — 90% qoplashga har qanday narxda erishish mumkin, savol NARXIDA.
-  qopladi      Int    @default(0)
-  ortiqcha     Float  @default(0)
-  kamomad      Float  @default(0)
+  qopladi      Int     @default(0)
+  ortiqcha     Float   @default(0)
+  kamomad      Float   @default(0)
 
   run SkuForecastRun @relation(fields: [runId], references: [id], onDelete: Cascade)
 
@@ -1034,13 +1041,13 @@ model SkuForecastSegment {
 // tarixdan o'rganiladi, ya'ni har hafta o'zgaradi; qaysi raqam qachon ishlatilgani
 // saqlanmasa, o'tgan haftaning prognozini qayta tushuntirib bo'lmaydi.
 model SkuForecastCalib {
-  id    Int    @id @default(autoincrement())
-  runId Int
+  id     Int     @id @default(autoincrement())
+  runId  Int
   // Kalibratsiya kaliti. Hozirgi sxema: "<ABC>|<p50 bandi>" (masalan "A|300-1k"),
   // zaxira daraja — faqat band ("300-1k"). Kalit ATAYLAB erkin matn: kesim sxemasi
   // o'lchov natijasiga qarab o'zgarib turadi (sinf → sinf×abc → abc×band), har
   // safar migratsiya yozish esa provenance jadvali uchun ortiqcha.
-  kalit  String @db.VarChar(32)
+  kalit  String  @db.VarChar(32)
   quantC Float // √-masshtab kvantil koeffitsienti: q90 = p50 + c·√(p50+1)
   n      Int // necha baho qatoridan o'rganildi (0 — sovuq start qiymati)
   sovuq  Boolean @default(false) // tarix yo'q edi, o'lchangan default ishlatildi
@@ -1937,4 +1944,293 @@ model TgCanonMerge {
 
   @@index([targetId])
   @@index([createdAt(sort: Desc)])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MOLIYA — naqd/pul oqimi (DDS, treasury). To'liq reja: MOLIYA_PLAN.md
+//
+// Asosiy prinsiplar:
+//  • Qoldiq HECH QACHON saqlanmaydi — CashAccountOpening + CashTxn'dan hisoblanadi.
+//  • Har transfer (Инкасса/Переброс/Обмен) = 1 CashTransfer + 2 CashTxn (double-entry).
+//    Bir tomonlama yozuv bo'lishi mumkin emas — kiritishda qarshi hisob majburiy.
+//  • Neytral moddalar (isNeutral) hech qanday daromad/xarajat KPI'siga kirmaydi.
+//  • occurredAt (aniq vaqt) kun ichidagi tartibni saqlaydi; businessDate (Asia/Tashkent
+//    kuni) hisobot va kunlik yopish uchun — src/lib/date.ts (isoDay) bilan hisoblanadi.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+enum CashAccountKind {
+  CASH // naqd kassa
+  BANK // bank hisobvarag'i — inkassatsiya shu yerga tushadi
+  CARD // plastik / ekvayring
+}
+
+/// DDS ning klassik uch bo'limi + texnik. TECHNICAL = pul kompaniya ichida ko'chdi.
+enum CashFlowSection {
+  OPERATING // savdo tushumi, ta'minotchi, ish haqi, kommunal, logistika
+  INVESTING // Зарафшон/Навоий Малл qurilishi, ер, transport sotib olish
+  FINANCING // moliyaviy yordam, dividend, qarz, kredit, ustav fondi
+  TECHNICAL // inkassa, obmen, perebros, ochilish qoldig'i, kassa farqi
+}
+
+enum CashDirection {
+  IN
+  OUT
+}
+
+/// Modda qaysi yo'nalishda ishlatilishi MUMKIN — kiritishda validatsiya uchun.
+/// Manbadagi xato: "Камомад" chiqimi "Савдо тушуми" (kirim) moddasiga yozilgan.
+enum CashArticleDirection {
+  IN_ONLY
+  OUT_ONLY
+  BOTH
+}
+
+enum CostCenterKind {
+  BRANCH // savdo nuqtasi
+  PROJECT // alohida biznes/loyiha: Зарафшон Малл, Навоий Малл, Молхона
+  COMPANY // umumkorporativ (Ofis)
+}
+
+enum CounterpartyKind {
+  EMPLOYEE // xodim
+  SUPPLIER // ta'minotchi (Supplier bilan bog'lanadi)
+  ACCOUNTABLE // hisobdor shaxs (podotchyot) — ochiq qoldig'i kuzatiladi
+  OTHER
+}
+
+enum CashTxnSource {
+  MANUAL // web forma
+  MINIAPP // telefon (Telegram mini app)
+  IMPORT // Google Sheets'dan ko'chirilgan tarix — qulflangan
+}
+
+/// Xarajat KIMGA tegishli. Hisob = pul QAYSI kassadan chiqqani — bu ikki xil narsa.
+/// Dalil: "04.03 · Маззона kassasi · Кунликчи 2 та · Зарафшон Малл курилиш".
+model CostCenter {
+  id        Int            @id @default(autoincrement())
+  name      String         @unique
+  kind      CostCenterKind
+  branchId  Int? // BRANCH bo'lsa — mavjud filialga bog'lanadi
+  isActive  Boolean        @default(true)
+  sortOrder Int            @default(0)
+  createdAt DateTime       @default(now())
+
+  branch   Branch?       @relation(fields: [branchId], references: [id])
+  accounts CashAccount[]
+  txns     CashTxn[]
+
+  @@index([branchId])
+  @@index([kind])
+}
+
+/// Kassa / bank hisobi / plastik. Filialga bog'lanishi IXTIYORIY — har filialda
+/// kassa bo'lishi shart emas (loyiha egasining qarori).
+model CashAccount {
+  id           Int             @id @default(autoincrement())
+  name         String          @unique
+  kind         CashAccountKind @default(CASH)
+  branchId     Int?
+  costCenterId Int? // odatiy xarajat markazi (kiritishda oldindan to'ldiriladi)
+  currency     String          @default("UZS")
+  isActive     Boolean         @default(true)
+  sortOrder    Int             @default(0)
+  /// Shu sanadan boshlab qoldiq ISHONCHLI (fizik sanash bilan tasdiqlangan).
+  /// Undan oldingi davr hisobotda "tarixiy — tasdiqlanmagan" bayrog'i bilan chiqadi:
+  /// meros ishonchsizligi (Офис −30.2 mlrd) o'chirilmaydi, IZOLYATSIYA qilinadi.
+  trustedFrom  DateTime?       @db.Date
+  createdAt    DateTime        @default(now())
+
+  branch     Branch?     @relation(fields: [branchId], references: [id])
+  costCenter CostCenter? @relation(fields: [costCenterId], references: [id])
+
+  aliases      CashAccountAlias[]
+  txns         CashTxn[]
+  openings     CashAccountOpening[]
+  transfersOut CashTransfer[]       @relation("CashTransferFrom")
+  transfersIn  CashTransfer[]       @relation("CashTransferTo")
+  users        UserCashAccount[]
+
+  @@index([branchId])
+  @@index([costCenterId])
+}
+
+/// Tarix importi uchun manbadagi imlo variantlari ("Смарт", "SMART Market").
+model CashAccountAlias {
+  id        Int    @id @default(autoincrement())
+  accountId Int
+  alias     String @unique
+
+  account CashAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+}
+
+/// Modda ierarxiyasining 2-darajasi: guruh (bo'lim ichida).
+model CashFlowGroup {
+  id        Int             @id @default(autoincrement())
+  code      String          @unique // "OP_PAYROLL", "TECH_TRANSFER"
+  name      String // "Xodim xarajatlari"
+  section   CashFlowSection
+  sortOrder Int             @default(0)
+  isActive  Boolean         @default(true)
+
+  articles CashFlowArticle[]
+
+  @@index([section])
+}
+
+/// 3-daraja: modda ("Статья ДДС"). Manbada ~68 ta noyob.
+/// O'CHIRILMAYDI — faqat isActive=false (tarixiy yozuvlar buzilmasin).
+model CashFlowArticle {
+  id         Int                  @id @default(autoincrement())
+  code       String               @unique // "OP_SALES_MEGA", "TECH_INKASSA"
+  name       String               @unique // manbadagi kanonik nom: "Иш хаки харажатлари"
+  groupId    Int
+  direction  CashArticleDirection @default(BOTH)
+  /// ENG MUHIM MAYDON. true = pul kompaniya ichida ko'chdi yoki texnik yozuv;
+  /// hech qanday daromad/xarajat KPI'siga KIRMAYDI. Namunada shunday moddalar
+  /// jami chiqimning 50.8% ini tashkil qilgan (faqat Инкасса — 42.5%).
+  /// DIQQAT: isNeutral ≠ section=TECHNICAL. Дивидент/Молиявий ёрдам — FINANCING,
+  /// lekin isNeutral=false (real pul kirdi/chiqdi, faqat operatsion emas).
+  isNeutral  Boolean              @default(false)
+  /// true = bu modda har doim CashTransfer'ning bir tomoni (Инкасса/Переброс/Обмен).
+  /// Kiritishda qarshi hisob MAJBURIY bo'ladi.
+  isTransfer Boolean              @default(false)
+  isActive   Boolean              @default(true)
+  sortOrder  Int                  @default(0)
+  note       String?
+
+  group   CashFlowGroup          @relation(fields: [groupId], references: [id])
+  aliases CashFlowArticleAlias[]
+  txns    CashTxn[]
+
+  @@index([groupId])
+}
+
+/// info varag'idagi qisqa nom → kanonik modda lug'ati
+/// (Ойлик→Иш хаки, Камунал→Электр энергияси, Салярка→Ёнилги...).
+model CashFlowArticleAlias {
+  id        Int    @id @default(autoincrement())
+  articleId Int
+  alias     String @unique
+
+  article CashFlowArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@index([articleId])
+}
+
+/// Kim pul oldi/berdi. Manbada bu erkin matn edi va 3-4 xil imloda yozilardi
+/// ("Исматов Элёр" / "Исамтов Элёр", "Азимов Акбар" / "Акбар ака").
+/// Endi reyestrdan TANLANADI — erkin matn emas.
+model Counterparty {
+  id         Int              @id @default(autoincrement())
+  name       String           @unique
+  kind       CounterpartyKind @default(OTHER)
+  supplierId Int? // SUPPLIER bo'lsa — mavjud Supplier bilan ko'prik
+  phone      String?
+  note       String?
+  isActive   Boolean          @default(true)
+  createdAt  DateTime         @default(now())
+
+  supplier Supplier?           @relation(fields: [supplierId], references: [id])
+  aliases  CounterpartyAlias[]
+  txns     CashTxn[]
+
+  @@index([supplierId])
+  @@index([kind])
+}
+
+model CounterpartyAlias {
+  id             Int    @id @default(autoincrement())
+  counterpartyId Int
+  alias          String @unique
+
+  counterparty Counterparty @relation(fields: [counterpartyId], references: [id], onDelete: Cascade)
+
+  @@index([counterpartyId])
+}
+
+/// Bitta pul harakati. "Қолдиқ" ustuni YO'Q — qoldiq doim hisoblanadi.
+model CashTxn {
+  id             Int           @id @default(autoincrement())
+  occurredAt     DateTime // aniq vaqt — kun ichidagi tartib
+  businessDate   DateTime      @db.Date // Asia/Tashkent kuni — hisobot/yopish uchun
+  accountId      Int
+  articleId      Int
+  direction      CashDirection
+  amount         Decimal       @db.Decimal(20, 2)
+  counterpartyId Int?
+  costCenterId   Int?
+  note           String?
+  transferId     Int? // to'ldirilgan bo'lsa — bu transferning bir tomoni
+  source         CashTxnSource @default(MANUAL)
+  isLocked       Boolean       @default(false) // ko'chirilgan tarix — tahrirlanmaydi
+  sourceRowHash  String?       @unique // import idempotentligi (takroriy yuklash xavfsiz)
+  createdById    Int?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  account      CashAccount     @relation(fields: [accountId], references: [id])
+  article      CashFlowArticle @relation(fields: [articleId], references: [id])
+  counterparty Counterparty?   @relation(fields: [counterpartyId], references: [id])
+  costCenter   CostCenter?     @relation(fields: [costCenterId], references: [id])
+  transfer     CashTransfer?   @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  createdBy    User?           @relation(fields: [createdById], references: [id])
+
+  @@index([businessDate])
+  @@index([accountId, businessDate])
+  @@index([articleId, businessDate])
+  @@index([counterpartyId])
+  @@index([costCenterId])
+  @@index([transferId])
+}
+
+/// Kassalararo ko'chirish (Инкасса → BANK, Переброс, Обмен).
+/// Har biri AYNAN 2 ta CashTxn yaratadi — yetim yozuv bo'lishi mumkin emas.
+model CashTransfer {
+  id            Int      @id @default(autoincrement())
+  fromAccountId Int
+  toAccountId   Int
+  amount        Decimal  @db.Decimal(20, 2)
+  occurredAt    DateTime
+  businessDate  DateTime @db.Date
+  note          String?
+  createdById   Int?
+  createdAt     DateTime @default(now())
+
+  fromAccount CashAccount @relation("CashTransferFrom", fields: [fromAccountId], references: [id])
+  toAccount   CashAccount @relation("CashTransferTo", fields: [toAccountId], references: [id])
+  createdBy   User?       @relation(fields: [createdById], references: [id])
+  txns        CashTxn[]
+
+  @@index([businessDate])
+  @@index([fromAccountId])
+  @@index([toAccountId])
+}
+
+/// Davr boshi qoldig'i — fizik sanash yoki tarix importidan ("Остатка" moddasi).
+model CashAccountOpening {
+  id        Int      @id @default(autoincrement())
+  accountId Int
+  onDate    DateTime @db.Date
+  amount    Decimal  @db.Decimal(20, 2)
+  note      String?
+  createdAt DateTime @default(now())
+
+  account CashAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, onDate])
+}
+
+/// Foydalanuvchi qaysi hisoblarga yozuv kirita oladi (2–5 kishi kiritadi).
+/// Bo'sh = cheklovsiz (UserBranch naqshi).
+model UserCashAccount {
+  userId    Int
+  accountId Int
+
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account CashAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@id([userId, accountId])
+  @@index([accountId])
 }

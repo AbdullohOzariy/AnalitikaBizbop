@@ -35,9 +35,11 @@ export const isSystemAdmin = (r: Roles): boolean => hasRole(r, "SYSTEM_ADMIN");
 /** Admin darajasidagi ma'lumotni ko'radi (Baza, Hisobot, Iyerarxiya) — read-only ADMIN ham. */
 export const isAdminTier = (r: Roles): boolean => hasRole(r, "SYSTEM_ADMIN", "ADMIN");
 
-/** Analitikani ko'ruvchilar (dashboardlar, OOS, Stockday, chiqim, rejalar, sotuv). */
+/** Analitikani ko'ruvchilar (dashboardlar, OOS, Stockday, chiqim, rejalar, sotuv).
+ *  FINANCE — moliyachi ATAYLAB shu yerda: u izolyatsiyalanmagan, P&L konteksti uchun
+ *  savdo raqamlarini ham ko'radi (MOLIYA_PLAN.md, 9-qaror). */
 export const canSeeAnalytics = (r: Roles): boolean =>
-  hasRole(r, "SYSTEM_ADMIN", "ADMIN", "CAT_MANAGER", "CEO", "SUPPLYCHAIN", "HEAD_CAT_MANAGER");
+  hasRole(r, "SYSTEM_ADMIN", "ADMIN", "CAT_MANAGER", "CEO", "SUPPLYCHAIN", "HEAD_CAT_MANAGER", "FINANCE");
 
 /** Zakaz yaratish/yuritish: menejer, boshi, supplychain yoki SYSTEM_ADMIN. */
 export const canManageOrders = (r: Roles): boolean =>
@@ -152,3 +154,41 @@ export const canManageInventoryItems = (r: Roles): boolean =>
  *  DIQQAT: bu sof KO'RISH/eksport gate'i; hech qanday mutatsiya bunga bog'lanmasin (INVENTORY read-only). */
 export const canSeeBazaSotuv = (r: Roles): boolean =>
   hasRole(r, "SYSTEM_ADMIN", "ADMIN", "INVENTORY");
+
+// ─── Moliya (kassa / DDS / treasury) ──────────────────────────────────────────
+// FINANCE — IZOLYATSIYALANMAGAN rol: Moliya bo'limini to'liq boshqaradi va
+// analitika/sotuvni ham ko'radi (canSeeAnalytics ichida). Shuning uchun
+// auth.config.ts dagi ISOLATED ro'yxatiga QO'SHILMAYDI — himoya sahifa guard'ida.
+// Batafsil: MOLIYA_PLAN.md
+
+/** Moliyachi roli (yordamchi tekshiruvlar uchun). */
+export const isFinance = (r: Roles): boolean => hasRole(r, "FINANCE");
+
+/** Moliya bo'limini KO'RA oladiganlar — read-only ADMIN va CEO ham ko'radi. */
+export const canSeeFinance = (r: Roles): boolean =>
+  hasRole(r, "SYSTEM_ADMIN", "ADMIN", "CEO", "FINANCE");
+
+/** Kassa yozuvini (kirim/chiqim/ko'chirish) KIRITA oladiganlar.
+ *  ADMIN va CEO — read-only kuzatuvchi, bu yerda YO'Q.
+ *  Yozuvni 2–5 kishi kiritadi; har biri UserCashAccount orqali o'z hisob(lar)iga bog'lanadi. */
+export const canEnterCash = (r: Roles): boolean => hasRole(r, "SYSTEM_ADMIN", "FINANCE");
+
+/** Moliya ma'lumotnomalarini (modda ierarxiyasi, hisoblar, kontragent) TAHRIRLASH. */
+export const canManageFinanceRefs = (r: Roles): boolean =>
+  hasRole(r, "SYSTEM_ADMIN", "FINANCE");
+
+// ─── Boshlang'ich sahifa ──────────────────────────────────────────────────────
+
+/** Rolga mos boshlang'ich sahifa — eng keng ruxsatdan boshlab tanlanadi.
+ *
+ *  MUHIM: bu funksiya canSeeAnalytics FALSE bo'lgan rol uchun HECH QACHON
+ *  "/dashboard" qaytarmaydi. Aks holda "/" → "/dashboard" → guard fail → "/"
+ *  cheksiz halqasi paydo bo'ladi (shu sabab bilan tuzatildi). */
+export function landingPathFor(r: Roles): string {
+  if (canSeeAnalytics(r)) return "/dashboard";
+  if (isInventoryRole(r)) return "/sotuv-dashboard";
+  if (isOperator(r)) return "/chiqim";
+  if (isLogist(r)) return "/logistika/hozir";
+  if (isMerchandiser(r)) return "/promo/doimiy";
+  return "/login";
+}

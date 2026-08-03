@@ -22,7 +22,7 @@ import {
 import { dailyForecastSeries } from "@/lib/forecast";
 import { computeWriteoffControl } from "@/lib/spisaniya/writeoff-plan";
 import { isoDay, parseDateParam } from "@/lib/date";
-import { canSeeAnalytics } from "@/lib/roles";
+import { canSeeAnalytics, landingPathFor } from "@/lib/roles";
 import { scopeSubIds } from "@/lib/scope";
 import { formatUZS, formatNumber, formatPercent } from "@/lib/format";
 import { Card, CardContent } from "@/components/ui/card";
@@ -586,8 +586,9 @@ export default async function DashboardPage({
 }) {
   const session = await auth();
   if (!session) redirect("/login");
-  // Analitikani ko'ruvchilar (admin tier, CEO, SUPPLYCHAIN, kategoriya menejerlari).
-  if (!canSeeAnalytics(session.user.roles)) redirect("/");
+  // Analitikani ko'ruvchilar (admin tier, CEO, SUPPLYCHAIN, kategoriya menejerlari, moliyachi).
+  // "/" EMAS — u yana shu yerga qaytarib halqa hosil qilardi; rolga mos bo'limga yuboramiz.
+  if (!canSeeAnalytics(session.user.roles)) redirect(landingPathFor(session.user.roles));
 
   const sp = await searchParams;
   // Parallel — ketma-ket await DB roundtrip'larini zanjirlab yuborardi (waterfall).

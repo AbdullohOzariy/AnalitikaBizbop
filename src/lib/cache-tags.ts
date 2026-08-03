@@ -13,3 +13,5 @@ export const TAG_BRANCHES = "branches";
 export const TAG_PARTNERSHIP = "partnership";
 // Community (mijozlar guruhi) — AI tahlili yangilanganda yoki qo'lda tuzatilganda.
 export const TAG_COMMUNITY = "community";
+// Moliya (kassa/DDS) — ma'lumotnoma yoki kassa yozuvi o'zgarganda.
+export const TAG_MOLIYA = "moliya";

@@ -48,6 +48,9 @@ import {
   LogIn,
   MessagesSquare,
   ShieldAlert,
+  Coins,
+  BookMarked,
+  Receipt,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -102,7 +105,7 @@ const SA = "SYSTEM_ADMIN" as const; // to'liq admin
 
 /** Guruhsiz, eng yuqori darajadagi bo'limlar. */
 const ROOT_ITEMS: NavItem[] = [
-  { href: "/dashboard", label: "Bosh sahifa", icon: LayoutDashboard, roles: [SA, A, "CAT_MANAGER", "CEO", "SUPPLYCHAIN", "HEAD_CAT_MANAGER"] },
+  { href: "/dashboard", label: "Bosh sahifa", icon: LayoutDashboard, roles: [SA, A, "CAT_MANAGER", "CEO", "SUPPLYCHAIN", "HEAD_CAT_MANAGER", "FINANCE"] },
 ];
 
 const NAV_GROUPS: NavGroup[] = [
@@ -118,7 +121,6 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/pme",             label: "PME analyze",     icon: Gem,             roles: [SA, A, "CAT_MANAGER", "SUPPLYCHAIN", "HEAD_CAT_MANAGER"] },
       { href: "/analyze",         label: "Analyze (narx)",  icon: ScanSearch,      roles: [SA, A, "CAT_MANAGER", "SUPPLYCHAIN", "HEAD_CAT_MANAGER"] },
       { href: "/report",          label: "Hisobot",         icon: Table2,          roles: [SA, A, "SUPPLYCHAIN"] },
-      { href: "/strategik-hamkorlik", label: "Strategik hamkorlik", icon: Handshake, roles: [SA, A, "CEO", "SUPPLYCHAIN"] },
       { href: "/rejalar",         label: "Rejalar",         icon: ClipboardList,   roles: [SA, A, "CAT_MANAGER", "CEO", "HEAD_CAT_MANAGER"] },
     ],
   },
@@ -130,7 +132,17 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/sotuv/sotib-olish", label: "Sotib olish", icon: ShoppingCart, roles: [SA, A, "CAT_MANAGER", "SUPPLYCHAIN", "HEAD_CAT_MANAGER", "CEO"] },
       { href: "/sotuv/nazorat",     label: "Zakaz nazorati", icon: ShieldAlert, roles: [SA, A, "CAT_MANAGER", "SUPPLYCHAIN", "HEAD_CAT_MANAGER", "CEO"] },
       { href: "/sverka",            label: "Sverka",      icon: FileCheck2,   roles: [SA, A, "SUPPLYCHAIN", "CEO", "OPERATOR"] },
-      { href: "/sotuv/finans",      label: "Finans",      icon: Wallet,       roles: [SA, A, "CEO"] },
+    ],
+  },
+  {
+    // MOLIYA — kassa/DDS (treasury). FINANCE izolyatsiyalanmagan rol: bu bo'limni
+    // to'liq boshqaradi va analitikani ham ko'radi. Reja: MOLIYA_PLAN.md
+    label: "Moliya",
+    icon: Wallet,
+    items: [
+      { href: "/moliya/kassa",       label: "Kassa jurnali", icon: Coins,      roles: [SA, A, "CEO", "FINANCE"] },
+      { href: "/moliya/malumotnoma", label: "Moddalar",      icon: BookMarked, roles: [SA, A, "CEO", "FINANCE"] },
+      { href: "/sotuv/finans",       label: "Harajatlar",    icon: Receipt,    roles: [SA, A, "CEO", "FINANCE"] },
     ],
   },
   {
@@ -175,6 +187,9 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/baza/tashrif",       label: "Tashriflar",        icon: Footprints,    roles: [SA, A] },
       { href: "/iyerarxiya",         label: "Iyerarxiya",        icon: Tag,           roles: [SA, A] },
       { href: "/baza/taminotchilar", label: "Yetkazib beruvchilar",    icon: Truck,         roles: [SA, A, "SUPPLYCHAIN", "HEAD_CAT_MANAGER", "CAT_MANAGER"] },
+      // Analitika'dan ko'chirildi (loyiha egasining qarori) — ta'minotchi shartlari
+      // master-data qatorida turadi.
+      { href: "/strategik-hamkorlik", label: "Strategik hamkorlik", icon: Handshake,   roles: [SA, A, "CEO", "SUPPLYCHAIN"] },
       { href: "/baza/moslanmagan",   label: "Moslanmagan",       icon: PackageSearch, roles: [SA, A] },
     ],
   },

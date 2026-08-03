@@ -13,7 +13,8 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "build:miniapp": "cd bot/miniapp && npm ci && npm run build && rm -rf ../../public/miniapp && cp -r dist ../../public/miniapp"
+    "build:miniapp": "cd bot/miniapp && npm ci && npm run build && rm -rf ../../public/miniapp && cp -r dist ../../public/miniapp",
+    "db:seed-moliya": "tsx prisma/seed-moliya.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.100.1",
