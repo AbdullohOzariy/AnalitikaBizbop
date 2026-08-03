@@ -428,37 +428,44 @@ const WO_TEXT: Record<WoBranchCell["status"], string> = {
   none: "text-muted-foreground/50",
 };
 
-function BranchPct({
-  cell,
-  wo,
-  small,
-}: {
-  cell?: PlanBranchCell;
-  wo?: WoBranchCell;
-  small?: boolean;
-}) {
+/** Filial ustuni — SAVDO reja bajarilishi %. */
+function BranchSalesPct({ cell, small }: { cell?: PlanBranchCell; small?: boolean }) {
   const pct = cell?.planPct ?? null;
-  const woTxt = woMatn(wo);
   return (
     <span
       className={cn("shrink-0 text-right tabular-nums", small ? "w-[62px]" : "w-[68px]")}
       title={
-        [
-          cell && cell.plan > 0
-            ? `Savdo: fakt ${formatUZS(cell.fact)} ÷ reja ${formatUZS(cell.plan)}`
-            : "Savdo rejasi qo'yilmagan",
-          wo && wo.factPct != null
-            ? `Chiqim: fakt ${wo.factPct.toFixed(1)}%${wo.planPct != null ? ` / reja ${wo.planPct.toFixed(1)}%` : ""} — ${WO_HINT[wo.status]}`
-            : "Chiqim: ma'lumot yo'q",
-        ].join("\n")
+        cell && cell.plan > 0
+          ? `Savdo: fakt ${formatUZS(cell.fact)} ÷ reja ${formatUZS(cell.plan)}`
+          : "Savdo rejasi qo'yilmagan"
       }
     >
       <span className={cn("block", small ? "text-[10px]" : "text-[11px] font-medium", planColor(pct))}>
         {pct != null ? `${pct.toFixed(0)}%` : "—"}
       </span>
-      {/* Chiqim savdo foizining OSTIDA — alohida ustun qilinsa jadval ikki barobar
-          kengayardi va nom ustuni siqilib ketardi. */}
-      <span className={cn("block text-[9px] leading-tight", woTxt ? WO_TEXT[wo!.status] : "text-muted-foreground/30")}>
+    </span>
+  );
+}
+
+/** Filial ustuni — CHIQIM (spisaniya) fakt/reja %. */
+function BranchWoPct({ wo, small }: { wo?: WoBranchCell; small?: boolean }) {
+  const woTxt = woMatn(wo);
+  return (
+    <span
+      className={cn("shrink-0 text-right tabular-nums", small ? "w-[62px]" : "w-[68px]")}
+      title={
+        wo && wo.factPct != null
+          ? `Chiqim: fakt ${wo.factPct.toFixed(1)}%${wo.planPct != null ? ` / reja ${wo.planPct.toFixed(1)}%` : ""} — ${WO_HINT[wo.status]}`
+          : "Chiqim: ma'lumot yo'q"
+      }
+    >
+      <span
+        className={cn(
+          "block font-medium",
+          small ? "text-[10px]" : "text-[11px]",
+          woTxt ? WO_TEXT[wo!.status] : "text-muted-foreground/30"
+        )}
+      >
         {woTxt ?? "—"}
       </span>
     </span>
@@ -470,6 +477,7 @@ export function PlanHierarchyWidget({
   branches,
   writeoff,
   writeoffLimitPct,
+  mode = "savdo",
 }: {
   data: PlanGroupNode[];
   /** Filial ustunlari (bo'sh — bitta filial tanlangan, kesim ko'rsatilmaydi). */
@@ -478,7 +486,14 @@ export function PlanHierarchyWidget({
   writeoff?: WoCell[];
   /** Kompaniya bo'yicha qo'lda qo'yilgan chiqim chegarasi (AppSetting) — kontekst uchun */
   writeoffLimitPct?: number | null;
+  /**
+   * Qaysi kesim ko'rsatiladi. Daraxt (bo'lim → kategoriya → subkat) ikkalasida
+   * AYNI — faqat o'ng tomondagi metrik ustunlari farq qiladi. Ilgari ikkalasi
+   * bitta kartada edi va filial ustuni ikki qavatli bo'lib o'qish qiyin edi.
+   */
+  mode?: "savdo" | "chiqim";
 }) {
+  const isWo = mode === "chiqim";
   const fb = branches ?? [];
   /** Tugundagi filial kataklarini `branches` tartibida qaytaradi. */
   const bc = (n: { byBranch?: PlanBranchCell[] }) =>
@@ -505,16 +520,20 @@ export function PlanHierarchyWidget({
     <ExpandableCard
       title={
         <span className="flex flex-wrap items-center gap-2">
-          <span>Reja bajarilishi — bo&apos;lim va kategoriyalar</span>
-          <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-            savdo: fakt ÷ reja · chiqim: fakt/reja %
+          <span>
+            {isWo
+              ? "Chiqim nazorati — bo'lim va kategoriyalar"
+              : "Reja bajarilishi — bo'lim va kategoriyalar"}
           </span>
-          {writeoffLimitPct != null && (
+          <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+            {isWo ? "chiqim: fakt/reja %" : "savdo: fakt ÷ reja"}
+          </span>
+          {isWo && writeoffLimitPct != null && (
             <span
               className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
               title="Kompaniya bo'yicha chiqim chegarasi (Sozlamalar)"
             >
-              chiqim chegarasi {writeoffLimitPct.toFixed(1)}%
+              chegara {writeoffLimitPct.toFixed(1)}%
             </span>
           )}
         </span>
@@ -531,14 +550,23 @@ export function PlanHierarchyWidget({
           {/* Ustun sarlavhalari */}
           <div className="flex items-center gap-2 px-2 pb-1 pl-8 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
             <span className="flex-1">Bo&apos;lim / kategoriya</span>
-            <span className="w-[96px] text-center">Chiqim</span>
             {fb.map((b) => (
-              <span key={b.id} className="w-[68px] truncate text-right" title={`${b.name} — yuqorida savdo rejasi %, pastida chiqim fakt/reja %`}>
+              <span
+                key={b.id}
+                className="w-[68px] truncate text-right"
+                title={isWo ? `${b.name} — chiqim fakt/reja %` : `${b.name} — savdo rejasi bajarilishi %`}
+              >
                 {b.name}
               </span>
             ))}
-            <span className="w-24">Savdo rejasi</span>
-            <span className="w-14 text-right">{fb.length > 0 ? "Jami" : "%"}</span>
+            {isWo ? (
+              <span className="w-[96px] text-center">Jami</span>
+            ) : (
+              <>
+                <span className="w-24">Savdo rejasi</span>
+                <span className="w-14 text-right">{fb.length > 0 ? "Jami" : "%"}</span>
+              </>
+            )}
           </div>
           {data.map((g) => {
             const gOpen = openGroups.has(g.id);
@@ -551,10 +579,18 @@ export function PlanHierarchyWidget({
                 >
                   <ChevronRight className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", gOpen && "rotate-90")} />
                   <span className="flex-1 truncate text-sm font-semibold">{g.name}</span>
-                  <WoBadge wo={wo("g", g.id)} />
-                  {bc(g).map((cell, i) => <BranchPct key={fb[i].id} cell={cell} wo={woBc("g", g.id)[i]} />)}
-                  <PlanMiniBar pct={g.planPct} />
-                  <PlanPct pct={g.planPct} />
+                  {isWo ? (
+                    <>
+                      {woBc("g", g.id).map((w, i) => <BranchWoPct key={fb[i].id} wo={w} />)}
+                      <WoBadge wo={wo("g", g.id)} />
+                    </>
+                  ) : (
+                    <>
+                      {bc(g).map((cell, i) => <BranchSalesPct key={fb[i].id} cell={cell} />)}
+                      <PlanMiniBar pct={g.planPct} />
+                      <PlanPct pct={g.planPct} />
+                    </>
+                  )}
                 </button>
 
                 {gOpen && (
@@ -576,10 +612,18 @@ export function PlanHierarchyWidget({
                               )}
                             />
                             <span className="flex-1 truncate text-[13px]">{c.name}</span>
-                            <WoBadge wo={wo("c", c.id)} />
-                            {bc(c).map((cell, i) => <BranchPct key={fb[i].id} cell={cell} wo={woBc("c", c.id)[i]} />)}
-                            <PlanMiniBar pct={c.planPct} />
-                            <PlanPct pct={c.planPct} />
+                            {isWo ? (
+                              <>
+                                {woBc("c", c.id).map((w, i) => <BranchWoPct key={fb[i].id} wo={w} />)}
+                                <WoBadge wo={wo("c", c.id)} />
+                              </>
+                            ) : (
+                              <>
+                                {bc(c).map((cell, i) => <BranchSalesPct key={fb[i].id} cell={cell} />)}
+                                <PlanMiniBar pct={c.planPct} />
+                                <PlanPct pct={c.planPct} />
+                              </>
+                            )}
                           </button>
 
                           {cOpen && c.subs.length > 0 && (
@@ -587,10 +631,18 @@ export function PlanHierarchyWidget({
                               {c.subs.map((s) => (
                                 <div key={s.id} className="flex items-center gap-2 py-1">
                                   <span className="flex-1 truncate text-xs text-muted-foreground">{s.name}</span>
-                                  <WoBadge wo={wo("s", s.id)} small />
-                                  {bc(s).map((cell, i) => <BranchPct key={fb[i].id} cell={cell} wo={woBc("s", s.id)[i]} small />)}
-                                  <PlanMiniBar pct={s.planPct} small />
-                                  <PlanPct pct={s.planPct} small />
+                                  {isWo ? (
+                                    <>
+                                      {woBc("s", s.id).map((w, i) => <BranchWoPct key={fb[i].id} wo={w} small />)}
+                                      <WoBadge wo={wo("s", s.id)} small />
+                                    </>
+                                  ) : (
+                                    <>
+                                      {bc(s).map((cell, i) => <BranchSalesPct key={fb[i].id} cell={cell} small />)}
+                                      <PlanMiniBar pct={s.planPct} small />
+                                      <PlanPct pct={s.planPct} small />
+                                    </>
+                                  )}
                                 </div>
                               ))}
                             </div>

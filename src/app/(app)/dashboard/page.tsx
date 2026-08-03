@@ -508,8 +508,17 @@ async function ChartsSection({
         planDays={groupPlan.days}
       />
 
-      {/* Kategoriyalar — Iyerarxiya bilan bir xil daraxt (bo'lim → kategoriya → subkat) */}
+      {/* Kategoriyalar — Iyerarxiya bilan bir xil daraxt (bo'lim → kategoriya → subkat).
+          Savdo va chiqim ATAYLAB ikki alohida kartada: bitta kartada filial ustuni
+          ikki qavatli bo'lib, ikkala raqamni ham o'qish qiyin edi. */}
       <PlanHierarchyWidget
+        mode="savdo"
+        data={planTree.groups}
+        branches={planTree.branches}
+      />
+
+      <PlanHierarchyWidget
+        mode="chiqim"
         data={planTree.groups}
         branches={planTree.branches}
         writeoff={woCells}
