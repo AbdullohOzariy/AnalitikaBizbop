@@ -82,7 +82,7 @@ export const authConfig = {
       }
       // IZOLATSIYA (ko'p-rol): faqat foydalanuvchining BARCHA rollari izolatsiyalangan
       // bo'lsa cheklov qoladi. Bittasi ham normal rol bo'lsa — to'liq kirish (union).
-      // MERCHANDISER → /promo (+/api/promo); OPERATOR → /chiqim,/sverka (+/api/*).
+      // MERCHANDISER → /promo, /marketing/community (+/api/promo); OPERATOR → /chiqim,/sverka (+/api/*).
       // Ikki izolatsiyalangan rol birga bo'lsa — ruxsat etilgan yo'llar birlashadi.
       if (isLoggedIn) {
         const u = (auth as { user?: { role?: string; roles?: string[] } })?.user;
@@ -91,7 +91,12 @@ export const authConfig = {
         const allIsolated = roles.length > 0 && roles.every((r) => ISOLATED.has(r));
         if (allIsolated) {
           const allowed: string[] = [];
-          if (roles.includes("MERCHANDISER")) allowed.push("/promo", "/api/promo");
+          // "/marketing/community" — sidebar'da MERCHANDISER'ga ALLAQACHON ko'rinardi,
+          // lekin bu yerda ochilmagani uchun havola bosilganda /promo/doimiy ga
+          // qaytarib yuborilardi. Sahifa guard'i canSeePromo (uni o'tkazadi) va
+          // tahrir faqat SYSTEM_ADMIN'da — ya'ni bu sof o'qish ruxsati.
+          // Sahifa server action ishlatadi (alohida /api prefiksi kerak emas).
+          if (roles.includes("MERCHANDISER")) allowed.push("/promo", "/api/promo", "/marketing/community");
           if (roles.includes("OPERATOR")) allowed.push("/chiqim", "/sverka", "/api/chiqim", "/api/sverka");
           // LOGIST — logistika nazoratchisi: faqat reyslar bo'limi (ma'lumotnoma + fors-major).
           if (roles.includes("LOGIST")) allowed.push("/logistika", "/api/logistika");
