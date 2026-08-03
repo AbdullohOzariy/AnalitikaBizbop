@@ -59,8 +59,8 @@ export default async function MoliyaMalumotnomaPage() {
     <div className="space-y-5">
       <PageHeader
         icon={BookMarked}
-        title="Moddalar ma'lumotnomasi"
-        description="Pul oqimi moddalari (Статья ДДС) — bo'lim → guruh → modda. «Neytral» bayrog'i shu yerda bir marta qo'yiladi va barcha hisobotga tarqaladi."
+        title="PQ Bo'limlari"
+        description="Pul oqimi (ДДС) bo'limlari — uch daraja: bo'lim → guruh → modda. «Neytral» bayrog'i shu yerda bir marta qo'yiladi va barcha hisobotga tarqaladi."
       />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
