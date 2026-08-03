@@ -2234,3 +2234,57 @@ model UserCashAccount {
   @@id([userId, accountId])
   @@index([accountId])
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// INTEGRATSIYA — tashqi tizim (1C) PUSH qiladigan hodisalar.
+//
+// PRINSIP: avval XOM saqlanadi, keyin qayta ishlanadi.
+// 1C konfiguratsiyalari har xil va sxema kelishuv jarayonida o'zgaradi. Agar biz
+// qabul paytida parse qilib, tushunmaganini rad etsak — ma'lumot YO'QOLADI va
+// 1C tomonda qayta yuborish mexanizmi bo'lmasligi mumkin. Shuning uchun endpoint
+// payload'ni o'zgartirmasdan yozadi va 200 qaytaradi; biznes mantiq alohida
+// bosqichda (status PENDING → PROCESSED) ishlaydi.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+enum IntegrationSource {
+  ONEC // 1C
+}
+
+enum IntegrationEventStatus {
+  PENDING // qabul qilindi, hali qayta ishlanmagan
+  PROCESSED // biznes modelga yozildi
+  FAILED // qayta ishlashda xato — attempts oshadi, qayta urinish mumkin
+  SKIPPED // ataylab e'tiborsiz qoldirildi (kerak bo'lmagan hujjat turi)
+}
+
+model IntegrationEvent {
+  id          Int                    @id @default(autoincrement())
+  source      IntegrationSource      @default(ONEC)
+  /// 1C obyekt turi — kelgan holicha ("ЧекККМ", "ПоступлениеТоваровУслуг",
+  /// "ПеремещениеТоваров", "СписаниеТоваров"...). Ro'yxat oldindan qotirilmaydi:
+  /// yangi tur kelsa ham qabul qilinadi va bu yerda ko'rinadi.
+  kind        String
+  /// 1C `Ref_Key` (GUID) — hujjatning barqaror identifikatori.
+  externalId  String?
+  /// Hujjat raqami (`Номер`) — odam o'qiydigan ko'rinish uchun.
+  externalNo  String?
+  /// Hujjat sanasi (`Дата`) — 1C bergan. Qabul vaqti bilan adashtirmaslik uchun alohida.
+  occurredAt  DateTime?
+  /// Xom JSON — o'zgartirilmasdan saqlanadi.
+  payload     Json
+  /// sha256(payload) — takroriy yuborish DUBL YARATMAYDI (1C retry qilsa xavfsiz).
+  payloadHash String                 @unique
+  status      IntegrationEventStatus @default(PENDING)
+  /// Qayta ishlash xatosi (foydalanuvchiga ko'rsatiladi, sir tozalangan holda).
+  error       String?
+  attempts    Int                    @default(0)
+  /// Bitta so'rovda kelgan guruh — nosozlikni izlashda butun partiyani ko'rish uchun.
+  batchId     String?
+  receivedAt  DateTime               @default(now())
+  processedAt DateTime?
+
+  @@index([status, receivedAt])
+  @@index([kind, occurredAt])
+  @@index([externalId])
+  @@index([batchId])
+}

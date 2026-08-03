@@ -51,6 +51,7 @@ import {
   Coins,
   BookMarked,
   Receipt,
+  Plug,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -113,7 +114,10 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Analitika",
     icon: BarChart3,
     items: [
-      { href: "/sotuv-dashboard", label: "Sotuv Dashboard", icon: Target,          roles: [SA, A, "CEO", "SUPPLYCHAIN"] },
+      // INVENTORY ATAYLAB shu yerda: sahifa guard'i (sotuv-dashboard/page.tsx) va
+      // auth.config uni o'tkazadi, login'dan keyin ham aynan shu sahifaga tushadi —
+      // lekin menyuda havolasi yo'q edi, ya'ni boshqa bo'limga o'tsa qaytolmasdi.
+      { href: "/sotuv-dashboard", label: "Sotuv Dashboard", icon: Target,          roles: [SA, A, "CEO", "SUPPLYCHAIN", "INVENTORY"] },
       { href: "/oos",             label: "OOS",             icon: PackageX,        roles: [SA, A, "CAT_MANAGER", "CEO", "SUPPLYCHAIN", "HEAD_CAT_MANAGER"] },
       { href: "/stockday",        label: "Stockday",        icon: Hourglass,       roles: [SA, A, "CAT_MANAGER", "CEO", "SUPPLYCHAIN", "HEAD_CAT_MANAGER"] },
       { href: "/prognoz",         label: "Talab prognozi",  icon: TrendingUp,      roles: [SA, A, "CAT_MANAGER", "CEO", "SUPPLYCHAIN", "HEAD_CAT_MANAGER"] },
@@ -216,6 +220,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/admin/users",       label: "Foydalanuvchilar", icon: Users,     roles: [SA] },
       { href: "/admin/kirishlar",   label: "Kirishlar",        icon: LogIn,     roles: [SA] },
       { href: "/admin/anketa",      label: "Anketa",           icon: FileText,  roles: [SA, A, "SUPPLYCHAIN"] },
+      { href: "/admin/integratsiya", label: "Integratsiya (1C)", icon: Plug,     roles: [SA] },
       { href: "/admin/sozlamalar",  label: "Sozlamalar",       icon: Settings,  roles: [SA] },
     ],
   },

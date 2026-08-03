@@ -251,3 +251,124 @@ npx tsx scripts/1c-explore.ts Catalog_Номенклатура --n 3   # namuna 
 
 Skript **faqat o'qiydi**, 401/404 xatolarini 1C tilida izohlaydi
 (huquq yetmasa / publikatsiya yoqilmagan bo'lsa).
+
+---
+
+## Ilova V — PUSH rejimi: 1C bizga yuboradi (TAYYOR, ishlaydi)
+
+> Loyiha egasi qarori: 1C **o'zi push qiladi** — cheklar va hujjatlar (prixod, rasxod,
+> peremesheniya…) jarayon sodir bo'lishi bilan avtomatik yuboriladi. Bu OData'dan
+> tortib olishdan afzal: 1C bazasi so'rovlar bilan yuklanmaydi, ma'lumot real vaqtda keladi.
+
+**Holat:** qabul qiluvchi endpoint **qurildi va ishlaydi**. Qayta ishlash (biznes modelga
+yozish) — keyingi bosqich; hozircha hamma narsa xom holda saqlanadi va `/admin/integratsiya`
+sahifasida ko'rinadi.
+
+### Asosiy dizayn qarori — avval saqlash, keyin tushunish
+
+Endpoint payload'ni **parse qilmaydi va tekshirmaydi**. Sabab: sxema kelishuvi hali
+davom etyapti; agar biz tushunmagan hujjatni rad etsak, 1C tomonda qayta yuborish
+mexanizmi bo'lmasligi mumkin va **ma'lumot butunlay yo'qoladi**. Shuning uchun:
+
+- har qanday JSON qabul qilinadi (turi ko'rsatilmagan bo'lsa ham — `UNKNOWN` bo'lib saqlanadi);
+- `200 OK` qaytdi = **bazaga yozildi**, ya'ni 1C uni "yuborildi" deb belgilashi mumkin;
+- `sha256(payload)` unique — takroriy yuborish **dubl yaratmaydi** (kalitlar tartibi
+  o'zgarsa ham hash bir xil bo'ladi).
+
+### Техническое задание для 1С (можно копировать)
+
+**Куда отправлять**
+
+```
+POST https://analitika.oilagroup.uz/api/1c/ingest
+Content-Type: application/json
+Authorization: Bearer <ТОКЕН>
+```
+
+Токен выдаём мы (передаётся отдельно, не по открытому каналу). Вместо `Authorization`
+можно использовать заголовок `X-Ingest-Token` — если в 1С так проще.
+
+Проверка связи (без отправки данных):
+
+```
+GET https://analitika.oilagroup.uz/api/1c/ingest
+Authorization: Bearer <ТОКЕН>
+```
+
+Ответ `200` со схемой ожидаемого формата. Если токен неверный — `404` (endpoint
+намеренно не раскрывает своё существование).
+
+**Формат тела**
+
+Принимаются три формы — какая удобнее в 1С:
+
+```jsonc
+// 1) один документ
+{ "kind": "ЧекККМ", "id": "...", "number": "...", "date": "...", "data": { } }
+
+// 2) массив
+[ { }, { } ]
+
+// 3) пакет
+{ "events": [ { }, { } ] }
+```
+
+Поля события:
+
+| Поле | Обяз. | Что это | Синонимы (тоже распознаются) |
+|---|---|---|---|
+| `kind` | желательно | Тип объекта 1С: `ЧекККМ`, `ПоступлениеТоваровУслуг`, `ПеремещениеТоваров`, `СписаниеТоваров`, `ВозвратТоваровПоставщику`, `ИнвентаризацияТоваров`… | `type`, `Тип`, `ВидДокумента` |
+| `id` | желательно | `Ref_Key` (GUID) документа | `Ref_Key`, `Ссылка`, `guid` |
+| `number` | нет | `Номер` документа | `Номер`, `no` |
+| `date` | нет | `Дата` документа, ISO | `Дата`, `timestamp` |
+| `data` | — | Тело документа: **любая структура**, включая табличные части | — |
+
+**Важно:** сохраняется **весь объект целиком**, а не только `data`. Поля верхнего
+уровня тоже не теряются. Список `kind` заранее не ограничен — новый тип документа
+будет принят и появится в интерфейсе.
+
+**Ответ**
+
+```json
+{ "ok": true, "batchId": "…", "received": 3, "accepted": 3, "duplicates": 0 }
+```
+
+| Код | Значение | Что делать в 1С |
+|---|---|---|
+| `200` | Записано (или уже было — `duplicates`) | Пометить как выгруженное |
+| `400` | Тело не JSON | Ошибка формата — не повторять |
+| `404` | Токен неверный/не задан | Проверить токен |
+| `413` | Слишком большой пакет | Уменьшить порцию |
+| `500` | Ошибка на нашей стороне | **Повторить позже** — дубля не будет |
+
+**Ограничения**
+
+- До **1000** событий в одном запросе, тело до **8 МБ**.
+- Повторная отправка безопасна: определяется по содержимому (`sha256`), а не по номеру.
+- Часовой пояс: если в `date` не указана зона, значение читается как **UTC**.
+  ⚠️ Если 1С отдаёт локальное время (Asia/Tashkent, +05:00) — **сообщите**,
+  мы поменяем в одном месте. Либо отправляйте с зоной: `2026-08-03T10:22:00+05:00`.
+
+**Что желательно уточнить**
+
+1. Отправка идёт **сразу при проведении** документа или пакетом по расписанию?
+2. Что происходит при недоступности нашего сервера — есть ли очередь и повтор?
+3. Отправляются ли **изменения/отмены проведения** уже отправленных документов?
+   (нам важно, чтобы задним числом не «поплыли» цифры)
+4. Чеки — по одному или агрегатом за смену? Ожидаемый объём в сутки?
+
+### Bizning tomonda
+
+- Sozlama: Railway env `ONEC_INGEST_TOKEN=<uzun tasodifiy satr>`.
+  **Token qo'yilmasa endpoint hamma so'rovga 404 qaytaradi** — ataylab: unutilsa ochiq qolmasin.
+- Ko'rish: **Tizim → Integratsiya (1C)** (`/admin/integratsiya`) — kelgan hodisalar, tur/holat
+  bo'yicha filtr, xom payload va uni nusxalash.
+- Model: `IntegrationEvent` (`prisma/schema.prisma`), mantiq: `src/lib/integratsiya/ingest.ts`
+  (21 unit test), endpoint: `src/app/api/1c/ingest/route.ts`.
+
+### Keyingi bosqich (hali qilinmagan)
+
+Kelgan hodisalarni biznes modelga yozish: `ЧекККМ` → `DailyReceiptMetric`/`ProductSales`,
+`ПоступлениеТоваровУслуг` → `PurchaseOrder`, `ПеремещениеТоваров` → `Distribution`/`BranchTransfer`,
+`СписаниеТоваров` → chiqim. Buni **real payload namunalari kelgandan keyin** yozamiz —
+shuning uchun ham xom saqlash birinchi qadam qilib tanlandi.
