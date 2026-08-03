@@ -6,9 +6,30 @@
 > `/moliya/dds` (hisobot) · `/moliya/kontragentlar` (reyestr + birlashtirish) ·
 > `/moliya/import` (tarix ko'chirish) · `/moliya/moslanmagan` · `/moliya/malumotnoma`.
 >
+> **JONLI BAZADA:** seed bajarildi (68 modda, 13 hisob, 16 xarajat markazi) va
+> **5 oylik tarix ko'chirildi** — 9 384 yozuv (01.03–01.08.2026), checksum so'mma-so'm mos
+> keldi (76 296 133 448 / 76 409 252 787, farq 0). 219 qator moslanmagan (kassa yoki modda
+> ustuni BO'SH bo'lgan qatorlar) — `/moliya/moslanmagan` da hal qilinadi.
+>
 > **Qolgan:** F2 miniapp · F6 HR (ish haqi) integratsiyasi.
-> **Kutilmoqda:** real `.xlsx` fayl (import shu bilan sinaladi), fizik sanash raqamlari,
-> 6 ta modda tasnifi tasdiqlanishi.
+> **Kutilmoqda:** fizik sanash raqamlari, 6 ta modda tasnifi tasdiqlanishi.
+
+### 5 oylik real ma'lumot — tozalashning natijasi
+
+| | Xom (jadval) | Tozalangan (tizim) |
+|---|---|---|
+| Kirim | 76 054 676 948 | **37 445 735 284** operatsion |
+| Chiqim | 75 650 915 654 | **37 178 477 857** operatsion |
+
+**Shishish aynan 2.03×** — 5 kunlik namunada o'lchangan qiymat bilan bir xil chiqdi.
+Ajratilganlar: neytral (inkassa/ko'chirish) **21.49 mlrd**, investitsion **2.43 mlrd**,
+moliyaviy sof **+23.94 mlrd** (kirim 38.48 / chiqim 14.55).
+
+⚠️ **Tekshirilishi kerak:** «Молиявий ёрдам» bo'yicha kirim (38.5 mlrd) operatsion
+tushumdan (37.4 mlrd) KATTA. Bu yo egadan haqiqatan shuncha pul kiritilgan, yoki bu modda
+bankdan naqdga qaytgan pul uchun ham ishlatilgan. Ikkinchisi bo'lsa — u aslida **neytral
+ko'chirish**, va uni «Молиявий ёрдам» deb qoldirish moliyaviy oqimni ikki barobar
+ko'rsatadi. Moliyachi bilan aniqlanishi shart.
 > Manba tahlili: "Копия Касса-Асосий" Google Sheet (fileId `1EcimeS_aZn0Gh2_ejlEHJKTKO8nAAoj4XGYTXzbARBg`),
 > 01.03–02.08.2026, aylanma ~76.3 mlrd UZS, 11 kassa, ~68 «Статья ДДС».
 
