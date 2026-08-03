@@ -103,9 +103,12 @@ function getCollapsedSnapshot() {
 const A = "ADMIN" as const;        // read-only admin
 const SA = "SYSTEM_ADMIN" as const; // to'liq admin
 
-/** Guruhsiz, eng yuqori darajadagi bo'limlar. */
+/** Guruhsiz, eng yuqori darajadagi bo'limlar.
+ *  Nom sahifaning o'z sarlavhasi bilan bir xil bo'lsin ("Dashboard") — drill-down
+ *  o'zgarishida "Bosh sahifa" deb nomlangani foydalanuvchini adashtirdi: u eski
+ *  nomni Analitika guruhi ichidan qidirdi va topa olmadi. */
 const ROOT_ITEMS: NavItem[] = [
-  { href: "/dashboard", label: "Bosh sahifa", icon: LayoutDashboard, roles: [SA, A, "CAT_MANAGER", "CEO", "SUPPLYCHAIN", "HEAD_CAT_MANAGER", "FINANCE"] },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: [SA, A, "CAT_MANAGER", "CEO", "SUPPLYCHAIN", "HEAD_CAT_MANAGER", "FINANCE"] },
 ];
 
 const NAV_GROUPS: NavGroup[] = [
