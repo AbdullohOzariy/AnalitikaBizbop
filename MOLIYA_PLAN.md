@@ -1,10 +1,14 @@
 # Moliya moduli — reja va qabul qilingan qarorlar
 
-> Holat (2026-08-03): **F1 qurildi va ishlaydi.** Tayyor sahifalar:
+> Holat (2026-08-03): **F1, F3, F4 qurildi va ishlaydi.** 9 ta sahifa:
 > `/moliya/kassa` (jurnal + kiritish + ko'chirish) · `/moliya/qoldiq` (fizik sanash) ·
+> `/moliya/yopish` (kunlik yopish + qulf) · `/moliya/nazorat` (anomaliyalar) ·
 > `/moliya/dds` (hisobot) · `/moliya/kontragentlar` (reyestr + birlashtirish) ·
-> `/moliya/malumotnoma` (68 modda).
-> Qolgan: F2 miniapp · F3 tarix importi · F4 kunlik yopish + anomaliya · F6 HR integratsiyasi.
+> `/moliya/import` (tarix ko'chirish) · `/moliya/moslanmagan` · `/moliya/malumotnoma`.
+>
+> **Qolgan:** F2 miniapp · F6 HR (ish haqi) integratsiyasi.
+> **Kutilmoqda:** real `.xlsx` fayl (import shu bilan sinaladi), fizik sanash raqamlari,
+> 6 ta modda tasnifi tasdiqlanishi.
 > Manba tahlili: "Копия Касса-Асосий" Google Sheet (fileId `1EcimeS_aZn0Gh2_ejlEHJKTKO8nAAoj4XGYTXzbARBg`),
 > 01.03–02.08.2026, aylanma ~76.3 mlrd UZS, 11 kassa, ~68 «Статья ДДС».
 

@@ -141,6 +141,7 @@ model User {
   cashTransfers     CashTransfer[] // kiritgan kassalararo ko'chirishlari
   cashAccounts      UserCashAccount[] // yozuv kirita oladigan hisoblari — bo'sh = cheklovsiz
   cashDayCloses     CashDayClose[] // yopgan kunlari (kassa sanashi)
+  cashImports       CashImportBatch[] // yuklagan tarix partiyalari
 }
 
 // Foydalanuvchi ↔ filial (ko'p-ko'p): miniapp'da dashboard/inventar shu filiallar bilan
@@ -2044,13 +2045,14 @@ model CashAccount {
   branch     Branch?     @relation(fields: [branchId], references: [id])
   costCenter CostCenter? @relation(fields: [costCenterId], references: [id])
 
-  aliases      CashAccountAlias[]
-  txns         CashTxn[]
-  openings     CashAccountOpening[]
-  transfersOut CashTransfer[]       @relation("CashTransferFrom")
-  transfersIn  CashTransfer[]       @relation("CashTransferTo")
-  closes       CashDayClose[]
-  users        UserCashAccount[]
+  aliases       CashAccountAlias[]
+  txns          CashTxn[]
+  openings      CashAccountOpening[]
+  transfersOut  CashTransfer[]       @relation("CashTransferFrom")
+  transfersIn   CashTransfer[]       @relation("CashTransferTo")
+  closes        CashDayClose[]
+  unmatchedRows UnmatchedCashRow[]
+  users         UserCashAccount[]
 
   @@index([branchId])
   @@index([costCenterId])
@@ -2168,16 +2170,19 @@ model CashTxn {
   source         CashTxnSource @default(MANUAL)
   isLocked       Boolean       @default(false) // ko'chirilgan tarix — tahrirlanmaydi
   sourceRowHash  String?       @unique // import idempotentligi (takroriy yuklash xavfsiz)
+  /// Qaysi import partiyasidan kelgan — partiyani BEKOR QILISH shu orqali ishlaydi.
+  importBatchId  Int?
   createdById    Int?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
-  account      CashAccount     @relation(fields: [accountId], references: [id])
-  article      CashFlowArticle @relation(fields: [articleId], references: [id])
-  counterparty Counterparty?   @relation(fields: [counterpartyId], references: [id])
-  costCenter   CostCenter?     @relation(fields: [costCenterId], references: [id])
-  transfer     CashTransfer?   @relation(fields: [transferId], references: [id], onDelete: Cascade)
-  createdBy    User?           @relation(fields: [createdById], references: [id])
+  account      CashAccount      @relation(fields: [accountId], references: [id])
+  article      CashFlowArticle  @relation(fields: [articleId], references: [id])
+  counterparty Counterparty?    @relation(fields: [counterpartyId], references: [id])
+  costCenter   CostCenter?      @relation(fields: [costCenterId], references: [id])
+  transfer     CashTransfer?    @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  importBatch  CashImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+  createdBy    User?            @relation(fields: [createdById], references: [id])
 
   @@index([businessDate])
   @@index([accountId, businessDate])
@@ -2185,6 +2190,7 @@ model CashTxn {
   @@index([counterpartyId])
   @@index([costCenterId])
   @@index([transferId])
+  @@index([importBatchId])
 }
 
 /// Kassalararo ko'chirish (Инкасса → BANK, Переброс, Обмен).
@@ -2314,4 +2320,69 @@ model CashDayClose {
 
   @@unique([accountId, onDate])
   @@index([onDate])
+}
+
+enum CashImportStatus {
+  OK
+  FAILED
+}
+
+/// Tarix importi partiyasi (Google Sheets → .xlsx). Har yuklash bir yozuv.
+/// CHECKSUM: manba varaqdagi jami Кирим/Чиқим bilan solishtiriladi; farq bo'lsa
+/// butun partiya RAD ETILADI — jimgina yarim import bo'lmasin.
+model CashImportBatch {
+  id            Int              @id @default(autoincrement())
+  fileName      String
+  fileHash      String // sha256 — bir xil faylni ikki marta yuklashni ogohlantiradi
+  status        CashImportStatus @default(OK)
+  /// Manba varaqdagi jami (sarlavha ustidagi qator)
+  sourceSumIn   Decimal?         @db.Decimal(20, 2)
+  sourceSumOut  Decimal?         @db.Decimal(20, 2)
+  /// Biz hisoblagan jami
+  parsedSumIn   Decimal          @default(0) @db.Decimal(20, 2)
+  parsedSumOut  Decimal          @default(0) @db.Decimal(20, 2)
+  rowsTotal     Int              @default(0)
+  rowsImported  Int              @default(0)
+  rowsSkipped   Int              @default(0)
+  rowsUnmatched Int              @default(0)
+  error         String?
+  createdById   Int?
+  createdAt     DateTime         @default(now())
+
+  createdBy User?              @relation(fields: [createdById], references: [id])
+  unmatched UnmatchedCashRow[]
+  txns      CashTxn[]
+
+  @@index([createdAt])
+}
+
+/// Import tushunmagan qator — YO'QOTILMAYDI, shu yerda turadi va qo'lda hal qilinadi.
+/// Hal qilinganda biriktirish ALIAS bo'lib saqlanadi: keyingi importda o'sha
+/// yozilish avtomatik topiladi.
+model UnmatchedCashRow {
+  id            Int       @id @default(autoincrement())
+  batchId       Int
+  /// "desk" — kassa tanilmadi · "article" — modda tanilmadi ·
+  /// "both_directions" — bir qatorda ham kirim ham chiqim · "date" — sana buzuq
+  reason        String
+  rowNo         Int
+  /// Manbadagi xom qiymatlar (o'zgartirilmagan)
+  rawDesk       String?
+  rawArticle    String?
+  rawDate       String?
+  rawPerson     String?
+  rawNote       String?
+  amountIn      Decimal?  @db.Decimal(20, 2)
+  amountOut     Decimal?  @db.Decimal(20, 2)
+  /// Hal qilingandan keyin yaratilgan yozuv (qayta hal qilinmasin)
+  resolvedTxnId Int?
+  resolvedAt    DateTime?
+  /// Qaysi hisobga biriktirildi (hal qilishda tanlanadi)
+  accountId     Int?
+
+  batch   CashImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  account CashAccount?    @relation(fields: [accountId], references: [id])
+
+  @@index([batchId])
+  @@index([reason, resolvedAt])
 }

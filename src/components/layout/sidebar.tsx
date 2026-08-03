@@ -151,6 +151,8 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/moliya/dds",           label: "DDS hisoboti",  icon: TrendingUp,  roles: [SA, A, "CEO", "FINANCE"] },
       { href: "/moliya/kontragentlar", label: "Kontragentlar", icon: Users,       roles: [SA, A, "CEO", "FINANCE"] },
       { href: "/moliya/malumotnoma",   label: "Moddalar",      icon: BookMarked,  roles: [SA, A, "CEO", "FINANCE"] },
+      { href: "/moliya/import",        label: "Tarix importi", icon: Upload,      roles: [SA, "FINANCE"] },
+      { href: "/moliya/moslanmagan",   label: "Moslanmagan",   icon: PackageSearch, roles: [SA, "FINANCE"] },
       { href: "/sotuv/finans",         label: "Harajatlar",    icon: Receipt,     roles: [SA, A, "CEO", "FINANCE"] },
     ],
   },
