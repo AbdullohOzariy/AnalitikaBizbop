@@ -140,6 +140,7 @@ model User {
   cashTxns          CashTxn[] // kiritgan kassa yozuvlari (createdBy)
   cashTransfers     CashTransfer[] // kiritgan kassalararo ko'chirishlari
   cashAccounts      UserCashAccount[] // yozuv kirita oladigan hisoblari — bo'sh = cheklovsiz
+  cashDayCloses     CashDayClose[] // yopgan kunlari (kassa sanashi)
 }
 
 // Foydalanuvchi ↔ filial (ko'p-ko'p): miniapp'da dashboard/inventar shu filiallar bilan
@@ -2048,6 +2049,7 @@ model CashAccount {
   openings     CashAccountOpening[]
   transfersOut CashTransfer[]       @relation("CashTransferFrom")
   transfersIn  CashTransfer[]       @relation("CashTransferTo")
+  closes       CashDayClose[]
   users        UserCashAccount[]
 
   @@index([branchId])
@@ -2287,4 +2289,29 @@ model IntegrationEvent {
   @@index([kind, occurredAt])
   @@index([externalId])
   @@index([batchId])
+}
+
+/// Kunlik yopish — fizik sanash natijasi va kunni QULFLASH.
+/// Yopilgan kunga yangi yozuv kiritib/o'chirib bo'lmaydi: aks holda kechagi
+/// sanash bugun "noto'g'ri" bo'lib qolardi va farq qayerdan chiqqani yo'qolardi.
+model CashDayClose {
+  id         Int      @id @default(autoincrement())
+  accountId  Int
+  onDate     DateTime @db.Date
+  /// Yopish paytida tizim hisoblagan qoldiq.
+  expected   Decimal  @db.Decimal(20, 2)
+  /// Mas'ul fizik sanagan naqd.
+  counted    Decimal  @db.Decimal(20, 2)
+  /// counted − expected. Manfiy = kamomad, musbat = ortiqcha.
+  /// Manbada bu "Касса фарк" moddasiga QO'LDA yozilardi; endi avtomatik hisoblanadi.
+  diff       Decimal  @db.Decimal(20, 2)
+  note       String?
+  closedById Int?
+  closedAt   DateTime @default(now())
+
+  account  CashAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  closedBy User?       @relation(fields: [closedById], references: [id])
+
+  @@unique([accountId, onDate])
+  @@index([onDate])
 }

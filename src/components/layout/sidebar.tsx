@@ -146,6 +146,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/moliya/kassa",         label: "Kassa jurnali", icon: Coins,       roles: [SA, A, "CEO", "FINANCE"] },
       { href: "/moliya/qoldiq",        label: "Qoldiqlar",     icon: Wallet,      roles: [SA, A, "CEO", "FINANCE"] },
+      { href: "/moliya/yopish",        label: "Kunlik yopish", icon: CalendarCheck, roles: [SA, A, "CEO", "FINANCE"] },
       { href: "/moliya/dds",           label: "DDS hisoboti",  icon: TrendingUp,  roles: [SA, A, "CEO", "FINANCE"] },
       { href: "/moliya/kontragentlar", label: "Kontragentlar", icon: Users,       roles: [SA, A, "CEO", "FINANCE"] },
       { href: "/moliya/malumotnoma",   label: "Moddalar",      icon: BookMarked,  roles: [SA, A, "CEO", "FINANCE"] },

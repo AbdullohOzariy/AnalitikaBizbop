@@ -5,6 +5,20 @@ import { redactForLog } from "@/lib/tg-redact";
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
 /**
+ * Biznes qoidasi buzilishi — xabari foydalanuvchiga AYNAN ko'rsatiladi.
+ * Kutilmagan xatolardan farqi shunda: matn ataylab yozilgan va ichki detal saqlamaydi,
+ * shuning uchun uni yashirishning hojati yo'q ("Amal bajarilmadi" deyish foydasiz).
+ * Chuqur ichkarida (helper funksiyada) tekshiruv qilinganda qulay — natijani
+ * qatlamma-qatlam qaytarish shart emas.
+ */
+export class BusinessError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "BusinessError";
+  }
+}
+
+/**
  * Server action xatosini foydalanuvchiga XAVFSIZ xabarga aylantiradi.
  * To'liq xato server log'iga yoziladi; UI'ga DB/Prisma ichki detallari
  * (jadval/ustun nomlari, stack) OSHKOR qilinmaydi.
@@ -13,6 +27,10 @@ export type ActionResult = { ok: true } | { ok: false; error: string };
  * bu helper faqat KUTILMAGAN (catch'ga tushgan) xatolar uchun mo'ljallangan.
  */
 export function actionError(err: unknown, context?: string): { ok: false; error: string } {
+  // Biznes qoidasi — bu kutilgan holat, log'ga shovqin qilmaydi va xabari
+  // foydalanuvchiga o'zgarishsiz boradi.
+  if (err instanceof BusinessError) return { ok: false, error: err.message };
+
   // Xato OBYEKTI emas, tozalangan matn log'ga yoziladi: telegraf tarmoq xatosi
   // message/stack ichida bot token'li URL olib keladi (Railway loglariga sizardi).
   console.error(`[action${context ? `:${context}` : ""}]`, redactForLog(err));

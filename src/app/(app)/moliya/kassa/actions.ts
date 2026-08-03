@@ -5,7 +5,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { AuthorizationError } from "@/lib/auth-helpers";
-import { actionError, type ActionResult } from "@/lib/action-error";
+import { actionError, BusinessError, type ActionResult } from "@/lib/action-error";
 import { canEnterCash } from "@/lib/roles";
 import { isoDay, nowTashkent, parseDateParam, TASHKENT_OFFSET_MS } from "@/lib/date";
 
@@ -45,6 +45,24 @@ async function assertAccountAllowed(userId: number, ...accountIds: number[]) {
   const allowed = new Set(scope.map((s) => s.accountId));
   for (const id of accountIds) {
     if (!allowed.has(id)) throw new AuthorizationError("Bu hisobga yozuv kiritish huquqingiz yo'q.");
+  }
+}
+
+/**
+ * Kun yopilgan bo'lsa — o'sha hisobga yozuv kiritib/o'chirib BO'LMAYDI.
+ * Aks holda kechagi fizik sanash bugun "noto'g'ri" bo'lib qolardi va farq
+ * qayerdan chiqqani yo'qolardi. Tuzatish faqat keyingi kunda storno bilan.
+ */
+async function assertKunOchiq(accountId: number, businessDate: Date, accountName?: string) {
+  const close = await prisma.cashDayClose.findUnique({
+    where: { accountId_onDate: { accountId, onDate: businessDate } },
+    select: { closedAt: true },
+  });
+  if (close) {
+    const kun = businessDate.toISOString().slice(0, 10);
+    throw new BusinessError(
+      `${kun} kuni${accountName ? ` «${accountName}» bo'yicha` : ""} allaqachon yopilgan — bu sanaga yozuv kiritib bo'lmaydi.`
+    );
   }
 }
 
@@ -115,6 +133,8 @@ export async function yozuvQoshAction(input: {
       return { ok: false, error: `«${article.name}» faqat KIRIM moddasi.` };
     if (article.direction === "OUT_ONLY" && d.direction !== "OUT")
       return { ok: false, error: `«${article.name}» faqat CHIQIM moddasi.` };
+
+    await assertKunOchiq(d.accountId, businessDate);
 
     // Yirik summada kontragent majburiy.
     const threshold = await largePaymentThreshold();
@@ -188,6 +208,10 @@ export async function kochirishQoshAction(input: {
     if (!article.isTransfer)
       return { ok: false, error: `«${article.name}» ko'chirish moddasi emas.` };
 
+    // Ikkala tomon ham ochiq bo'lishi shart — biri yopiq bo'lsa transfer nomutanosib qolardi.
+    await assertKunOchiq(d.fromAccountId, businessDate);
+    await assertKunOchiq(d.toAccountId, businessDate);
+
     const occurredAt = resolveMoment(businessDate);
 
     // Ikki yozuv bitta tranzaksiyada — yetim (juftlanmagan) yozuv bo'lishi mumkin emas.
@@ -249,13 +273,14 @@ export async function yozuvOchirAction(id: number): Promise<ActionResult> {
 
     const txn = await prisma.cashTxn.findUnique({
       where: { id: txnId },
-      select: { isLocked: true, source: true, transferId: true, accountId: true },
+      select: { isLocked: true, source: true, transferId: true, accountId: true, businessDate: true },
     });
     if (!txn) return { ok: false, error: "Yozuv topilmadi." };
     if (txn.isLocked || txn.source === "IMPORT")
       return { ok: false, error: "Ko'chirilgan tarix qulflangan — o'chirib bo'lmaydi." };
 
     await assertAccountAllowed(user.id, txn.accountId);
+    await assertKunOchiq(txn.accountId, txn.businessDate);
 
     // Transferning bir tomonini o'chirish qoldiqni buzadi — butun juftlik o'chadi
     // (CashTxn.transferId onDelete: Cascade).
