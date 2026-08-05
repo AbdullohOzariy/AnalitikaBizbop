@@ -372,3 +372,67 @@ Kelgan hodisalarni biznes modelga yozish: `ЧекККМ` → `DailyReceiptMetric
 `ПоступлениеТоваровУслуг` → `PurchaseOrder`, `ПеремещениеТоваров` → `Distribution`/`BranchTransfer`,
 `СписаниеТоваров` → chiqim. Buni **real payload namunalari kelgandan keyin** yozamiz —
 shuning uchun ham xom saqlash birinchi qadam qilib tanlandi.
+
+---
+
+## Ilova G — Kassa cheki (ЧекККМ) namunasi tahlili
+
+> 1C bergan namuna: `analitic (1).json` (05.08.2026). Bizning tomon uni **hozircha ham
+> qabul qiladi** — `/api/1c/ingest` sxemani tekshirmaydi, xom saqlaydi va
+> **cp1251 ni ham tiklab o'qiydi**. Quyidagilar QAYTA ISHLASH bosqichi uchun kerak.
+
+### Bizga eng qimmatli maydonlar
+
+| Maydon | Nima beradi |
+|---|---|
+| `payments[]` `{name, value}` | **Naqd / plastik ajratish** — Moliya modulida yetishmayotgan aynan shu edi |
+| `shop`, `pos` | Filial va kassa — usiz cheklarni taqsimlab bo'lmaydi |
+| `positions[].item.art` + `barcode` | SKU moslashtirish (bizda 25 406 SKU) |
+| `positions[].storno` | Vozvrat / bekor qilingan qator |
+| `qty: 0.723` | Kasrli miqdor — tarozili tovar |
+| `card` | Sodiqlik kartasi — mijoz analitikasi |
+
+### Вопросы к команде 1С (можно копировать)
+
+**1. Кодировка.** Файл-образец пришёл в **windows-1251**. Мы научились её распознавать,
+но просим отдавать **UTF-8** с заголовком `Content-Type: application/json; charset=utf-8`.
+Важно: первый образец (04.08) уже пришёл с **разрушенной** кириллицей — 106 символов
+U+FFFD, восстановить невозможно. Если в проде так уйдёт хотя бы один чек, мы навсегда
+потеряем название товара, ФИО кассира и — главное — **вид оплаты**.
+
+**2. Итоги не сходятся.** В образце:
+
+| Проверка | Сумма по строкам | В шапке | Расхождение |
+|---|---|---|---|
+| `sum` | 5 839.09 | 2 839.09 | 3 000.00 |
+| `totalSum` | 5 749.49 | 2 728.92 | 3 020.57 |
+| `payments` | 68.68 | 2 728.92 | 2 660.24 |
+
+Также `sumWT = 34.23` одинаково во всех трёх строках с разной ценой, а `qtyBuys = 4`
+при сумме `qty = 3.723`. Просим: либо прислать **согласованный** образец, либо описать
+формулу каждого поля — `sum`, `sumWithDiscs`, `totalSum`, `sumR`, `sumWD`, `sumWT`.
+
+**3. Устойчивый идентификатор.** В образце только `number: "121"` — он повторяется
+каждый день на каждой кассе. Есть ли **GUID (`Ref_Key`)** чека? Если нет — подтвердите,
+что связка `shop + pos + openDate + number + session` уникальна: мы построим на ней
+защиту от дублей (при повторной отправке чек не задвоится).
+
+**4. Дата и время.** `openDate: "04.08.26"` — двузначный год, `openTime` без часового
+пояса. Просим ISO с зоной: `"2026-08-04T16:49:04+05:00"`. Мы работаем в Asia/Tashkent,
+и граница суток должна быть однозначной (от неё зависит сверка с кассовой книгой).
+
+**5. Значения полей.** Что означают: `type` (1 — продажа? возврат?), `session`,
+`status` (какие значения кроме `"success"`), `aos` (в образце пусто), `fiscal`
+(пусто — когда заполняется?). Нужен **список допустимых значений** `payments[].name`
+(наличные / карта / перевод / …) — по нему мы раскладываем выручку.
+
+**6. Соответствие магазинов.** `shop: 5` — какой это объект? Нужна таблица соответствия
+для всех точек: Mega Center, Gold Mart, Oila SM, Smart City (Учкудук), а также кафе,
+Mazzona и игровые зоны.
+
+**7. Возвраты.** Возврат приходит отдельным чеком (с `type`?) или флагом `storno` в
+позиции? От этого зависит, как считать чистую выручку.
+
+**8. Объём и режим.** Сколько чеков в сутки ожидается и отправка идёт **сразу при
+пробитии** или пакетом? Наш приём: до 1000 событий в одном запросе, тело до 8 МБ,
+повторная отправка безопасна.
