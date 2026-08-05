@@ -12,7 +12,9 @@
  */
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { after } from "next/server";
 import { redactForLog } from "@/lib/tg-redact";
+import { cheklarniQaytaIshla } from "@/lib/integratsiya/chek-saqla";
 import {
   decodeBody,
   extractEvents,
@@ -126,6 +128,18 @@ export async function POST(req: Request) {
       })),
       skipDuplicates: true, // takroriy yuborish xavfsiz (idempotent)
     });
+
+    // Qayta ishlash JAVOBDAN KEYIN — 1C kutib turmasin va u yiqilsa ham
+    // xom hodisa allaqachon saqlangan bo'ladi (200 kafolati buzilmaydi).
+    if (res.count > 0) {
+      after(async () => {
+        try {
+          await cheklarniQaytaIshla(Math.min(res.count * 2, 500));
+        } catch (e) {
+          console.error("[1c-ingest:qayta-ishlash]", redactForLog(e));
+        }
+      });
+    }
 
     return NextResponse.json({
       ok: true,

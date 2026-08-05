@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { GuruhEditor } from "./guruh-editor";
 import { FilialarEditor } from "./filialar-editor";
 import { ChiqimFilialEditor } from "./chiqim-filial-editor";
+import { OnecShopEditor } from "./onec-shop-editor";
 import { RuxsatEditor } from "./ruxsat-editor";
 import { SverkaGuruhEditor } from "./sverka-guruh-editor";
 import { SverkaXodimlar, type XodimRow } from "../../sverka/sverka-client";
@@ -280,11 +281,31 @@ async function SpisaniyaTab() {
     filialarToliq(),
     guruhChatIdOl(),
     ruxsatList(),
-    prisma.branch.findMany({ orderBy: { sortOrder: "asc" }, select: { id: true, name: true, chiqimFilial: true } }),
+    prisma.branch.findMany({
+      orderBy: { sortOrder: "asc" },
+      select: {
+        id: true,
+        name: true,
+        chiqimFilial: true,
+        onecShopId: true,
+        _count: { select: { receipts: true } },
+      },
+    }),
     chiqimFilials(),
     adminKategoriyaDaraxt(),
     botUserBiriktirmalar(),
   ]);
+
+  // Cheklarda uchragan, lekin hech bir filialga biriktirilmagan 1C do'konlari —
+  // "shop 7 dan 340 chek kelyapti, lekin u qaysi filial?" degan savolni ochadi.
+  const shopStats = await prisma.receipt.groupBy({
+    by: ["shop"],
+    where: { branchId: null },
+    _count: true,
+    orderBy: { _count: { shop: "desc" } },
+    take: 20,
+  });
+  const bogliqsizShoplar = shopStats.map((r) => ({ shop: r.shop, soni: r._count }));
 
   return (
     <div className="space-y-5">
@@ -310,6 +331,22 @@ async function SpisaniyaTab() {
         actions={<Building2 className="h-4 w-4 text-muted-foreground" />}
       >
         <FilialarEditor filialar={filialar} />
+      </SectionCard>
+
+      <SectionCard
+        title="1C do'koni → filial"
+        description="Chekdagi `shop` raqami qaysi filial ekani (1C integratsiyasi)"
+        actions={<Link2 className="h-4 w-4 text-muted-foreground" />}
+      >
+        <OnecShopEditor
+          branches={branches.map((b) => ({
+            id: b.id,
+            name: b.name,
+            onecShopId: b.onecShopId,
+            chekSoni: b._count.receipts,
+          }))}
+          bogliqsizShoplar={bogliqsizShoplar}
+        />
       </SectionCard>
 
       <SectionCard

@@ -610,3 +610,55 @@ export async function narxReportYuborAction(): Promise<
     return { ok: false, error: msg.includes("Ruxsat") ? "Ruxsat yo'q." : msg };
   }
 }
+
+// ─── 1C do'kon ID → filial bog'lash ────────────────────────────────────────────
+// Chekda `shop: 5` keladi, lekin u qaysi filial ekanini faqat inson biladi.
+// Biriktirilmagan bo'lsa chek BARIBIR saqlanadi — faqat filialsiz turadi va
+// keyin biriktirilgach qayta hisoblanadi.
+const onecShopSchema = z.object({
+  branchId: z.coerce.number().int().positive(),
+  shopId: z.string().trim(), // bo'sh — bog'lashni olib tashlash
+});
+
+export async function onecShopBoglaAction(input: {
+  branchId: number;
+  shopId: string;
+}): Promise<Result> {
+  try {
+    await requireAdmin();
+    const p = onecShopSchema.parse(input);
+    const { prisma } = await import("@/lib/prisma");
+
+    const qiymat = p.shopId === "" ? null : Number(p.shopId);
+    if (qiymat !== null && (!Number.isInteger(qiymat) || qiymat < 0)) {
+      return { ok: false, error: "Do'kon ID butun musbat son bo'lishi kerak." };
+    }
+
+    // @unique — bitta shop ikki filialga biriktirilmasin (cheklar ikkiga bo'linardi)
+    if (qiymat !== null) {
+      const band = await prisma.branch.findFirst({
+        where: { onecShopId: qiymat, NOT: { id: p.branchId } },
+        select: { name: true },
+      });
+      if (band) return { ok: false, error: `Bu do'kon ID «${band.name}» ga biriktirilgan.` };
+    }
+
+    await prisma.branch.update({
+      where: { id: p.branchId },
+      data: { onecShopId: qiymat },
+    });
+
+    // Biriktirilgach — o'sha do'konning filialsiz cheklarini bog'laymiz.
+    if (qiymat !== null) {
+      await prisma.receipt.updateMany({
+        where: { shop: qiymat, branchId: null },
+        data: { branchId: p.branchId },
+      });
+    }
+
+    revalidatePath(RP);
+    return { ok: true };
+  } catch (err) {
+    return xato(err);
+  }
+}

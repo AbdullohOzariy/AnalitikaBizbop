@@ -172,6 +172,9 @@ model CategoryManager {
 model Branch {
   id            Int      @id @default(autoincrement())
   name          String   @unique
+  /// 1C do'kon ID (chekdagi `shop`) — Sozlamalar → Filiallar'da QO'LDA biriktiriladi.
+  /// Biriktirilmagan bo'lsa chek baribir saqlanadi, faqat filialsiz turadi.
+  onecShopId    Int?     @unique
   chiqimFilial  String? // bizbop (spisaniya bot) yozuvlar.filial nomi — chiqim filtri uchun; null bo'lsa name ishlatiladi. Sozlamalar → Filiallar'da bog'lanadi
   sortOrder     Int      @default(0)
   sverkaTopicId Int? // sverka guruhidagi topic (message_thread_id) — Sozlamalar → Sverka'da
@@ -204,6 +207,7 @@ model Branch {
   tgRequests        TgRequest[] // guruhda shu filial haqida so'ralgan murojaatlar
   skuForecasts      SkuForecast[] // haftalik SKU talab prognozi
   skuForecastAcc    SkuForecastAccuracy[] // prognoz aniqligi baholari
+  receipts          Receipt[] // 1C dan kelgan kassa cheklari
   cashAccounts      CashAccount[] // shu filialning kassa/bank hisoblari (bo'lmasligi ham mumkin)
   costCenters       CostCenter[] // shu filialga mos xarajat markazi
 }
@@ -401,17 +405,18 @@ model Product {
 
   // Joriy holat — har yuklashda denormalizatsiya qilinadi (OOS/zakaz so'rovi
   // ProductSales tarixini skanlamasligi uchun). Manba — eng so'nggi davr.
-  currentStock   Decimal?  @db.Decimal(20, 3) // so'nggi davrdagi qoldiq (filiallar yig'indisi)
-  currentSold    Decimal?  @db.Decimal(20, 3) // so'nggi davrdagi sotuv (dona)
-  abcClass       String?   @db.Char(1) // ABC sinfi (standart 3 oylik oyna) — sotuv yuklashda yangilanadi
-  xyzClass       String?   @db.Char(1) // XYZ sinfi (talab barqarorligi) — sotuv yuklashda yangilanadi
+  currentStock   Decimal?      @db.Decimal(20, 3) // so'nggi davrdagi qoldiq (filiallar yig'indisi)
+  currentSold    Decimal?      @db.Decimal(20, 3) // so'nggi davrdagi sotuv (dona)
+  abcClass       String?       @db.Char(1) // ABC sinfi (standart 3 oylik oyna) — sotuv yuklashda yangilanadi
+  xyzClass       String?       @db.Char(1) // XYZ sinfi (talab barqarorligi) — sotuv yuklashda yangilanadi
   leadTimeDays   Int? // zakazdan kelguncha kunlar — yetkazib beruvchi profilida kiritiladi
   archivedAt     DateTime? // no-aktiv (arxiv) — buyurtma/OOS/Stockday'dan chiqadi, tarix saqlanadi
-  packSize       Decimal?  @db.Decimal(20, 3) // pachkadagi dona soni/hajmi (og'irlik/hajm uchun kasr ham) — buyurtmada eslab qolinadi
-  purchasePrice  Decimal?  @db.Decimal(20, 2) // kelishilgan sotib olish narxi (dona) — zakazdan eslab qolinadi
-  lastSalePeriod DateTime? @db.Date // so'nggi yuklangan davr (eskini bosib o'tmaslik uchun)
-  imageData      String?   @db.Text // promo dizayn banner master rasmi — item saqlanganda shu yerga ham yoziladi, yangi aksiyada meros
-  imageZoom      Float     @default(1) // master rasm kattalashtirish (x1..x2)
+  packSize       Decimal?      @db.Decimal(20, 3) // pachkadagi dona soni/hajmi (og'irlik/hajm uchun kasr ham) — buyurtmada eslab qolinadi
+  purchasePrice  Decimal?      @db.Decimal(20, 2) // kelishilgan sotib olish narxi (dona) — zakazdan eslab qolinadi
+  lastSalePeriod DateTime?     @db.Date // so'nggi yuklangan davr (eskini bosib o'tmaslik uchun)
+  receiptLines   ReceiptLine[] // chekdagi sotuv qatorlari (1C integratsiyasi)
+  imageData      String?       @db.Text // promo dizayn banner master rasmi — item saqlanganda shu yerga ham yoziladi, yangi aksiyada meros
+  imageZoom      Float         @default(1) // master rasm kattalashtirish (x1..x2)
 
   category          Category?             @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   supplier          Supplier?             @relation(fields: [supplierId], references: [id], onDelete: SetNull)
@@ -2291,6 +2296,8 @@ model IntegrationEvent {
   receivedAt  DateTime               @default(now())
   processedAt DateTime?
 
+  receipts Receipt[]
+
   @@index([status, receivedAt])
   @@index([kind, occurredAt])
   @@index([externalId])
@@ -2385,4 +2392,119 @@ model UnmatchedCashRow {
 
   @@index([batchId])
   @@index([reason, resolvedAt])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CHEK BAZASI — 1C dan kelgan kassa cheklari (ЧекККМ).
+//
+// XOM QATLAM ALOHIDA: IntegrationEvent xom payloadni saqlaydi, bu yerda esa
+// TALQIN qilingan ko'rinish turadi. Talqinda xato topilsa — xom payloaddan
+// qayta hisoblanadi, ya'ni ma'lumot yo'qolmaydi.
+//
+// Hujjatlar (prixod/peremesheniye/spisaniye) ATAYLAB alohida bazada bo'ladi:
+// chek kuniga minglab keladi, hujjat — o'nlab. Bitta jadvalda hujjat qidiruvi
+// chek massasi ostida ko'milib qolardi.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// To'lov turi — nomdan normallashtiriladi ("Наличные" → CASH).
+/// Moliya moduli uchun ASOSIY: naqd/plastik ajratish shu yerdan chiqadi.
+enum PaymentKind {
+  CASH // naqd
+  CARD // plastik / bank kartasi
+  TRANSFER // o'tkazma
+  OTHER // tanilmagan nom — hisobotda ko'rinadi va qo'lda moslanadi
+}
+
+model Receipt {
+  id Int @id @default(autoincrement())
+
+  // ── Manba identifikatsiyasi ──
+  shop         Int // 1C do'kon ID (filial bilan moslik — branchId)
+  pos          Int // kassa raqami do'kon ichida
+  number       String // chek raqami (har kuni takrorlanadi)
+  session      Int // smena
+  /// Chek ochilgan aniq payt (openDate + openTime).
+  openAt       DateTime
+  /// Hisobot kuni (Asia/Tashkent) — sverka va DDS shu bo'yicha.
+  businessDate DateTime @db.Date
+
+  // ── Chek xususiyatlari ──
+  type           Int // chek turi (1 = sotuv; qolgan qiymatlar aniqlanmagan)
+  status         String // "success" va boshqalar
+  fiscal         String? // fiskal chek raqami (namunada bo'sh)
+  receiptBarcode String? // CHEKNING o'z shtrix-kodi (tovarniki emas)
+  card           String? // sodiqlik kartasi; bo'sh = kartasiz mijoz
+  cashierId      Int?
+  cashierName    String?
+
+  // ── Summalar (1C bergan holicha) ──
+  qtyBuys      Decimal? @db.Decimal(20, 3) // ma'nosi aniqlanmagan — xom saqlanadi
+  qtyPositions Int
+  sum          Decimal  @db.Decimal(20, 2) // chegirmagacha
+  sumWithDiscs Decimal  @db.Decimal(20, 2) // chegirmadan keyin
+  totalSum     Decimal  @db.Decimal(20, 2) // to'langan
+
+  // ── Bog'lanishlar ──
+  branchId   Int? // shop → Branch moslik (Sozlamalarda biriktiriladi)
+  externalId String? // 1C GUID bersa shu yerga (model o'zgarmasin)
+  eventId    Int? // qaysi xom hodisadan hosil bo'lgan
+  createdAt  DateTime @default(now())
+
+  branch   Branch?           @relation(fields: [branchId], references: [id])
+  event    IntegrationEvent? @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  lines    ReceiptLine[]
+  payments ReceiptPayment[]
+
+  /// Dublikatga qarshi: 1C hozircha GUID bermaydi, shuning uchun tabiiy kalit.
+  /// GUID kelsa — externalId qo'shimcha kafolat bo'ladi.
+  @@unique([shop, pos, businessDate, number, session])
+  @@index([businessDate])
+  @@index([branchId, businessDate])
+  @@index([eventId])
+}
+
+model ReceiptLine {
+  id        Int @id @default(autoincrement())
+  receiptId Int
+  lineNo    Int // qator tartibi (manbada yo'q — biz beramiz)
+
+  /// item.id — NOMENKLATURA KODI (1C tasdiqladi), Product.code bilan bir xil.
+  itemCode  Int?
+  productId Int? // moslashtirilgan SKU (topilmasa null — yo'qotilmaydi)
+
+  art         String?
+  name        String
+  barcode     String? // NOMENKLATURA shtrix-kodi
+  classCode   String? // "ГТД 12345"
+  packageCode String?
+
+  qty    Decimal @db.Decimal(20, 3) // kasrli — tarozili tovar
+  storno Int     @default(0) // bekor qilingan qator
+
+  sum      Decimal @db.Decimal(20, 2) // chegirmagacha
+  sumR     Decimal @db.Decimal(20, 2) // ⚠️ ma'nosi hali noma'lum — xom saqlanadi
+  sumWD    Decimal @db.Decimal(20, 2) // chegirmadan keyin
+  sumWT    Decimal @db.Decimal(20, 2) // soliq bilan
+  totalSum Decimal @db.Decimal(20, 2)
+
+  receipt Receipt  @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  product Product? @relation(fields: [productId], references: [id])
+
+  @@index([receiptId])
+  @@index([productId])
+  @@index([itemCode])
+}
+
+model ReceiptPayment {
+  id        Int         @id @default(autoincrement())
+  receiptId Int
+  /// 1C bergan nom — O'ZGARTIRILMAYDI (yangi tur qo'shilsa ham ko'rinadi).
+  name      String
+  kind      PaymentKind @default(OTHER)
+  value     Decimal     @db.Decimal(20, 2)
+
+  receipt Receipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+
+  @@index([receiptId])
+  @@index([kind])
 }
