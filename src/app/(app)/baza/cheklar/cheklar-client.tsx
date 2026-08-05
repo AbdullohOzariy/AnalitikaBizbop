@@ -4,7 +4,6 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import {
-  ChevronDown,
   Filter,
   Search,
   Banknote,
@@ -21,6 +20,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Pill, EmptyState } from "@/components/common/page";
 import { formatUZS, formatDateTimeUZ } from "@/lib/format";
+import { ChekKorinish } from "./chek-korinish";
 import { cn } from "@/lib/utils";
 
 type Payment = { id: number; name: string; kind: string; value: number };
@@ -83,7 +83,7 @@ export function CheklarClient({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [openId, setOpenId] = useState<number | null>(null);
+  const [tanlangan, setTanlangan] = useState<Row | null>(null);
   const [q, setQ] = useState(filters.q);
 
   const apply = (patch: Partial<typeof filters>) => {
@@ -240,113 +240,54 @@ export function CheklarClient({
         <Card>
           <CardContent className="space-y-1 py-3">
             {rows.map((r) => {
-              const open = openId === r.id;
               const stornoBor = r.lines.some((l) => l.storno !== 0);
               return (
-                <div
+                <button
                   key={r.id}
+                  type="button"
+                  onClick={() => setTanlangan(r)}
                   className={cn(
-                    "rounded-xl border border-border bg-card/50 transition-colors",
-                    open && "border-primary/40 bg-card",
+                    "flex w-full items-center gap-2 rounded-xl border border-border bg-card/50 px-3 py-2 text-left transition-colors hover:border-primary/40 hover:bg-card",
                     stornoBor && "border-destructive/30"
                   )}
                 >
-                  <button type="button" onClick={() => setOpenId(open ? null : r.id)} className="flex w-full items-center gap-2 px-3 py-2 text-left">
-                    <span className="w-[120px] shrink-0 text-xs text-muted-foreground">
-                      {formatDateTimeUZ(r.openAt)}
-                    </span>
-                    <span className="w-[70px] shrink-0 text-sm font-medium">№{r.number}</span>
-                    <span className="hidden w-[120px] shrink-0 truncate text-xs sm:block">
-                      {r.branchName ?? <span className="text-amber-600">shop {r.shop}</span>}
-                    </span>
-                    <span className="hidden flex-1 truncate text-xs text-muted-foreground md:block">
-                      {r.cashierName ?? "—"}
-                    </span>
-                    <span className="flex shrink-0 gap-1">
-                      {r.payments.map((p) => {
-                        const m = KIND_META[p.kind] ?? KIND_META.OTHER;
-                        const Icon = m.icon;
-                        return (
-                          <Pill key={p.id} className={cn("gap-1", m.tone)}>
-                            <Icon className="h-3 w-3" />
-                            {m.l}
-                          </Pill>
-                        );
-                      })}
-                      {stornoBor && (
-                        <Pill className="gap-1 bg-destructive/10 text-destructive">
-                          <Undo2 className="h-3 w-3" />
-                          storno
+                  <span className="w-[120px] shrink-0 text-xs text-muted-foreground">
+                    {formatDateTimeUZ(r.openAt)}
+                  </span>
+                  <span className="w-[70px] shrink-0 text-sm font-medium">№{r.number}</span>
+                  <span className="hidden w-[120px] shrink-0 truncate text-xs sm:block">
+                    {r.branchName ?? <span className="text-amber-600">shop {r.shop}</span>}
+                  </span>
+                  <span className="hidden flex-1 truncate text-xs text-muted-foreground md:block">
+                    {r.cashierName ?? "—"}
+                  </span>
+                  <span className="flex shrink-0 gap-1">
+                    {r.payments.map((p) => {
+                      const m = KIND_META[p.kind] ?? KIND_META.OTHER;
+                      const Icon = m.icon;
+                      return (
+                        <Pill key={p.id} className={cn("gap-1", m.tone)}>
+                          <Icon className="h-3 w-3" />
+                          {m.l}
                         </Pill>
-                      )}
-                    </span>
-                    <span className="w-[110px] shrink-0 text-right text-sm font-bold tabular-nums">
-                      {formatUZS(r.totalSum)}
-                    </span>
-                    <ChevronDown className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
-                  </button>
-
-                  {open && (
-                    <div className="space-y-3 border-t border-border px-3 py-3">
-                      <div className="grid gap-x-6 gap-y-1 text-xs sm:grid-cols-3">
-                        <F l="Do'kon / kassa" v={`shop ${r.shop} · pos ${r.pos} · smena ${r.session}`} />
-                        <F l="Hisobot kuni" v={r.businessDate} />
-                        <F l="Holat" v={`${r.status} · tur ${r.type}`} />
-                        <F l="Karta" v={r.card ?? "—"} />
-                        <F l="Qatorlar" v={String(r.qtyPositions)} />
-                        <F l="Chegirmagacha" v={formatUZS(r.sum)} />
-                      </div>
-
-                      <div>
-                        <div className="mb-1 text-[11px] font-medium text-muted-foreground">To&apos;lovlar</div>
-                        <div className="flex flex-wrap gap-2">
-                          {r.payments.map((p) => (
-                            <span key={p.id} className="rounded-lg bg-muted/50 px-2.5 py-1 text-xs">
-                              «{p.name}» → <b>{KIND_META[p.kind]?.l ?? p.kind}</b> · {formatUZS(p.value)}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <div className="mb-1 text-[11px] font-medium text-muted-foreground">
-                          Qatorlar — SKU topilmagan qatorlar sariq bilan
-                        </div>
-                        <div className="overflow-x-auto">
-                          <table className="w-full min-w-[520px] text-xs">
-                            <thead className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                              <tr>
-                                <th className="w-6 pb-1 text-left">#</th>
-                                <th className="pb-1 text-left">Tovar</th>
-                                <th className="w-20 pb-1 text-right">Miqdor</th>
-                                <th className="w-24 pb-1 text-right">Summa</th>
-                                <th className="w-24 pb-1 text-right">Chegirma b/n</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {r.lines.map((l) => (
-                                <tr key={l.id} className={cn("border-t border-border/50", !l.matched && "bg-amber-500/[0.07]")}>
-                                  <td className="py-1 text-muted-foreground">{l.lineNo}</td>
-                                  <td className="py-1">
-                                    <div className="truncate">{l.name}</div>
-                                    <div className="text-[10px] text-muted-foreground">
-                                      kod {l.itemCode ?? "—"} · {l.barcode ?? "shtrix-kodsiz"}
-                                      {!l.matched && <span className="ml-1 text-amber-600">SKU topilmadi</span>}
-                                      {l.storno !== 0 && <span className="ml-1 text-destructive">storno</span>}
-                                    </div>
-                                  </td>
-                                  <td className="py-1 text-right tabular-nums">{l.qty}</td>
-                                  <td className="py-1 text-right tabular-nums">{formatUZS(l.sum)}</td>
-                                  <td className="py-1 text-right tabular-nums font-medium">{formatUZS(l.sumWD)}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                      );
+                    })}
+                    {r.lines.some((l) => !l.matched) && (
+                      <Pill className="gap-1 bg-amber-500/15 text-amber-700 dark:text-amber-400">
+                        SKU
+                      </Pill>
+                    )}
+                    {stornoBor && (
+                      <Pill className="gap-1 bg-destructive/10 text-destructive">
+                        <Undo2 className="h-3 w-3" />
+                        storno
+                      </Pill>
+                    )}
+                  </span>
+                  <span className="w-[110px] shrink-0 text-right text-sm font-bold tabular-nums">
+                    {formatUZS(r.totalSum)}
+                  </span>
+                </button>
               );
             })}
             {!toliqmi && (
@@ -357,15 +298,8 @@ export function CheklarClient({
           </CardContent>
         </Card>
       )}
-    </div>
-  );
-}
 
-function F({ l, v }: { l: string; v: string }) {
-  return (
-    <div className="flex gap-2">
-      <span className="shrink-0 text-muted-foreground">{l}:</span>
-      <span className="min-w-0 truncate">{v}</span>
+      {tanlangan && <ChekKorinish chek={tanlangan} onClose={() => setTanlangan(null)} />}
     </div>
   );
 }
