@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
 import {
+  decodeBody,
   extractEvents,
   normalizeEvent,
   parse1cDate,
+  parseOpenDateTime,
   stableHash,
   tokenMatches,
   UNKNOWN_KIND,
@@ -125,5 +127,109 @@ describe("tokenMatches", () => {
     // Aks holda ONEC_INGEST_TOKEN unutilsa endpoint hammaga ochiq qolardi.
     expect(tokenMatches("", "")).toBe(false);
     expect(tokenMatches("nimadir", "")).toBe(false);
+  });
+});
+
+describe("decodeBody — 1C kodlashi", () => {
+  // 1C ko'pincha windows-1251 da chiqaradi. req.json() ni ishlatsak kirill
+  // matn U+FFFD ga aylanib QAYTARIB BO'LMAYDIGAN holga kelardi — bu haqiqiy
+  // holat edi: 1C bergan birinchi namuna faylda 106 ta U+FFFD bor edi.
+  const cp1251 = (s: string): Uint8Array => {
+    // "Наличные" ni cp1251 baytlariga o'giramiz (А=0xC0 dan boshlanadi)
+    const TABLE = "АБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдежзийклмнопрстуфхцчшщъыьэюя";
+    return new Uint8Array(
+      [...s].map((ch) => {
+        const i = TABLE.indexOf(ch);
+        return i >= 0 ? 0xc0 + i : ch.charCodeAt(0);
+      })
+    );
+  };
+
+  it("UTF-8 tanani o'zgartirmasdan o'qiydi", () => {
+    const buf = new TextEncoder().encode('{"name":"Наличные"}');
+    expect(JSON.parse(decodeBody(buf, "application/json"))).toEqual({ name: "Наличные" });
+  });
+
+  it("cp1251 tanani TIKLAB o'qiydi (charset ko'rsatilmagan bo'lsa ham)", () => {
+    const buf = cp1251('{"name":"Наличные"}');
+    expect(JSON.parse(decodeBody(buf, "application/json"))).toEqual({ name: "Наличные" });
+  });
+
+  it("Content-Type dagi charset hurmat qilinadi", () => {
+    const buf = cp1251('{"name":"Водка"}');
+    expect(JSON.parse(decodeBody(buf, "application/json; charset=windows-1251"))).toEqual({
+      name: "Водка",
+    });
+  });
+
+  it("noma'lum charset berilsa ham avtomatik aniqlashga tushadi", () => {
+    const buf = new TextEncoder().encode('{"a":1}');
+    expect(JSON.parse(decodeBody(buf, "application/json; charset=allaqanday"))).toEqual({ a: 1 });
+  });
+
+  it("ASCII har ikki kodlashda ham bir xil", () => {
+    const buf = new TextEncoder().encode('{"a":"test"}');
+    expect(decodeBody(buf, null)).toBe('{"a":"test"}');
+  });
+});
+
+describe("kassa cheki (1C real namunasi)", () => {
+  // Haqiqiy fayldan olingan shakl: shop/pos qo'shilgan, type — chek turi raqami.
+  const chek = {
+    shop: 5,
+    pos: 1,
+    number: "121",
+    openDate: "04.08.26",
+    openTime: "16:49:04",
+    type: 1,
+    status: "success",
+    payments: [{ name: "Наличные", value: 68.68 }],
+    positions: [{ item: { name: "Водка 0,75" }, qty: 1, sum: 4500 }],
+  };
+
+  it("RAQAMLI `type` kind bo'lib ketmaydi", () => {
+    // Aks holda barcha cheklar "1" nomli turga yig'ilib, tur filtri foydasiz bo'lardi.
+    expect(normalizeEvent(chek).kind).toBe(UNKNOWN_KIND);
+  });
+
+  it("matnli tur esa qabul qilinadi", () => {
+    expect(normalizeEvent({ ...chek, type: "ЧекККМ" }).kind).toBe("ЧекККМ");
+  });
+
+  it("openDate + openTime dan sana o'qiladi", () => {
+    expect(normalizeEvent(chek).occurredAt?.toISOString()).toBe("2026-08-04T16:49:04.000Z");
+  });
+
+  it("chek raqami externalNo ga tushadi", () => {
+    expect(normalizeEvent(chek).externalNo).toBe("121");
+  });
+
+  it("shop/pos payloadda saqlanadi (ustki daraja tashlanmaydi)", () => {
+    const p = normalizeEvent(chek).payload;
+    expect(p.shop).toBe(5);
+    expect(p.pos).toBe(1);
+  });
+});
+
+describe("parseOpenDateTime", () => {
+  it("DD.MM.YY + vaqt", () => {
+    expect(parseOpenDateTime("04.08.26", "16:49:04")?.toISOString()).toBe("2026-08-04T16:49:04.000Z");
+  });
+
+  it("to'rt xonali yil ham ishlaydi", () => {
+    expect(parseOpenDateTime("04.08.2026", "10:00")?.toISOString()).toBe("2026-08-04T10:00:00.000Z");
+  });
+
+  it("vaqt bo'lmasa kun boshi", () => {
+    expect(parseOpenDateTime("04.08.26", null)?.toISOString()).toBe("2026-08-04T00:00:00.000Z");
+  });
+
+  it("mavjud bo'lmagan sana JIMGINA surilmaydi", () => {
+    expect(parseOpenDateTime("31.02.26", "10:00")).toBeNull();
+  });
+
+  it("noto'g'ri format", () => {
+    expect(parseOpenDateTime("2026-08-04", "10:00")).toBeNull();
+    expect(parseOpenDateTime("", "10:00")).toBeNull();
   });
 });

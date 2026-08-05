@@ -14,6 +14,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { redactForLog } from "@/lib/tg-redact";
 import {
+  decodeBody,
   extractEvents,
   normalizeEvent,
   tokenMatches,
@@ -71,9 +72,13 @@ export async function POST(req: Request) {
     );
   }
 
+  // req.json() ISHLATILMAYDI: u tanani har doim UTF-8 deb o'qiydi va 1C ning
+  // windows-1251 chiqishida kirill matnni U+FFFD ga aylantirib YO'Q QILADI.
+  // decodeBody kodlashni o'zi aniqlaydi (charset → UTF-8 → cp1251).
   let body: unknown;
   try {
-    body = await req.json();
+    const raw = new Uint8Array(await req.arrayBuffer());
+    body = JSON.parse(decodeBody(raw, req.headers.get("content-type")));
   } catch {
     return NextResponse.json({ ok: false, error: "JSON parse qilinmadi." }, { status: 400 });
   }

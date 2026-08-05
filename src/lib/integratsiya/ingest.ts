@@ -59,6 +59,32 @@ export function parse1cDate(v: unknown): Date | null {
   return d;
 }
 
+/**
+ * Kassa cheki sanasi: `openDate` "04.08.26" (DD.MM.YY) + `openTime` "16:49:04".
+ *
+ * ⚠️ Ikki xonali yil 2000-yillar deb o'qiladi (26 → 2026) va zona YO'Q, shuning
+ * uchun UTC deb olinadi. 1C bilan ISO formatga (zona bilan) o'tish kelishilsa,
+ * yuqoridagi `parse1cDate` uni allaqachon qo'llab-quvvatlaydi va bu funksiya
+ * o'z-o'zidan ishlatilmay qoladi.
+ */
+export function parseOpenDateTime(openDate: unknown, openTime: unknown): Date | null {
+  const d = str(openDate);
+  if (!d) return null;
+  const m = /^(\d{2})\.(\d{2})\.(\d{2}|\d{4})$/.exec(d);
+  if (!m) return null;
+  const [, dd, mm, yy] = m;
+  const year = yy.length === 2 ? 2000 + Number(yy) : Number(yy);
+
+  const t = str(openTime) ?? "00:00:00";
+  const tm = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(t);
+  const [hh, mi, ss] = tm ? [Number(tm[1]), Number(tm[2]), Number(tm[3] ?? 0)] : [0, 0, 0];
+
+  const dt = new Date(Date.UTC(year, Number(mm) - 1, Number(dd), hh, mi, ss));
+  // Rollover tekshiruvi: "31.02.26" jimgina martga surilmasin.
+  if (dt.getUTCMonth() !== Number(mm) - 1 || dt.getUTCDate() !== Number(dd)) return null;
+  return dt;
+}
+
 /** Payload'ning barqaror sha256'si: kalitlar tartibi o'zgarsa ham hash O'ZGARMAYDI. */
 export function stableHash(value: unknown): string {
   const canonical = (v: unknown): unknown => {
@@ -77,15 +103,22 @@ export function stableHash(value: unknown): string {
 export const UNKNOWN_KIND = "UNKNOWN";
 
 export function normalizeEvent(raw: RawEvent): NormalizedEvent {
-  const kind =
-    str(pick(raw, ["kind", "Kind", "type", "Type", "Тип", "ВидДокумента", "ТипДокумента", "entity"])) ??
-    UNKNOWN_KIND;
+  // `type` ATAYLAB ro'yxatda: ba'zi manbalar hujjat turini shunday ataydi.
+  // Lekin chek payloadida `type: 1` — bu chek TURI (sotuv/vozvrat) raqami,
+  // hujjat turi emas. Shuning uchun faqat RAQAM BO'LMAGAN matn qabul qilinadi:
+  // aks holda barcha cheklar "1" nomli turga yig'ilib, filtr foydasiz bo'lardi.
+  const xomKind = str(
+    pick(raw, ["kind", "Kind", "type", "Type", "Тип", "ВидДокумента", "ТипДокумента", "entity"])
+  );
+  const kind = xomKind && !/^\d+$/.test(xomKind) ? xomKind : UNKNOWN_KIND;
 
   const externalId = str(
     pick(raw, ["id", "Id", "ID", "ref", "Ref", "Ref_Key", "Ссылка", "guid", "GUID", "uid"])
   );
   const externalNo = str(pick(raw, ["number", "Number", "Номер", "no", "docNumber"]));
-  const occurredAt = parse1cDate(pick(raw, ["date", "Date", "Дата", "occurredAt", "timestamp"]));
+  const occurredAt =
+    parse1cDate(pick(raw, ["date", "Date", "Дата", "occurredAt", "timestamp"])) ??
+    parseOpenDateTime(raw.openDate, raw.openTime);
 
   // Payload — TO'LIQ obyekt (faqat `data` emas): 1C ustki darajaga ham maydon
   // qo'shishi mumkin va uni tashlab yuborsak tiklab bo'lmaydi.
@@ -130,4 +163,37 @@ export function tokenMatches(got: string, expected: string): boolean {
     return false;
   }
   return crypto.timingSafeEqual(a, b);
+}
+
+// ─── Kodlash (encoding) ──────────────────────────────────────────────────────
+
+/**
+ * So'rov tanasini MATNGA aylantiradi, kodlashni o'zi aniqlab.
+ *
+ * NEGA KERAK: 1C ko'pincha **windows-1251** da chiqaradi. `req.json()` esa tanani
+ * har doim UTF-8 deb o'qiydi — natijada kirill matn U+FFFD ga aylanadi va
+ * QAYTARIB BO'LMAYDI (kassir ismi, tovar nomi, to'lov turi yo'qoladi).
+ * Bu faraziy emas: 1C bergan birinchi namuna faylda aynan shu sodir bo'lgan
+ * (106 ta U+FFFD), ikkinchisi esa toza cp1251 bo'lib keldi.
+ *
+ * Tartib: Content-Type dagi charset → qat'iy UTF-8 → cp1251.
+ */
+export function decodeBody(buf: Uint8Array, contentType?: string | null): string {
+  const charset = /charset=([\w-]+)/i.exec(contentType ?? "")?.[1]?.toLowerCase();
+
+  if (charset && charset !== "utf-8" && charset !== "utf8") {
+    try {
+      return new TextDecoder(charset).decode(buf);
+    } catch {
+      // Noma'lum charset — quyidagi avtomatik aniqlashga tushamiz.
+    }
+  }
+
+  // Qat'iy UTF-8: yaroqsiz ketma-ketlik bo'lsa XATO beradi (jimgina U+FFFD emas).
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(buf);
+  } catch {
+    // UTF-8 emas — 1C uchun eng ehtimolli variant.
+    return new TextDecoder("windows-1251").decode(buf);
+  }
 }
