@@ -52,6 +52,7 @@ import {
   BookMarked,
   Receipt,
   Plug,
+  ReceiptText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -194,6 +195,7 @@ const NAV_GROUPS: NavGroup[] = [
     icon: Database,
     items: [
       { href: "/baza/sotuv",         label: "Sotuv",             icon: Database,      roles: [SA, A, "INVENTORY"] },
+      { href: "/baza/cheklar",       label: "Cheklar",           icon: ReceiptText,   roles: [SA, A, "FINANCE"] },
       { href: "/baza/qoldiq",        label: "Qoldiq",            icon: Boxes,         roles: [SA, A] },
       { href: "/baza/tashrif",       label: "Tashriflar",        icon: Footprints,    roles: [SA, A] },
       { href: "/iyerarxiya",         label: "Iyerarxiya",        icon: Tag,           roles: [SA, A] },
