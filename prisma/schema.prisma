@@ -2508,3 +2508,23 @@ model ReceiptPayment {
   @@index([receiptId])
   @@index([kind])
 }
+
+/// To'lov turi moslashuvi — 1C bergan NOM → bizdagi tur.
+///
+/// NEGA JADVAL: nomlarni kodga qotirib qo'ysak, 1C yangi tur qo'shganda
+/// (yoki nomni o'zgartirganda) deploy kerak bo'lardi va shu oraliqda to'lov
+/// jimgina OTHER bo'lib, tushum hisobotidan tushib qolardi.
+///
+/// Har yangi nom AVTOMATIK qo'shiladi: taxminiy tur qo'yiladi, `isConfirmed`
+/// esa false bo'ladi — ya'ni Sozlamalarda "tekshirilmagan" bo'lib ko'rinadi.
+/// Odam tasdiqlagach taxmin qayta yozilmaydi.
+model PaymentTypeMap {
+  id          Int         @id @default(autoincrement())
+  /// 1C bergan nom — O'ZGARTIRILMAYDI (registr ham saqlanadi).
+  name        String      @unique
+  kind        PaymentKind @default(OTHER)
+  /// Odam tasdiqladimi. false = avtomatik taxmin, ko'rib chiqilishi kerak.
+  isConfirmed Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}

@@ -8,7 +8,7 @@
  * xom payload esa joyida qoladi — tuzatilgach qayta ishlanadi.
  */
 import { prisma } from "@/lib/prisma";
-import { isChek, parseChek } from "./chek";
+import { isChek, parseChek, tolovTuri } from "./chek";
 
 export type QaytaIshlashNatija = {
   korildi: number;
@@ -16,6 +16,8 @@ export type QaytaIshlashNatija = {
   yangilandi: number;
   chekEmas: number;
   xato: number;
+  /** Birinchi marta uchragan to'lov nomlari — Sozlamalarda tasdiqlanishi kerak. */
+  yangiTolovTuri: number;
 };
 
 /**
@@ -36,6 +38,7 @@ export async function cheklarniQaytaIshla(limit = 500): Promise<QaytaIshlashNati
     yangilandi: 0,
     chekEmas: 0,
     xato: 0,
+    yangiTolovTuri: 0,
   };
   if (events.length === 0) return natija;
 
@@ -45,6 +48,17 @@ export async function cheklarniQaytaIshla(limit = 500): Promise<QaytaIshlashNati
     select: { id: true, onecShopId: true },
   });
   const shopToBranch = new Map(branches.map((b) => [b.onecShopId!, b.id]));
+
+  // To'lov turi moslashuvi — QO'LDA sozlanadigan jadval (Sozlamalar).
+  // Yangi nom uchraganda avtomatik qo'shiladi (taxminiy tur, isConfirmed=false),
+  // ya'ni u Sozlamalarda "tekshirilmagan" bo'lib ko'rinadi va tushumdan
+  // jimgina tushib qolmaydi.
+  const tolovMap = new Map(
+    (await prisma.paymentTypeMap.findMany({ select: { name: true, kind: true } })).map((t) => [
+      t.name,
+      t.kind,
+    ])
+  );
 
   for (const ev of events) {
     // Chek emas — hujjat bo'lishi mumkin. SKIPPED emas, PENDING'da QOLDIRAMIZ:
@@ -141,7 +155,8 @@ export async function cheklarniQaytaIshla(limit = 500): Promise<QaytaIshlashNati
           data: c.payments.map((p) => ({
             receiptId: r.id,
             name: p.name,
-            kind: p.kind,
+            // Moslashuv jadvali USTUN: odam tasdiqlagan qaror taxmindan muhimroq.
+            kind: tolovMap.get(p.name) ?? p.kind,
             value: p.value,
           })),
         });
@@ -151,6 +166,16 @@ export async function cheklarniQaytaIshla(limit = 500): Promise<QaytaIshlashNati
           data: { status: "PROCESSED", processedAt: new Date(), error: null },
         });
       });
+
+      // Yangi to'lov nomlarini ro'yxatga qo'shamiz — Sozlamalarda ko'rinsin.
+      for (const p of c.payments) {
+        if (tolovMap.has(p.name)) continue;
+        await prisma.paymentTypeMap
+          .create({ data: { name: p.name, kind: tolovTuri(p.name), isConfirmed: false } })
+          .catch(() => undefined); // parallel so'rovda unique to'qnashuvi — muhim emas
+        tolovMap.set(p.name, tolovTuri(p.name));
+        natija.yangiTolovTuri++;
+      }
 
       if (mavjud) natija.yangilandi++;
       else natija.yaratildi++;

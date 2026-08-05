@@ -662,3 +662,42 @@ export async function onecShopBoglaAction(input: {
     return xato(err);
   }
 }
+
+// ─── To'lov turi moslashuvi ────────────────────────────────────────────────────
+// 1C bergan nom → bizdagi tur. Naqd/plastik ajratish shu yerdan chiqadi,
+// shuning uchun tasdiqlash QO'LDA: taxmin xato bo'lsa tushum noto'g'ri bo'linadi.
+const tolovTuriSchema = z.object({
+  name: z.string().trim().min(1),
+  kind: z.enum(["CASH", "CARD", "TRANSFER", "OTHER"]),
+});
+
+export async function tolovTuriBelgilaAction(input: {
+  name: string;
+  kind: "CASH" | "CARD" | "TRANSFER" | "OTHER";
+}): Promise<Result> {
+  try {
+    await requireAdmin();
+    const p = tolovTuriSchema.parse(input);
+    const { prisma } = await import("@/lib/prisma");
+
+    await prisma.$transaction(async (tx) => {
+      await tx.paymentTypeMap.upsert({
+        where: { name: p.name },
+        create: { name: p.name, kind: p.kind, isConfirmed: true },
+        update: { kind: p.kind, isConfirmed: true },
+      });
+      // ALLAQACHON saqlangan cheklarni ham qayta belgilaymiz — aks holda
+      // tuzatish faqat kelajakdagi cheklarga ta'sir qilardi va hisobot
+      // eski/yangi aralash bo'lib qolardi.
+      await tx.receiptPayment.updateMany({
+        where: { name: p.name },
+        data: { kind: p.kind },
+      });
+    });
+
+    revalidatePath(RP);
+    return { ok: true };
+  } catch (err) {
+    return xato(err);
+  }
+}

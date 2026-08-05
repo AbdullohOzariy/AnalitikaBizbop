@@ -82,9 +82,11 @@ const txt = (v: unknown): string | null => {
 };
 
 /**
- * To'lov turini nomdan aniqlaydi. Naqd/plastik ajratish Moliya moduli uchun
- * ASOSIY, shuning uchun nom o'zgarsa ham ishlashi kerak (registr, bo'shliq,
- * lotin/kirill yozilishi).
+ * To'lov turini nomdan TAXMIN qiladi.
+ *
+ * Bu faqat BOSHLANG'ICH taxmin: yakuniy qaror `PaymentTypeMap` jadvalida,
+ * Sozlamalarda qo'lda tasdiqlanadi. Shuning uchun bu yerda xato bo'lsa ham
+ * tuzatish deploysiz bo'ladi.
  *
  * Tanilmagan nom OTHER bo'ladi va hisobotda ko'rinadi — jimgina naqdga
  * qo'shilib ketmaydi (bu tushumni buzardi).

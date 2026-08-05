@@ -19,6 +19,7 @@ import { GuruhEditor } from "./guruh-editor";
 import { FilialarEditor } from "./filialar-editor";
 import { ChiqimFilialEditor } from "./chiqim-filial-editor";
 import { OnecShopEditor } from "./onec-shop-editor";
+import { TolovTuriEditor } from "./tolov-turi-editor";
 import { RuxsatEditor } from "./ruxsat-editor";
 import { SverkaGuruhEditor } from "./sverka-guruh-editor";
 import { SverkaXodimlar, type XodimRow } from "../../sverka/sverka-client";
@@ -307,6 +308,15 @@ async function SpisaniyaTab() {
   });
   const bogliqsizShoplar = shopStats.map((r) => ({ shop: r.shop, soni: r._count }));
 
+  // To'lov turlari — nom bo'yicha hajm bilan (tasdiqlash muhimligini ko'rsatadi)
+  const [tolovTurlari, tolovStats] = await Promise.all([
+    prisma.paymentTypeMap.findMany({ orderBy: [{ isConfirmed: "asc" }, { name: "asc" }] }),
+    prisma.receiptPayment.groupBy({ by: ["name"], _count: true, _sum: { value: true } }),
+  ]);
+  const tolovHajm = new Map(
+    tolovStats.map((t) => [t.name, { soni: t._count, summa: Number(t._sum.value ?? 0) }])
+  );
+
   return (
     <div className="space-y-5">
       <SectionCard
@@ -331,6 +341,23 @@ async function SpisaniyaTab() {
         actions={<Building2 className="h-4 w-4 text-muted-foreground" />}
       >
         <FilialarEditor filialar={filialar} />
+      </SectionCard>
+
+      <SectionCard
+        title="To'lov turlari (1C)"
+        description="Chekdagi to'lov nomi → naqd / plastik / o'tkazma. Tushum shu bo'yicha bo'linadi"
+        actions={<Link2 className="h-4 w-4 text-muted-foreground" />}
+      >
+        <TolovTuriEditor
+          rows={tolovTurlari.map((t) => ({
+            id: t.id,
+            name: t.name,
+            kind: t.kind,
+            isConfirmed: t.isConfirmed,
+            soni: tolovHajm.get(t.name)?.soni ?? 0,
+            summa: tolovHajm.get(t.name)?.summa ?? 0,
+          }))}
+        />
       </SectionCard>
 
       <SectionCard
