@@ -15,6 +15,7 @@ import { prisma } from "@/lib/prisma";
 import { after } from "next/server";
 import { redactForLog } from "@/lib/tg-redact";
 import { cheklarniQaytaIshla } from "@/lib/integratsiya/chek-saqla";
+import { haqiqiyIp, ipTekshir, ipJurnal } from "@/lib/integratsiya/ip-cheklov";
 import {
   decodeBody,
   extractEvents,
@@ -42,9 +43,16 @@ const notFound = () => new NextResponse("Not found", { status: 404 });
 
 export async function GET(req: Request) {
   if (!authorized(req)) return notFound();
+
+  // Ping IP'ni RO'YXATGA OLMAYDI — faqat tekshiradi. Aks holda test uchun
+  // boshqa kompyuterdan qilingan ping IP'ni band qilib qo'yardi.
+  const ip = haqiqiyIp(req);
+  const ipRes = await ipTekshir(ip).catch(() => ({ ok: true, royxatgaOlindi: false }) as const);
   return NextResponse.json({
     ok: true,
     service: "analitika-bizbop",
+    yourIp: ip,
+    ipAllowed: ipRes.ok,
     // 1C tomon nima kutilishini shu javobdan ko'radi — hujjat izlab yurmasin.
     accepts: {
       method: "POST",
@@ -65,6 +73,22 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   if (!authorized(req)) return notFound();
+
+  // IP cheklovi TOKENDAN KEYIN: tokensiz so'rov IP ro'yxatiga ta'sir qilmasin
+  // (aks holda tasodifiy skaner birinchi IP bo'lib yozilib qolardi).
+  const ip = haqiqiyIp(req);
+  const ipRes = await ipTekshir(ip);
+  await ipJurnal(ip, ipRes.ok);
+  if (!ipRes.ok) {
+    console.warn(`[1c-ingest] ruxsatsiz IP: ${ipRes.ip} (ruxsat: ${ipRes.ruxsatEtilgan.join(", ")})`);
+    return NextResponse.json(
+      { ok: false, error: "Bu IP manzildan qabul qilinmaydi." },
+      { status: 403 }
+    );
+  }
+  if (ipRes.royxatgaOlindi) {
+    console.log(`[1c-ingest] birinchi ulanish — IP ro'yxatga olindi: ${ip}`);
+  }
 
   const len = Number(req.headers.get("content-length") || 0);
   if (len > MAX_BODY_BYTES) {

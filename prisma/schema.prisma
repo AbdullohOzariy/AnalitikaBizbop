@@ -2528,3 +2528,22 @@ model PaymentTypeMap {
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 }
+
+/// 1C qabul endpointiga murojaat qilgan IP'lar jurnali.
+///
+/// NEGA KERAK: IP cheklovi "birinchi kelgan IP" prinsipida ishlaydi, shuning
+/// uchun BOSHQA IP'dan urinish bo'lganini bilish shart — u yo 1C ning ikkinchi
+/// serveri (ruxsat berish kerak), yo begona (bilish kerak).
+///
+/// IP bo'yicha AGREGAT saqlanadi (har so'rov emas) — jadval o'smaydi.
+model OnecIpLog {
+  id        Int      @id @default(autoincrement())
+  ip        String   @unique
+  /// So'nggi urinishda ruxsat berildimi.
+  allowed   Boolean
+  requests  Int      @default(0)
+  firstSeen DateTime @default(now())
+  lastSeen  DateTime @updatedAt
+
+  @@index([allowed, lastSeen])
+}

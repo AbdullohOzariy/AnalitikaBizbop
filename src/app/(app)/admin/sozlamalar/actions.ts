@@ -701,3 +701,76 @@ export async function tolovTuriBelgilaAction(input: {
     return xato(err);
   }
 }
+
+// ─── 1C qabul: IP cheklovi ─────────────────────────────────────────────────────
+// "Birinchi kelgan IP" prinsipi: 1C tomonining IP'sini so'rab o'tirmaymiz,
+// birinchi muvaffaqiyatli so'rov avtomatik ro'yxatga olinadi. Bu yerda uni
+// ko'rish, qo'shish va olib tashlash mumkin.
+
+async function ipRoyxat(): Promise<string[]> {
+  const { prisma } = await import("@/lib/prisma");
+  const row = await prisma.appSetting.findUnique({ where: { key: "onec_allowed_ips" } });
+  return (row?.value ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+async function ipSaqla(list: string[]): Promise<void> {
+  const { prisma } = await import("@/lib/prisma");
+  const v = [...new Set(list)].join(",");
+  await prisma.appSetting.upsert({
+    where: { key: "onec_allowed_ips" },
+    create: { key: "onec_allowed_ips", value: v },
+    update: { value: v },
+  });
+}
+
+const ipSchema = z
+  .string()
+  .trim()
+  .min(3)
+  .max(64)
+  .regex(/^[0-9a-fA-F.:]+$/, "IP manzil noto'g'ri.");
+
+/** IP'ga ruxsat berish (jurnalda rad etilgan qatordan bir bosishda). */
+export async function onecIpRuxsatAction(ip: string): Promise<Result> {
+  try {
+    await requireAdmin();
+    const p = ipSchema.parse(ip);
+    await ipSaqla([...(await ipRoyxat()), p]);
+    const { prisma } = await import("@/lib/prisma");
+    await prisma.onecIpLog.updateMany({ where: { ip: p }, data: { allowed: true } });
+    revalidatePath(RP);
+    return { ok: true };
+  } catch (err) {
+    return xato(err);
+  }
+}
+
+/** IP'ni ro'yxatdan olib tashlash. */
+export async function onecIpOlibTashlaAction(ip: string): Promise<Result> {
+  try {
+    await requireAdmin();
+    const p = ipSchema.parse(ip);
+    await ipSaqla((await ipRoyxat()).filter((x) => x !== p));
+    const { prisma } = await import("@/lib/prisma");
+    await prisma.onecIpLog.updateMany({ where: { ip: p }, data: { allowed: false } });
+    revalidatePath(RP);
+    return { ok: true };
+  } catch (err) {
+    return xato(err);
+  }
+}
+
+/**
+ * Ro'yxatni butunlay tozalash — keyingi so'rov yana "birinchi" bo'lib
+ * ro'yxatga olinadi. 1C serveri ko'chganda/IP o'zgarganda ishlatiladi.
+ */
+export async function onecIpTozalaAction(): Promise<Result> {
+  try {
+    await requireAdmin();
+    await ipSaqla([]);
+    revalidatePath(RP);
+    return { ok: true };
+  } catch (err) {
+    return xato(err);
+  }
+}

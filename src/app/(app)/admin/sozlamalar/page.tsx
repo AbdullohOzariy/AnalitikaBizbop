@@ -20,6 +20,7 @@ import { FilialarEditor } from "./filialar-editor";
 import { ChiqimFilialEditor } from "./chiqim-filial-editor";
 import { OnecShopEditor } from "./onec-shop-editor";
 import { TolovTuriEditor } from "./tolov-turi-editor";
+import { OnecIpEditor } from "./onec-ip-editor";
 import { RuxsatEditor } from "./ruxsat-editor";
 import { SverkaGuruhEditor } from "./sverka-guruh-editor";
 import { SverkaXodimlar, type XodimRow } from "../../sverka/sverka-client";
@@ -317,6 +318,16 @@ async function SpisaniyaTab() {
     tolovStats.map((t) => [t.name, { soni: t._count, summa: Number(t._sum.value ?? 0) }])
   );
 
+  // 1C qabul IP'lari — ruxsat berilgani ham, rad etilgani ham
+  const [ipLog, ipSetting] = await Promise.all([
+    prisma.onecIpLog.findMany({ orderBy: { lastSeen: "desc" }, take: 30 }),
+    prisma.appSetting.findUnique({ where: { key: "onec_allowed_ips" } }),
+  ]);
+  const ruxsatEtilganIp = (ipSetting?.value ?? "")
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+
   return (
     <div className="space-y-5">
       <SectionCard
@@ -341,6 +352,23 @@ async function SpisaniyaTab() {
         actions={<Building2 className="h-4 w-4 text-muted-foreground" />}
       >
         <FilialarEditor filialar={filialar} />
+      </SectionCard>
+
+      <SectionCard
+        title="1C qabul: IP cheklovi"
+        description="Ma'lumot qaysi IP'dan kelayotgani. Birinchi so'rov avtomatik ro'yxatga olinadi"
+        actions={<Link2 className="h-4 w-4 text-muted-foreground" />}
+      >
+        <OnecIpEditor
+          rows={ipLog.map((r) => ({
+            ip: r.ip,
+            allowed: r.allowed,
+            requests: r.requests,
+            firstSeen: formatDateUZ(r.firstSeen),
+            lastSeen: formatDateUZ(r.lastSeen),
+          }))}
+          ruxsatEtilgan={ruxsatEtilganIp}
+        />
       </SectionCard>
 
       <SectionCard
