@@ -89,7 +89,7 @@ export function ChekKorinish({ chek, onClose }: { chek: ChekView; onClose: () =>
           className="rounded-lg border border-border bg-[#fffdf7] p-4 font-mono text-[12px] leading-[1.5] text-neutral-900 shadow-inner dark:bg-neutral-50"
         >
           <div className="text-center">
-            <div className="text-[13px] font-bold tracking-wide">OILA GROUP</div>
+            <div className="text-[13px] font-bold tracking-wide">BIZBOP</div>
             <div className="text-[12px]">{chek.branchName ?? `Do'kon ${chek.shop}`}</div>
           </div>
 
