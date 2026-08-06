@@ -241,3 +241,30 @@ HTTPS trafik butunlay tegilmaydi. Worker o'chirilsa — holat bugungiday bo'ladi
 Worker ishlamasa: kichik VPS + nginx, `1c.oilagroup.uz` (Cloudflare'da **DNS
 only** A yozuv). nginx 80-portni tinglaydi va `https://analitika.oilagroup.uz`
 ga uzatadi, `Host` header'ini saqlagan holda. ~$4/oy, 100% ishlaydi.
+
+### 8.6 NATIJA — HTTP ishladi ✅ (2026-08-06)
+
+Worker qo'yilgach tekshirildi:
+
+```
+http://analitika.oilagroup.uz/api/1c/ingest  (token bilan)
+  → {"ok": true, "yourIp": "188.113.244.55", ...}
+```
+
+| Tekshiruv | Natija |
+|---|---|
+| HTTP + token | `200` + to'liq JSON ✅ (avval `301` edi) |
+| **Mijoz IP'si** | `yourIp` **haqiqiy IP bilan aynan mos** ✅ — Worker orqali o'tganda ham buzilmaydi, IP cheklovi ishlaydi |
+| HTTPS | `404` (tokensiz) — o'zgarishsiz ✅ |
+| Sayt `/login` | `200` ✅ |
+| IP ro'yxati | bo'sh ✅ — GET ping band qilmadi |
+
+**Ya'ni hujjatlanmagan faraz TASDIQLANDI:** Worker `url.protocol = "https:"` qilsa,
+tashrifchi HTTP kelgan bo'lsa ham Cloudflare origin'ga TLS bilan boradi.
+
+Route: `analitika.oilagroup.uz/api/1c/*` (sxemasiz — Cloudflare dialogi `http://`
+prefiksli pattern'da zonani topa olmadi). Sxemasiz route HTTPS'ni ham ushlaydi,
+lekin Worker kodidagi birinchi shart uni o'zgarishsiz o'tkazadi.
+
+⚠️ **IP ro'yxati hali BO'SH.** Birinchi POST'ni **1C** yuborishi shart —
+kim birinchi yuborsa, IP o'shanda qulflanadi. `GET` ping xavfsiz.
