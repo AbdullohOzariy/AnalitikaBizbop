@@ -48,7 +48,7 @@ Ko'chirgandan keyin quyidagi uchtasi to'g'ri bo'lmasa HTTP baribir ishlamaydi:
 
 | Sozlama | Qiymat | Nega |
 |---|---|---|
-| **SSL/TLS → Overview** | **Full** | `Flexible` bo'lsa Cloudflare Railway'ga HTTP bilan boradi, Railway 301 qaytaradi → **cheksiz aylanma**. `Full` = CF→Railway HTTPS bilan. |
+| **SSL/TLS → Overview** | **Full** | `Flexible` bo'lsa Cloudflare Railway'ga HTTP bilan boradi, Railway 301 qaytaradi → **cheksiz aylanma**. ⚠️ Lekin `Full` ham HTTP so'rovni o'zi hal qilmaydi — 8-bo'limga qarang. |
 | **SSL/TLS → Edge Certificates → Always Use HTTPS** | **OFF** | Yoqiq bo'lsa Cloudflare o'zi `http` ni `https` ga buradi va butun ish behuda ketadi. |
 | **SSL/TLS → Edge Certificates → Automatic HTTPS Rewrites** | OFF | Xuddi shu sabab. |
 
@@ -142,20 +142,102 @@ HTTP kelganda ishlashi uchun kod allaqachon moslangan:
 **Maxfiylik tiklanmaydi:** HTTP'da chek summalari va tovar nomlari yo'lda
 o'qilishi mumkin. Bu HTTP tanlashning narxi — HMAC uni qoplamaydi.
 
-Shuning uchun **HTTP yoqilishi bilan imzo majburiy qilinishi kerak**:
-Sozlamalar → «1C qabul: imzo» → *Imzoni majburiy qilish*. Tugma faqat barcha
-so'rovlar imzolangani ko'ringandan keyin yoqiladi.
+### Imzo bo'yicha qaror (2026-08-06)
+
+Loyiha egasi **imzo ishlatmaslikka** qaror qildi: summalar qo'lda ham
+tekshirilar ekan, imzo integratsiyani kechiktirishga arzimaydi.
+
+Kod o'z joyida qoladi va uxlab turadi (`onec_hmac_required = 0`). Keyinchalik
+kerak bo'lsa: Sozlamalar → «1C qabul: imzo» → bitta tugma. `ONEC_INGEST_SECRET`
+Railway'da allaqachon sozlangan.
+
+Himoya hozir: **token + IP cheklovi**. Bu uzoqdagi begonani to'xtatadi, lekin
+trafik yo'lidagi odamni emas.
 
 ---
 
-## 7. Tartib (buzilmasin)
+## 7. Tartib
 
-1. `ONEC_INGEST_SECRET` Railway'da — ✅ **qo'yilgan** (2026-08-06)
-2. Kod deploy qilinadi (HMAC + HSTS o'zgarishi)
-3. 1C jamoasiga kalit beriladi, ular imzolashni qo'shadi
-4. Sozlamalarda «necha so'rov imzolangan» tekshiriladi
-5. Cloudflare ko'chiriladi, HTTP ochiladi
-6. **Imzo majburiy qilinadi**
+1. `ONEC_INGEST_SECRET` Railway'da — ✅ qo'yilgan (2026-08-06)
+2. Kod deploy — ✅ `cbf0baa`, `2f0a296`
+3. Cloudflare ko'chirildi — ✅
+4. **HTTP ochish** — Worker kerak, 8-bo'limga qarang
+5. 1C birinchi POST'ni yuboradi → IP avtomatik ro'yxatga olinadi
 
-⚠️ 3-qadam 1-qadamdan oldin bo'lsa, imzoli so'rovlar `401` oladi
-(«Server tomonda imzo kaliti sozlanmagan»). Tartib shuning uchun muhim.
+⚠️ IP ro'yxati **bo'sh** bo'lishi kerak va birinchi POST'ni **1C** qilishi shart —
+kim birinchi yuborsa, IP o'shanda qulflanadi.
+
+---
+
+## 8. Ko'chirishdan keyin: HTTP hali 301 — sabab va yechim
+
+**Sana:** 2026-08-06, ko'chirish tugagandan keyin aniqlangan.
+
+### 8.1 Nima bo'ldi
+
+Cloudflare o'tdi, pochta buzilmadi, sozlamalar to'g'ri qo'yildi
+(`Full` · «Always Use HTTPS» OFF · «Automatic HTTPS Rewrites» OFF).
+Lekin `http://analitika.oilagroup.uz` baribir **301** qaytardi.
+
+Diagnoz:
+
+| So'rov | Natija | Kim javob berdi |
+|---|---|---|
+| HTTPS → Cloudflare → Railway | `404` ✅ | ilova (`x-railway-request-id`, `x-railway-edge`) |
+| HTTP → Cloudflare → Railway | `301` ❌ | Railway **edge**'i (`x-railway-67`) |
+
+Railway'ga HTTPS ustidan `X-Forwarded-Proto: http`, `CF-Visitor {"scheme":"http"}`,
+`X-Forwarded-Ssl: off`, `Front-End-Https: off` yuborilganda **hech qaysi**
+301 keltirmadi. Ya'ni Railway header'ga emas, **ulanishning o'ziga** qaraydi.
+
+### 8.2 Ildiz sabab (Cloudflare hujjati)
+
+> *Full: "...makes connections to the origin **using the scheme requested by the
+> visitor**. If your visitor uses `http`, then Cloudflare connects to the origin
+> **using plaintext HTTP** and vice versa."*
+> — developers.cloudflare.com/ssl/origin-configuration/ssl-modes/full/
+
+**`Full` ≠ «har doim HTTPS».** U faqat *visitor HTTPS bo'lganda* origin bilan TLS
+quradi. HTTP so'rov origin'ga ham HTTP bo'lib boradi → Railway 301 qiladi.
+
+### 8.3 Nima ISHLAMAYDI (tekshirilgan, vaqt sarflamang)
+
+| Variant | Nega yo'q |
+|---|---|
+| Origin Rules → Destination port 443 | Free planda faqat **port** o'zgaradi, sxema emas. Host header/SNI override — Enterprise-only |
+| SSL rejimini `Flexible` qilish | CF plain HTTP → Railway 301 → https → CF... **cheksiz aylanma** |
+| Railway'da redirectni o'chirish | Bunday sozlama yo'q |
+| Worker'dan `3xi8jpkm.up.railway.app` ga fetch | Railway **Host bo'yicha** marshrutlaydi. Tekshirildi: `/login` → `404`, 101 bayt. Worker'da Host'ni o'zgartirib bo'lmaydi (`resolveOverride` — Enterprise) |
+
+### 8.4 Yechim — Cloudflare Worker
+
+Kod: `cloudflare-worker/1c-http-korpik.js`. Worker HTTP so'rovni **o'sha
+hostname**'ga, lekin `https://` bilan qayta yuboradi → Cloudflare origin'ga TLS
+bilan boradi → 301 yo'q. Host o'zgarmagani uchun Railway ilovani topadi.
+
+Aylanma yo'q: *"Routes cannot be the target of a same-zone `fetch()` call"* —
+Worker'ning o'z zonasiga fetch'i origin'ga to'g'ri ketadi.
+
+**Qadamlar (Cloudflare panelida):**
+
+1. **Workers & Pages → Create → Start with Hello World → Deploy**
+   (nom: `1c-http-korpik`)
+2. **Edit code** → butun kodni `cloudflare-worker/1c-http-korpik.js` bilan
+   almashtiring → **Deploy**
+3. **Settings → Domains & Routes → Add → Route**
+   - Zone: `oilagroup.uz`
+   - Route: `http://analitika.oilagroup.uz/api/1c/*`
+   - **Sxema (`http://`) ataylab yoziladi** — shunda HTTPS trafik Worker'ga
+     umuman kirmaydi va o'zgarishsiz ishlayveradi. Qamrov faqat 1C yo'li.
+
+**Limit:** Free plan — 100 000 so'rov/kun. 1C hajmi bunga yaqin ham kelmaydi.
+
+**Xavf:** Route faqat `http://` + `/api/1c/*` bo'lgani uchun sayt, pochta va
+HTTPS trafik butunlay tegilmaydi. Worker o'chirilsa — holat bugungiday bo'ladi
+(301), boshqa hech narsa buzilmaydi.
+
+### 8.5 Zaxira yechim
+
+Worker ishlamasa: kichik VPS + nginx, `1c.oilagroup.uz` (Cloudflare'da **DNS
+only** A yozuv). nginx 80-portni tinglaydi va `https://analitika.oilagroup.uz`
+ga uzatadi, `Host` header'ini saqlagan holda. ~$4/oy, 100% ishlaydi.
