@@ -37,7 +37,6 @@ Javobdagi foydali maydonlar:
 | `yourIp` | Bizga sizning qaysi IP'ingiz ko'rinyapti |
 | `ipAllowed` | Shu IP ruxsat ro'yxatidami |
 | `serverTime` | Bizning server soati (unix soniya) — o'zingiznikini solishtiring |
-| `signature.required` | Imzo hozir majburiymi |
 
 ---
 
@@ -82,14 +81,89 @@ yechim ham har xil:
 Invoke-WebRequest https://analitika.oilagroup.uz/api/1c/ingest -UseBasicParsing
 ```
 
-Bu ham xato bersa — Windows eski, HTTP kerak bo'ladi. Unda bizga ayting, biz HTTP
-manzil tayyorlaymiz. Lekin u holda **3-bo'limdagi imzo majburiy** bo'ladi.
+Bu ham xato bersa — Windows eski. Unda bizga ayting, biz **HTTP manzil
+tayyorlaymiz** va shu yo'l bilan ketamiz.
 
 ---
 
-## 3. Imzo (HMAC) — HTTP ishlatilganda MAJBURIY
 
-**Nega kerak.** HTTP shifrlanmagan. Ya'ni `Authorization: Bearer <TOKEN>` header
+## 3. Kodlash (кодировка) haqi
+
+Kirill matn (kassir ismi, tovar nomi, to'lov turi) buzilmasligi uchun:
+
+- **UTF-8** da yuborsangiz — `Content-Type: application/json; charset=utf-8`
+- **windows-1251** da yuborsangiz — `Content-Type: application/json; charset=windows-1251`
+
+`charset` ni yozmasangiz ham biz o'zimiz aniqlaymiz, lekin **yozganingiz aniqroq**.
+
+⚠️ Bir marta shunday bo'lgan: fayl cp1251 da edi, lekin UTF-8 deb o'qildi va
+kirill harflar `�` ga aylanib **butunlay yo'qoldi**. Shuning uchun `charset` ni
+yozib qo'ying.
+
+---
+
+## 4. Javoblar
+
+| Kod | Ma'nosi | Nima qilish |
+|---|---|---|
+| `200` | Qabul qilindi va **bazaga yozildi** | "yuborildi" deb belgilang |
+| `400` | JSON o'qilmadi | Formatni tekshiring |
+| `401` | Imzo bilan bog'liq (hozir ishlatilmaydi) | Javobdagi matnni o'qing |
+| `403` | Bu IP dan qabul qilinmaydi | Bizga ayting |
+| `404` | Token noto'g'ri | Tokenni tekshiring |
+| `413` | So'rov juda katta | Partiyani kichraytiring (max 1000 hodisa, 8 MB) |
+| `500` | Bizda xato | **Qayta yuboring** |
+
+**`200` = yozildi.** Bu kafolat: javob kelgan bo'lsa ma'lumot yo'qolmaydi.
+
+**Qayta yuborish xavfsiz.** Har bir hodisa mazmuni bo'yicha tekshiriladi —
+ikki marta yuborilsa ikkinchisi jimgina tashlanadi, dubl paydo bo'lmaydi.
+Shuning uchun shubha bo'lsa — qayta yuboring.
+
+---
+
+## 5. IP cheklovi
+
+Sizning IP'ingizni oldindan so'ramaymiz. **Birinchi muvaffaqiyatli so'rov**
+kelgan IP avtomatik ro'yxatga olinadi, keyin faqat o'sha IP qabul qilinadi.
+
+Agar 1C server ko'chsa yoki IP o'zgarsa — `403` keladi. Bizga ayting, bir
+bosishda yangilaymiz.
+
+Agar sizda **bir nechta server** bo'lsa, oldindan aytib qo'ying.
+
+---
+
+## 6. Nima yuboriladi
+
+Uch shaklning istalgani bo'ladi:
+
+```json
+{ "kind": "ЧекККМ", "id": "...", "number": "121", "date": "...", "data": { } }
+```
+```json
+[ { }, { } ]
+```
+```json
+{ "events": [ { }, { } ] }
+```
+
+Chek uchun tuzilma allaqachon kelishilgan (namuna fayl bo'yicha).
+
+**Hujjatlar** (приход / расход / перемещение) uchun bitta shart bor:
+har bir hujjatda **`kind`** maydoni bo'lsin — hujjat turi matn bilan
+(masalan `"ПоступлениеТоваровУслуг"`). Usiz biz prixodni chekdan ajrata olmaymiz.
+
+---
+
+## Ilova — Imzo (HMAC). HOZIRCHA KERAK EMAS
+
+> ⚠️ **Buni bajarmang.** Server tomonda imzo qo'llab-quvvatlanadi, lekin
+> **majburiy emas** — imzosiz so'rovlar oddiy qabul qilinadi. Bu ilova
+> kelajakda kerak bo'lib qolsa deb saqlanyapti. Sizdan so'ralmaguncha
+> e'tibor bermang.
+
+**Nega kerak bo'lishi mumkin.** HTTP shifrlanmagan. Ya'ni `Authorization: Bearer <TOKEN>` header
 ochiq ketadi va yo'lda uni o'qib olish mumkin. Tokenni bilgan odam esa bizga
 soxta chek yubora oladi.
 
@@ -215,70 +289,3 @@ Platformangiz versiyasiga qarab nomlar biroz farq qilishi mumkin — moslashtiri
 ```
 
 ---
-
-## 4. Kodlash (кодировка) haqi
-
-Kirill matn (kassir ismi, tovar nomi, to'lov turi) buzilmasligi uchun:
-
-- **UTF-8** da yuborsangiz — `Content-Type: application/json; charset=utf-8`
-- **windows-1251** da yuborsangiz — `Content-Type: application/json; charset=windows-1251`
-
-`charset` ni yozmasangiz ham biz o'zimiz aniqlaymiz, lekin **yozganingiz aniqroq**.
-
-⚠️ Bir marta shunday bo'lgan: fayl cp1251 da edi, lekin UTF-8 deb o'qildi va
-kirill harflar `�` ga aylanib **butunlay yo'qoldi**. Shuning uchun `charset` ni
-yozib qo'ying.
-
----
-
-## 5. Javoblar
-
-| Kod | Ma'nosi | Nima qilish |
-|---|---|---|
-| `200` | Qabul qilindi va **bazaga yozildi** | "yuborildi" deb belgilang |
-| `400` | JSON o'qilmadi | Formatni tekshiring |
-| `401` | Imzo yo'q / noto'g'ri / vaqt farqi katta | Javobdagi matnni o'qing |
-| `403` | Bu IP dan qabul qilinmaydi | Bizga ayting |
-| `404` | Token noto'g'ri | Tokenni tekshiring |
-| `413` | So'rov juda katta | Partiyani kichraytiring (max 1000 hodisa, 8 MB) |
-| `500` | Bizda xato | **Qayta yuboring** |
-
-**`200` = yozildi.** Bu kafolat: javob kelgan bo'lsa ma'lumot yo'qolmaydi.
-
-**Qayta yuborish xavfsiz.** Har bir hodisa mazmuni bo'yicha tekshiriladi —
-ikki marta yuborilsa ikkinchisi jimgina tashlanadi, dubl paydo bo'lmaydi.
-Shuning uchun shubha bo'lsa — qayta yuboring.
-
----
-
-## 6. IP cheklovi
-
-Sizning IP'ingizni oldindan so'ramaymiz. **Birinchi muvaffaqiyatli so'rov**
-kelgan IP avtomatik ro'yxatga olinadi, keyin faqat o'sha IP qabul qilinadi.
-
-Agar 1C server ko'chsa yoki IP o'zgarsa — `403` keladi. Bizga ayting, bir
-bosishda yangilaymiz.
-
-Agar sizda **bir nechta server** bo'lsa, oldindan aytib qo'ying.
-
----
-
-## 7. Nima yuboriladi
-
-Uch shaklning istalgani bo'ladi:
-
-```json
-{ "kind": "ЧекККМ", "id": "...", "number": "121", "date": "...", "data": { } }
-```
-```json
-[ { }, { } ]
-```
-```json
-{ "events": [ { }, { } ] }
-```
-
-Chek uchun tuzilma allaqachon kelishilgan (namuna fayl bo'yicha).
-
-**Hujjatlar** (приход / расход / перемещение) uchun bitta shart bor:
-har bir hujjatda **`kind`** maydoni bo'lsin — hujjat turi matn bilan
-(masalan `"ПоступлениеТоваровУслуг"`). Usiz biz prixodni chekdan ajrata olmaymiz.

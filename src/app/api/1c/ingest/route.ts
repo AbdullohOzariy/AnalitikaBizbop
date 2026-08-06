@@ -62,10 +62,13 @@ async function imzoMajburiymi(): Promise<boolean> {
 export async function GET(req: Request) {
   if (!authorized(req)) return notFound();
 
-  // Ping IP'ni RO'YXATGA OLMAYDI — faqat tekshiradi. Aks holda test uchun
-  // boshqa kompyuterdan qilingan ping IP'ni band qilib qo'yardi.
+  // qabulQil=false — ping IP'ni BAND QILMAYDI, faqat tekshiradi. Aks holda
+  // ulanishni sinab ko'rgan har qanday kompyuter ro'yxatni egallab olardi va
+  // 1C ning haqiqiy so'rovi 403 olardi.
   const ip = haqiqiyIp(req);
-  const ipRes = await ipTekshir(ip).catch(() => ({ ok: true, royxatgaOlindi: false }) as const);
+  const ipRes = await ipTekshir(ip, false).catch(
+    () => ({ ok: true, royxatgaOlindi: false }) as const
+  );
   const majburiy = await imzoMajburiymi();
   return NextResponse.json({
     ok: true,
@@ -106,8 +109,10 @@ export async function POST(req: Request) {
 
   // IP cheklovi TOKENDAN KEYIN: tokensiz so'rov IP ro'yxatiga ta'sir qilmasin
   // (aks holda tasodifiy skaner birinchi IP bo'lib yozilib qolardi).
+  // qabulQil=true — faqat POST ro'yxatni band qila oladi ("birinchi haqiqiy
+  // yuborish" prinsipi). Token allaqachon tekshirilgan, ya'ni buni 1C qiladi.
   const ip = haqiqiyIp(req);
-  const ipRes = await ipTekshir(ip);
+  const ipRes = await ipTekshir(ip, true);
   if (!ipRes.ok) {
     await ipJurnal(ip, false);
     console.warn(`[1c-ingest] ruxsatsiz IP: ${ipRes.ip} (ruxsat: ${ipRes.ruxsatEtilgan.join(", ")})`);

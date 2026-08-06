@@ -50,14 +50,19 @@ function parseIps(raw: string | null | undefined): string[] {
 /**
  * IP ruxsat etilganmi. Ro'yxat BO'SH bo'lsa — shu IP ro'yxatga olinadi
  * (birinchi muvaffaqiyatli ulanish).
+ *
+ * `qabulQil` — bo'sh ro'yxatni SHU IP bilan band qilishga ruxsat. Faqat POST
+ * uchun `true`. GET ping `false` bilan chaqiradi: aks holda ulanishni tekshirib
+ * ko'rgan har qanday kompyuter (biz o'zimiz ham) ro'yxatni band qilib qo'yadi
+ * va keyin 1C ning haqiqiy so'rovi `403` oladi. Bu bir marta sodir bo'lgan.
  */
-export async function ipTekshir(ip: string): Promise<IpTekshiruv> {
+export async function ipTekshir(ip: string, qabulQil = false): Promise<IpTekshiruv> {
   const row = await prisma.appSetting.findUnique({ where: { key: IP_SETTING_KEY } });
   const ruxsat = parseIps(row?.value);
 
   if (ruxsat.length === 0) {
     // "unknown" ni ro'yxatga OLMAYMIZ — aks holda cheklov mangu ochiq qolardi.
-    if (ip === "unknown") return { ok: true, royxatgaOlindi: false };
+    if (ip === "unknown" || !qabulQil) return { ok: true, royxatgaOlindi: false };
     await prisma.appSetting.upsert({
       where: { key: IP_SETTING_KEY },
       create: { key: IP_SETTING_KEY, value: ip },
