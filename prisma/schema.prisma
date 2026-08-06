@@ -2542,6 +2542,10 @@ model OnecIpLog {
   /// So'nggi urinishda ruxsat berildimi.
   allowed   Boolean
   requests  Int      @default(0)
+  /// Shundan nechtasi HMAC bilan imzolangan edi. Imzoni MAJBURIY qilishdan
+  /// oldin shu son `requests` ga teng bo'lishi kerak — aks holda yoqish 1C
+  /// oqimini to'xtatib qo'yadi.
+  signedRequests Int @default(0)
   firstSeen DateTime @default(now())
   lastSeen  DateTime @updatedAt
 

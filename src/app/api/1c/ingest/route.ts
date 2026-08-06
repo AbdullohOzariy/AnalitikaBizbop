@@ -17,6 +17,13 @@ import { redactForLog } from "@/lib/tg-redact";
 import { cheklarniQaytaIshla } from "@/lib/integratsiya/chek-saqla";
 import { haqiqiyIp, ipTekshir, ipJurnal } from "@/lib/integratsiya/ip-cheklov";
 import {
+  imzoTekshir,
+  HMAC_REQUIRED_KEY,
+  IMZO_HEADER,
+  VAQT_HEADER,
+  IMZO_OYNA_SEK,
+} from "@/lib/integratsiya/imzo";
+import {
   decodeBody,
   extractEvents,
   normalizeEvent,
@@ -41,6 +48,17 @@ function authorized(req: Request): boolean {
 /** Sozlanmagan yoki noto'g'ri token — 404: endpoint borligini ham oshkor qilmaymiz. */
 const notFound = () => new NextResponse("Not found", { status: 404 });
 
+/**
+ * Imzo majburiymi. Sozlamalardan o'qiladi (env emas) — 1C imzolashni qo'shgach
+ * qayta deploy qilmasdan, bitta tugma bilan yoqiladi.
+ */
+async function imzoMajburiymi(): Promise<boolean> {
+  const row = await prisma.appSetting
+    .findUnique({ where: { key: HMAC_REQUIRED_KEY } })
+    .catch(() => null);
+  return row?.value === "1";
+}
+
 export async function GET(req: Request) {
   if (!authorized(req)) return notFound();
 
@@ -48,11 +66,23 @@ export async function GET(req: Request) {
   // boshqa kompyuterdan qilingan ping IP'ni band qilib qo'yardi.
   const ip = haqiqiyIp(req);
   const ipRes = await ipTekshir(ip).catch(() => ({ ok: true, royxatgaOlindi: false }) as const);
+  const majburiy = await imzoMajburiymi();
   return NextResponse.json({
     ok: true,
     service: "analitika-bizbop",
     yourIp: ip,
     ipAllowed: ipRes.ok,
+    // Server soati — 1C tomon o'z soatini shu bilan solishtirib ko'radi.
+    serverTime: Math.floor(Date.now() / 1000),
+    signature: {
+      required: majburiy,
+      configured: Boolean(process.env.ONEC_INGEST_SECRET),
+      alg: "HMAC-SHA256",
+      headers: { signature: IMZO_HEADER, timestamp: VAQT_HEADER },
+      payload: "<timestamp>.<xom tana baytlari>",
+      encoding: "hex (kichik harf)",
+      clockSkewSeconds: IMZO_OYNA_SEK,
+    },
     // 1C tomon nima kutilishini shu javobdan ko'radi — hujjat izlab yurmasin.
     accepts: {
       method: "POST",
@@ -78,8 +108,8 @@ export async function POST(req: Request) {
   // (aks holda tasodifiy skaner birinchi IP bo'lib yozilib qolardi).
   const ip = haqiqiyIp(req);
   const ipRes = await ipTekshir(ip);
-  await ipJurnal(ip, ipRes.ok);
   if (!ipRes.ok) {
+    await ipJurnal(ip, false);
     console.warn(`[1c-ingest] ruxsatsiz IP: ${ipRes.ip} (ruxsat: ${ipRes.ruxsatEtilgan.join(", ")})`);
     return NextResponse.json(
       { ok: false, error: "Bu IP manzildan qabul qilinmaydi." },
@@ -98,12 +128,46 @@ export async function POST(req: Request) {
     );
   }
 
+  // Tana BIR MARTA xom bayt sifatida o'qiladi: imzo aynan shu baytlar bo'yicha
+  // tekshiriladi, keyin o'shalar dekodlanadi. Matnga aylantirilgandan keyin
+  // imzolash noto'g'ri bo'lardi — cp1251 → UTF-8 da baytlar o'zgaradi.
+  let raw: Uint8Array;
+  try {
+    raw = new Uint8Array(await req.arrayBuffer());
+  } catch {
+    await ipJurnal(ip, true);
+    return NextResponse.json({ ok: false, error: "So'rov tanasi o'qilmadi." }, { status: 400 });
+  }
+  // Content-Length YOLG'ON bo'lishi mumkin — haqiqiy o'lchamni ham tekshiramiz.
+  if (raw.byteLength > MAX_BODY_BYTES) {
+    return NextResponse.json(
+      { ok: false, error: `So'rov juda katta (${raw.byteLength} bayt). Partiyani kichraytiring.` },
+      { status: 413 }
+    );
+  }
+
+  // HMAC imzo: HTTP (shifrsiz) kanalda tokenni ushlab olish mumkin, imzo kaliti
+  // esa simda ketmaydi. Imzo kelgan bo'lsa har doim tekshiriladi.
+  const imzoRes = imzoTekshir({
+    secret: process.env.ONEC_INGEST_SECRET,
+    imzo: req.headers.get(IMZO_HEADER),
+    vaqt: req.headers.get(VAQT_HEADER),
+    tana: raw,
+    talabQilinadi: await imzoMajburiymi(),
+  });
+  // Jurnal AYNAN shu yerda: imzo holati ma'lum bo'lgach, lekin rad javobidan
+  // oldin — imzosi noto'g'ri urinish ham ko'rinib tursin.
+  await ipJurnal(ip, true, imzoRes.ok && imzoRes.holat === "tekshirildi");
+  if (!imzoRes.ok) {
+    console.warn(`[1c-ingest] imzo rad etildi: ${imzoRes.sabab} (ip: ${ip})`);
+    return NextResponse.json({ ok: false, error: imzoRes.sabab }, { status: 401 });
+  }
+
   // req.json() ISHLATILMAYDI: u tanani har doim UTF-8 deb o'qiydi va 1C ning
   // windows-1251 chiqishida kirill matnni U+FFFD ga aylantirib YO'Q QILADI.
   // decodeBody kodlashni o'zi aniqlaydi (charset → UTF-8 → cp1251).
   let body: unknown;
   try {
-    const raw = new Uint8Array(await req.arrayBuffer());
     body = JSON.parse(decodeBody(raw, req.headers.get("content-type")));
   } catch {
     return NextResponse.json({ ok: false, error: "JSON parse qilinmadi." }, { status: 400 });

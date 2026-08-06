@@ -35,7 +35,11 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        source: "/:path*",
+        // 1C qabul endpointi ATAYLAB tashqarida: u HTTP orqali ham ishlashi
+        // kerak (1C tomonda TLS muammosi bor). HSTS yuborilsa, uni hurmat
+        // qiladigan mijoz so'rovni o'zi HTTPS'ga ko'taradi va yana o'sha
+        // sertifikat xatosiga tushadi. Himoya bu yerda HMAC imzo bilan.
+        source: "/((?!api/1c).*)",
         headers: [
           { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
         ],

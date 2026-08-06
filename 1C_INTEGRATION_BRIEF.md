@@ -436,3 +436,76 @@ Mazzona и игровые зоны.
 **8. Объём и режим.** Сколько чеков в сутки ожидается и отправка идёт **сразу при
 пробитии** или пакетом? Наш приём: до 1000 событий в одном запросе, тело до 8 МБ,
 повторная отправка безопасна.
+
+---
+
+## Ilova D — HTTP masalasi: DNS manzarasi va transport qarori
+
+**Sana:** 2026-08-06. 1C jamoasi «HTTP kerak» degandan keyin o'tkazilgan tekshiruv.
+
+### D.1 Aniqlangan faktlar
+
+```
+NS                      ns1.eskiz.uz, ns2.eskiz.uz
+analitika.oilagroup.uz  CNAME → 3xi8jpkm.up.railway.app  (69.46.46.59)
+oilagroup.uz            A     → 45.138.159.4   (Apache — sayt)
+www                     CNAME → oilagroup.uz
+mail / ftp / webmail    A     → 45.138.159.4
+MX                      10 mail.oilagroup.uz
+TXT (SPF)               v=spf1 +a +mx +ipv4:45.138.159.4 ~all
+*  (wildcard)           A     → 185.183.243.161  (panel2.eskiz.uz — eskiz parkovkasi, BIZNIKI EMAS)
+```
+
+`http://analitika.oilagroup.uz` → **301** `https://...` (Railway majburlaydi, o'chirib bo'lmaydi).
+
+**Muhim xulosa:** pochta (MX + SPF) **alohida serverda** (45.138.159.4). Butun
+zonani Cloudflare'ga ko'chirish 8 ta yozuvni qo'lda ko'chirishni talab qiladi va
+xato bo'lsa **korxona elektron pochtasi to'xtaydi**. Bu bitta endpoint uchun
+nomutanosib xavf.
+
+### D.2 Variantlar
+
+| # | Variant | Narx | oilagroup.uz DNS | Trafik shifri | Baho |
+|---|---|---|---|---|---|
+| **A** | 1C tomonda sertifikat tekshiruvini o'chirish | 0 | tegilmaydi | **bor** (TLS) | ✅ eng yaxshi |
+| **B** | Alohida domen + Cloudflare | ~$10/yil | tegilmaydi | yo'q (HTTP) | ✅ xavfsiz zaxira |
+| **C** | Butun zonani Cloudflare'ga ko'chirish | 0 | **8 yozuv ko'chadi** | yo'q (HTTP) | ⚠️ pochta xavfi |
+| **D** | Kichik VPS + nginx (`1c.oilagroup.uz`) | ~$4/oy | 1 ta A yozuv qo'shiladi | yo'q (HTTP) | ⚪ ishlaydi, xarajat |
+
+**A varianti** — `ЗащищенноеСоединениеOpenSSL(, )` bilan bir qator kod. Sertifikat
+tekshirilmaydi, lekin **trafik shifrlangan qoladi**. Batafsili: `1C_ULANISH.md`.
+
+**Diagnostika shart:** A ishlashi 1C ning muammosi *sertifikatga ishonch* ekaniga
+bog'liq. Agar Windows eski bo'lib **TLS 1.2 ni umuman bilmasa** — A yordam
+bermaydi va B/C/D kerak bo'ladi. Farqni ajratish uchun 1C jamoasidan **xatoning
+aniq matni** so'raladi (`1C_ULANISH.md` §2 jadvali).
+
+**D varianti eslatmasi:** `*` wildcard bor, shuning uchun `1c.oilagroup.uz` uchun
+**aniq A yozuv** qo'shilishi shart — aks holda so'rov eskiz parkovkasiga ketadi.
+
+### D.3 HTTP ustida nima himoyalanadi, nima yo'q
+
+| | Token bilan (HTTPS) | Token bilan (HTTP) | Token + HMAC (HTTP) |
+|---|---|---|---|
+| Maxfiylik (o'qib bo'lmaslik) | ✅ | ❌ | ❌ |
+| Yuboruvchi haqiqiyligi | ✅ | ❌ token o'g'irlanadi | ✅ kalit simda ketmaydi |
+| Tana o'zgartirilmaganligi | ✅ | ❌ | ✅ |
+| Eski so'rovni qayta yuborish (replay) | — | ❌ | ✅ ±5 daqiqa oynasi |
+
+**HTTP da maxfiylikni tiklab bo'lmaydi** — chek summalari yo'lda o'qilishi mumkin.
+Buni foydalanuvchiga ochiq aytish shart, "HMAC qo'ydik, xavfsiz" deyish noto'g'ri.
+
+Replay uchun alohida nonce jadvali **kerak emas**: `IntegrationEvent.payloadHash`
+unique, shuning uchun oyna ichida takrorlangan so'rov ham yangi yozuv yaratmaydi.
+
+### D.4 Qurilgani (kod tayyor, 2026-08-06)
+
+- `src/lib/integratsiya/imzo.ts` — HMAC-SHA256 tekshiruvi (23 test)
+- `POST /api/1c/ingest` — imzo **kelgan bo'lsa har doim tekshiriladi**, kelmagani
+  esa `onec_hmac_required` sozlamasiga bog'liq (o'tish davri uchun)
+- `GET /api/1c/ingest` — `serverTime` va `signature{...}` qaytaradi (soat farqini
+  1C tomon o'zi ko'radi)
+- `OnecIpLog.signedRequests` — nechta so'rov imzolangani; Sozlamalarda ko'rinadi.
+  Imzoni majburiy qilish tugmasi shu songa qarab yoqiladi (ko'r-ko'rona emas)
+- `ONEC_INGEST_SECRET` — **tokendan ALOHIDA** sir. Bir xil bo'lsa, HTTP da tokenni
+  ushlagan odam imzo kalitini ham bilib oladi va himoya yo'qqa chiqadi.

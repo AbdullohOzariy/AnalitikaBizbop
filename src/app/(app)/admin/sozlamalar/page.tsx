@@ -21,6 +21,8 @@ import { ChiqimFilialEditor } from "./chiqim-filial-editor";
 import { OnecShopEditor } from "./onec-shop-editor";
 import { TolovTuriEditor } from "./tolov-turi-editor";
 import { OnecIpEditor } from "./onec-ip-editor";
+import { OnecImzoEditor } from "./onec-imzo-editor";
+import { HMAC_REQUIRED_KEY } from "@/lib/integratsiya/imzo";
 import { RuxsatEditor } from "./ruxsat-editor";
 import { SverkaGuruhEditor } from "./sverka-guruh-editor";
 import { SverkaXodimlar, type XodimRow } from "../../sverka/sverka-client";
@@ -319,14 +321,24 @@ async function SpisaniyaTab() {
   );
 
   // 1C qabul IP'lari — ruxsat berilgani ham, rad etilgani ham
-  const [ipLog, ipSetting] = await Promise.all([
+  const [ipLog, ipSetting, imzoSetting] = await Promise.all([
     prisma.onecIpLog.findMany({ orderBy: { lastSeen: "desc" }, take: 30 }),
     prisma.appSetting.findUnique({ where: { key: "onec_allowed_ips" } }),
+    prisma.appSetting.findUnique({ where: { key: HMAC_REQUIRED_KEY } }),
   ]);
   const ruxsatEtilganIp = (ipSetting?.value ?? "")
     .split(",")
     .map((x) => x.trim())
     .filter(Boolean);
+
+  // Imzo statistikasi FAQAT ruxsat etilgan IP'lar bo'yicha: rad etilgan
+  // skanerlarning imzosiz urinishlari "1C imzolamayapti" degan noto'g'ri
+  // xulosaga olib kelmasin.
+  const imzoLog = ipLog.filter((r) => ruxsatEtilganIp.includes(r.ip));
+  const imzoStat = {
+    jami: imzoLog.reduce((s, r) => s + r.requests, 0),
+    imzolangan: imzoLog.reduce((s, r) => s + r.signedRequests, 0),
+  };
 
   return (
     <div className="space-y-5">
@@ -368,6 +380,19 @@ async function SpisaniyaTab() {
             lastSeen: formatDateUZ(r.lastSeen),
           }))}
           ruxsatEtilgan={ruxsatEtilganIp}
+        />
+      </SectionCard>
+
+      <SectionCard
+        title="1C qabul: imzo (HMAC)"
+        description="So'rov haqiqiyligini tasdiqlash. HTTP orqali qabul qilishda shart"
+        actions={<Link2 className="h-4 w-4 text-muted-foreground" />}
+      >
+        <OnecImzoEditor
+          majburiy={imzoSetting?.value === "1"}
+          sirSozlangan={Boolean(process.env.ONEC_INGEST_SECRET)}
+          jami={imzoStat.jami}
+          imzolangan={imzoStat.imzolangan}
         />
       </SectionCard>
 

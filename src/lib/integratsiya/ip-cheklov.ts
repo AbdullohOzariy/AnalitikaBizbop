@@ -76,14 +76,27 @@ export async function ipTekshir(ip: string): Promise<IpTekshiruv> {
  * IP bo'yicha agregat (har so'rov emas): jadval o'smaydi, lekin "qaysi IP'dan
  * necha marta kelgan" savoliga javob beradi. Rad etilgan urinish 1C ning
  * ikkinchi serveri bo'lishi ham mumkin — buni ko'rmasdan bilib bo'lmaydi.
+ *
+ * `imzolangan` — so'rov HMAC bilan TO'G'RI imzolangan bo'lsa true. Shu hisob
+ * imzoni majburiy qilish xavfsizmi yo'qmi degan savolga javob beradi: agar
+ * barcha so'rovlar imzolangan bo'lsa, yoqish oqimni buzmaydi.
  */
-export async function ipJurnal(ip: string, allowed: boolean): Promise<void> {
+export async function ipJurnal(
+  ip: string,
+  allowed: boolean,
+  imzolangan = false
+): Promise<void> {
   if (ip === "unknown") return;
+  const imzo = imzolangan ? 1 : 0;
   await prisma.onecIpLog
     .upsert({
       where: { ip },
-      create: { ip, allowed, requests: 1 },
-      update: { allowed, requests: { increment: 1 } },
+      create: { ip, allowed, requests: 1, signedRequests: imzo },
+      update: {
+        allowed,
+        requests: { increment: 1 },
+        signedRequests: { increment: imzo },
+      },
     })
     .catch(() => undefined); // jurnal — yordamchi, asosiy oqimni to'xtatmasin
 }

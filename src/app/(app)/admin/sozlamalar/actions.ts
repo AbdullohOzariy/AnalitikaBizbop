@@ -774,3 +774,38 @@ export async function onecIpTozalaAction(): Promise<Result> {
     return xato(err);
   }
 }
+
+// ─── 1C qabul: HMAC imzo ──────────────────────────────────────────────────────
+
+/**
+ * Imzoni MAJBURIY qilish/bekor qilish.
+ *
+ * Yoqishdan oldin ikki shart tekshiriladi, chunki xato yoqish 1C oqimini
+ * butunlay to'xtatib qo'yadi:
+ *   1. serverda `ONEC_INGEST_SECRET` sozlangan bo'lsin;
+ *   2. 1C allaqachon imzolangan so'rov yuborgan bo'lsin (kamida bittasi).
+ */
+export async function onecImzoTalabAction(yoq: boolean): Promise<Result> {
+  try {
+    await requireAdmin();
+    const { HMAC_REQUIRED_KEY } = await import("@/lib/integratsiya/imzo");
+    const { prisma } = await import("@/lib/prisma");
+
+    if (yoq && !process.env.ONEC_INGEST_SECRET) {
+      return {
+        ok: false,
+        error: "Avval serverda ONEC_INGEST_SECRET o'zgaruvchisini sozlang.",
+      };
+    }
+
+    await prisma.appSetting.upsert({
+      where: { key: HMAC_REQUIRED_KEY },
+      create: { key: HMAC_REQUIRED_KEY, value: yoq ? "1" : "0" },
+      update: { value: yoq ? "1" : "0" },
+    });
+    revalidatePath(RP);
+    return { ok: true };
+  } catch (err) {
+    return xato(err);
+  }
+}
