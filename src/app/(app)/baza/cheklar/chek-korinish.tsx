@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Printer, Table2, ReceiptText } from "lucide-react";
+import { Table2, ReceiptText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -12,7 +12,12 @@ import {
 import { formatUZS } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-export type ChekPayment = { id: number; name: string; kind: string; value: number };
+export type ChekPayment = {
+  id: number;
+  name: string;
+  kind: string;
+  value: number;
+};
 export type ChekLine = {
   id: number;
   lineNo: number;
@@ -68,7 +73,13 @@ function vaqt(iso: string): { sana: string; soat: string } {
 /** Dona narxi — manbada yo'q, summa ÷ miqdordan chiqariladi. */
 const donaNarx = (sum: number, qty: number) => (qty > 0 ? sum / qty : 0);
 
-export function ChekKorinish({ chek, onClose }: { chek: ChekView; onClose: () => void }) {
+export function ChekKorinish({
+  chek,
+  onClose,
+}: {
+  chek: ChekView;
+  onClose: () => void;
+}) {
   const [texnik, setTexnik] = useState(false);
   const t = vaqt(chek.openAt);
   const chegirma = chek.sum - chek.sumWithDiscs;
@@ -76,7 +87,7 @@ export function ChekKorinish({ chek, onClose }: { chek: ChekView; onClose: () =>
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-[420px]">
-        <DialogHeader className="print:hidden">
+        <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
             <ReceiptText className="h-4 w-4" />
             Chek №{chek.number}
@@ -84,20 +95,24 @@ export function ChekKorinish({ chek, onClose }: { chek: ChekView; onClose: () =>
         </DialogHeader>
 
         {/* ── Qog'oz chek ── */}
-        <div
-          id="chek-qogoz"
-          className="rounded-lg border border-border bg-[#fffdf7] p-4 font-mono text-[12px] leading-[1.5] text-neutral-900 shadow-inner dark:bg-neutral-50"
-        >
+        <div className="rounded-lg border border-border bg-[#fffdf7] p-4 font-mono text-[12px] leading-[1.5] text-neutral-900 shadow-inner dark:bg-neutral-50">
           <div className="text-center">
             <div className="text-[13px] font-bold tracking-wide">BIZBOP</div>
-            <div className="text-[12px]">{chek.branchName ?? `Do'kon ${chek.shop}`}</div>
+            <div className="text-[12px]">
+              {chek.branchName ?? `Do'kon ${chek.shop}`}
+            </div>
           </div>
 
           <Chiziq />
 
           <Qator chap={`Chek №${chek.number}`} ong={t.sana} />
-          <Qator chap={`Kassa ${chek.pos} · Smena ${chek.session}`} ong={t.soat} />
-          {chek.cashierName && <div className="truncate">Kassir: {chek.cashierName}</div>}
+          <Qator
+            chap={`Kassa ${chek.pos} · Smena ${chek.session}`}
+            ong={t.soat}
+          />
+          {chek.cashierName && (
+            <div className="truncate">Kassir: {chek.cashierName}</div>
+          )}
 
           <Chiziq />
 
@@ -105,16 +120,25 @@ export function ChekKorinish({ chek, onClose }: { chek: ChekView; onClose: () =>
             const narx = donaNarx(l.sum, l.qty);
             const qatorChegirma = l.sum - l.sumWD;
             return (
-              <div key={l.id} className={cn("py-0.5", l.storno !== 0 && "line-through opacity-60")}>
+              <div
+                key={l.id}
+                className={cn(
+                  "py-0.5",
+                  l.storno !== 0 && "line-through opacity-60",
+                )}
+              >
                 <div className="break-words">{l.name}</div>
                 <Qator
                   chap={`  ${l.qty} × ${formatUZS(narx)}`}
                   ong={formatUZS(l.sum)}
                 />
                 {qatorChegirma !== 0 && (
-                  <Qator chap="  chegirma" ong={`-${formatUZS(qatorChegirma)}`} />
+                  <Qator
+                    chap="  chegirma"
+                    ong={`-${formatUZS(qatorChegirma)}`}
+                  />
                 )}
-                {l.storno !== 0 && <div className="text-[11px]">  ↩ STORNO</div>}
+                {l.storno !== 0 && <div className="text-[11px]"> ↩ STORNO</div>}
               </div>
             );
           })}
@@ -122,7 +146,9 @@ export function ChekKorinish({ chek, onClose }: { chek: ChekView; onClose: () =>
           <Chiziq />
 
           <Qator chap="JAMI" ong={formatUZS(chek.sum)} qalin />
-          {chegirma !== 0 && <Qator chap="Chegirma" ong={`-${formatUZS(chegirma)}`} />}
+          {chegirma !== 0 && (
+            <Qator chap="Chegirma" ong={`-${formatUZS(chegirma)}`} />
+          )}
           <Qator chap="TO'LOV" ong={formatUZS(chek.totalSum)} qalin katta />
 
           <Chiziq />
@@ -142,11 +168,13 @@ export function ChekKorinish({ chek, onClose }: { chek: ChekView; onClose: () =>
             <div>Tovar turlari: {chek.qtyPositions}</div>
           </div>
 
-          <div className="mt-2 text-center text-[11px]">Xaridingiz uchun rahmat!</div>
+          <div className="mt-2 text-center text-[11px]">
+            Xaridingiz uchun rahmat!
+          </div>
         </div>
 
         {/* ── Texnik ma'lumot ── */}
-        <div className="print:hidden">
+        <div>
           <Button
             variant="ghost"
             size="sm"
@@ -169,7 +197,9 @@ export function ChekKorinish({ chek, onClose }: { chek: ChekView; onClose: () =>
               </div>
 
               <div>
-                <div className="mb-1 font-medium text-muted-foreground">To&apos;lovlar (xom nom)</div>
+                <div className="mb-1 font-medium text-muted-foreground">
+                  To&apos;lovlar (xom nom)
+                </div>
                 {chek.payments.map((p) => (
                   <div key={p.id}>
                     «{p.name}» → {p.kind} · {formatUZS(p.value)}
@@ -178,39 +208,25 @@ export function ChekKorinish({ chek, onClose }: { chek: ChekView; onClose: () =>
               </div>
 
               <div>
-                <div className="mb-1 font-medium text-muted-foreground">Qatorlar</div>
+                <div className="mb-1 font-medium text-muted-foreground">
+                  Qatorlar
+                </div>
                 {chek.lines.map((l) => (
-                  <div key={l.id} className={cn(!l.matched && "text-amber-600 dark:text-amber-500")}>
-                    {l.lineNo}. kod {l.itemCode ?? "—"} · {l.barcode ?? "b/kodsiz"}
+                  <div
+                    key={l.id}
+                    className={cn(
+                      !l.matched && "text-amber-600 dark:text-amber-500",
+                    )}
+                  >
+                    {l.lineNo}. kod {l.itemCode ?? "—"} ·{" "}
+                    {l.barcode ?? "b/kodsiz"}
                     {!l.matched && " · SKU topilmadi"}
                   </div>
                 ))}
               </div>
             </div>
           )}
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => window.print()}
-            className="mt-2 h-8 w-full gap-1.5 text-xs"
-          >
-            <Printer className="h-3.5 w-3.5" />
-            Chop etish
-          </Button>
         </div>
-
-        {/* Chop etishda faqat chekning o'zi chiqsin */}
-        <style>{`
-          @media print {
-            body * { visibility: hidden; }
-            #chek-qogoz, #chek-qogoz * { visibility: visible; }
-            #chek-qogoz {
-              position: absolute; left: 0; top: 0; width: 72mm;
-              border: 0; box-shadow: none; background: #fff;
-            }
-          }
-        `}</style>
       </DialogContent>
     </Dialog>
   );
@@ -232,9 +248,16 @@ function Qator({
   katta?: boolean;
 }) {
   return (
-    <div className={cn("flex items-baseline justify-between gap-3", qalin && "font-bold")}>
+    <div
+      className={cn(
+        "flex items-baseline justify-between gap-3",
+        qalin && "font-bold",
+      )}
+    >
       <span className="min-w-0 break-words">{chap}</span>
-      <span className={cn("shrink-0 tabular-nums", katta && "text-[14px]")}>{ong}</span>
+      <span className={cn("shrink-0 tabular-nums", katta && "text-[14px]")}>
+        {ong}
+      </span>
     </div>
   );
 }
