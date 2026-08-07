@@ -94,12 +94,19 @@ const txt = (v: unknown): string | null => {
 export function tolovTuri(name: string): PaymentKind {
   const s = name.toLowerCase().replace(/\s+/g, " ").trim();
 
-  // TARTIB MUHIM: "безналичный" ichida "нал" bor. Naqdni oldin tekshirsak,
-  // NAQD BO'LMAGAN to'lov naqd deb hisoblanardi — bu butun kassa sverkasini
-  // buzadi (aynan shu narsa uchun integratsiya qilinyapti).
+  // TARTIB MUHIM: "нал" bo'lagi NAQD BO'LMAGAN so'zlar ichida ham uchraydi —
+  // "без­нал­ичный" va "Терми­нал". Naqdni oldin tekshirsak, ular naqd deb
+  // hisoblanardi va butun kassa sverkasi buzilardi (aynan shu narsa uchun
+  // integratsiya qilinyapti). "Терминал" jonli ma'lumotda AYNAN shunday
+  // xato tushgan — 2026-08-07 da topilib tuzatildi.
   if (/безнал|перечис|перевод|o'tkaz|otkaz|transfer|bank/.test(s)) return "TRANSFER";
-  if (/карт|плас|karta|plastik|card|uzcard|humo|visa|master/.test(s)) return "CARD";
+  if (/терминал|terminal|карт|плас|karta|plastik|card|uzcard|humo|visa|master/.test(s)) {
+    return "CARD";
+  }
   if (/нал|naqd|cash/.test(s)) return "CASH";
+  // Payme/Click/Uzum kabi ilovalar ATAYLAB OTHER: ular kassaga naqd tushirmaydi,
+  // lekin plastikmi yoki o'tkazmami — buxgalteriya qarori. Sozlamalarda
+  // tasdiqlanadi va hisobotda "boshqa" bo'lib ko'rinib turadi.
   return "OTHER";
 }
 
@@ -182,6 +189,26 @@ export function parseChek(p: unknown): Chek | { error: string } {
     return { name, kind: tolovTuri(name), value: num(t.value) };
   });
 
+  // Chek sarlavhasidagi summalar HAR DOIM KELMAYDI. 1C bergan namunada `sum`,
+  // `sumWithDiscs`, `totalSum` bor edi, jonli oqimda esa YO'Q — natijada barcha
+  // cheklar 0 summa bilan tushib qoldi (2026-08-07 da aniqlandi).
+  //
+  // Yo'q bo'lsa qatorlardan yig'amiz. Manba tanlovi ataylab:
+  //   totalSum — TO'LOVLARDAN: bu haqiqatan olingan pul, tushum shu.
+  // Kelgan bo'lsa 1C ning qiymati ustun — kelajakda maydon qaytsa o'zi ishlaydi.
+  const bor = (v: unknown) => v !== undefined && v !== null && v !== "";
+  const yig = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+
+  const sum = bor(o.sum) ? num(o.sum) : yig(lines.map((l) => l.sum));
+  const sumWithDiscs = bor(o.sumWithDiscs)
+    ? num(o.sumWithDiscs)
+    : yig(lines.map((l) => l.sumWD));
+  const totalSum = bor(o.totalSum)
+    ? num(o.totalSum)
+    : payments.length > 0
+      ? yig(payments.map((p) => p.value))
+      : yig(lines.map((l) => l.totalSum));
+
   return {
     shop,
     pos,
@@ -198,9 +225,9 @@ export function parseChek(p: unknown): Chek | { error: string } {
     cashierName: txt(user.name),
     qtyBuys: o.qtyBuys === undefined ? null : num(o.qtyBuys),
     qtyPositions: num(o.qtyPositions, lines.length),
-    sum: num(o.sum),
-    sumWithDiscs: num(o.sumWithDiscs),
-    totalSum: num(o.totalSum),
+    sum,
+    sumWithDiscs,
+    totalSum,
     lines,
     payments,
   };

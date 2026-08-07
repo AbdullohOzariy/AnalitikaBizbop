@@ -203,3 +203,75 @@ describe("parseChek — xato holatlar", () => {
     expect(r).toHaveProperty("error");
   });
 });
+
+describe("tolovTuri — 'нал' bo'lagi tuzoqlari", () => {
+  // REGRESSIYA: jonli oqimda "Терминал" NAQD deb tushgan edi (2026-08-07).
+  // "Терми-нал" ichida "нал" bor, naqd tekshiruvi oldinroq turgani uchun.
+  it("Терминал → CARD (naqd EMAS)", () => {
+    expect(tolovTuri("Терминал")).toBe("CARD");
+    expect(tolovTuri("терминал")).toBe("CARD");
+    expect(tolovTuri("POS-терминал")).toBe("CARD");
+  });
+
+  it("Безналичный → TRANSFER (naqd EMAS)", () => {
+    expect(tolovTuri("Безналичный")).toBe("TRANSFER");
+  });
+
+  it("Наличные → CASH", () => {
+    expect(tolovTuri("Наличные")).toBe("CASH");
+    expect(tolovTuri("Naqd")).toBe("CASH");
+  });
+
+  it("to'lov ilovalari OTHER bo'lib qoladi — buxgalteriya tasdiqlasin", () => {
+    for (const n of ["PaymeGo", "Click", "Uzum"]) {
+      expect(tolovTuri(n)).toBe("OTHER");
+    }
+  });
+});
+
+describe("parseChek — summalar kelmaganda qatorlardan yig'iladi", () => {
+  // Jonli 1C oqimida sarlavhada sum/sumWithDiscs/totalSum YO'Q — barcha cheklar
+  // 0 summa bilan tushib qolgan edi (2026-08-07).
+  const xom = {
+    shop: 1, pos: 5, number: "887929", session: 3813,
+    openDate: "07.08.26", openTime: "16:02:03", type: 1, qtyPositions: 2,
+    user: { id: 1, name: "admin" },
+    payments: [{ name: "Наличные", value: 500 }],
+    positions: [
+      { qty: 1, sum: 300, sumWD: 280, totalSum: 280, storno: 0, item: { id: 1, name: "A" } },
+      { qty: 2, sum: 250, sumWD: 220, totalSum: 220, storno: 0, item: { id: 2, name: "B" } },
+    ],
+  };
+
+  it("sum va sumWithDiscs qatorlardan yig'iladi", () => {
+    const r = parseChek(xom);
+    expect("error" in r).toBe(false);
+    if ("error" in r) return;
+    expect(r.sum).toBe(550);
+    expect(r.sumWithDiscs).toBe(500);
+  });
+
+  it("totalSum TO'LOVLARDAN olinadi — haqiqatan olingan pul", () => {
+    const r = parseChek(xom);
+    if ("error" in r) throw new Error("parse xato");
+    expect(r.totalSum).toBe(500);
+  });
+
+  it("to'lov bo'lmasa qatorlarning totalSum'i ishlatiladi", () => {
+    const r = parseChek({ ...xom, payments: [] });
+    if ("error" in r) throw new Error("parse xato");
+    expect(r.totalSum).toBe(500);
+  });
+
+  it("1C summani YUBORSA — uniki ustun (kelajakda maydon qaytsa ishlaydi)", () => {
+    const r = parseChek({ ...xom, sum: 999, sumWithDiscs: 888, totalSum: 777 });
+    if ("error" in r) throw new Error("parse xato");
+    expect([r.sum, r.sumWithDiscs, r.totalSum]).toEqual([999, 888, 777]);
+  });
+
+  it("0 qiymat ham HURMAT QILINADI (yig'indi bilan almashtirilmaydi)", () => {
+    const r = parseChek({ ...xom, totalSum: 0 });
+    if ("error" in r) throw new Error("parse xato");
+    expect(r.totalSum).toBe(0);
+  });
+});
