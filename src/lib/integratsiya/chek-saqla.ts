@@ -21,15 +21,47 @@ export type QaytaIshlashNatija = {
 };
 
 /**
+ * Ayni paytda bitta drenaj ishlashi uchun bayroq.
+ *
+ * Navbatni ikki joy bo'shatadi: har POST'dan keyin (`after`) va har 5 daqiqada
+ * (cron). 1C har 20 soniyada yuborgani uchun ular ustma-ust tushadi va bir xil
+ * hodisalarni ikki marta o'qib, bir xil chekni yozishga urinadi. Upsert buni
+ * xatosiz hal qiladi, lekin ish baribir ikki barobar bajarilardi.
+ */
+let ishlayapti = false;
+
+/**
  * PENDING hodisalarni chekka aylantiradi.
  * @param limit bir chaqiruvda nechta hodisa (katta partiyada bo'lib ishlaydi)
  */
-export async function cheklarniQaytaIshla(limit = 500): Promise<QaytaIshlashNatija> {
+export async function cheklarniQaytaIshla(
+  limit = 500,
+): Promise<QaytaIshlashNatija> {
+  const bosh: QaytaIshlashNatija = {
+    korildi: 0,
+    yaratildi: 0,
+    yangilandi: 0,
+    chekEmas: 0,
+    xato: 0,
+    yangiTolovTuri: 0,
+  };
+  // Allaqachon ishlayapti — bu chaqiruv jim chiqadi. Hodisa yo'qolmaydi:
+  // ishlayotgani ularni baribir oladi, olmasa 5 daqiqadan keyin cron oladi.
+  if (ishlayapti) return bosh;
+  ishlayapti = true;
+  try {
+    return await drenaj(limit);
+  } finally {
+    ishlayapti = false;
+  }
+}
+
+async function drenaj(limit: number): Promise<QaytaIshlashNatija> {
   const events = await prisma.integrationEvent.findMany({
     where: { status: "PENDING" },
     orderBy: { id: "asc" },
     take: limit,
-    select: { id: true, payload: true },
+    select: { id: true, payload: true, attempts: true },
   });
 
   const natija: QaytaIshlashNatija = {
@@ -54,10 +86,11 @@ export async function cheklarniQaytaIshla(limit = 500): Promise<QaytaIshlashNati
   // ya'ni u Sozlamalarda "tekshirilmagan" bo'lib ko'rinadi va tushumdan
   // jimgina tushib qolmaydi.
   const tolovMap = new Map(
-    (await prisma.paymentTypeMap.findMany({ select: { name: true, kind: true } })).map((t) => [
-      t.name,
-      t.kind,
-    ])
+    (
+      await prisma.paymentTypeMap.findMany({
+        select: { name: true, kind: true },
+      })
+    ).map((t) => [t.name, t.kind]),
   );
 
   for (const ev of events) {
@@ -79,7 +112,11 @@ export async function cheklarniQaytaIshla(limit = 500): Promise<QaytaIshlashNati
     }
 
     // SKU moslashtirish: item.id = nomenklatura kodi = Product.code
-    const kodlar = [...new Set(c.lines.map((l) => l.itemCode).filter((x): x is number => x != null))];
+    const kodlar = [
+      ...new Set(
+        c.lines.map((l) => l.itemCode).filter((x): x is number => x != null),
+      ),
+    ];
     const products = kodlar.length
       ? await prisma.product.findMany({
           where: { code: { in: kodlar } },
@@ -114,28 +151,39 @@ export async function cheklarniQaytaIshla(limit = 500): Promise<QaytaIshlashNati
       eventId: ev.id,
     };
 
+    let mavjud: { id: number } | null = null;
     try {
-      const mavjud = await prisma.receipt.findUnique({
-        where: { shop_pos_businessDate_number_session: kalit },
-        select: { id: true },
-      });
-
       await prisma.$transaction(async (tx) => {
+        // Statistika uchun: chek yangimi yoki yangilanmoqdami. Poyga holatida
+        // bir-ikkiga adashishi mumkin — yozuvga ta'sir qilmaydi.
+        mavjud = await tx.receipt.findUnique({
+          where: { shop_pos_businessDate_number_session: kalit },
+          select: { id: true },
+        });
+
+        // UPSERT — "topib ko'r, keyin yarat" ATAYLAB ishlatilmaydi: ikki drenaj
+        // bir vaqtda ishlaganda (POST'dan keyingi `after` va 5 daqiqalik cron)
+        // ikkalasida ham "topilmadi" rost bo'lib chiqadi va ikkinchisi
+        // `Unique constraint failed` xatosiga uchraydi. Bu 2026-08-07 da
+        // jonli oqimda sodir bo'ldi. Upsert bu qarorni bazaga topshiradi.
+        const r = await tx.receipt.upsert({
+          where: { shop_pos_businessDate_number_session: kalit },
+          create: { ...kalit, ...sarlavha },
+          update: sarlavha,
+        });
+
         // Qayta yuborilgan chek — qatorlar/to'lovlar QAYTA yoziladi (1C tuzatgan
-        // bo'lishi mumkin). Sarlavha ham yangilanadi.
-        if (mavjud) {
-          await tx.receiptLine.deleteMany({ where: { receiptId: mavjud.id } });
-          await tx.receiptPayment.deleteMany({ where: { receiptId: mavjud.id } });
-          await tx.receipt.update({ where: { id: mavjud.id }, data: sarlavha });
-        }
-        const r = mavjud ?? (await tx.receipt.create({ data: { ...kalit, ...sarlavha } }));
+        // bo'lishi mumkin).
+        await tx.receiptLine.deleteMany({ where: { receiptId: r.id } });
+        await tx.receiptPayment.deleteMany({ where: { receiptId: r.id } });
 
         await tx.receiptLine.createMany({
           data: c.lines.map((l) => ({
             receiptId: r.id,
             lineNo: l.lineNo,
             itemCode: l.itemCode,
-            productId: l.itemCode != null ? codeToId.get(l.itemCode) ?? null : null,
+            productId:
+              l.itemCode != null ? (codeToId.get(l.itemCode) ?? null) : null,
             art: l.art,
             name: l.name,
             barcode: l.barcode,
@@ -171,7 +219,9 @@ export async function cheklarniQaytaIshla(limit = 500): Promise<QaytaIshlashNati
       for (const p of c.payments) {
         if (tolovMap.has(p.name)) continue;
         await prisma.paymentTypeMap
-          .create({ data: { name: p.name, kind: tolovTuri(p.name), isConfirmed: false } })
+          .create({
+            data: { name: p.name, kind: tolovTuri(p.name), isConfirmed: false },
+          })
           .catch(() => undefined); // parallel so'rovda unique to'qnashuvi — muhim emas
         tolovMap.set(p.name, tolovTuri(p.name));
         natija.yangiTolovTuri++;
@@ -180,10 +230,23 @@ export async function cheklarniQaytaIshla(limit = 500): Promise<QaytaIshlashNati
       if (mavjud) natija.yangilandi++;
       else natija.yaratildi++;
     } catch (e) {
+      // O'TKINCHI xatolar (bir vaqtda yozish to'qnashuvi, baza uzilishi)
+      // PENDING'da QOLDIRILADI — keyingi drenaj qayta urinib ko'radi.
+      // FAILED faqat 5 urinishdan keyin: FAILED hodisa hech qachon qayta
+      // ishlanmaydi (`where: status PENDING`), ya'ni o'tkinchi nosozlik uchun
+      // uni darhol FAILED qilish chekni mangu yo'qotib qo'yardi.
+      const kod = (e as { code?: string })?.code;
+      const otkinchi =
+        kod === "P2002" ||
+        kod === "P2034" ||
+        kod === "P1001" ||
+        kod === "P1017";
+      const urinish = ev.attempts + 1;
+
       await prisma.integrationEvent.update({
         where: { id: ev.id },
         data: {
-          status: "FAILED",
+          status: otkinchi && urinish < 5 ? "PENDING" : "FAILED",
           error: e instanceof Error ? e.message.slice(0, 400) : "Noma'lum xato",
           attempts: { increment: 1 },
         },
