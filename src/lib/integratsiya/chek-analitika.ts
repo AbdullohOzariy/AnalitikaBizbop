@@ -19,7 +19,8 @@ export type ChekFiltr = {
   from: string;
   to: string;
   branchId: number | null;
-  pos: number | null;
+  /** Kassa: "shop:pos" — `pos` do'konlar orasida TAKRORLANADI (shop 1 va 5 da ham 1-kassa bor). */
+  kassa: string | null;
   cashierId: number | null;
   kind: string | null;
   /** Toshkent soati bo'yicha oraliq (0–23), ikkalasi ham ixtiyoriy. */
@@ -34,7 +35,7 @@ export type ChekFiltr = {
 
 export const BOSH_FILTR: Omit<ChekFiltr, "from" | "to"> = {
   branchId: null,
-  pos: null,
+  kassa: null,
   cashierId: null,
   kind: null,
   soatDan: null,
@@ -44,6 +45,17 @@ export const BOSH_FILTR: Omit<ChekFiltr, "from" | "to"> = {
   skuYoq: false,
 };
 
+/**
+ * To'lov darajasidagi filtr — `p` = "ReceiptPayment" taxallusi.
+ *
+ * NEGA ALOHIDA: `shart()` CHEKNI saqlaydi. Aralash to'lovli chekda (26 ta bor)
+ * "naqd" filtri tanlansa, o'sha chekning PLASTIK qismi ham yig'indiga kirib
+ * ketardi — o'lchandi: 2.55 mln so'm begona tur sizib chiqqan edi.
+ */
+function tolovShart(f: ChekFiltr): Prisma.Sql {
+  return f.kind ? Prisma.sql`AND p.kind = ${f.kind}` : Prisma.empty;
+}
+
 /** Barcha filtrlar — `r` = "Receipt" taxallusi. */
 function shart(f: ChekFiltr): Prisma.Sql {
   const w: Prisma.Sql[] = [
@@ -51,7 +63,12 @@ function shart(f: ChekFiltr): Prisma.Sql {
     Prisma.sql`r."businessDate" <= ${f.to}::date`,
   ];
   if (f.branchId) w.push(Prisma.sql`r."branchId" = ${f.branchId}`);
-  if (f.pos != null) w.push(Prisma.sql`r.pos = ${f.pos}`);
+  if (f.kassa) {
+    const [sh, po] = f.kassa.split(":").map(Number);
+    if (Number.isFinite(sh) && Number.isFinite(po)) {
+      w.push(Prisma.sql`r.shop = ${sh} AND r.pos = ${po}`);
+    }
+  }
   if (f.cashierId != null) w.push(Prisma.sql`r."cashierId" = ${f.cashierId}`);
   if (f.kind) {
     w.push(
@@ -108,6 +125,13 @@ export type ChekKpi = {
   vaqtQamrovi: number;
   naqd: number;
   stornoCheklar: number;
+  /**
+   * Tovari bor, lekin chegirmadan keyin summasi 0 bo'lgan cheklar.
+   *
+   * NAZORAT SIGNALI: mijoz to'lamagan, tovar esa chiqib ketgan. Xodim xaridi,
+   * hisobdan chiqarish yoki suiiste'mol bo'lishi mumkin — o'zi ko'rinib tursin.
+   */
+  tekinCheklar: number;
 };
 
 export async function chekKpi(f: ChekFiltr): Promise<ChekKpi> {
@@ -123,6 +147,7 @@ export async function chekKpi(f: ChekFiltr): Promise<ChekKpi> {
       SELECT COALESCE(SUM(p.value), 0)::float8 s
       FROM "ReceiptPayment" p JOIN r0 ON r0.id = p."receiptId"
       JOIN "PaymentKindDef" d ON d.code = p.kind AND d."isCash"
+      WHERE TRUE ${tolovShart(f)}
     )
     SELECT
       count(*)::int                                        AS cheklar,
@@ -138,7 +163,8 @@ export async function chekKpi(f: ChekFiltr): Promise<ChekKpi> {
       (SELECT s FROM naqd)                                 AS naqd,
       count(*) FILTER (WHERE EXISTS (
         SELECT 1 FROM "ReceiptLine" l WHERE l."receiptId" = r0.id AND l.storno <> 0
-      ))::int                                              AS "stornoCheklar"
+      ))::int                                              AS "stornoCheklar",
+      count(*) FILTER (WHERE r0."totalSum" = 0 AND r0.sum > 0)::int AS "tekinCheklar"
     FROM r0 LEFT JOIN qator q ON q."receiptId" = r0.id
   `);
   const x = r[0] ?? {};
@@ -154,6 +180,7 @@ export async function chekKpi(f: ChekFiltr): Promise<ChekKpi> {
     vaqtQamrovi: cheklar > 0 ? Number(x.vaqtli ?? 0) / cheklar : 0,
     naqd: Number(x.naqd ?? 0),
     stornoCheklar: Number(x.stornoCheklar ?? 0),
+    tekinCheklar: Number(x.tekinCheklar ?? 0),
   };
 }
 
@@ -187,63 +214,94 @@ export async function soatlikOqim(f: ChekFiltr): Promise<SoatQator[]> {
 
 export type KesimQator = {
   id: number | null;
+  /** Filtr uchun barqaror kalit: kassada "shop:pos", kassirda id. */
+  kalit: string;
   nom: string;
   cheklar: number;
   tushum: number;
   ortChek: number;
   ortTur: number;
   ortVaqt: number | null;
-  /** Bekor qilingan qatori bor cheklar ulushi — nazorat signali. */
+  /**
+   * Bekor qilingan qatorlarning PUL ulushi — nazorat signali.
+   *
+   * NEGA CHEK SONI EMAS: 20 ta arzon qatorni bekor qilish bilan 1 ta qimmatini
+   * bekor qilish chek soni bo'yicha bir xil ko'rinardi. Pul bo'yicha tarqoqlik
+   * 3.75× (1.12%–4.20%), chek soni bo'yicha atigi 1.92%.
+   */
   stornoUlush: number;
+  /** Xizmat vaqti nechta chekda o'lchangani — ustunga ishonch darajasi. */
+  vaqtli: number;
 };
 
-/** `boyicha`: kassir yoki kassa (pos). */
+/**
+ * Kassir yoki kassa kesimi.
+ *
+ * ⚠️ KASSA `shop` BILAN BIRGA guruhlanadi: `pos` do'kon ICHIDA raqamlanadi va
+ * do'konlar orasida takrorlanadi (jonli bazada shop 1 va shop 5 da ham 1-kassa
+ * bor). Faqat `pos` bo'yicha guruhlash turli filiallarning kassalarini bitta
+ * qatorga qo'shib yuborardi.
+ */
 async function kesim(
   f: ChekFiltr,
   boyicha: "kassir" | "kassa",
 ): Promise<KesimQator[]> {
-  const idCol =
-    boyicha === "kassir" ? Prisma.sql`r."cashierId"` : Prisma.sql`r.pos`;
-  const nomCol =
-    boyicha === "kassir"
-      ? Prisma.sql`COALESCE(max(r."cashierName"), '—')`
-      : Prisma.sql`('Kassa ' || r.pos::text)`;
+  const kassa = boyicha === "kassa";
 
+  // Kassir nomi: OXIRGI ishlatilgani. `max()` alfavit bo'yicha tanlardi va
+  // bitta id ostida ikki nom bo'lsa (id=1 da "admin" ham, "Системный
+  // администратор" ham bor) qaysi biri chiqishi tasodifiy bo'lardi.
   const rows = await prisma.$queryRaw<
     {
-      id: number | null;
-      nom: string;
-      cheklar: number;
-      tushum: number;
-      ortChek: number;
-      ortTur: number;
-      ortVaqt: number | null;
-      stornoli: number;
+      id: number | null; kalit: string; nom: string; cheklar: number;
+      tushum: number; ortChek: number; ortTur: number;
+      ortVaqt: number | null; vaqtli: number;
+      stornoPul: number; jamiPul: number;
     }[]
   >(Prisma.sql`
-    SELECT ${idCol} AS id,
-           ${nomCol} AS nom,
-           count(*)::int AS cheklar,
-           COALESCE(SUM(r."totalSum"), 0)::float8 AS tushum,
-           COALESCE(AVG(r."totalSum"), 0)::float8 AS "ortChek",
-           COALESCE(AVG(r."qtyPositions"), 0)::float8 AS "ortTur",
-           AVG(EXTRACT(EPOCH FROM (r."closeAt" - r."openAt")))::float8 AS "ortVaqt",
-           count(*) FILTER (WHERE EXISTS (
-             SELECT 1 FROM "ReceiptLine" l WHERE l."receiptId" = r.id AND l.storno <> 0
-           ))::int AS stornoli
-    FROM "Receipt" r WHERE ${shart(f)}
-    GROUP BY ${idCol}, ${boyicha === "kassa" ? Prisma.sql`r.pos` : Prisma.sql`r."cashierId"`}
+    WITH r0 AS (SELECT r.* FROM "Receipt" r WHERE ${shart(f)}),
+    storno AS (
+      SELECT l."receiptId",
+             SUM(l."totalSum") FILTER (WHERE l.storno <> 0)::float8 AS bekor,
+             SUM(l."totalSum")::float8 AS jami
+      FROM "ReceiptLine" l JOIN r0 ON r0.id = l."receiptId"
+      GROUP BY 1
+    )
+    SELECT
+      ${kassa ? Prisma.sql`r0.pos` : Prisma.sql`r0."cashierId"`} AS id,
+      ${kassa ? Prisma.sql`(r0.shop::text || ':' || r0.pos::text)` : Prisma.sql`COALESCE(r0."cashierId"::text, '')`} AS kalit,
+      ${
+        kassa
+          ? Prisma.sql`(COALESCE(max(b.name), 'Do''kon ' || r0.shop::text) || ' · Kassa ' || r0.pos::text)`
+          : Prisma.sql`COALESCE((array_agg(r0."cashierName" ORDER BY r0."openAt" DESC))[1], '—')`
+      } AS nom,
+      count(*)::int AS cheklar,
+      COALESCE(SUM(r0."totalSum"), 0)::float8 AS tushum,
+      COALESCE(AVG(r0."totalSum"), 0)::float8 AS "ortChek",
+      COALESCE(AVG(r0."qtyPositions"), 0)::float8 AS "ortTur",
+      AVG(EXTRACT(EPOCH FROM (r0."closeAt" - r0."openAt")))::float8 AS "ortVaqt",
+      count(*) FILTER (WHERE r0."closeAt" IS NOT NULL)::int AS vaqtli,
+      COALESCE(SUM(s.bekor), 0)::float8 AS "stornoPul",
+      COALESCE(SUM(s.jami), 0)::float8 AS "jamiPul"
+    FROM r0
+    LEFT JOIN storno s ON s."receiptId" = r0.id
+    ${kassa ? Prisma.sql`LEFT JOIN "Branch" b ON b.id = r0."branchId"` : Prisma.empty}
+    GROUP BY ${kassa ? Prisma.sql`r0.shop, r0.pos` : Prisma.sql`r0."cashierId"`}
     ORDER BY tushum DESC
   `);
+
   return rows.map((x) => ({
     id: x.id,
+    kalit: x.kalit,
     nom: x.nom,
     cheklar: x.cheklar,
     tushum: Number(x.tushum),
     ortChek: Number(x.ortChek),
     ortTur: Number(x.ortTur),
     ortVaqt: x.ortVaqt == null ? null : Number(x.ortVaqt),
-    stornoUlush: x.cheklar > 0 ? x.stornoli / x.cheklar : 0,
+    vaqtli: x.vaqtli,
+    // PUL ulushi — chek soni emas (izohga qarang).
+    stornoUlush: x.jamiPul > 0 ? Number(x.stornoPul) / Number(x.jamiPul) : 0,
   }));
 }
 
@@ -265,7 +323,7 @@ export async function tolovTaqsimoti(
     SELECT p.kind, COALESCE(SUM(p.value), 0)::float8 AS summa
     FROM "ReceiptPayment" p
     JOIN "Receipt" r ON r.id = p."receiptId"
-    WHERE ${shart(f)}
+    WHERE ${shart(f)} ${tolovShart(f)}
     GROUP BY p.kind
   `);
   return new Map(rows.map((x) => [x.kind, Number(x.summa)]));
@@ -313,11 +371,14 @@ export async function kassirRoyxati(
 
 export async function kassaRoyxati(
   f: Pick<ChekFiltr, "from" | "to">,
-): Promise<number[]> {
-  const rows = await prisma.$queryRaw<{ pos: number }[]>(Prisma.sql`
-    SELECT DISTINCT r.pos FROM "Receipt" r
+): Promise<{ kalit: string; nom: string }[]> {
+  // `pos` do'konlar orasida takrorlanadi — kalit "shop:pos" bo'lishi SHART.
+  const rows = await prisma.$queryRaw<{ kalit: string; nom: string }[]>(Prisma.sql`
+    SELECT (r.shop::text || ':' || r.pos::text) AS kalit,
+           (COALESCE(max(b.name), 'Do''kon ' || r.shop::text) || ' · Kassa ' || r.pos::text) AS nom
+    FROM "Receipt" r LEFT JOIN "Branch" b ON b.id = r."branchId"
     WHERE r."businessDate" >= ${f.from}::date AND r."businessDate" <= ${f.to}::date
-    ORDER BY r.pos
+    GROUP BY r.shop, r.pos ORDER BY r.shop, r.pos
   `);
-  return rows.map((r) => r.pos);
+  return rows;
 }

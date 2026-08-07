@@ -131,6 +131,9 @@ export function tolovTuri(name: string): PaymentKind {
  */
 const TASHKENT_OFFSET_MS = 5 * 3_600_000;
 
+/** Xizmat vaqtining oqilona yuqori chegarasi (2 soat) — izohga qarang. */
+const MAX_XIZMAT_MS = 2 * 3_600_000;
+
 export function chekVaqti(openDate: unknown, openTime: unknown): Date | null {
   const d = txt(openDate);
   if (!d) return null;
@@ -282,11 +285,16 @@ export function parseChek(p: unknown): Chek | { error: string } {
     number,
     session: num(o.session),
     openAt,
-    // Faqat ochilishdan KEYIN bo'lsa qabul qilamiz: soat noto'g'ri sozlangan
-    // kassada teskari qiymat chiqib, "manfiy xizmat vaqti" ko'rinardi.
+    // Faqat ochilishdan KEYIN va OQILONA oraliqda. Kassa soati noto'g'ri
+    // sozlangan bo'lsa teskari qiymat "manfiy xizmat vaqti" berardi; oldinga
+    // siljigan soat esa soatlab "xizmat" ko'rsatardi va o'rtachani buzardi.
+    // Kuzatilgan eng uzun haqiqiy chek — 1425 sek, shuning uchun 2 soat
+    // xavfsiz chegara (himoya, tuzatish emas: hozir bitta ham rad etilmaydi).
     closeAt: (() => {
       const f = fiskalVaqt(o.fiscal);
-      return f && f.getTime() >= openAt.getTime() ? f : null;
+      if (!f) return null;
+      const d = f.getTime() - openAt.getTime();
+      return d >= 0 && d <= MAX_XIZMAT_MS ? f : null;
     })(),
     businessDate: hisobotKuni(openAt),
     type: num(o.type),

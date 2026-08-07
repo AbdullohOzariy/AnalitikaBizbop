@@ -65,7 +65,7 @@ export type Filtrlar = {
   from: string;
   to: string;
   branch: number | null;
-  pos: number | null;
+  kassa: string | null;
   kassir: number | null;
   kind: string | null;
   soatDan: number | null;
@@ -90,7 +90,7 @@ export function CheklarClient({
   rows: Row[];
   branches: { id: number; name: string }[];
   kassirlar: { id: number; nom: string }[];
-  kassalar: number[];
+  kassalar: { kalit: string; nom: string }[];
   filters: Filtrlar;
   jami: number;
   korsatilgan: number;
@@ -111,7 +111,7 @@ export function CheklarClient({
     p.set("from", n.from);
     p.set("to", n.to);
     if (n.branch) p.set("branch", String(n.branch));
-    if (n.pos != null) p.set("pos", String(n.pos));
+    if (n.kassa) p.set("kassa", n.kassa);
     if (n.kassir != null) p.set("kassir", String(n.kassir));
     if (n.kind) p.set("kind", n.kind);
     if (n.soatDan != null) p.set("soatDan", String(n.soatDan));
@@ -123,7 +123,7 @@ export function CheklarClient({
   };
 
   const faolFiltr =
-    filters.branch != null || filters.pos != null || filters.kassir != null ||
+    filters.branch != null || filters.kassa != null || filters.kassir != null ||
     filters.kind != null || filters.soatDan != null || filters.soatGacha != null ||
     !!filters.q || filters.storno || filters.skuYoq;
 
@@ -203,8 +203,16 @@ export function CheklarClient({
                 opts={branches.map((b) => ({ v: b.id, l: b.name }))} w="w-[150px]" />
             </Maydon>
             <Maydon l="Kassa">
-              <Tanlov value={filters.pos} onChange={(v) => apply({ pos: v })}
-                opts={kassalar.map((k) => ({ v: k, l: `Kassa ${k}` }))} w="w-[110px]" />
+              <select
+                value={filters.kassa ?? ""}
+                onChange={(e) => apply({ kassa: e.target.value || null })}
+                className="h-8 w-[170px] rounded-md border border-input bg-background px-2 text-xs"
+              >
+                <option value="">Barchasi</option>
+                {kassalar.map((k) => (
+                  <option key={k.kalit} value={k.kalit}>{k.nom}</option>
+                ))}
+              </select>
             </Maydon>
             <Maydon l="Kassir">
               <Tanlov value={filters.kassir} onChange={(v) => apply({ kassir: v })}

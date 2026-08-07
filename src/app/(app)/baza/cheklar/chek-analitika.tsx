@@ -14,12 +14,16 @@ export type SoatQator = {
 };
 export type KesimQator = {
   id: number | null;
+  kalit: string;
   nom: string;
   cheklar: number;
   tushum: number;
   ortChek: number;
   ortTur: number;
   ortVaqt: number | null;
+  /** Xizmat vaqti nechta chekda o'lchangan — ustunga ishonch. */
+  vaqtli: number;
+  /** Bekor qilingan qatorlarning PUL ulushi. */
   stornoUlush: number;
 };
 
@@ -47,6 +51,7 @@ export function ChekAnalitika({
   kassirlar,
   kassalar,
   stornoCheklar,
+  tekinCheklar,
   jamiCheklar,
   vaqtQamrovi,
 }: {
@@ -54,6 +59,7 @@ export function ChekAnalitika({
   kassirlar: KesimQator[];
   kassalar: KesimQator[];
   stornoCheklar: number;
+  tekinCheklar: number;
   jamiCheklar: number;
   vaqtQamrovi: number;
 }) {
@@ -102,6 +108,13 @@ export function ChekAnalitika({
               <span>
                 Pik: <b className="text-foreground">{pikSoat.soat}:00</b> —{" "}
                 {pikSoat.cheklar.toLocaleString("uz-UZ")} chek
+              </span>
+            )}
+            {tekinCheklar > 0 && (
+              <span className="flex items-center gap-1 text-rose-600 dark:text-rose-400">
+                <AlertTriangle className="h-3 w-3" />
+                {tekinCheklar.toLocaleString("uz-UZ")} chek 100% chegirma bilan
+                (tovar chiqqan, pul kelmagan)
               </span>
             )}
             {stornoCheklar > 0 && (
@@ -156,7 +169,7 @@ export function ChekAnalitika({
           Xizmat vaqti — chek ochilishidan fiskallashtirilgunicha.{" "}
           {vaqtQamrovi >= 0.999
             ? "Barcha cheklarda o'lchangan."
-            : `Cheklarning ${(vaqtQamrovi * 100).toFixed(0)}% ida o'lchangan (qolganida fiskal havola yo'q).`}
+            : `Cheklarning ${(vaqtQamrovi * 100).toFixed(0)}% ida o'lchangan — qolgani hali qayta ishlanmagan.`}
         </p>
       </CardContent>
     </Card>
@@ -166,6 +179,12 @@ export function ChekAnalitika({
 function Jadval({ rows }: { rows: KesimQator[] }) {
   if (rows.length === 0) return <Bosh />;
   const maxTushum = Math.max(1, ...rows.map((r) => r.tushum));
+  // NISBIY chegara: qotirilgan 15% hech qachon yonmasdi (kuzatilgan eng katta
+  // qiymat 4.2%). Davr o'rtachasidan 1.5 barobar oshgani ajratiladi.
+  const jamiPul = rows.reduce((a, r) => a + r.tushum, 0);
+  const ortStorno =
+    jamiPul > 0 ? rows.reduce((a, r) => a + r.stornoUlush * r.tushum, 0) / jamiPul : 0;
+  const chegara = Math.max(0.02, ortStorno * 1.5);
 
   return (
     <div className="overflow-x-auto">
@@ -180,12 +199,14 @@ function Jadval({ rows }: { rows: KesimQator[] }) {
             </th>
             <th className="px-2 py-2 text-right font-medium">Tovar/chek</th>
             <th className="px-2 py-2 text-right font-medium">Xizmat</th>
-            <th className="px-2 py-2 text-right font-medium">Storno</th>
+            <th className="px-2 py-2 text-right font-medium" title="Bekor qilingan qatorlarning pul ulushi">
+              Storno (pul)
+            </th>
           </tr>
         </thead>
         <tbody className="divide-y divide-border/60">
           {rows.map((r) => (
-            <tr key={`${r.id ?? "yoq"}-${r.nom}`} className="hover:bg-muted/40">
+            <tr key={r.kalit || r.nom} className="hover:bg-muted/40">
               <td className="max-w-[220px] px-2 py-2">
                 <div className="truncate font-medium">{r.nom}</div>
                 <div className="mt-1 h-1 w-full overflow-hidden rounded bg-muted">
@@ -213,7 +234,7 @@ function Jadval({ rows }: { rows: KesimQator[] }) {
               <td
                 className={cn(
                   "px-2 py-2 text-right tabular-nums",
-                  r.stornoUlush >= 0.15 &&
+                  r.stornoUlush >= chegara &&
                     "font-semibold text-amber-600 dark:text-amber-400",
                 )}
               >

@@ -71,7 +71,7 @@ export default async function CheklarPage({
     from: isoDay(from),
     to: isoDay(to),
     branchId: son(sp.branch),
-    pos: son(sp.pos),
+    kassa: one(sp.kassa) || null,
     cashierId: son(sp.kassir),
     kind: one(sp.kind) || null,
     soatDan: soat(sp.soatDan),
@@ -221,7 +221,7 @@ export default async function CheklarPage({
           hint={
             kpi.vaqtQamrovi > 0
               ? `median · o'rtacha ${vaqt(kpi.ortVaqt)}`
-              : "fiskal havola yo'q"
+              : "hali o'lchanmagan"
           }
         />
         <StatCard
@@ -242,6 +242,7 @@ export default async function CheklarPage({
         kassirlar={kassirlar}
         kassalar={kassalar}
         stornoCheklar={kpi.stornoCheklar}
+        tekinCheklar={kpi.tekinCheklar}
         jamiCheklar={kpi.cheklar}
         vaqtQamrovi={kpi.vaqtQamrovi}
       />
@@ -292,7 +293,7 @@ export default async function CheklarPage({
           from: f.from,
           to: f.to,
           branch: f.branchId,
-          pos: f.pos,
+          kassa: f.kassa,
           kassir: f.cashierId,
           kind: f.kind,
           soatDan: f.soatDan,

@@ -401,3 +401,35 @@ describe("parseChek — closeAt", () => {
     expect(r.totalSum).toBe(300);
   });
 });
+
+describe("closeAt — oqilona oraliq", () => {
+  const xom = {
+    shop: 1, pos: 3, number: "1", session: 1,
+    openDate: "07.08.26", openTime: "22:00:00", type: 1,
+    user: { id: 1, name: "a" },
+    payments: [{ name: "Наличные", value: 100 }],
+    positions: [{ qty: 1, sum: 100, sumWD: 100, totalSum: 100, storno: 0, item: { id: 1, name: "A" } }],
+  };
+  const ol = (fiscal: string) => {
+    const r = parseChek({ ...xom, fiscal });
+    if ("error" in r) throw new Error("parse xato");
+    return r.closeAt;
+  };
+
+  it("2 soatdan uzun 'xizmat' rad etiladi", () => {
+    // 22:00 → ertasi 10:00 = 12 soat
+    expect(ol("?c=20260808100000")).toBeNull();
+  });
+
+  it("chegara ichidagi qabul qilinadi", () => {
+    expect(ol("?c=20260807230000")).not.toBeNull(); // 1 soat
+  });
+
+  it("aql bovar qilmas yil rad etiladi", () => {
+    expect(ol("?c=99990807210536")).toBeNull();
+  });
+
+  it("bir lahzada yopilgan chek (0 sek) qabul qilinadi", () => {
+    expect(ol("?c=20260807220000")).not.toBeNull();
+  });
+});
