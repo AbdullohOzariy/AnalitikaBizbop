@@ -642,30 +642,47 @@ export const findMissingDays = (range: DateRange) =>
     { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
   )();
 
-/** Mavjud ma'lumot davri (default range hisoblash uchun). */
+/**
+ * Mavjud ma'lumot davri — KESHSIZ hisob.
+ *
+ * Alohida ajratilgan, chunki `unstable_cache` Next so'rov konteksti tashqarisida
+ * ishlamaydi ("Invariant: incrementalCache missing"). Cron ishlari esa aynan
+ * shunday kontekstda bajariladi. Mantiq bitta joyda qolishi uchun keshlangan
+ * variant ham shu funksiyani chaqiradi.
+ */
+export async function computeDefaultRange(): Promise<{ start: string; end: string }> {
+  const [lastSale, lastVisit] = await Promise.all([
+    prisma.categorySales.findFirst({ orderBy: { periodEnd: "desc" }, select: { periodEnd: true } }),
+    prisma.dailyVisits.findFirst({ orderBy: { date: "desc" }, select: { date: true } }),
+  ]);
+  const candidates = [lastSale?.periodEnd, lastVisit?.date].filter(Boolean) as Date[];
+  if (candidates.length === 0) {
+    const now = new Date();
+    return { start: isoDay(startOfMonth(now)), end: isoDay(endOfMonth(now)) };
+  }
+  const ref = new Date(Math.max(...candidates.map((d) => d.getTime())));
+  return { start: isoDay(startOfMonth(ref)), end: isoDay(endOfMonth(ref)) };
+}
+
 // unstable_cache Date serialize qila olmaydi — ISO string sifatida cache qilamiz.
-const _cachedDefaultRange = unstable_cache(
-  async (): Promise<{ start: string; end: string }> => {
-    const [lastSale, lastVisit] = await Promise.all([
-      prisma.categorySales.findFirst({ orderBy: { periodEnd: "desc" }, select: { periodEnd: true } }),
-      prisma.dailyVisits.findFirst({ orderBy: { date: "desc" }, select: { date: true } }),
-    ]);
-    const candidates = [lastSale?.periodEnd, lastVisit?.date].filter(Boolean) as Date[];
-    if (candidates.length === 0) {
-      const now = new Date();
-      return { start: isoDay(startOfMonth(now)), end: isoDay(endOfMonth(now)) };
-    }
-    const ref = new Date(Math.max(...candidates.map((d) => d.getTime())));
-    return { start: isoDay(startOfMonth(ref)), end: isoDay(endOfMonth(ref)) };
-  },
-  ["defaultRange"],
-  { tags: [ANALYTICS_CACHE_TAG], revalidate: false }
-);
+const _cachedDefaultRange = unstable_cache(computeDefaultRange, ["defaultRange"], {
+  tags: [ANALYTICS_CACHE_TAG],
+  revalidate: false,
+});
+
+const toRange = (r: { start: string; end: string }): DateRange => ({
+  start: new Date(r.start + "T00:00:00.000Z"),
+  end: new Date(r.end + "T00:00:00.000Z"),
+});
 
 export async function getDefaultRange(): Promise<DateRange> {
-  const { start, end } = await _cachedDefaultRange();
-  return {
-    start: new Date(start + "T00:00:00.000Z"),
-    end:   new Date(end   + "T00:00:00.000Z"),
-  };
+  return toRange(await _cachedDefaultRange());
+}
+
+/**
+ * `getDefaultRange` ning keshsiz varianti — CRON va boshqa so'rovdan tashqari
+ * kontekstlar uchun. Natija bir xil, faqat keshdan foydalanmaydi.
+ */
+export async function getDefaultRangeUncached(): Promise<DateRange> {
+  return toRange(await computeDefaultRange());
 }

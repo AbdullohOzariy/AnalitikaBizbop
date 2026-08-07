@@ -182,8 +182,14 @@ export type StockdayRow = {
   arrivalDays: number | null; // keyingi zakaz kunigacha + lead time (lead kiritilmagan — null)
 };
 
-// Zaxira kunlari CTE — latest (qoldiq) + agg (davrdagi o'rtacha kunlik sotuv).
-function sdCte(f: SnapshotFilters, todayStr: string): Prisma.Sql {
+/**
+ * Zaxira kunlari CTE — latest (qoldiq) + agg (davrdagi o'rtacha kunlik sotuv).
+ *
+ * EKSPORT QILINGAN: norma hisoboti (`lib/stockday-report`) ham shu CTE'ni ishlatadi.
+ * Formulani ikkinchi joyda qayta yozish eng yomon natija bo'lardi — sahifada bir xil,
+ * hisobotda boshqa stockday chiqib, qaysi biri to'g'ri ekani noma'lum bo'lib qolardi.
+ */
+export function sdCte(f: SnapshotFilters, todayStr: string): Prisma.Sql {
   return Prisma.sql`
     base AS (
       SELECT ps."productId", ps."branchId", ps."stockQty", ps."soldQty", ps."costAmount",

@@ -30,6 +30,19 @@ const JOBS: CronJob[] = [
       console.log(`[inv-report] yuborildi: ${r.count} ta muammoli SKU`);
     },
   },
+  // 14:00 — zaxira normasidan oshgan SKU × filial. Faqat sozlamada YOQILGAN bo'lsa:
+  // aks holda sozlanmagan tizimda har kuni "cron bajarilmadi" alerti kelardi.
+  {
+    name: "stockday-report", cron: "0 14 * * *", hour: 14, minute: 0,
+    run: async () => {
+      const { getStockdayReportConfig } = await import("@/lib/stockday-report/sozlama");
+      if (!(await getStockdayReportConfig()).autoEnabled) return;
+      const { sendStockdayNormReport } = await import("@/lib/stockday-report/report");
+      const r = await sendStockdayNormReport();
+      if (!r.ok) throw new Error(r.error || "yuborilmadi");
+      console.log(`[stockday-report] yuborildi: ${r.count} ta qator`);
+    },
+  },
   // 11:00 — filiallar narx farqi (bir SKU turli filialda turli narxda) PDF. Faqat sozlamada
   // YOQILGAN bo'lsa: aks holda sozlanmagan tizimda har kuni "cron bajarilmadi" alerti kelardi.
   // Yangi sotuv fayli yuklanmagan bo'lsa davr o'zgarmaydi va report jim chiqadi.

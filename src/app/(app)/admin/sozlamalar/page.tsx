@@ -32,6 +32,8 @@ import { InventoryReportEditor } from "./inventory-report-editor";
 import { getInventoryReportConfig } from "@/lib/inventory-report/sozlama";
 import { MarginReportEditor } from "./margin-report-editor";
 import { getMarginReportConfig } from "@/lib/margin-report/sozlama";
+import { StockdayReportEditor } from "./stockday-report-editor";
+import { getStockdayReportConfig } from "@/lib/stockday-report/sozlama";
 import { DeliveryAlertEditor } from "./delivery-alert-editor";
 import { ExpiryAlertEditor } from "./expiry-alert-editor";
 import { PromoAlertEditor } from "./promo-alert-editor";
@@ -46,7 +48,7 @@ import { NarxReportEditor } from "./narx-report-editor";
 import { getNarxReportConfig, getNarxReportLastPeriod } from "@/lib/narx-report/sozlama";
 import { formatDateUZ } from "@/lib/format";
 
-type Tab = "spisaniya" | "sverka" | "inventarizatsiya" | "marja" | "yetkazish" | "zakaz" | "spdaily" | "narx";
+type Tab = "spisaniya" | "sverka" | "inventarizatsiya" | "marja" | "yetkazish" | "zakaz" | "spdaily" | "narx" | "zaxira";
 
 export default async function SozlamalarPage({
   searchParams,
@@ -58,7 +60,7 @@ export default async function SozlamalarPage({
   if (!session.user.roles.includes("SYSTEM_ADMIN")) redirect("/dashboard");
 
   const sp = await searchParams;
-  const tab: Tab = sp.tab === "sverka" ? "sverka" : sp.tab === "inventarizatsiya" ? "inventarizatsiya" : sp.tab === "marja" ? "marja" : sp.tab === "yetkazish" ? "yetkazish" : sp.tab === "zakaz" ? "zakaz" : sp.tab === "spdaily" ? "spdaily" : sp.tab === "narx" ? "narx" : "spisaniya";
+  const tab: Tab = sp.tab === "sverka" ? "sverka" : sp.tab === "inventarizatsiya" ? "inventarizatsiya" : sp.tab === "marja" ? "marja" : sp.tab === "yetkazish" ? "yetkazish" : sp.tab === "zakaz" ? "zakaz" : sp.tab === "spdaily" ? "spdaily" : sp.tab === "narx" ? "narx" : sp.tab === "zaxira" ? "zaxira" : "spisaniya";
 
   return (
     <div className="space-y-5">
@@ -80,6 +82,7 @@ export default async function SozlamalarPage({
           { v: "zakaz", l: "Zakaz PDF" },
           { v: "spdaily", l: "Spisaniya kunlik" },
           { v: "narx", l: "Filiallar narxi" },
+          { v: "zaxira", l: "Zaxira normasi" },
         ] as { v: Tab; l: string }[]).map((t) => (
           <Link
             key={t.v}
@@ -98,7 +101,7 @@ export default async function SozlamalarPage({
         ))}
       </div>
 
-      {tab === "spisaniya" ? <SpisaniyaTab /> : tab === "sverka" ? <SverkaTab /> : tab === "inventarizatsiya" ? <InventarizatsiyaTab /> : tab === "marja" ? <MarjaTab /> : tab === "yetkazish" ? <YetkazishTab /> : tab === "zakaz" ? <ZakazTab /> : tab === "narx" ? <NarxTab /> : <SpisaniyaDailyTab />}
+      {tab === "spisaniya" ? <SpisaniyaTab /> : tab === "sverka" ? <SverkaTab /> : tab === "inventarizatsiya" ? <InventarizatsiyaTab /> : tab === "marja" ? <MarjaTab /> : tab === "yetkazish" ? <YetkazishTab /> : tab === "zakaz" ? <ZakazTab /> : tab === "narx" ? <NarxTab /> : tab === "zaxira" ? <ZaxiraTab /> : <SpisaniyaDailyTab />}
     </div>
   );
 }
@@ -220,6 +223,32 @@ async function YetkazishTab() {
           chatId={promoCfg.chatId ?? ""}
           topicId={promoCfg.topicId != null ? String(promoCfg.topicId) : ""}
           autoEnabled={promoCfg.autoEnabled}
+        />
+      </SectionCard>
+    </div>
+  );
+}
+
+// ─── Zaxira normasi xabarnoma bot ─────────────────────────────────────────────
+
+async function ZaxiraTab() {
+  const [cfg, normaSoni] = await Promise.all([
+    getStockdayReportConfig(),
+    prisma.stockdayLimit.count().catch(() => 0),
+  ]);
+  return (
+    <div className="space-y-5">
+      <SectionCard
+        title="Zaxira normasi xabarnoma bot"
+        description="Normadan oshgan tovarlar (SKU × filial) Excel'i — ortiqcha kapital bo'yicha saralangan"
+        actions={<MessageSquare className="h-4 w-4 text-muted-foreground" />}
+      >
+        <StockdayReportEditor
+          tokenSet={!!cfg.token}
+          chatId={cfg.chatId ?? ""}
+          topicId={cfg.topicId != null ? String(cfg.topicId) : ""}
+          autoEnabled={cfg.autoEnabled}
+          normaSoni={normaSoni}
         />
       </SectionCard>
     </div>
