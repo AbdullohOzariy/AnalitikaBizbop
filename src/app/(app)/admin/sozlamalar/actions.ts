@@ -23,7 +23,11 @@ function xato(err: unknown): Result {
   if (msg.includes("duplicate key") || msg.includes("23505"))
     return { ok: false, error: "Bunday nom allaqachon mavjud." };
   if (msg.includes("foreign key") || msg.includes("23503"))
-    return { ok: false, error: "Bu filialda yozuvlar bor — o'chirib bo'lmaydi (o'rniga nofaol qiling)." };
+    return {
+      ok: false,
+      error:
+        "Bu filialda yozuvlar bor — o'chirib bo'lmaydi (o'rniga nofaol qiling).",
+    };
   return { ok: false, error: msg };
 }
 
@@ -38,7 +42,9 @@ export async function filialQoshishAction(nomi: string): Promise<Result> {
     await filialQoshish(nomiSchema.parse(nomi));
     revalidatePath(RP);
     return { ok: true };
-  } catch (err) { return xato(err); }
+  } catch (err) {
+    return xato(err);
+  }
 }
 
 const filialPatchSchema = z.object({
@@ -46,11 +52,18 @@ const filialPatchSchema = z.object({
   nomi: z.string().trim().min(1).max(100).optional(),
   aktiv: z.boolean().optional(),
   // topic_id — raqam yoki bo'sh (null = topic yo'q)
-  topic_id: z.string().trim().regex(/^-?\d*$/, "Faqat raqam").optional(),
+  topic_id: z
+    .string()
+    .trim()
+    .regex(/^-?\d*$/, "Faqat raqam")
+    .optional(),
 });
 
 export async function filialYangilaAction(input: {
-  id: number; nomi?: string; aktiv?: boolean; topic_id?: string;
+  id: number;
+  nomi?: string;
+  aktiv?: boolean;
+  topic_id?: string;
 }): Promise<Result> {
   try {
     await requireAdmin();
@@ -58,11 +71,13 @@ export async function filialYangilaAction(input: {
     await filialYangila(p.id, {
       nomi: p.nomi,
       aktiv: p.aktiv,
-      topic_id: p.topic_id === undefined ? undefined : (p.topic_id || null),
+      topic_id: p.topic_id === undefined ? undefined : p.topic_id || null,
     });
     revalidatePath(RP);
     return { ok: true };
-  } catch (err) { return xato(err); }
+  } catch (err) {
+    return xato(err);
+  }
 }
 
 export async function filialOchirAction(id: number): Promise<Result> {
@@ -71,7 +86,9 @@ export async function filialOchirAction(id: number): Promise<Result> {
     await filialOchir(z.coerce.number().int().positive().parse(id));
     revalidatePath(RP);
     return { ok: true };
-  } catch (err) { return xato(err); }
+  } catch (err) {
+    return xato(err);
+  }
 }
 
 // ─── Analitika filial → bizbop (chiqim) filial nomi bog'lash ───────────────────
@@ -83,7 +100,8 @@ const chiqimFilialSchema = z.object({
 });
 
 export async function chiqimFilialBoglaAction(input: {
-  branchId: number; filial: string;
+  branchId: number;
+  filial: string;
 }): Promise<Result> {
   try {
     await requireAdmin();
@@ -98,11 +116,16 @@ export async function chiqimFilialBoglaAction(input: {
     revalidateTag(ANALYTICS_CACHE_TAG, "max");
     revalidatePath(RP);
     return { ok: true };
-  } catch (err) { return xato(err); }
+  } catch (err) {
+    return xato(err);
+  }
 }
 
 // ─── Guruh chat_id ──────────────────────────────────────────────────────────────
-const chatIdSchema = z.string().trim().regex(/^-?\d+$/, "Chat ID raqam bo'lishi kerak");
+const chatIdSchema = z
+  .string()
+  .trim()
+  .regex(/^-?\d+$/, "Chat ID raqam bo'lishi kerak");
 
 export async function guruhSaqlaAction(chatId: string): Promise<Result> {
   try {
@@ -110,30 +133,49 @@ export async function guruhSaqlaAction(chatId: string): Promise<Result> {
     await guruhChatIdSaqla(chatIdSchema.parse(chatId));
     revalidatePath(RP);
     return { ok: true };
-  } catch (err) { return xato(err); }
+  } catch (err) {
+    return xato(err);
+  }
 }
 
 // ─── Bot foydalanuvchilari (whitelist) ────────────────────────────────────────
-const tgIdSchema = z.string().trim().regex(/^\d{5,15}$/, "Telegram ID — 5-15 raqam");
+const tgIdSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{5,15}$/, "Telegram ID — 5-15 raqam");
 
-export async function ruxsatQoshishAction(input: { telegramId: string; ism?: string }): Promise<Result> {
+export async function ruxsatQoshishAction(input: {
+  telegramId: string;
+  ism?: string;
+}): Promise<Result> {
   try {
     const admin = await requireAdmin();
     const telegramId = tgIdSchema.parse(input.telegramId);
     const ism = (input.ism ?? "").trim().slice(0, 100) || null;
-    await ruxsatQoshish(telegramId, ism, admin.name?.trim() || admin.email || "admin");
+    await ruxsatQoshish(
+      telegramId,
+      ism,
+      admin.name?.trim() || admin.email || "admin",
+    );
     revalidatePath(RP);
     return { ok: true };
-  } catch (err) { return xato(err); }
+  } catch (err) {
+    return xato(err);
+  }
 }
 
-export async function ruxsatToggleAction(telegramId: string, aktiv: boolean): Promise<Result> {
+export async function ruxsatToggleAction(
+  telegramId: string,
+  aktiv: boolean,
+): Promise<Result> {
   try {
     await requireAdmin();
     await ruxsatToggle(tgIdSchema.parse(telegramId), aktiv);
     revalidatePath(RP);
     return { ok: true };
-  } catch (err) { return xato(err); }
+  } catch (err) {
+    return xato(err);
+  }
 }
 
 export async function ruxsatOchirAction(telegramId: string): Promise<Result> {
@@ -142,7 +184,9 @@ export async function ruxsatOchirAction(telegramId: string): Promise<Result> {
     await ruxsatOchir(tgIdSchema.parse(telegramId));
     revalidatePath(RP);
     return { ok: true };
-  } catch (err) { return xato(err); }
+  } catch (err) {
+    return xato(err);
+  }
 }
 
 // ─── Bot xodimiga Iyerarxiya kategoriyalarini biriktirish (BotUserCategory) ────
@@ -152,7 +196,7 @@ const katIdsSchema = z.array(z.number().int().positive()).max(200);
 
 export async function botUserKategoriyaSaqlaAction(
   telegramId: string,
-  categoryIds: number[]
+  categoryIds: number[],
 ): Promise<Result> {
   try {
     await requireAdmin();
@@ -161,19 +205,28 @@ export async function botUserKategoriyaSaqlaAction(
     const { prisma } = await import("@/lib/prisma");
     if (ids.length) {
       const bor = await prisma.category.count({ where: { id: { in: ids } } });
-      if (bor !== ids.length) return { ok: false, error: "Kategoriya topilmadi — sahifani yangilang." };
+      if (bor !== ids.length)
+        return {
+          ok: false,
+          error: "Kategoriya topilmadi — sahifani yangilang.",
+        };
     }
     await prisma.$transaction([
       prisma.botUserCategory.deleteMany({ where: { telegramId: tgId } }),
       ...(ids.length
-        ? [prisma.botUserCategory.createMany({ data: ids.map((categoryId) => ({ telegramId: tgId, categoryId })) })]
+        ? [
+            prisma.botUserCategory.createMany({
+              data: ids.map((categoryId) => ({ telegramId: tgId, categoryId })),
+            }),
+          ]
         : []),
     ]);
     revalidatePath(RP);
     return { ok: true };
-  } catch (err) { return xato(err); }
+  } catch (err) {
+    return xato(err);
+  }
 }
-
 
 /** Sverka guruh chat ID'sini saqlash (asosiy baza, AppSetting). */
 export async function sverkaGuruhSaqlaAction(chatId: string): Promise<Result> {
@@ -181,15 +234,19 @@ export async function sverkaGuruhSaqlaAction(chatId: string): Promise<Result> {
     await requireAdmin();
     const v = chatId.trim();
     if (v && !/^-?\d{5,20}$/.test(v)) {
-      return { ok: false, error: "Chat ID raqam bo'lishi kerak (odatda -100... ko'rinishida)." };
+      return {
+        ok: false,
+        error: "Chat ID raqam bo'lishi kerak (odatda -100... ko'rinishida).",
+      };
     }
     const { setSverkaGroupChatId } = await import("@/lib/sverka/sozlama");
     await setSverkaGroupChatId(v);
     revalidatePath("/admin/sozlamalar");
     return { ok: true };
-  } catch (err) { return xato(err); }
+  } catch (err) {
+    return xato(err);
+  }
 }
-
 
 /** Sverka: filial → guruh topigi (message_thread_id) bog'lash. */
 export async function sverkaTopicSaqlaAction(input: {
@@ -212,9 +269,10 @@ export async function sverkaTopicSaqlaAction(input: {
     clearSverkaTopicCache();
     revalidatePath(RP);
     return { ok: true };
-  } catch (err) { return xato(err); }
+  } catch (err) {
+    return xato(err);
+  }
 }
-
 
 /** Sverka "Qabul qildi" ro'yxati — ism qo'shish. */
 export async function sverkaQabulchiQoshAction(ism: string): Promise<Result> {
@@ -222,10 +280,16 @@ export async function sverkaQabulchiQoshAction(ism: string): Promise<Result> {
     await requireAdmin();
     const nm = z.string().trim().min(1, "Ism kiriting").max(120).parse(ism);
     const { prisma } = await import("@/lib/prisma");
-    await prisma.sverkaQabulchi.upsert({ where: { ism: nm }, create: { ism: nm }, update: {} });
+    await prisma.sverkaQabulchi.upsert({
+      where: { ism: nm },
+      create: { ism: nm },
+      update: {},
+    });
     revalidatePath(RP);
     return { ok: true };
-  } catch (err) { return xato(err); }
+  } catch (err) {
+    return xato(err);
+  }
 }
 
 export async function sverkaQabulchiOchirAction(id: number): Promise<Result> {
@@ -236,15 +300,18 @@ export async function sverkaQabulchiOchirAction(id: number): Promise<Result> {
     await prisma.sverkaQabulchi.delete({ where: { id: qid } });
     revalidatePath(RP);
     return { ok: true };
-  } catch (err) { return xato(err); }
+  } catch (err) {
+    return xato(err);
+  }
 }
-
 
 // ─── Inventarizatsiya xabarnoma bot (kunlik muammoli tovarlar hisoboti) ─────────
 
 /** Bot token + guruh chat id + topic id'ni saqlash. token bo'sh — o'zgartirilmaydi. */
 export async function inventoryReportSaqlaAction(input: {
-  token: string; chatId: string; topicId: string;
+  token: string;
+  chatId: string;
+  topicId: string;
 }): Promise<Result> {
   try {
     await requireAdmin();
@@ -252,22 +319,36 @@ export async function inventoryReportSaqlaAction(input: {
     const chatId = input.chatId.trim();
     const topicId = input.topicId.trim();
     if (!chatId) {
-      return { ok: false, error: "Guruh chat ID kiritilishi shart (bo'sh saqlasangiz xabarnoma o'chadi)." };
+      return {
+        ok: false,
+        error:
+          "Guruh chat ID kiritilishi shart (bo'sh saqlasangiz xabarnoma o'chadi).",
+      };
     }
     if (!/^-?\d{5,20}$/.test(chatId)) {
-      return { ok: false, error: "Guruh chat ID raqam bo'lishi kerak (odatda -100... ko'rinishida)." };
+      return {
+        ok: false,
+        error:
+          "Guruh chat ID raqam bo'lishi kerak (odatda -100... ko'rinishida).",
+      };
     }
     if (topicId && !/^\d{1,12}$/.test(topicId)) {
       return { ok: false, error: "Topic ID musbat raqam bo'lishi kerak." };
     }
     if (token && !/^\d{6,}:[A-Za-z0-9_-]{20,}$/.test(token)) {
-      return { ok: false, error: "Bot token noto'g'ri (123456:ABC... ko'rinishida)." };
+      return {
+        ok: false,
+        error: "Bot token noto'g'ri (123456:ABC... ko'rinishida).",
+      };
     }
-    const { setInventoryReportConfig } = await import("@/lib/inventory-report/sozlama");
+    const { setInventoryReportConfig } =
+      await import("@/lib/inventory-report/sozlama");
     await setInventoryReportConfig({ token, chatId, topicId });
     revalidatePath(RP);
     return { ok: true };
-  } catch (err) { return xato(err); }
+  } catch (err) {
+    return xato(err);
+  }
 }
 
 /** Hisobotni hoziroq yuborish (sinov tugmasi). Yuborilgan muammoli SKU sonini qaytaradi. */
@@ -276,7 +357,8 @@ export async function inventoryReportYuborAction(): Promise<
 > {
   try {
     await requireAdmin();
-    const { sendInventoryReport } = await import("@/lib/inventory-report/report");
+    const { sendInventoryReport } =
+      await import("@/lib/inventory-report/report");
     return await sendInventoryReport();
   } catch (err) {
     const msg = err instanceof Error ? redactError(err) : "Xato.";
@@ -288,7 +370,10 @@ export async function inventoryReportYuborAction(): Promise<
 
 /** Bot token + guruh chat id + topic id + avto-yoqish'ni saqlash. token bo'sh — o'zgartirilmaydi. */
 export async function marginReportSaqlaAction(input: {
-  token: string; chatId: string; topicId: string; autoEnabled: boolean;
+  token: string;
+  chatId: string;
+  topicId: string;
+  autoEnabled: boolean;
 }): Promise<Result> {
   try {
     await requireAdmin();
@@ -296,22 +381,41 @@ export async function marginReportSaqlaAction(input: {
     const chatId = input.chatId.trim();
     const topicId = input.topicId.trim();
     if (!chatId) {
-      return { ok: false, error: "Guruh chat ID kiritilishi shart (bo'sh saqlasangiz xabarnoma o'chadi)." };
+      return {
+        ok: false,
+        error:
+          "Guruh chat ID kiritilishi shart (bo'sh saqlasangiz xabarnoma o'chadi).",
+      };
     }
     if (!/^-?\d{5,20}$/.test(chatId)) {
-      return { ok: false, error: "Guruh chat ID raqam bo'lishi kerak (odatda -100... ko'rinishida)." };
+      return {
+        ok: false,
+        error:
+          "Guruh chat ID raqam bo'lishi kerak (odatda -100... ko'rinishida).",
+      };
     }
     if (topicId && !/^\d{1,12}$/.test(topicId)) {
       return { ok: false, error: "Topic ID musbat raqam bo'lishi kerak." };
     }
     if (token && !/^\d{6,}:[A-Za-z0-9_-]{20,}$/.test(token)) {
-      return { ok: false, error: "Bot token noto'g'ri (123456:ABC... ko'rinishida)." };
+      return {
+        ok: false,
+        error: "Bot token noto'g'ri (123456:ABC... ko'rinishida).",
+      };
     }
-    const { setMarginReportConfig } = await import("@/lib/margin-report/sozlama");
-    await setMarginReportConfig({ token, chatId, topicId, autoEnabled: !!input.autoEnabled });
+    const { setMarginReportConfig } =
+      await import("@/lib/margin-report/sozlama");
+    await setMarginReportConfig({
+      token,
+      chatId,
+      topicId,
+      autoEnabled: !!input.autoEnabled,
+    });
     revalidatePath(RP);
     return { ok: true };
-  } catch (err) { return xato(err); }
+  } catch (err) {
+    return xato(err);
+  }
 }
 
 /** Marja hisobotini hoziroq yuborish (sinov tugmasi). Minus kataklar sonini qaytaradi. */
@@ -332,7 +436,11 @@ export async function marginReportYuborAction(): Promise<
 
 /** Bot token + guruh chat id + topic id + avto-yoqish'ni saqlash. token bo'sh — o'zgartirilmaydi. */
 export async function stockdayReportSaqlaAction(input: {
-  token: string; chatId: string; topicId: string; autoEnabled: boolean; excludeCodes: string;
+  token: string;
+  chatId: string;
+  topicId: string;
+  autoEnabled: boolean;
+  excludeCodes: string;
 }): Promise<Result> {
   try {
     await requireAdmin();
@@ -340,26 +448,42 @@ export async function stockdayReportSaqlaAction(input: {
     const chatId = input.chatId.trim();
     const topicId = input.topicId.trim();
     if (!chatId) {
-      return { ok: false, error: "Guruh chat ID kiritilishi shart (bo'sh saqlasangiz xabarnoma o'chadi)." };
+      return {
+        ok: false,
+        error:
+          "Guruh chat ID kiritilishi shart (bo'sh saqlasangiz xabarnoma o'chadi).",
+      };
     }
     if (!/^-?\d{5,20}$/.test(chatId)) {
-      return { ok: false, error: "Guruh chat ID raqam bo'lishi kerak (odatda -100... ko'rinishida)." };
+      return {
+        ok: false,
+        error:
+          "Guruh chat ID raqam bo'lishi kerak (odatda -100... ko'rinishida).",
+      };
     }
     if (topicId && !/^\d{1,12}$/.test(topicId)) {
       return { ok: false, error: "Topic ID musbat raqam bo'lishi kerak." };
     }
     if (token && !/^\d{6,}:[A-Za-z0-9_-]{20,}$/.test(token)) {
-      return { ok: false, error: "Bot token noto'g'ri (123456:ABC... ko'rinishida)." };
+      return {
+        ok: false,
+        error: "Bot token noto'g'ri (123456:ABC... ko'rinishida).",
+      };
     }
-    const { setStockdayReportConfig } = await import("@/lib/stockday-report/sozlama");
+    const { setStockdayReportConfig } =
+      await import("@/lib/stockday-report/sozlama");
     await setStockdayReportConfig({
-      token, chatId, topicId,
+      token,
+      chatId,
+      topicId,
       autoEnabled: !!input.autoEnabled,
       excludeCodes: input.excludeCodes ?? "",
     });
     revalidatePath(RP);
     return { ok: true };
-  } catch (err) { return xato(err); }
+  } catch (err) {
+    return xato(err);
+  }
 }
 
 /** Zaxira normasi hisobotini hoziroq yuborish (sinov tugmasi). Oshgan qatorlar sonini qaytaradi. */
@@ -368,7 +492,8 @@ export async function stockdayReportYuborAction(): Promise<
 > {
   try {
     await requireAdmin();
-    const { sendStockdayNormReport } = await import("@/lib/stockday-report/report");
+    const { sendStockdayNormReport } =
+      await import("@/lib/stockday-report/report");
     return await sendStockdayNormReport();
   } catch (err) {
     const msg = err instanceof Error ? redactError(err) : "Xato.";
@@ -380,7 +505,10 @@ export async function stockdayReportYuborAction(): Promise<
 
 /** Bot token + guruh chat id + topic id + avto-yoqish'ni saqlash. token bo'sh — o'zgartirilmaydi. */
 export async function deliveryAlertSaqlaAction(input: {
-  token: string; chatId: string; topicId: string; autoEnabled: boolean;
+  token: string;
+  chatId: string;
+  topicId: string;
+  autoEnabled: boolean;
 }): Promise<Result> {
   try {
     await requireAdmin();
@@ -388,22 +516,41 @@ export async function deliveryAlertSaqlaAction(input: {
     const chatId = input.chatId.trim();
     const topicId = input.topicId.trim();
     if (!chatId) {
-      return { ok: false, error: "Guruh chat ID kiritilishi shart (bo'sh saqlasangiz xabarnoma o'chadi)." };
+      return {
+        ok: false,
+        error:
+          "Guruh chat ID kiritilishi shart (bo'sh saqlasangiz xabarnoma o'chadi).",
+      };
     }
     if (!/^-?\d{5,20}$/.test(chatId)) {
-      return { ok: false, error: "Guruh chat ID raqam bo'lishi kerak (odatda -100... ko'rinishida)." };
+      return {
+        ok: false,
+        error:
+          "Guruh chat ID raqam bo'lishi kerak (odatda -100... ko'rinishida).",
+      };
     }
     if (topicId && !/^\d{1,12}$/.test(topicId)) {
       return { ok: false, error: "Topic ID musbat raqam bo'lishi kerak." };
     }
     if (token && !/^\d{6,}:[A-Za-z0-9_-]{20,}$/.test(token)) {
-      return { ok: false, error: "Bot token noto'g'ri (123456:ABC... ko'rinishida)." };
+      return {
+        ok: false,
+        error: "Bot token noto'g'ri (123456:ABC... ko'rinishida).",
+      };
     }
-    const { setDeliveryAlertConfig } = await import("@/lib/delivery-alert/sozlama");
-    await setDeliveryAlertConfig({ token, chatId, topicId, autoEnabled: !!input.autoEnabled });
+    const { setDeliveryAlertConfig } =
+      await import("@/lib/delivery-alert/sozlama");
+    await setDeliveryAlertConfig({
+      token,
+      chatId,
+      topicId,
+      autoEnabled: !!input.autoEnabled,
+    });
     revalidatePath(RP);
     return { ok: true };
-  } catch (err) { return xato(err); }
+  } catch (err) {
+    return xato(err);
+  }
 }
 
 /** Kechikish signalini hoziroq yuborish (sinov tugmasi). Kechikkan zakazlar sonini qaytaradi. */
@@ -424,7 +571,10 @@ export async function deliveryAlertYuborAction(): Promise<
 
 /** Bot token + guruh chat id + topic id + avto-yoqish. token bo'sh — o'zgartirilmaydi. */
 export async function expiryAlertSaqlaAction(input: {
-  token: string; chatId: string; topicId: string; autoEnabled: boolean;
+  token: string;
+  chatId: string;
+  topicId: string;
+  autoEnabled: boolean;
 }): Promise<Result> {
   try {
     await requireAdmin();
@@ -432,22 +582,40 @@ export async function expiryAlertSaqlaAction(input: {
     const chatId = input.chatId.trim();
     const topicId = input.topicId.trim();
     if (!chatId) {
-      return { ok: false, error: "Guruh chat ID kiritilishi shart (bo'sh saqlasangiz xabarnoma o'chadi)." };
+      return {
+        ok: false,
+        error:
+          "Guruh chat ID kiritilishi shart (bo'sh saqlasangiz xabarnoma o'chadi).",
+      };
     }
     if (!/^-?\d{5,20}$/.test(chatId)) {
-      return { ok: false, error: "Guruh chat ID raqam bo'lishi kerak (odatda -100... ko'rinishida)." };
+      return {
+        ok: false,
+        error:
+          "Guruh chat ID raqam bo'lishi kerak (odatda -100... ko'rinishida).",
+      };
     }
     if (topicId && !/^\d{1,12}$/.test(topicId)) {
       return { ok: false, error: "Topic ID musbat raqam bo'lishi kerak." };
     }
     if (token && !/^\d{6,}:[A-Za-z0-9_-]{20,}$/.test(token)) {
-      return { ok: false, error: "Bot token noto'g'ri (123456:ABC... ko'rinishida)." };
+      return {
+        ok: false,
+        error: "Bot token noto'g'ri (123456:ABC... ko'rinishida).",
+      };
     }
     const { setExpiryAlertConfig } = await import("@/lib/expiry-alert/sozlama");
-    await setExpiryAlertConfig({ token, chatId, topicId, autoEnabled: !!input.autoEnabled });
+    await setExpiryAlertConfig({
+      token,
+      chatId,
+      topicId,
+      autoEnabled: !!input.autoEnabled,
+    });
     revalidatePath(RP);
     return { ok: true };
-  } catch (err) { return xato(err); }
+  } catch (err) {
+    return xato(err);
+  }
 }
 
 /** Muddat signalini hoziroq yuborish (sinov). Shoshilinch partiyalar sonini qaytaradi. */
@@ -468,7 +636,10 @@ export async function expiryAlertYuborAction(): Promise<
 
 /** Bot token + guruh chat id + topic id + avto-yoqish. token bo'sh — o'zgartirilmaydi. */
 export async function promoAlertSaqlaAction(input: {
-  token: string; chatId: string; topicId: string; autoEnabled: boolean;
+  token: string;
+  chatId: string;
+  topicId: string;
+  autoEnabled: boolean;
 }): Promise<Result> {
   try {
     await requireAdmin();
@@ -476,22 +647,40 @@ export async function promoAlertSaqlaAction(input: {
     const chatId = input.chatId.trim();
     const topicId = input.topicId.trim();
     if (!chatId) {
-      return { ok: false, error: "Guruh chat ID kiritilishi shart (bo'sh saqlasangiz xabarnoma o'chadi)." };
+      return {
+        ok: false,
+        error:
+          "Guruh chat ID kiritilishi shart (bo'sh saqlasangiz xabarnoma o'chadi).",
+      };
     }
     if (!/^-?\d{5,20}$/.test(chatId)) {
-      return { ok: false, error: "Guruh chat ID raqam bo'lishi kerak (odatda -100... ko'rinishida)." };
+      return {
+        ok: false,
+        error:
+          "Guruh chat ID raqam bo'lishi kerak (odatda -100... ko'rinishida).",
+      };
     }
     if (topicId && !/^\d{1,12}$/.test(topicId)) {
       return { ok: false, error: "Topic ID musbat raqam bo'lishi kerak." };
     }
     if (token && !/^\d{6,}:[A-Za-z0-9_-]{20,}$/.test(token)) {
-      return { ok: false, error: "Bot token noto'g'ri (123456:ABC... ko'rinishida)." };
+      return {
+        ok: false,
+        error: "Bot token noto'g'ri (123456:ABC... ko'rinishida).",
+      };
     }
     const { setPromoAlertConfig } = await import("@/lib/promo-alert/sozlama");
-    await setPromoAlertConfig({ token, chatId, topicId, autoEnabled: !!input.autoEnabled });
+    await setPromoAlertConfig({
+      token,
+      chatId,
+      topicId,
+      autoEnabled: !!input.autoEnabled,
+    });
     revalidatePath(RP);
     return { ok: true };
-  } catch (err) { return xato(err); }
+  } catch (err) {
+    return xato(err);
+  }
 }
 
 /** Aksiya signalini hoziroq yuborish (sinov). Bugungi aksiyalar sonini qaytaradi. */
@@ -512,7 +701,10 @@ export async function promoAlertYuborAction(): Promise<
 
 /** Bot token + guruh chat id + topic id + avto-yoqish'ni saqlash. token bo'sh — o'zgartirilmaydi. */
 export async function zakazPdfSaqlaAction(input: {
-  token: string; chatId: string; topicId: string; autoEnabled: boolean;
+  token: string;
+  chatId: string;
+  topicId: string;
+  autoEnabled: boolean;
 }): Promise<Result> {
   try {
     await requireAdmin();
@@ -520,32 +712,59 @@ export async function zakazPdfSaqlaAction(input: {
     const chatId = input.chatId.trim();
     const topicId = input.topicId.trim();
     if (!chatId) {
-      return { ok: false, error: "Guruh chat ID kiritilishi shart (bo'sh saqlasangiz yuborish o'chadi)." };
+      return {
+        ok: false,
+        error:
+          "Guruh chat ID kiritilishi shart (bo'sh saqlasangiz yuborish o'chadi).",
+      };
     }
     if (!/^-?\d{5,20}$/.test(chatId)) {
-      return { ok: false, error: "Guruh chat ID raqam bo'lishi kerak (odatda -100... ko'rinishida)." };
+      return {
+        ok: false,
+        error:
+          "Guruh chat ID raqam bo'lishi kerak (odatda -100... ko'rinishida).",
+      };
     }
     if (topicId && !/^\d{1,12}$/.test(topicId)) {
       return { ok: false, error: "Topic ID musbat raqam bo'lishi kerak." };
     }
     if (token && !/^\d{6,}:[A-Za-z0-9_-]{20,}$/.test(token)) {
-      return { ok: false, error: "Bot token noto'g'ri (123456:ABC... ko'rinishida)." };
+      return {
+        ok: false,
+        error: "Bot token noto'g'ri (123456:ABC... ko'rinishida).",
+      };
     }
     const { setZakazPdfConfig } = await import("@/lib/zakaz-pdf/sozlama");
-    await setZakazPdfConfig({ token, chatId, topicId, autoEnabled: !!input.autoEnabled });
+    await setZakazPdfConfig({
+      token,
+      chatId,
+      topicId,
+      autoEnabled: !!input.autoEnabled,
+    });
     revalidatePath(RP);
     return { ok: true };
-  } catch (err) { return xato(err); }
+  } catch (err) {
+    return xato(err);
+  }
 }
 
 /** Sinov: eng oxirgi qabul qilingan (yoki istalgan oxirgi) zakazni hozir yuboradi. */
-export async function zakazPdfTestAction(): Promise<{ ok: true; orderId: number } | { ok: false; error: string }> {
+export async function zakazPdfTestAction(): Promise<
+  { ok: true; orderId: number } | { ok: false; error: string }
+> {
   try {
     await requireAdmin();
     const { prisma } = await import("@/lib/prisma");
     const target =
-      (await prisma.purchaseOrder.findFirst({ where: { status: "ACCEPTED" }, orderBy: { updatedAt: "desc" }, select: { id: true } })) ??
-      (await prisma.purchaseOrder.findFirst({ orderBy: { id: "desc" }, select: { id: true } }));
+      (await prisma.purchaseOrder.findFirst({
+        where: { status: "ACCEPTED" },
+        orderBy: { updatedAt: "desc" },
+        select: { id: true },
+      })) ??
+      (await prisma.purchaseOrder.findFirst({
+        orderBy: { id: "desc" },
+        select: { id: true },
+      }));
     if (!target) return { ok: false, error: "Sinov uchun zakaz topilmadi." };
     const { sendZakazPdf } = await import("@/lib/zakaz-pdf/send");
     const r = await sendZakazPdf(target.id);
@@ -561,7 +780,10 @@ export async function zakazPdfTestAction(): Promise<{ ok: true; orderId: number 
 
 /** Bot token + guruh chat id + topic id + avto-yoqish'ni saqlash. token bo'sh — o'zgartirilmaydi. */
 export async function spisaniyaDailySaqlaAction(input: {
-  token: string; chatId: string; topicId: string; autoEnabled: boolean;
+  token: string;
+  chatId: string;
+  topicId: string;
+  autoEnabled: boolean;
 }): Promise<Result> {
   try {
     await requireAdmin();
@@ -569,29 +791,51 @@ export async function spisaniyaDailySaqlaAction(input: {
     const chatId = input.chatId.trim();
     const topicId = input.topicId.trim();
     if (!chatId) {
-      return { ok: false, error: "Guruh chat ID kiritilishi shart (bo'sh saqlasangiz yuborish o'chadi)." };
+      return {
+        ok: false,
+        error:
+          "Guruh chat ID kiritilishi shart (bo'sh saqlasangiz yuborish o'chadi).",
+      };
     }
     if (!/^-?\d{5,20}$/.test(chatId)) {
-      return { ok: false, error: "Guruh chat ID raqam bo'lishi kerak (odatda -100... ko'rinishida)." };
+      return {
+        ok: false,
+        error:
+          "Guruh chat ID raqam bo'lishi kerak (odatda -100... ko'rinishida).",
+      };
     }
     if (topicId && !/^\d{1,12}$/.test(topicId)) {
       return { ok: false, error: "Topic ID musbat raqam bo'lishi kerak." };
     }
     if (token && !/^\d{6,}:[A-Za-z0-9_-]{20,}$/.test(token)) {
-      return { ok: false, error: "Bot token noto'g'ri (123456:ABC... ko'rinishida)." };
+      return {
+        ok: false,
+        error: "Bot token noto'g'ri (123456:ABC... ko'rinishida).",
+      };
     }
-    const { setSpisaniyaDailyConfig } = await import("@/lib/spisaniya-daily/sozlama");
-    await setSpisaniyaDailyConfig({ token, chatId, topicId, autoEnabled: !!input.autoEnabled });
+    const { setSpisaniyaDailyConfig } =
+      await import("@/lib/spisaniya-daily/sozlama");
+    await setSpisaniyaDailyConfig({
+      token,
+      chatId,
+      topicId,
+      autoEnabled: !!input.autoEnabled,
+    });
     revalidatePath(RP);
     return { ok: true };
-  } catch (err) { return xato(err); }
+  } catch (err) {
+    return xato(err);
+  }
 }
 
 /** Kunlik hisobotni hoziroq yuborish (sinov). Jami chiqim summasini qaytaradi. */
-export async function spisaniyaDailyYuborAction(): Promise<{ ok: true; total: number } | { ok: false; error: string }> {
+export async function spisaniyaDailyYuborAction(): Promise<
+  { ok: true; total: number } | { ok: false; error: string }
+> {
   try {
     await requireAdmin();
-    const { sendSpisaniyaDailyReport } = await import("@/lib/spisaniya-daily/report");
+    const { sendSpisaniyaDailyReport } =
+      await import("@/lib/spisaniya-daily/report");
     return await sendSpisaniyaDailyReport();
   } catch (err) {
     const msg = err instanceof Error ? redactError(err) : "Xato.";
@@ -603,7 +847,10 @@ export async function spisaniyaDailyYuborAction(): Promise<{ ok: true; total: nu
 
 /** Bot token + guruh chat id + topic id + avto-yoqish'ni saqlash. token bo'sh — o'zgartirilmaydi. */
 export async function narxReportSaqlaAction(input: {
-  token: string; chatId: string; topicId: string; autoEnabled: boolean;
+  token: string;
+  chatId: string;
+  topicId: string;
+  autoEnabled: boolean;
 }): Promise<Result> {
   try {
     await requireAdmin();
@@ -611,16 +858,27 @@ export async function narxReportSaqlaAction(input: {
     const chatId = input.chatId.trim();
     const topicId = input.topicId.trim();
     if (!chatId) {
-      return { ok: false, error: "Guruh chat ID kiritilishi shart (bo'sh saqlasangiz xabarnoma o'chadi)." };
+      return {
+        ok: false,
+        error:
+          "Guruh chat ID kiritilishi shart (bo'sh saqlasangiz xabarnoma o'chadi).",
+      };
     }
     if (!/^-?\d{5,20}$/.test(chatId)) {
-      return { ok: false, error: "Guruh chat ID raqam bo'lishi kerak (odatda -100... ko'rinishida)." };
+      return {
+        ok: false,
+        error:
+          "Guruh chat ID raqam bo'lishi kerak (odatda -100... ko'rinishida).",
+      };
     }
     if (topicId && !/^\d{1,12}$/.test(topicId)) {
       return { ok: false, error: "Topic ID musbat raqam bo'lishi kerak." };
     }
     if (token && !/^\d{6,}:[A-Za-z0-9_-]{20,}$/.test(token)) {
-      return { ok: false, error: "Bot token noto'g'ri (123456:ABC... ko'rinishida)." };
+      return {
+        ok: false,
+        error: "Bot token noto'g'ri (123456:ABC... ko'rinishida).",
+      };
     }
     const { setNarxReportConfig } = await import("@/lib/narx-report/sozlama");
     // ALOHIDA catch: bu chaqiruv argumentlari orasida TOKEN bor. Prisma xatolari
@@ -628,14 +886,24 @@ export async function narxReportSaqlaAction(input: {
     // xom `err.message` brauzerga tokenni olib chiqishi mumkin edi. Mijozga umumiy
     // xabar, serverga esa redaksiyalangan diagnostika beramiz.
     try {
-      await setNarxReportConfig({ token, chatId, topicId, autoEnabled: !!input.autoEnabled });
+      await setNarxReportConfig({
+        token,
+        chatId,
+        topicId,
+        autoEnabled: !!input.autoEnabled,
+      });
     } catch (err) {
       console.error("[sozlamalar] narxReportSaqla:", redactForLog(err));
-      return { ok: false, error: "Sozlamani saqlab bo'lmadi. Qaytadan urinib ko'ring." };
+      return {
+        ok: false,
+        error: "Sozlamani saqlab bo'lmadi. Qaytadan urinib ko'ring.",
+      };
     }
     revalidatePath(RP);
     return { ok: true };
-  } catch (err) { return xato(err); }
+  } catch (err) {
+    return xato(err);
+  }
 }
 
 /**
@@ -644,7 +912,8 @@ export async function narxReportSaqlaAction(input: {
  * deb jim skipped qaytarardi.
  */
 export async function narxReportYuborAction(): Promise<
-  { ok: true; count: number; period: string | null; skipped?: boolean } | { ok: false; error: string }
+  | { ok: true; count: number; period: string | null; skipped?: boolean }
+  | { ok: false; error: string }
 > {
   try {
     await requireAdmin();
@@ -688,7 +957,11 @@ export async function onecShopBoglaAction(input: {
         where: { onecShopId: qiymat, NOT: { id: p.branchId } },
         select: { name: true },
       });
-      if (band) return { ok: false, error: `Bu do'kon ID «${band.name}» ga biriktirilgan.` };
+      if (band)
+        return {
+          ok: false,
+          error: `Bu do'kon ID «${band.name}» ga biriktirilgan.`,
+        };
     }
 
     await prisma.branch.update({
@@ -715,9 +988,40 @@ export async function onecShopBoglaAction(input: {
 // 1C bergan nom → bizdagi tur. Naqd/plastik ajratish shu yerdan chiqadi,
 // shuning uchun tasdiqlash QO'LDA: taxmin xato bo'lsa tushum noto'g'ri bo'linadi.
 const tolovTuriSchema = z.object({
-  name: z.string().trim().min(1),
+  name: z.string().trim().min(1).max(100),
   kind: z.enum(["CASH", "CARD", "TRANSFER", "OTHER"]),
 });
+
+/**
+ * Qo'lda qo'shilgan to'lov turini o'chirish.
+ *
+ * FAQAT ISHLATILMAGANINI: agar shu nom bilan chek to'lovi bor bo'lsa, o'chirish
+ * ularni turi noma'lum holatga tashlab ketardi va tushum taqsimoti buzilardi.
+ * 1C keyin o'sha nomni yuborsa — u avtomatik qayta paydo bo'ladi.
+ */
+export async function tolovTuriOchirAction(name: string): Promise<Result> {
+  try {
+    await requireAdmin();
+    const p = z.string().trim().min(1).parse(name);
+    const { prisma } = await import("@/lib/prisma");
+
+    const ishlatilgan = await prisma.receiptPayment.count({
+      where: { name: p },
+    });
+    if (ishlatilgan > 0) {
+      return {
+        ok: false,
+        error: `«${p}» ${ishlatilgan.toLocaleString("uz-UZ")} ta chekda ishlatilgan — o'chirib bo'lmaydi. Turini o'zgartiring.`,
+      };
+    }
+
+    await prisma.paymentTypeMap.deleteMany({ where: { name: p } });
+    revalidatePath(RP);
+    return { ok: true };
+  } catch (err) {
+    return xato(err);
+  }
+}
 
 export async function tolovTuriBelgilaAction(input: {
   name: string;
@@ -757,8 +1061,13 @@ export async function tolovTuriBelgilaAction(input: {
 
 async function ipRoyxat(): Promise<string[]> {
   const { prisma } = await import("@/lib/prisma");
-  const row = await prisma.appSetting.findUnique({ where: { key: "onec_allowed_ips" } });
-  return (row?.value ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  const row = await prisma.appSetting.findUnique({
+    where: { key: "onec_allowed_ips" },
+  });
+  return (row?.value ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
 async function ipSaqla(list: string[]): Promise<void> {
@@ -785,7 +1094,10 @@ export async function onecIpRuxsatAction(ip: string): Promise<Result> {
     const p = ipSchema.parse(ip);
     await ipSaqla([...(await ipRoyxat()), p]);
     const { prisma } = await import("@/lib/prisma");
-    await prisma.onecIpLog.updateMany({ where: { ip: p }, data: { allowed: true } });
+    await prisma.onecIpLog.updateMany({
+      where: { ip: p },
+      data: { allowed: true },
+    });
     revalidatePath(RP);
     return { ok: true };
   } catch (err) {
@@ -800,7 +1112,10 @@ export async function onecIpOlibTashlaAction(ip: string): Promise<Result> {
     const p = ipSchema.parse(ip);
     await ipSaqla((await ipRoyxat()).filter((x) => x !== p));
     const { prisma } = await import("@/lib/prisma");
-    await prisma.onecIpLog.updateMany({ where: { ip: p }, data: { allowed: false } });
+    await prisma.onecIpLog.updateMany({
+      where: { ip: p },
+      data: { allowed: false },
+    });
     revalidatePath(RP);
     return { ok: true };
   } catch (err) {
