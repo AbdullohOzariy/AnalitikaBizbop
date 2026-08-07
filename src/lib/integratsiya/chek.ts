@@ -218,15 +218,21 @@ export function parseChek(p: unknown): Chek | { error: string } {
   const bor = (v: unknown) => v !== undefined && v !== null && v !== "";
   const yig = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 
-  const sum = bor(o.sum) ? num(o.sum) : yig(lines.map((l) => l.sum));
+  // STORNO QATORLAR HISOBGA OLINMAYDI. Bekor qilingan qator chekda qoladi
+  // (kassir nima qilgani ko'rinsin uchun), lekin summaga KIRMAYDI. Buni
+  // qo'shib yuborish 2026-08-07 da jonli ma'lumotda summani 2.2% ga
+  // shishirgan edi; stornosiz yig'indi esa to'lov summasiga AYNAN teng chiqadi.
+  const faol = lines.filter((l) => l.storno === 0);
+
+  const sum = bor(o.sum) ? num(o.sum) : yig(faol.map((l) => l.sum));
   const sumWithDiscs = bor(o.sumWithDiscs)
     ? num(o.sumWithDiscs)
-    : yig(lines.map((l) => l.sumWD));
+    : yig(faol.map((l) => l.sumWD));
   const totalSum = bor(o.totalSum)
     ? num(o.totalSum)
     : payments.length > 0
       ? yig(payments.map((p) => p.value))
-      : yig(lines.map((l) => l.totalSum));
+      : yig(faol.map((l) => l.totalSum));
 
   return {
     shop,

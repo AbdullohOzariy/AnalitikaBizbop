@@ -275,3 +275,56 @@ describe("parseChek — summalar kelmaganda qatorlardan yig'iladi", () => {
     expect(r.totalSum).toBe(0);
   });
 });
+
+describe("parseChek — storno qatorlar summaga kirmaydi", () => {
+  // REGRESSIYA: jonli ma'lumotda chek summasi 2.2% ga shishgan edi — bekor
+  // qilingan qatorlar ham qo'shilgani uchun. Stornosiz yig'indi to'lov
+  // summasiga aynan teng chiqadi.
+  const xom = {
+    shop: 1, pos: 5, number: "888137", session: 3980,
+    openDate: "07.08.26", openTime: "20:10:00", type: 1,
+    user: { id: 1, name: "admin" },
+    payments: [{ name: "Терминал", value: 700 }],
+    positions: [
+      { qty: 1, sum: 500, sumWD: 450, totalSum: 450, storno: 0, item: { id: 1, name: "A" } },
+      { qty: 1, sum: 300, sumWD: 250, totalSum: 250, storno: 0, item: { id: 2, name: "B" } },
+      // Bekor qilingan — chekda ko'rinadi, lekin summaga kirmaydi
+      { qty: 1, sum: 900, sumWD: 900, totalSum: 900, storno: 1, item: { id: 3, name: "BEKOR" } },
+    ],
+  };
+
+  it("sum faqat faol qatorlardan", () => {
+    const r = parseChek(xom);
+    if ("error" in r) throw new Error("parse xato");
+    expect(r.sum).toBe(800); // 500+300, 900 kirmaydi
+  });
+
+  it("sumWithDiscs ham faqat faol qatorlardan", () => {
+    const r = parseChek(xom);
+    if ("error" in r) throw new Error("parse xato");
+    expect(r.sumWithDiscs).toBe(700); // 450+250
+  });
+
+  it("storno qatorning O'ZI ro'yxatda qoladi — kassir nima qilgani ko'rinsin", () => {
+    const r = parseChek(xom);
+    if ("error" in r) throw new Error("parse xato");
+    expect(r.lines).toHaveLength(3);
+    expect(r.lines[2].storno).toBe(1);
+  });
+
+  it("to'lov bo'lmasa totalSum ham faqat faol qatorlardan", () => {
+    const r = parseChek({ ...xom, payments: [] });
+    if ("error" in r) throw new Error("parse xato");
+    expect(r.totalSum).toBe(700); // 450+250, bekor qilingan 900 kirmaydi
+  });
+
+  it("hammasi storno bo'lsa — summa 0", () => {
+    const r = parseChek({
+      ...xom,
+      payments: [],
+      positions: xom.positions.map((p) => ({ ...p, storno: 1 })),
+    });
+    if ("error" in r) throw new Error("parse xato");
+    expect([r.sum, r.sumWithDiscs, r.totalSum]).toEqual([0, 0, 0]);
+  });
+});
