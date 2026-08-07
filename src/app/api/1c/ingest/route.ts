@@ -233,15 +233,20 @@ export async function POST(req: Request) {
 
     // Qayta ishlash JAVOBDAN KEYIN — 1C kutib turmasin va u yiqilsa ham
     // xom hodisa allaqachon saqlangan bo'ladi (200 kafolati buzilmaydi).
-    if (res.count > 0) {
-      after(async () => {
-        try {
-          await cheklarniQaytaIshla(Math.min(res.count * 2, 500));
-        } catch (e) {
-          console.error("[1c-ingest:qayta-ishlash]", redactForLog(e));
-        }
-      });
-    }
+    //
+    // `res.count > 0` SHARTI OLIB TASHLANDI: 1C bir chekni qayta yuborsa yangi
+    // qator qo'shilmaydi (skipDuplicates), lekin navbatda ESKI PENDING turgan
+    // bo'lishi mumkin edi va u hech qachon qayta ishlanmasdi. Navbat bo'sh
+    // bo'lsa funksiya darhol qaytadi, ya'ni bu qimmat emas.
+    // Zaxira sifatida har 5 daqiqada cron ham navbatni bo'shatadi
+    // (`instrumentation.ts`) — `after()` bajarilmay qolsa ham ma'lumot yo'qolmaydi.
+    after(async () => {
+      try {
+        await cheklarniQaytaIshla(500);
+      } catch (e) {
+        console.error("[1c-ingest:qayta-ishlash]", redactForLog(e));
+      }
+    });
 
     return NextResponse.json({
       ok: true,

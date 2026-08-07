@@ -271,6 +271,36 @@ export async function register() {
       }
       console.log(`[instrumentation] ${JOBS.length} ta cron o'rnatildi (Asia/Tashkent)`);
 
+      // ── 1C navbatini bo'shatish — HAR 5 DAQIQADA ──
+      // Asosiy yo'l: POST javobidan keyin `after()`. Lekin unga TAYANIB BO'LMAYDI:
+      // 1C bir chekni qayta yuborsa `createMany` uni tashlab yuboradi (skipDuplicates),
+      // yangi qator qo'shilmaydi va qayta ishlash umuman rejalashtirilmaydi — navbatda
+      // eski PENDING qolgan bo'lsa u yerda turib qolardi. 2026-08-07 da aynan shu
+      // sodir bo'ldi: 21 ta hodisa PENDING'da to'planib qoldi va qo'lda ishga
+      // tushirilgunicha chek bazasiga tushmadi.
+      //
+      // `runCron` ISHLATILMAYDI: u kunlik dedup qiladi (job+dayKey unique), ya'ni
+      // tez takrorlanadigan ish kuniga bir marta bajarilib qolardi.
+      schedule(
+        "*/5 * * * *",
+        () => {
+          void (async () => {
+            try {
+              const { cheklarniQaytaIshla } = await import("@/lib/integratsiya/chek-saqla");
+              const r = await cheklarniQaytaIshla(500);
+              if (r.yaratildi > 0 || r.yangilandi > 0) {
+                console.log(
+                  `[1c-navbat] ${r.yaratildi} yangi, ${r.yangilandi} yangilandi, ${r.xato} xato`
+                );
+              }
+            } catch (e) {
+              console.error("[1c-navbat] xato:", e instanceof Error ? e.message : e);
+            }
+          })();
+        },
+        { timezone: "Asia/Tashkent" }
+      );
+
       // CATCH-UP: server o'sha vaqtda o'chiq bo'lgan bo'lsa, bugungi vaqti o'tgan ishlarni
       // bir marta bajaramiz. runCron dedup qiladi — allaqachon bajarilgan bo'lsa jim chiqadi.
       const now = nowTashkent();
