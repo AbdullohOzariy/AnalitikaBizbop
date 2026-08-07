@@ -165,6 +165,49 @@ export function tokenMatches(got: string, expected: string): boolean {
   return crypto.timingSafeEqual(a, b);
 }
 
+/**
+ * Muvaffaqiyatsiz autentifikatsiya uchun tashxis ma'lumoti.
+ *
+ * NEGA KERAK: endpoint noto'g'ri token uchun ATAYLAB `404` qaytaradi va sababni
+ * aytmaydi (borligini ham oshkor qilmaslik uchun). Bu tashqi skanerga qarshi
+ * to'g'ri, lekin hamkor jamoa bilan nosozlik izlashda ko'r qoldiradi: "404
+ * kelyapti" dan boshqa hech narsa ma'lum bo'lmaydi.
+ *
+ * ⚠️ TOKEN QIYMATI QAYTARILMAYDI — faqat uzunligi va dastlabki 6 belgisi.
+ * Shu bilan "prefiks tushib qolgan / token kesilgan / umuman kelmagan / boshqa
+ * token" holatlari ajratiladi, sir esa jurnalga tushmaydi.
+ */
+export function authTashxis(req: Request, ip: string): Record<string, unknown> {
+  const auth = req.headers.get("authorization");
+  const alt = req.headers.get("x-ingest-token");
+
+  const bearerPrefiks = auth ? /^bearer\s/i.test(auth) : null;
+  const qiymat = (
+    auth ? (bearerPrefiks ? auth.replace(/^bearer\s+/i, "") : auth) : (alt ?? "")
+  ).trim();
+
+  let path = req.url;
+  try {
+    path = new URL(req.url).pathname;
+  } catch {
+    // URL parse bo'lmasa xom qiymat qoladi — tashxis oqimni to'xtatmasin.
+  }
+
+  return {
+    ip,
+    method: req.method,
+    path,
+    header: auth ? "authorization" : alt ? "x-ingest-token" : "YO'Q",
+    bearerPrefiks,
+    tokenUzunligi: qiymat.length,
+    tokenBoshi: qiymat.slice(0, 6),
+    kutilganUzunlik: (process.env.ONEC_INGEST_TOKEN || "").length,
+    contentType: req.headers.get("content-type"),
+    contentLength: req.headers.get("content-length"),
+    ua: req.headers.get("user-agent")?.slice(0, 80) ?? null,
+  };
+}
+
 // ─── Kodlash (encoding) ──────────────────────────────────────────────────────
 
 /**

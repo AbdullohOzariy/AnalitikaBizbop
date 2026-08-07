@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import {
+  authTashxis,
   decodeBody,
   extractEvents,
   normalizeEvent,
@@ -231,5 +232,66 @@ describe("parseOpenDateTime", () => {
   it("noto'g'ri format", () => {
     expect(parseOpenDateTime("2026-08-04", "10:00")).toBeNull();
     expect(parseOpenDateTime("", "10:00")).toBeNull();
+  });
+});
+
+describe("authTashxis", () => {
+  const SIR = "s3cr3t-token-abcdefghijklmnop";
+  const req = (h: Record<string, string>, url = "http://x/api/1c/ingest", method = "POST") =>
+    new Request(url, { method, headers: h });
+
+  beforeEach(() => {
+    process.env.ONEC_INGEST_TOKEN = SIR;
+  });
+
+  // ENG MUHIM TEKSHIRUV: tashxis jurnalga tushadi, ya'ni token qiymati
+  // hech qanday maydonda TO'LIQ ko'rinmasligi kerak.
+  it("token qiymatini OSHKOR QILMAYDI", () => {
+    const d = authTashxis(req({ authorization: `Bearer ${SIR}` }), "1.2.3.4");
+    const matn = JSON.stringify(d);
+    expect(matn).not.toContain(SIR);
+    expect(matn).not.toContain(SIR.slice(0, 10));
+  });
+
+  it("Bearer prefiksi borligini ko'rsatadi", () => {
+    expect(authTashxis(req({ authorization: `Bearer ${SIR}` }), "1.2.3.4")).toMatchObject({
+      header: "authorization",
+      bearerPrefiks: true,
+      tokenUzunligi: SIR.length,
+    });
+  });
+
+  it("prefiks TUSHIB QOLGANINI ajratadi — 404 ning eng ehtimolli sababi", () => {
+    expect(authTashxis(req({ authorization: SIR }), "1.2.3.4")).toMatchObject({
+      header: "authorization",
+      bearerPrefiks: false,
+      tokenUzunligi: SIR.length,
+    });
+  });
+
+  it("token KESILGANINI uzunlik farqidan ko'rsatadi", () => {
+    const d = authTashxis(req({ authorization: `Bearer ${SIR.slice(0, 10)}` }), "1.2.3.4");
+    expect(d.tokenUzunligi).toBe(10);
+    expect(d.kutilganUzunlik).toBe(SIR.length);
+  });
+
+  it("header umuman yo'qligini ko'rsatadi", () => {
+    expect(authTashxis(req({}), "1.2.3.4")).toMatchObject({
+      header: "YO'Q",
+      bearerPrefiks: null,
+      tokenUzunligi: 0,
+    });
+  });
+
+  it("muqobil X-Ingest-Token headerini taniydi", () => {
+    expect(authTashxis(req({ "x-ingest-token": SIR }), "1.2.3.4")).toMatchObject({
+      header: "x-ingest-token",
+      bearerPrefiks: null,
+    });
+  });
+
+  it("yo'l va metodni yozadi — noto'g'ri manzilni ajratish uchun", () => {
+    const d = authTashxis(req({}, "http://x/api/1c/Ingest", "POST"), "1.2.3.4");
+    expect(d).toMatchObject({ path: "/api/1c/Ingest", method: "POST", ip: "1.2.3.4" });
   });
 });

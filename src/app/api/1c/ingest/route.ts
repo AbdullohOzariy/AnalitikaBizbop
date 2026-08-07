@@ -24,6 +24,7 @@ import {
   IMZO_OYNA_SEK,
 } from "@/lib/integratsiya/imzo";
 import {
+  authTashxis,
   decodeBody,
   extractEvents,
   normalizeEvent,
@@ -45,8 +46,16 @@ function authorized(req: Request): boolean {
   return tokenMatches(got, expected);
 }
 
-/** Sozlanmagan yoki noto'g'ri token — 404: endpoint borligini ham oshkor qilmaymiz. */
-const notFound = () => new NextResponse("Not found", { status: 404 });
+/**
+ * Sozlanmagan yoki noto'g'ri token — 404: endpoint borligini ham oshkor qilmaymiz.
+ *
+ * Mijozga sabab AYTILMAYDI, lekin jurnalga yoziladi: aks holda hamkor jamoa
+ * bilan "404 kelyapti" dan nariga o'tib bo'lmaydi. Token QIYMATI yozilmaydi.
+ */
+function notFound(req: Request): NextResponse {
+  console.warn("[1c-ingest:auth-xato]", JSON.stringify(authTashxis(req, haqiqiyIp(req))));
+  return new NextResponse("Not found", { status: 404 });
+}
 
 /**
  * Imzo majburiymi. Sozlamalardan o'qiladi (env emas) — 1C imzolashni qo'shgach
@@ -60,7 +69,7 @@ async function imzoMajburiymi(): Promise<boolean> {
 }
 
 export async function GET(req: Request) {
-  if (!authorized(req)) return notFound();
+  if (!authorized(req)) return notFound(req);
 
   // qabulQil=false — ping IP'ni BAND QILMAYDI, faqat tekshiradi. Aks holda
   // ulanishni sinab ko'rgan har qanday kompyuter ro'yxatni egallab olardi va
@@ -105,7 +114,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  if (!authorized(req)) return notFound();
+  if (!authorized(req)) return notFound(req);
 
   // IP cheklovi TOKENDAN KEYIN: tokensiz so'rov IP ro'yxatiga ta'sir qilmasin
   // (aks holda tasodifiy skaner birinchi IP bo'lib yozilib qolardi).
