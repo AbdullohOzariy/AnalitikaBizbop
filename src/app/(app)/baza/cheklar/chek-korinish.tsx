@@ -39,6 +39,7 @@ export type ChekView = {
   number: string;
   session: number;
   openAt: string;
+  closeAt: string | null;
   businessDate: string;
   type: number;
   status: string;
@@ -164,6 +165,15 @@ export function ChekKorinish({
           <div className="text-[11px]">
             {chek.card && <div>Karta: {chek.card}</div>}
             <div>Tovar turlari: {chek.qtyPositions}</div>
+            {chek.closeAt && (
+              <div>
+                Kassada:{" "}
+                {Math.round(
+                  (new Date(chek.closeAt).getTime() - new Date(chek.openAt).getTime()) / 1000
+                )}{" "}
+                sek
+              </div>
+            )}
           </div>
 
           <div className="mt-2 text-center text-[11px]">

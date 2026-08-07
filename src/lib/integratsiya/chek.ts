@@ -56,6 +56,8 @@ export type Chek = {
   number: string;
   session: number;
   openAt: Date;
+  /** Fiskal havoladan olingan yopilish payti; `null` — havola yo'q yoki noto'g'ri. */
+  closeAt: Date | null;
   businessDate: Date;
   type: number;
   status: string;
@@ -155,6 +157,46 @@ export function chekVaqti(openDate: unknown, openTime: unknown): Date | null {
   return dt;
 }
 
+/**
+ * Chek YOPILGAN payt — fiskal havoladan.
+ *
+ *   https://ofd.soliq.uz/check?t=...&r=...&c=20260807210536&s=...
+ *                                          ^^^^^^^^^^^^^^ YYYYMMDDHHMMSS
+ *
+ * NEGA SHU YERDAN: 1C ning `closeDate` maydoni HAR DOIM bo'sh keladi
+ * (711 payloadda bittasi ham to'ldirilmagan), `closeTime` esa umuman yo'q.
+ *
+ * NEGA BU YOPILISH VAQTI DEB HISOBLAYMIZ (dalil statistik, 1C tasdiqlagani yo'q):
+ *   – 397/397 chekda ochilishdan KEYIN, bitta ham istisno yo'q;
+ *   – farq savat hajmiga bog'liq: 10+ qatorli chek o'rtacha 156 sek,
+ *     1-2 qatorli 27 sek. Tasodifiy vaqt bunday bog'lanmasdi.
+ *
+ * Vaqt Toshkent zonasida deb olinadi (`chekVaqti` bilan bir xil).
+ */
+export function fiskalVaqt(fiscal: unknown): Date | null {
+  const s = txt(fiscal);
+  if (!s) return null;
+  const m = /[?&]c=(\d{14})(?:&|$)/.exec(s);
+  if (!m) return null;
+  const [y, mo, d, h, mi, se] = [
+    +m[1].slice(0, 4),
+    +m[1].slice(4, 6),
+    +m[1].slice(6, 8),
+    +m[1].slice(8, 10),
+    +m[1].slice(10, 12),
+    +m[1].slice(12, 14),
+  ];
+  if (mo < 1 || mo > 12 || d < 1 || d > 31 || h > 23 || mi > 59 || se > 59)
+    return null;
+  const utc = Date.UTC(y, mo - 1, d, h, mi, se) - TASHKENT_OFFSET_MS;
+  const dt = new Date(utc);
+  if (Number.isNaN(dt.getTime()) || y < 2000) return null;
+  // Rollover: "31.02" jimgina martga surilmasin
+  const chk = new Date(utc + TASHKENT_OFFSET_MS);
+  if (chk.getUTCMonth() !== mo - 1 || chk.getUTCDate() !== d) return null;
+  return dt;
+}
+
 /** Toshkent kuni (hisobot sanasi) — openAt dan olinadi. */
 export function hisobotKuni(openAt: Date): Date {
   const t = new Date(openAt.getTime() + TASHKENT_OFFSET_MS);
@@ -240,6 +282,12 @@ export function parseChek(p: unknown): Chek | { error: string } {
     number,
     session: num(o.session),
     openAt,
+    // Faqat ochilishdan KEYIN bo'lsa qabul qilamiz: soat noto'g'ri sozlangan
+    // kassada teskari qiymat chiqib, "manfiy xizmat vaqti" ko'rinardi.
+    closeAt: (() => {
+      const f = fiskalVaqt(o.fiscal);
+      return f && f.getTime() >= openAt.getTime() ? f : null;
+    })(),
     businessDate: hisobotKuni(openAt),
     type: num(o.type),
     status: txt(o.status) ?? "",

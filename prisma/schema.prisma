@@ -2445,6 +2445,14 @@ model Receipt {
   session      Int // smena
   /// Chek ochilgan aniq payt (openDate + openTime).
   openAt       DateTime
+  /// Chek yopilgan payt — FISKAL HAVOLADAN olinadi (`...&c=YYYYMMDDHHMMSS&...`).
+  ///
+  /// 1C ning `closeDate` maydoni har doim BO'SH keladi (711 payloadda bittasi
+  /// ham to'ldirilmagan), `closeTime` esa umuman yo'q. Fiskal havoladagi vaqt
+  /// esa 397/397 chekda ochilishdan KEYIN va farq savat hajmiga bog'liq
+  /// (10+ qatorli chek 156 sek, 1-2 qatorli 27 sek) — ya'ni bu kassada
+  /// o'tgan vaqt. 1C rasman tasdiqlagani yo'q, dalil statistik.
+  closeAt      DateTime?
   /// Hisobot kuni (Asia/Tashkent) — sverka va DDS shu bo'yicha.
   businessDate DateTime @db.Date
 

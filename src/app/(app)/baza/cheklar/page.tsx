@@ -4,168 +4,247 @@ import { prisma } from "@/lib/prisma";
 import { isAdminTier, canSeeFinance } from "@/lib/roles";
 import { isoDay, nowTashkent, parseDateParam } from "@/lib/date";
 import { decimalToNumber, formatUZS } from "@/lib/format";
-import { Receipt, Banknote, CreditCard, Calculator } from "lucide-react";
+import {
+  Receipt,
+  Banknote,
+  Calculator,
+  ShoppingBasket,
+  Timer,
+} from "lucide-react";
 import { PageHeader, StatCard } from "@/components/common/page";
 import { CheklarClient } from "./cheklar-client";
+import { ChekAnalitika } from "./chek-analitika";
 import {
   tolovTurlari as tolovTurlariRoyxat,
   turXaritasi,
   toneOf,
 } from "@/lib/integratsiya/tolov-turlari";
+import {
+  chekKpi,
+  soatlikOqim,
+  kassirKesimi,
+  kassaKesimi,
+  chekIdlari,
+  tolovTaqsimoti,
+  kassirRoyxati,
+  kassaRoyxati,
+  type ChekFiltr,
+} from "@/lib/integratsiya/chek-analitika";
 
 export const dynamic = "force-dynamic";
 
 type SP = Promise<Record<string, string | string[] | undefined>>;
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+const son = (v: string | string[] | undefined): number | null => {
+  const s = one(v);
+  return s != null && s !== "" && /^-?\d+$/.test(s) ? Number(s) : null;
+};
+const soat = (v: string | string[] | undefined): number | null => {
+  const n = son(v);
+  return n != null && n >= 0 && n <= 23 ? n : null;
+};
 
 const LIMIT = 100;
 
-export default async function CheklarPage({ searchParams }: { searchParams: SP }) {
+export default async function CheklarPage({
+  searchParams,
+}: {
+  searchParams: SP;
+}) {
   const session = await auth();
   if (!session) redirect("/login");
   // Admin-tier yoki moliyachi: cheklar naqd/plastik ajratishning MANBASI.
-  if (!isAdminTier(session.user.roles) && !canSeeFinance(session.user.roles)) redirect("/dashboard");
+  if (!isAdminTier(session.user.roles) && !canSeeFinance(session.user.roles)) {
+    redirect("/dashboard");
+  }
 
   const sp = await searchParams;
   const today = nowTashkent();
   const bugun = new Date(isoDay(today) + "T00:00:00.000Z");
-  const from = parseDateParam(one(sp.from), new Date(bugun.getTime() - 6 * 86400_000))!;
+  const from = parseDateParam(
+    one(sp.from),
+    new Date(bugun.getTime() - 6 * 86400_000),
+  )!;
   const to = parseDateParam(one(sp.to), bugun)!;
-  const branchId = Number(one(sp.branch)) || null;
-  const kind = one(sp.kind) || null;
-  const q = (one(sp.q) || "").trim();
 
-  const where = {
-    businessDate: { gte: from, lte: to },
-    ...(branchId ? { branchId } : {}),
-    ...(kind ? { payments: { some: { kind: kind as "CASH" } } } : {}),
-    ...(q
-      ? {
-          OR: [
-            { number: { contains: q } },
-            { card: { contains: q } },
-            { cashierName: { contains: q, mode: "insensitive" as const } },
-            { lines: { some: { name: { contains: q, mode: "insensitive" as const } } } },
-            { lines: { some: { barcode: { contains: q } } } },
-          ],
-        }
-      : {}),
+  const f: ChekFiltr = {
+    from: isoDay(from),
+    to: isoDay(to),
+    branchId: son(sp.branch),
+    pos: son(sp.pos),
+    cashierId: son(sp.kassir),
+    kind: one(sp.kind) || null,
+    soatDan: soat(sp.soatDan),
+    soatGacha: soat(sp.soatGacha),
+    q: (one(sp.q) || "").trim(),
+    storno: one(sp.storno) === "1",
+    skuYoq: one(sp.skuYoq) === "1",
   };
 
-  const [agg, tolovlar, rows, branches, bogliqsiz] = await Promise.all([
-    prisma.receipt.aggregate({ where, _count: true, _sum: { totalSum: true } }),
-    // Naqd/plastik ajratish — chek emas, TO'LOV darajasida (bir chekda ikkalasi bo'lishi mumkin)
-    prisma.receiptPayment.groupBy({
-      by: ["kind"],
-      where: { receipt: where },
-      _sum: { value: true },
-      _count: true,
+  const [
+    kpi,
+    soatlar,
+    kassirlar,
+    kassalar,
+    idlar,
+    byKind,
+    kindDefs,
+    branches,
+    kassirOpts,
+    kassaOpts,
+  ] = await Promise.all([
+    chekKpi(f),
+    soatlikOqim(f),
+    kassirKesimi(f),
+    kassaKesimi(f),
+    chekIdlari(f, LIMIT),
+    tolovTaqsimoti(f),
+    tolovTurlariRoyxat(),
+    prisma.branch.findMany({
+      orderBy: { sortOrder: "asc" },
+      select: { id: true, name: true },
     }),
-    prisma.receipt.findMany({
-      where,
-      orderBy: [{ openAt: "desc" }, { id: "desc" }],
-      take: LIMIT,
-      select: {
-        id: true,
-        shop: true,
-        pos: true,
-        number: true,
-        session: true,
-        openAt: true,
-        businessDate: true,
-        type: true,
-        status: true,
-        card: true,
-        cashierName: true,
-        qtyPositions: true,
-        sum: true,
-        sumWithDiscs: true,
-        totalSum: true,
-        branch: { select: { name: true } },
-        payments: { select: { id: true, name: true, kind: true, value: true } },
-        lines: {
-          orderBy: { lineNo: "asc" },
-          select: {
-            id: true,
-            lineNo: true,
-            itemCode: true,
-            productId: true,
-            name: true,
-            barcode: true,
-            qty: true,
-            storno: true,
-            sum: true,
-            sumWD: true,
-            totalSum: true,
-          },
-        },
-      },
-    }),
-    prisma.branch.findMany({ orderBy: { sortOrder: "asc" }, select: { id: true, name: true } }),
-    prisma.receipt.count({ where: { ...where, branchId: null } }),
+    kassirRoyxati(f),
+    kassaRoyxati(f),
   ]);
 
-  const byKind = new Map(
-    tolovlar.map((t) => [t.kind, { summa: decimalToNumber(t._sum.value), soni: t._count }])
-  );
+  const rows = idlar.ids.length
+    ? await prisma.receipt.findMany({
+        where: { id: { in: idlar.ids } },
+        orderBy: [{ openAt: "desc" }, { id: "desc" }],
+        select: {
+          id: true,
+          shop: true,
+          pos: true,
+          number: true,
+          session: true,
+          openAt: true,
+          closeAt: true,
+          businessDate: true,
+          type: true,
+          status: true,
+          card: true,
+          cashierName: true,
+          qtyPositions: true,
+          sum: true,
+          sumWithDiscs: true,
+          totalSum: true,
+          branch: { select: { name: true } },
+          payments: {
+            select: { id: true, name: true, kind: true, value: true },
+          },
+          lines: {
+            orderBy: { lineNo: "asc" },
+            select: {
+              id: true,
+              lineNo: true,
+              itemCode: true,
+              productId: true,
+              name: true,
+              barcode: true,
+              qty: true,
+              storno: true,
+              sum: true,
+              sumWD: true,
+              totalSum: true,
+            },
+          },
+        },
+      })
+    : [];
 
-  // Turlar BOSHQARILADI (PaymentKindDef) — nomlar va ranglar bazadan keladi.
-  // Ro'yxatda yo'q kod ham ko'rsatiladi: eski chekdagi tur o'chirilgan bo'lsa
-  // ham summa yo'qolmasin (`turXaritasi` shu uchun).
-  const kindDefs = await tolovTurlariRoyxat();
+  const bogliqsiz = await prisma.receipt.count({
+    where: { businessDate: { gte: from, lte: to }, branchId: null },
+  });
+
   const tur = turXaritasi(kindDefs);
-  const kodlar = [...new Set([...kindDefs.map((k) => k.code), ...byKind.keys()])];
+  const kodlar = [
+    ...new Set([...kindDefs.map((k) => k.code), ...byKind.keys()]),
+  ];
   const taqsimot = kodlar
     .map((code) => ({
       code,
       name: tur(code).name,
       pill: toneOf(tur(code).tone).pill,
       bar: toneOf(tur(code).tone).bar,
-      summa: byKind.get(code)?.summa ?? 0,
+      summa: byKind.get(code) ?? 0,
       sortOrder: tur(code).sortOrder,
     }))
     .sort((a, b) => a.sortOrder - b.sortOrder);
 
-  // "Naqd" endi BELGI bo'yicha: `isCash` turlarning yig'indisi. Ilgari qotirilgan
-  // "CASH" edi — yangi naqd turi qo'shilsa u hisobga tushmay qolardi.
-  const naqdKodlar = new Set(kindDefs.filter((k) => k.isCash).map((k) => k.code));
-  const naqd = [...byKind].reduce((s, [k, v]) => s + (naqdKodlar.has(k) ? v.summa : 0), 0);
-
-  const chekSoni = agg._count;
-  const jami = decimalToNumber(agg._sum.totalSum);
+  const vaqt = (s: number | null) =>
+    s == null
+      ? "—"
+      : s >= 60
+        ? `${Math.floor(s / 60)}m ${Math.round(s % 60)}s`
+        : `${Math.round(s)}s`;
 
   return (
     <div className="space-y-5">
       <PageHeader
         icon={Receipt}
         title="Cheklar"
-        description="1C dan kelgan kassa cheklari. Naqd/plastik ajratish shu yerdan chiqadi."
+        description="1C dan kelgan kassa cheklari. Bu bo'lim mustaqil — boshqa hisobotlarga ta'sir qilmaydi."
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <StatCard
           label="Cheklar"
-          value={chekSoni.toLocaleString("uz-UZ")}
+          value={kpi.cheklar.toLocaleString("uz-UZ")}
           icon={Receipt}
           tone="blue"
-          hint={chekSoni > 0 ? `o'rtacha chek ${formatUZS(jami / chekSoni)}` : "davr bo'yicha"}
         />
-        <StatCard label="Jami tushum" value={formatUZS(jami, { compact: true })} icon={Calculator} tone="violet" />
+        <StatCard
+          label="Jami tushum"
+          value={formatUZS(kpi.tushum, { compact: true })}
+          icon={Calculator}
+          tone="violet"
+        />
+        <StatCard
+          label="O'rtacha chek"
+          value={formatUZS(kpi.ortChek, { compact: true })}
+          icon={Calculator}
+          tone="violet"
+        />
+        <StatCard
+          label="Chekdagi tovar"
+          value={kpi.ortTur.toFixed(1)}
+          icon={ShoppingBasket}
+          tone="orange"
+          hint={`${kpi.ortDona.toFixed(1)} dona`}
+        />
+        <StatCard
+          label="Xizmat vaqti"
+          value={vaqt(kpi.medVaqt)}
+          icon={Timer}
+          tone="orange"
+          hint={
+            kpi.vaqtQamrovi > 0
+              ? `median · o'rtacha ${vaqt(kpi.ortVaqt)}`
+              : "fiskal havola yo'q"
+          }
+        />
         <StatCard
           label="Naqd"
-          value={formatUZS(naqd, { compact: true })}
+          value={formatUZS(kpi.naqd, { compact: true })}
           icon={Banknote}
           tone="green"
-          hint={jami > 0 ? `${((naqd / jami) * 100).toFixed(1)}%` : undefined}
-        />
-        <StatCard
-          label="Naqdsiz"
-          value={formatUZS(jami - naqd, { compact: true })}
-          icon={CreditCard}
-          tone="orange"
-          hint={jami > 0 ? `${(((jami - naqd) / jami) * 100).toFixed(1)}%` : undefined}
+          hint={
+            kpi.tushum > 0
+              ? `${((kpi.naqd / kpi.tushum) * 100).toFixed(1)}%`
+              : undefined
+          }
         />
       </div>
+
+      <ChekAnalitika
+        soatlar={soatlar}
+        kassirlar={kassirlar}
+        kassalar={kassalar}
+        stornoCheklar={kpi.stornoCheklar}
+        jamiCheklar={kpi.cheklar}
+        vaqtQamrovi={kpi.vaqtQamrovi}
+      />
 
       <CheklarClient
         rows={rows.map((r) => ({
@@ -175,6 +254,7 @@ export default async function CheklarPage({ searchParams }: { searchParams: SP }
           number: r.number,
           session: r.session,
           openAt: r.openAt.toISOString(),
+          closeAt: r.closeAt?.toISOString() ?? null,
           businessDate: isoDay(r.businessDate),
           type: r.type,
           status: r.status,
@@ -206,8 +286,23 @@ export default async function CheklarPage({ searchParams }: { searchParams: SP }
           })),
         }))}
         branches={branches}
-        filters={{ from: isoDay(from), to: isoDay(to), branch: branchId, kind, q }}
-        toliqmi={rows.length < LIMIT}
+        kassirlar={kassirOpts}
+        kassalar={kassaOpts}
+        filters={{
+          from: f.from,
+          to: f.to,
+          branch: f.branchId,
+          pos: f.pos,
+          kassir: f.cashierId,
+          kind: f.kind,
+          soatDan: f.soatDan,
+          soatGacha: f.soatGacha,
+          q: f.q,
+          storno: f.storno,
+          skuYoq: f.skuYoq,
+        }}
+        jami={idlar.jami}
+        korsatilgan={rows.length}
         bogliqsiz={bogliqsiz}
         taqsimot={taqsimot}
         kinds={kindDefs.map((k) => ({

@@ -135,6 +135,7 @@ async function drenaj(limit: number): Promise<QaytaIshlashNatija> {
 
     const sarlavha = {
       openAt: c.openAt,
+      closeAt: c.closeAt,
       type: c.type,
       status: c.status,
       fiscal: c.fiscal,

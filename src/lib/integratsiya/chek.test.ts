@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { isChek, parseChek, tolovTuri, chekVaqti, hisobotKuni } from "./chek";
+import {
+  isChek,
+  parseChek,
+  tolovTuri,
+  chekVaqti,
+  hisobotKuni,
+  fiskalVaqt,
+} from "./chek";
 
 /** 1C bergan HAQIQIY namuna (analitic (1).json, 05.08.2026) — qisqartirilmagan shakl. */
 const NAMUNA = {
@@ -326,5 +333,71 @@ describe("parseChek — storno qatorlar summaga kirmaydi", () => {
     });
     if ("error" in r) throw new Error("parse xato");
     expect([r.sum, r.sumWithDiscs, r.totalSum]).toEqual([0, 0, 0]);
+  });
+});
+
+describe("fiskalVaqt — chek yopilgan payt", () => {
+  const F = "https://ofd.soliq.uz/check?t=LG42&r=60914&c=20260807210536&s=372418822107";
+
+  it("`c=` dan sanani ajratadi (Toshkent → UTC)", () => {
+    const d = fiskalVaqt(F);
+    // 07.08.2026 21:05:36 Toshkent = 16:05:36 UTC
+    expect(d?.toISOString()).toBe("2026-08-07T16:05:36.000Z");
+  });
+
+  it("oxirgi parametr bo'lsa ham topadi", () => {
+    expect(fiskalVaqt("https://x/check?t=1&c=20260807210536")?.toISOString()).toBe(
+      "2026-08-07T16:05:36.000Z"
+    );
+  });
+
+  it("havola yo'q / `c=` yo'q — null", () => {
+    expect(fiskalVaqt(null)).toBeNull();
+    expect(fiskalVaqt("")).toBeNull();
+    expect(fiskalVaqt("https://x/check?t=1&r=2")).toBeNull();
+  });
+
+  it("noto'g'ri uzunlik yoki qiymat — null", () => {
+    expect(fiskalVaqt("?c=2026080721053")).toBeNull(); // 13 xona
+    expect(fiskalVaqt("?c=20261307210536")).toBeNull(); // 13-oy
+    expect(fiskalVaqt("?c=20260231210536")).toBeNull(); // 31-fevral
+    expect(fiskalVaqt("?c=20260807996536")).toBeNull(); // 99-soat
+  });
+
+  // `s=...` ichida ham raqam bor — `c=` bilan adashtirmasin
+  it("boshqa parametrdagi raqamni olmaydi", () => {
+    expect(fiskalVaqt("https://x/check?s=372418822107372&r=1")).toBeNull();
+  });
+});
+
+describe("parseChek — closeAt", () => {
+  const xom = {
+    shop: 1, pos: 3, number: "888096", session: 3980,
+    openDate: "07.08.26", openTime: "21:03:42", type: 1,
+    user: { id: 1, name: "admin" },
+    payments: [{ name: "Терминал", value: 300 }],
+    positions: [{ qty: 1, sum: 300, sumWD: 300, totalSum: 300, storno: 0, item: { id: 1, name: "A" } }],
+  };
+
+  it("fiskal havoladan yopilish vaqtini oladi", () => {
+    const r = parseChek({ ...xom, fiscal: "https://ofd.soliq.uz/check?c=20260807210536" });
+    if ("error" in r) throw new Error("parse xato");
+    expect(r.closeAt?.toISOString()).toBe("2026-08-07T16:05:36.000Z");
+    // 21:03:42 → 21:05:36 = 114 sekund xizmat
+    expect((r.closeAt!.getTime() - r.openAt.getTime()) / 1000).toBe(114);
+  });
+
+  // Kassa soati noto'g'ri sozlangan bo'lsa "manfiy xizmat vaqti" chiqardi.
+  it("ochilishdan OLDINGI vaqtni rad etadi", () => {
+    const r = parseChek({ ...xom, fiscal: "https://x/check?c=20260807210000" });
+    if ("error" in r) throw new Error("parse xato");
+    expect(r.closeAt).toBeNull();
+  });
+
+  it("fiskal havola yo'q — closeAt null, chek baribir o'qiladi", () => {
+    const r = parseChek(xom);
+    if ("error" in r) throw new Error("parse xato");
+    expect(r.closeAt).toBeNull();
+    expect(r.totalSum).toBe(300);
   });
 });
