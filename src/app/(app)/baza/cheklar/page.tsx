@@ -7,6 +7,11 @@ import { decimalToNumber, formatUZS } from "@/lib/format";
 import { Receipt, Banknote, CreditCard, Calculator } from "lucide-react";
 import { PageHeader, StatCard } from "@/components/common/page";
 import { CheklarClient } from "./cheklar-client";
+import {
+  tolovTurlari as tolovTurlariRoyxat,
+  turXaritasi,
+  toneOf,
+} from "@/lib/integratsiya/tolov-turlari";
 
 export const dynamic = "force-dynamic";
 
@@ -103,10 +108,28 @@ export default async function CheklarPage({ searchParams }: { searchParams: SP }
   const byKind = new Map(
     tolovlar.map((t) => [t.kind, { summa: decimalToNumber(t._sum.value), soni: t._count }])
   );
-  const naqd = byKind.get("CASH")?.summa ?? 0;
-  const plastik = byKind.get("CARD")?.summa ?? 0;
-  const otkazma = byKind.get("TRANSFER")?.summa ?? 0;
-  const boshqa = byKind.get("OTHER")?.summa ?? 0;
+
+  // Turlar BOSHQARILADI (PaymentKindDef) — nomlar va ranglar bazadan keladi.
+  // Ro'yxatda yo'q kod ham ko'rsatiladi: eski chekdagi tur o'chirilgan bo'lsa
+  // ham summa yo'qolmasin (`turXaritasi` shu uchun).
+  const kindDefs = await tolovTurlariRoyxat();
+  const tur = turXaritasi(kindDefs);
+  const kodlar = [...new Set([...kindDefs.map((k) => k.code), ...byKind.keys()])];
+  const taqsimot = kodlar
+    .map((code) => ({
+      code,
+      name: tur(code).name,
+      pill: toneOf(tur(code).tone).pill,
+      bar: toneOf(tur(code).tone).bar,
+      summa: byKind.get(code)?.summa ?? 0,
+      sortOrder: tur(code).sortOrder,
+    }))
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+
+  // "Naqd" endi BELGI bo'yicha: `isCash` turlarning yig'indisi. Ilgari qotirilgan
+  // "CASH" edi — yangi naqd turi qo'shilsa u hisobga tushmay qolardi.
+  const naqdKodlar = new Set(kindDefs.filter((k) => k.isCash).map((k) => k.code));
+  const naqd = [...byKind].reduce((s, [k, v]) => s + (naqdKodlar.has(k) ? v.summa : 0), 0);
 
   const chekSoni = agg._count;
   const jami = decimalToNumber(agg._sum.totalSum);
@@ -136,11 +159,11 @@ export default async function CheklarPage({ searchParams }: { searchParams: SP }
           hint={jami > 0 ? `${((naqd / jami) * 100).toFixed(1)}%` : undefined}
         />
         <StatCard
-          label="Plastik"
-          value={formatUZS(plastik, { compact: true })}
+          label="Naqdsiz"
+          value={formatUZS(jami - naqd, { compact: true })}
           icon={CreditCard}
           tone="orange"
-          hint={jami > 0 ? `${((plastik / jami) * 100).toFixed(1)}%` : undefined}
+          hint={jami > 0 ? `${(((jami - naqd) / jami) * 100).toFixed(1)}%` : undefined}
         />
       </div>
 
@@ -186,7 +209,12 @@ export default async function CheklarPage({ searchParams }: { searchParams: SP }
         filters={{ from: isoDay(from), to: isoDay(to), branch: branchId, kind, q }}
         toliqmi={rows.length < LIMIT}
         bogliqsiz={bogliqsiz}
-        tolovlar={{ naqd, plastik, otkazma, boshqa }}
+        taqsimot={taqsimot}
+        kinds={kindDefs.map((k) => ({
+          code: k.code,
+          name: k.name,
+          pill: toneOf(k.tone).pill,
+        }))}
       />
     </div>
   );

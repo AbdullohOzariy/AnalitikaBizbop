@@ -10,9 +10,19 @@ import {
   guruhChatIdOl,
   ruxsatList,
 } from "@/lib/spisaniya/db";
-import { adminKategoriyaDaraxt, botUserBiriktirmalar } from "@/lib/spisaniya/sku-scope";
+import {
+  adminKategoriyaDaraxt,
+  botUserBiriktirmalar,
+} from "@/lib/spisaniya/sku-scope";
 import { getSverkaGroupChatId } from "@/lib/sverka/sozlama";
-import { Settings, WifiOff, Building2, MessageSquare, Users, Link2 } from "lucide-react";
+import {
+  Settings,
+  WifiOff,
+  Building2,
+  MessageSquare,
+  Users,
+  Link2,
+} from "lucide-react";
 import { PageHeader, SectionCard, EmptyState } from "@/components/common/page";
 import { cn } from "@/lib/utils";
 import { GuruhEditor } from "./guruh-editor";
@@ -20,14 +30,25 @@ import { FilialarEditor } from "./filialar-editor";
 import { ChiqimFilialEditor } from "./chiqim-filial-editor";
 import { OnecShopEditor } from "./onec-shop-editor";
 import { TolovTuriEditor } from "./tolov-turi-editor";
+import { TolovKindEditor } from "./tolov-kind-editor";
+import {
+  tolovTurlari as tolovTurlariRoyxat,
+  toneOf,
+} from "@/lib/integratsiya/tolov-turlari";
 import { OnecIpEditor } from "./onec-ip-editor";
 import { OnecImzoEditor } from "./onec-imzo-editor";
 import { HMAC_REQUIRED_KEY } from "@/lib/integratsiya/imzo";
 import { RuxsatEditor } from "./ruxsat-editor";
 import { SverkaGuruhEditor } from "./sverka-guruh-editor";
 import { SverkaXodimlar, type XodimRow } from "../../sverka/sverka-client";
-import { SverkaTopiklarEditor, type SverkaTopicRow } from "./sverka-topiklar-editor";
-import { SverkaQabulchiEditor, type QabulchiRow } from "./sverka-qabulchi-editor";
+import {
+  SverkaTopiklarEditor,
+  type SverkaTopicRow,
+} from "./sverka-topiklar-editor";
+import {
+  SverkaQabulchiEditor,
+  type QabulchiRow,
+} from "./sverka-qabulchi-editor";
 import { InventoryReportEditor } from "./inventory-report-editor";
 import { getInventoryReportConfig } from "@/lib/inventory-report/sozlama";
 import { MarginReportEditor } from "./margin-report-editor";
@@ -45,10 +66,22 @@ import { getZakazPdfConfig } from "@/lib/zakaz-pdf/sozlama";
 import { SpisaniyaDailyEditor } from "./spisaniya-daily-editor";
 import { getSpisaniyaDailyConfig } from "@/lib/spisaniya-daily/sozlama";
 import { NarxReportEditor } from "./narx-report-editor";
-import { getNarxReportConfig, getNarxReportLastPeriod } from "@/lib/narx-report/sozlama";
+import {
+  getNarxReportConfig,
+  getNarxReportLastPeriod,
+} from "@/lib/narx-report/sozlama";
 import { formatDateUZ } from "@/lib/format";
 
-type Tab = "spisaniya" | "sverka" | "inventarizatsiya" | "marja" | "yetkazish" | "zakaz" | "spdaily" | "narx" | "zaxira";
+type Tab =
+  | "spisaniya"
+  | "sverka"
+  | "inventarizatsiya"
+  | "marja"
+  | "yetkazish"
+  | "zakaz"
+  | "spdaily"
+  | "narx"
+  | "zaxira";
 
 export default async function SozlamalarPage({
   searchParams,
@@ -60,7 +93,24 @@ export default async function SozlamalarPage({
   if (!session.user.roles.includes("SYSTEM_ADMIN")) redirect("/dashboard");
 
   const sp = await searchParams;
-  const tab: Tab = sp.tab === "sverka" ? "sverka" : sp.tab === "inventarizatsiya" ? "inventarizatsiya" : sp.tab === "marja" ? "marja" : sp.tab === "yetkazish" ? "yetkazish" : sp.tab === "zakaz" ? "zakaz" : sp.tab === "spdaily" ? "spdaily" : sp.tab === "narx" ? "narx" : sp.tab === "zaxira" ? "zaxira" : "spisaniya";
+  const tab: Tab =
+    sp.tab === "sverka"
+      ? "sverka"
+      : sp.tab === "inventarizatsiya"
+        ? "inventarizatsiya"
+        : sp.tab === "marja"
+          ? "marja"
+          : sp.tab === "yetkazish"
+            ? "yetkazish"
+            : sp.tab === "zakaz"
+              ? "zakaz"
+              : sp.tab === "spdaily"
+                ? "spdaily"
+                : sp.tab === "narx"
+                  ? "narx"
+                  : sp.tab === "zaxira"
+                    ? "zaxira"
+                    : "spisaniya";
 
   return (
     <div className="space-y-5">
@@ -73,17 +123,19 @@ export default async function SozlamalarPage({
       {/* Tablar: Spisaniya / Sverka */}
       {/* flex-wrap — tablar soni 8 ta bo'ldi, tor ekranda toshib ketmasin */}
       <div role="tablist" className="flex flex-wrap gap-2">
-        {([
-          { v: "spisaniya", l: "Spisaniya sozlamalari" },
-          { v: "sverka", l: "Sverka sozlamalari" },
-          { v: "inventarizatsiya", l: "Inventarizatsiya" },
-          { v: "marja", l: "Marja" },
-          { v: "yetkazish", l: "Yetkazish kechikishi" },
-          { v: "zakaz", l: "Zakaz PDF" },
-          { v: "spdaily", l: "Spisaniya kunlik" },
-          { v: "narx", l: "Filiallar narxi" },
-          { v: "zaxira", l: "Zaxira normasi" },
-        ] as { v: Tab; l: string }[]).map((t) => (
+        {(
+          [
+            { v: "spisaniya", l: "Spisaniya sozlamalari" },
+            { v: "sverka", l: "Sverka sozlamalari" },
+            { v: "inventarizatsiya", l: "Inventarizatsiya" },
+            { v: "marja", l: "Marja" },
+            { v: "yetkazish", l: "Yetkazish kechikishi" },
+            { v: "zakaz", l: "Zakaz PDF" },
+            { v: "spdaily", l: "Spisaniya kunlik" },
+            { v: "narx", l: "Filiallar narxi" },
+            { v: "zaxira", l: "Zaxira normasi" },
+          ] as { v: Tab; l: string }[]
+        ).map((t) => (
           <Link
             key={t.v}
             href={`/admin/sozlamalar?tab=${t.v}`}
@@ -93,7 +145,7 @@ export default async function SozlamalarPage({
               "inline-flex h-9 items-center rounded-xl border px-4 text-sm font-medium transition-colors",
               tab === t.v
                 ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                : "border-border bg-card text-muted-foreground hover:text-foreground hover:bg-secondary"
+                : "border-border bg-card text-muted-foreground hover:text-foreground hover:bg-secondary",
             )}
           >
             {t.l}
@@ -101,7 +153,25 @@ export default async function SozlamalarPage({
         ))}
       </div>
 
-      {tab === "spisaniya" ? <SpisaniyaTab /> : tab === "sverka" ? <SverkaTab /> : tab === "inventarizatsiya" ? <InventarizatsiyaTab /> : tab === "marja" ? <MarjaTab /> : tab === "yetkazish" ? <YetkazishTab /> : tab === "zakaz" ? <ZakazTab /> : tab === "narx" ? <NarxTab /> : tab === "zaxira" ? <ZaxiraTab /> : <SpisaniyaDailyTab />}
+      {tab === "spisaniya" ? (
+        <SpisaniyaTab />
+      ) : tab === "sverka" ? (
+        <SverkaTab />
+      ) : tab === "inventarizatsiya" ? (
+        <InventarizatsiyaTab />
+      ) : tab === "marja" ? (
+        <MarjaTab />
+      ) : tab === "yetkazish" ? (
+        <YetkazishTab />
+      ) : tab === "zakaz" ? (
+        <ZakazTab />
+      ) : tab === "narx" ? (
+        <NarxTab />
+      ) : tab === "zaxira" ? (
+        <ZaxiraTab />
+      ) : (
+        <SpisaniyaDailyTab />
+      )}
     </div>
   );
 }
@@ -311,7 +381,15 @@ async function SpisaniyaTab() {
       />
     );
   }
-  const [filialar, chatId, ruxsatlar, branches, bizbopFilials, katDaraxt, biriktirmalar] = await Promise.all([
+  const [
+    filialar,
+    chatId,
+    ruxsatlar,
+    branches,
+    bizbopFilials,
+    katDaraxt,
+    biriktirmalar,
+  ] = await Promise.all([
     filialarToliq(),
     guruhChatIdOl(),
     ruxsatList(),
@@ -339,15 +417,30 @@ async function SpisaniyaTab() {
     orderBy: { _count: { shop: "desc" } },
     take: 20,
   });
-  const bogliqsizShoplar = shopStats.map((r) => ({ shop: r.shop, soni: r._count }));
+  const bogliqsizShoplar = shopStats.map((r) => ({
+    shop: r.shop,
+    soni: r._count,
+  }));
 
   // To'lov turlari — nom bo'yicha hajm bilan (tasdiqlash muhimligini ko'rsatadi)
-  const [tolovTurlari, tolovStats] = await Promise.all([
-    prisma.paymentTypeMap.findMany({ orderBy: [{ isConfirmed: "asc" }, { name: "asc" }] }),
-    prisma.receiptPayment.groupBy({ by: ["name"], _count: true, _sum: { value: true } }),
+  const [tolovTurlari, tolovStats, kindDefs, kindStats] = await Promise.all([
+    prisma.paymentTypeMap.findMany({
+      orderBy: [{ isConfirmed: "asc" }, { name: "asc" }],
+    }),
+    prisma.receiptPayment.groupBy({
+      by: ["name"],
+      _count: true,
+      _sum: { value: true },
+    }),
+    tolovTurlariRoyxat(),
+    prisma.receiptPayment.groupBy({ by: ["kind"], _count: true }),
   ]);
+  const kindHajm = new Map(kindStats.map((k) => [k.kind, k._count]));
   const tolovHajm = new Map(
-    tolovStats.map((t) => [t.name, { soni: t._count, summa: Number(t._sum.value ?? 0) }])
+    tolovStats.map((t) => [
+      t.name,
+      { soni: t._count, summa: Number(t._sum.value ?? 0) },
+    ]),
   );
 
   // 1C qabul IP'lari — ruxsat berilgani ham, rad etilgani ham
@@ -377,7 +470,11 @@ async function SpisaniyaTab() {
         description={`${ruxsatlar.length} ta · faqat ruxsat berilganlar botdan foydalanadi`}
         actions={<Users className="h-4 w-4 text-muted-foreground" />}
       >
-        <RuxsatEditor ruxsatlar={ruxsatlar} daraxt={katDaraxt} biriktirmalar={biriktirmalar} />
+        <RuxsatEditor
+          ruxsatlar={ruxsatlar}
+          daraxt={katDaraxt}
+          biriktirmalar={biriktirmalar}
+        />
       </SectionCard>
 
       <SectionCard
@@ -427,11 +524,33 @@ async function SpisaniyaTab() {
       </SectionCard>
 
       <SectionCard
-        title="To'lov turlari (1C)"
-        description="Chekdagi to'lov nomi → naqd / plastik / o'tkazma. Tushum shu bo'yicha bo'linadi"
+        title="To'lov turlari ro'yxati"
+        description="Naqd · Plastik · O'tkazma va o'zingiz qo'shganlari. Yangi usul chiqsa shu yerda qo'shiladi"
+        actions={<Link2 className="h-4 w-4 text-muted-foreground" />}
+      >
+        <TolovKindEditor
+          rows={kindDefs.map((k) => ({
+            code: k.code,
+            name: k.name,
+            isCash: k.isCash,
+            tone: k.tone,
+            isSystem: k.isSystem,
+            ishlatilgan: kindHajm.get(k.code) ?? 0,
+          }))}
+        />
+      </SectionCard>
+
+      <SectionCard
+        title="1C to'lov nomi → tur"
+        description="Chekdagi to'lov nomi qaysi turga tegishli. Tushum shu bo'yicha bo'linadi"
         actions={<Link2 className="h-4 w-4 text-muted-foreground" />}
       >
         <TolovTuriEditor
+          kinds={kindDefs.map((k) => ({
+            code: k.code,
+            name: k.name,
+            on: toneOf(k.tone).on,
+          }))}
           rows={tolovTurlari.map((t) => ({
             id: t.id,
             name: t.name,
@@ -476,7 +595,10 @@ async function SverkaTab() {
   const [chatId, xodimlar, filialar, qabulchilar] = await Promise.all([
     getSverkaGroupChatId(),
     prisma.sverkaXodim.findMany({ orderBy: { createdAt: "desc" } }),
-    prisma.branch.findMany({ orderBy: { sortOrder: "asc" }, select: { id: true, name: true, sverkaTopicId: true } }),
+    prisma.branch.findMany({
+      orderBy: { sortOrder: "asc" },
+      select: { id: true, name: true, sverkaTopicId: true },
+    }),
     prisma.sverkaQabulchi.findMany({ orderBy: { ism: "asc" } }),
   ]);
 
@@ -496,7 +618,11 @@ async function SverkaTab() {
         actions={<Building2 className="h-4 w-4 text-muted-foreground" />}
       >
         <SverkaTopiklarEditor
-          filialar={filialar.map((f): SverkaTopicRow => ({ id: f.id, name: f.name, topicId: f.sverkaTopicId }))}
+          filialar={filialar.map((f): SverkaTopicRow => ({
+            id: f.id,
+            name: f.name,
+            topicId: f.sverkaTopicId,
+          }))}
         />
       </SectionCard>
 
@@ -505,7 +631,12 @@ async function SverkaTab() {
         description={`${qabulchilar.length} ta · mini app'dagi "Qabul qildi" tanlovi`}
         actions={<Users className="h-4 w-4 text-muted-foreground" />}
       >
-        <SverkaQabulchiEditor qabulchilar={qabulchilar.map((q): QabulchiRow => ({ id: q.id, ism: q.ism }))} />
+        <SverkaQabulchiEditor
+          qabulchilar={qabulchilar.map((q): QabulchiRow => ({
+            id: q.id,
+            ism: q.ism,
+          }))}
+        />
       </SectionCard>
 
       <SverkaXodimlar

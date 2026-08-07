@@ -989,8 +989,129 @@ export async function onecShopBoglaAction(input: {
 // shuning uchun tasdiqlash QO'LDA: taxmin xato bo'lsa tushum noto'g'ri bo'linadi.
 const tolovTuriSchema = z.object({
   name: z.string().trim().min(1).max(100),
-  kind: z.enum(["CASH", "CARD", "TRANSFER", "OTHER"]),
+  // Turlar ro'yxati BOSHQARILADI (PaymentKindDef) — shuning uchun bu yerda
+  // qat'iy enum yo'q, mavjudligi bazadan tekshiriladi.
+  kind: z.string().trim().min(1).max(30),
 });
+
+// ─── To'lov TURLARI ro'yxati (PaymentKindDef) ─────────────────────────────────
+
+const kindSchema = z.object({
+  code: z.string().trim().min(1).max(30),
+  name: z.string().trim().min(1).max(40),
+  isCash: z.boolean(),
+  tone: z.string().trim().min(1).max(20),
+});
+
+/** Yangi to'lov turi. Kod normallashtiriladi va takrorlanmasligi tekshiriladi. */
+export async function tolovKindQoshAction(input: {
+  code: string;
+  name: string;
+  isCash: boolean;
+  tone: string;
+}): Promise<Result> {
+  try {
+    await requireAdmin();
+    const p = kindSchema.parse(input);
+    const { kodNormalla, TONE_CODES } =
+      await import("@/lib/integratsiya/tolov-turlari");
+    const { prisma } = await import("@/lib/prisma");
+
+    const code = kodNormalla(p.code);
+    if (!code)
+      return {
+        ok: false,
+        error: "Kod harf yoki raqamdan iborat bo'lishi kerak.",
+      };
+    if (!TONE_CODES.includes(p.tone))
+      return { ok: false, error: "Rang noto'g'ri." };
+
+    const bor = await prisma.paymentKindDef.findUnique({ where: { code } });
+    if (bor) return { ok: false, error: `«${code}» kodli tur allaqachon bor.` };
+
+    const oxirgi = await prisma.paymentKindDef.aggregate({
+      _max: { sortOrder: true },
+      where: { isSystem: false },
+    });
+    await prisma.paymentKindDef.create({
+      data: {
+        code,
+        name: p.name,
+        isCash: p.isCash,
+        tone: p.tone,
+        // Tizim turlaridan keyin, "Boshqa" (900) dan oldin.
+        sortOrder: Math.min(890, (oxirgi._max.sortOrder ?? 100) + 10),
+      },
+    });
+    revalidatePath(RP);
+    return { ok: true };
+  } catch (err) {
+    return xato(err);
+  }
+}
+
+/** Turning NOMI, rangi va "naqdmi" belgisi. Kod o'zgartirilmaydi. */
+export async function tolovKindTahrirAction(input: {
+  code: string;
+  name: string;
+  isCash: boolean;
+  tone: string;
+}): Promise<Result> {
+  try {
+    await requireAdmin();
+    const p = kindSchema.parse(input);
+    const { TONE_CODES } = await import("@/lib/integratsiya/tolov-turlari");
+    const { prisma } = await import("@/lib/prisma");
+    if (!TONE_CODES.includes(p.tone))
+      return { ok: false, error: "Rang noto'g'ri." };
+
+    // KOD O'ZGARTIRILMAYDI: cheklarda kod saqlanadi, o'zgarsa ularning turi
+    // "yo'q" bo'lib qolardi.
+    await prisma.paymentKindDef.update({
+      where: { code: p.code },
+      data: { name: p.name, isCash: p.isCash, tone: p.tone },
+    });
+    revalidatePath(RP);
+    return { ok: true };
+  } catch (err) {
+    return xato(err);
+  }
+}
+
+/**
+ * Turni o'chirish. Ikki himoya:
+ *  – tizim turlari (Naqd/Plastik/O'tkazma/Boshqa) o'chirilmaydi;
+ *  – ishlatilayotgan tur o'chirilmaydi (cheklar va moslashuv jadvali).
+ */
+export async function tolovKindOchirAction(code: string): Promise<Result> {
+  try {
+    await requireAdmin();
+    const p = z.string().trim().min(1).parse(code);
+    const { prisma } = await import("@/lib/prisma");
+
+    const def = await prisma.paymentKindDef.findUnique({ where: { code: p } });
+    if (!def) return { ok: false, error: "Tur topilmadi." };
+    if (def.isSystem)
+      return { ok: false, error: `«${def.name}» — tizim turi, o'chirilmaydi.` };
+
+    const [tolovlar, moslik] = await Promise.all([
+      prisma.receiptPayment.count({ where: { kind: p } }),
+      prisma.paymentTypeMap.count({ where: { kind: p } }),
+    ]);
+    if (tolovlar > 0 || moslik > 0) {
+      return {
+        ok: false,
+        error: `«${def.name}» ishlatilyapti (${tolovlar.toLocaleString("uz-UZ")} to'lov, ${moslik} moslik) — avval ularni boshqa turga o'tkazing.`,
+      };
+    }
+
+    await prisma.paymentKindDef.delete({ where: { code: p } });
+    revalidatePath(RP);
+    return { ok: true };
+  } catch (err) {
+    return xato(err);
+  }
+}
 
 /**
  * Qo'lda qo'shilgan to'lov turini o'chirish.
@@ -1025,12 +1146,19 @@ export async function tolovTuriOchirAction(name: string): Promise<Result> {
 
 export async function tolovTuriBelgilaAction(input: {
   name: string;
-  kind: "CASH" | "CARD" | "TRANSFER" | "OTHER";
+  kind: string;
 }): Promise<Result> {
   try {
     await requireAdmin();
     const p = tolovTuriSchema.parse(input);
     const { prisma } = await import("@/lib/prisma");
+
+    // Tur mavjudligini tekshiramiz: aks holda chekka yo'q kod yozilib,
+    // hisobotda "noma'lum tur" bo'lib chiqib qolardi.
+    const def = await prisma.paymentKindDef.findUnique({
+      where: { code: p.kind },
+    });
+    if (!def) return { ok: false, error: "Bunday to'lov turi yo'q." };
 
     await prisma.$transaction(async (tx) => {
       await tx.paymentTypeMap.upsert({

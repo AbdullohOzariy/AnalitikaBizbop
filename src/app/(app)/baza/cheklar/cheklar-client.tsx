@@ -6,10 +6,6 @@ import { useRouter, usePathname } from "next/navigation";
 import {
   Filter,
   Search,
-  Banknote,
-  CreditCard,
-  ArrowLeftRight,
-  CircleHelp,
   AlertTriangle,
   Undo2,
   ReceiptText,
@@ -59,12 +55,9 @@ type Row = {
   lines: Line[];
 };
 
-const KIND_META: Record<string, { l: string; icon: typeof Banknote; tone: string }> = {
-  CASH: { l: "naqd", icon: Banknote, tone: "bg-primary/10 text-primary" },
-  CARD: { l: "plastik", icon: CreditCard, tone: "bg-blue-500/10 text-blue-600 dark:text-blue-400" },
-  TRANSFER: { l: "o'tkazma", icon: ArrowLeftRight, tone: "bg-violet-500/10 text-violet-600 dark:text-violet-400" },
-  OTHER: { l: "boshqa", icon: CircleHelp, tone: "bg-muted text-muted-foreground" },
-};
+/** Turlar BOSHQARILADI (PaymentKindDef) — nom va rang serverdan keladi. */
+type KindOpt = { code: string; name: string; pill: string };
+type TaqsimotQator = KindOpt & { bar: string; summa: number };
 
 export function CheklarClient({
   rows,
@@ -72,14 +65,16 @@ export function CheklarClient({
   filters,
   toliqmi,
   bogliqsiz,
-  tolovlar,
+  taqsimot,
+  kinds,
 }: {
   rows: Row[];
   branches: { id: number; name: string }[];
   filters: { from: string; to: string; branch: number | null; kind: string | null; q: string };
   toliqmi: boolean;
   bogliqsiz: number;
-  tolovlar: { naqd: number; plastik: number; otkazma: number; boshqa: number };
+  taqsimot: TaqsimotQator[];
+  kinds: KindOpt[];
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -99,7 +94,11 @@ export function CheklarClient({
     router.push(`${pathname}?${p}`);
   };
 
-  const jami = tolovlar.naqd + tolovlar.plastik + tolovlar.otkazma + tolovlar.boshqa;
+  const jami = taqsimot.reduce((s, t) => s + t.summa, 0);
+  // Ro'yxatda yo'q kod (turi o'chirilgan eski chek) — kodning o'zi ko'rsatiladi.
+  const turlar = new Map(kinds.map((k) => [k.code, k]));
+  const turOl = (code: string): KindOpt =>
+    turlar.get(code) ?? { code, name: code, pill: "bg-muted text-muted-foreground" };
 
   return (
     <div className="space-y-4">
@@ -111,43 +110,31 @@ export function CheklarClient({
               To&apos;lov taqsimoti
             </div>
             <div className="flex h-2.5 overflow-hidden rounded-full bg-muted">
-              {(
-                [
-                  ["CASH", tolovlar.naqd, "bg-primary"],
-                  ["CARD", tolovlar.plastik, "bg-blue-500"],
-                  ["TRANSFER", tolovlar.otkazma, "bg-violet-500"],
-                  ["OTHER", tolovlar.boshqa, "bg-muted-foreground/50"],
-                ] as const
-              ).map(([k, v, cls]) =>
-                v > 0 ? (
+              {taqsimot.map((t) =>
+                t.summa > 0 ? (
                   <div
-                    key={k}
-                    className={cls}
-                    style={{ width: `${(v / jami) * 100}%` }}
-                    title={`${KIND_META[k].l}: ${formatUZS(v)}`}
+                    key={t.code}
+                    className={t.bar}
+                    style={{ width: `${(t.summa / jami) * 100}%` }}
+                    title={`${t.name}: ${formatUZS(t.summa)}`}
                   />
                 ) : null
               )}
             </div>
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
-              {(
-                [
-                  ["CASH", tolovlar.naqd],
-                  ["CARD", tolovlar.plastik],
-                  ["TRANSFER", tolovlar.otkazma],
-                  ["OTHER", tolovlar.boshqa],
-                ] as const
-              ).map(([k, v]) =>
-                v > 0 ? (
-                  <span key={k} className="tabular-nums">
-                    <span className="text-muted-foreground">{KIND_META[k].l}:</span>{" "}
-                    <b>{formatUZS(v)}</b>{" "}
-                    <span className="text-muted-foreground">({((v / jami) * 100).toFixed(1)}%)</span>
+              {taqsimot.map((t) =>
+                t.summa > 0 ? (
+                  <span key={t.code} className="tabular-nums">
+                    <span className="text-muted-foreground">{t.name}:</span>{" "}
+                    <b>{formatUZS(t.summa)}</b>{" "}
+                    <span className="text-muted-foreground">
+                      ({((t.summa / jami) * 100).toFixed(1)}%)
+                    </span>
                   </span>
                 ) : null
               )}
             </div>
-            {tolovlar.boshqa > 0 && (
+            {(taqsimot.find((t) => t.code === "OTHER")?.summa ?? 0) > 0 && (
               <p className="mt-2 flex items-center gap-1.5 text-[11px] text-amber-600 dark:text-amber-400">
                 <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                 «boshqa» — turi tasdiqlanmagan to&apos;lovlar.{" "}
@@ -196,8 +183,10 @@ export function CheklarClient({
               className="h-8 w-[130px] rounded-md border border-input bg-background px-2 text-xs"
             >
               <option value="">Barchasi</option>
-              {Object.entries(KIND_META).map(([k, v]) => (
-                <option key={k} value={k}>{v.l}</option>
+              {kinds.map((k) => (
+                <option key={k.code} value={k.code}>
+                  {k.name}
+                </option>
               ))}
             </select>
           </div>
@@ -263,12 +252,10 @@ export function CheklarClient({
                   </span>
                   <span className="flex shrink-0 gap-1">
                     {r.payments.map((p) => {
-                      const m = KIND_META[p.kind] ?? KIND_META.OTHER;
-                      const Icon = m.icon;
+                      const t = turOl(p.kind);
                       return (
-                        <Pill key={p.id} className={cn("gap-1", m.tone)}>
-                          <Icon className="h-3 w-3" />
-                          {m.l}
+                        <Pill key={p.id} className={t.pill}>
+                          {t.name}
                         </Pill>
                       );
                     })}
@@ -299,7 +286,13 @@ export function CheklarClient({
         </Card>
       )}
 
-      {tanlangan && <ChekKorinish chek={tanlangan} onClose={() => setTanlangan(null)} />}
+      {tanlangan && (
+        <ChekKorinish
+          chek={tanlangan}
+          onClose={() => setTanlangan(null)}
+          turNomi={(code: string) => turOl(code).name}
+        />
+      )}
     </div>
   );
 }

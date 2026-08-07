@@ -41,7 +41,14 @@ export type ChekQator = {
 
 export type ChekTolov = { name: string; kind: PaymentKind; value: number };
 
-export type PaymentKind = "CASH" | "CARD" | "TRANSFER" | "OTHER";
+/**
+ * To'lov turi kodi (`PaymentKindDef.code`).
+ *
+ * Qat'iy birlashma EMAS: turlar ro'yxatini foydalanuvchi Sozlamalarda o'zi
+ * boshqaradi (Payme, Click, bonus...). Quyidagi `tolovTuri` faqat TUG'MA
+ * to'rttasini taxmin qiladi; qolganini odam `PaymentTypeMap` orqali biriktiradi.
+ */
+export type PaymentKind = string;
 
 export type Chek = {
   shop: number;
@@ -99,8 +106,13 @@ export function tolovTuri(name: string): PaymentKind {
   // hisoblanardi va butun kassa sverkasi buzilardi (aynan shu narsa uchun
   // integratsiya qilinyapti). "Терминал" jonli ma'lumotda AYNAN shunday
   // xato tushgan — 2026-08-07 da topilib tuzatildi.
-  if (/безнал|перечис|перевод|o'tkaz|otkaz|transfer|bank/.test(s)) return "TRANSFER";
-  if (/терминал|terminal|карт|плас|karta|plastik|card|uzcard|humo|visa|master/.test(s)) {
+  if (/безнал|перечис|перевод|o'tkaz|otkaz|transfer|bank/.test(s))
+    return "TRANSFER";
+  if (
+    /терминал|terminal|карт|плас|karta|plastik|card|uzcard|humo|visa|master/.test(
+      s,
+    )
+  ) {
     return "CARD";
   }
   if (/нал|naqd|cash/.test(s)) return "CASH";
@@ -127,22 +139,28 @@ export function chekVaqti(openDate: unknown, openTime: unknown): Date | null {
 
   const t = txt(openTime) ?? "00:00:00";
   const tm = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(t);
-  const [hh, mi, ss] = tm ? [Number(tm[1]), Number(tm[2]), Number(tm[3] ?? 0)] : [0, 0, 0];
+  const [hh, mi, ss] = tm
+    ? [Number(tm[1]), Number(tm[2]), Number(tm[3] ?? 0)]
+    : [0, 0, 0];
 
   // Toshkent vaqti sifatida o'qib, UTC ga o'giramiz.
-  const utc = Date.UTC(year, Number(mm) - 1, Number(dd), hh, mi, ss) - TASHKENT_OFFSET_MS;
+  const utc =
+    Date.UTC(year, Number(mm) - 1, Number(dd), hh, mi, ss) - TASHKENT_OFFSET_MS;
   const dt = new Date(utc);
   if (Number.isNaN(dt.getTime())) return null;
   // Rollover tekshiruvi: "31.02.26" jimgina martga surilmasin.
   const chk = new Date(utc + TASHKENT_OFFSET_MS);
-  if (chk.getUTCMonth() !== Number(mm) - 1 || chk.getUTCDate() !== Number(dd)) return null;
+  if (chk.getUTCMonth() !== Number(mm) - 1 || chk.getUTCDate() !== Number(dd))
+    return null;
   return dt;
 }
 
 /** Toshkent kuni (hisobot sanasi) — openAt dan olinadi. */
 export function hisobotKuni(openAt: Date): Date {
   const t = new Date(openAt.getTime() + TASHKENT_OFFSET_MS);
-  return new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate()));
+  return new Date(
+    Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate()),
+  );
 }
 
 export function parseChek(p: unknown): Chek | { error: string } {
@@ -150,7 +168,8 @@ export function parseChek(p: unknown): Chek | { error: string } {
   const o = p as Record<string, unknown>;
 
   const openAt = chekVaqti(o.openDate, o.openTime);
-  if (!openAt) return { error: `Sana o'qilmadi: openDate=${JSON.stringify(o.openDate)}` };
+  if (!openAt)
+    return { error: `Sana o'qilmadi: openDate=${JSON.stringify(o.openDate)}` };
 
   const number = txt(o.number);
   if (!number) return { error: "Chek raqami yo'q." };

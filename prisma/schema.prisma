@@ -2408,11 +2408,31 @@ model UnmatchedCashRow {
 
 /// To'lov turi — nomdan normallashtiriladi ("Наличные" → CASH).
 /// Moliya moduli uchun ASOSIY: naqd/plastik ajratish shu yerdan chiqadi.
-enum PaymentKind {
-  CASH // naqd
-  CARD // plastik / bank kartasi
-  TRANSFER // o'tkazma
-  OTHER // tanilmagan nom — hisobotda ko'rinadi va qo'lda moslanadi
+///
+/// NEGA ENUM EMAS, JADVAL: to'lov usullari bozorda tez o'zgaradi (Payme, Click,
+/// Uzum, bonus, sertifikat...). Enum bo'lganda har yangi usul uchun migratsiya
+/// va deploy kerak bo'lardi — shu oraliqda to'lov "boshqa" ga tushib, tushum
+/// taqsimoti noto'g'ri ko'rinardi. Endi foydalanuvchi Sozlamalarda o'zi qo'shadi.
+model PaymentKindDef {
+  id Int @id @default(autoincrement())
+  /// Barqaror kalit — `ReceiptPayment.kind` va `PaymentTypeMap.kind` shuni saqlaydi.
+  /// O'zgartirilmaydi: o'zgartirilsa eski cheklarning turi "yo'q" bo'lib qolardi.
+  code String @unique
+  /// Ko'rinadigan nom — istalgan vaqtda o'zgartiriladi.
+  name String
+  /// KASSAGA NAQD tushadimi. Moliya sverkasi shu belgiga tayanadi: kassir
+  /// sanaydigan pulda faqat shu turlar bo'ladi.
+  isCash Boolean @default(false)
+  /// UI rangi — belgilangan ro'yxatdan (dizayn tizimiga mos bo'lishi uchun).
+  tone String @default("slate")
+  sortOrder Int @default(100)
+  /// Tizim turi — o'chirib bo'lmaydi. "OTHER" har doim kerak: tanilmagan nom
+  /// tushadigan joy bo'lmasa, to'lov jimgina yo'qolardi.
+  isSystem  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sortOrder])
 }
 
 model Receipt {
@@ -2499,9 +2519,11 @@ model ReceiptPayment {
   id        Int         @id @default(autoincrement())
   receiptId Int
   /// 1C bergan nom — O'ZGARTIRILMAYDI (yangi tur qo'shilsa ham ko'rinadi).
-  name      String
-  kind      PaymentKind @default(OTHER)
-  value     Decimal     @db.Decimal(20, 2)
+  name  String
+  /// `PaymentKindDef.code`. FK EMAS ataylab: tur o'chirilsa ham chek yozuvi
+  /// buzilmasin — eng yomoni "noma'lum tur" bo'lib ko'rinadi, yo'qolmaydi.
+  kind  String  @default("OTHER")
+  value Decimal @db.Decimal(20, 2)
 
   receipt Receipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
 
@@ -2521,12 +2543,13 @@ model ReceiptPayment {
 model PaymentTypeMap {
   id          Int         @id @default(autoincrement())
   /// 1C bergan nom — O'ZGARTIRILMAYDI (registr ham saqlanadi).
-  name        String      @unique
-  kind        PaymentKind @default(OTHER)
+  name        String   @unique
+  /// `PaymentKindDef.code`.
+  kind        String   @default("OTHER")
   /// Odam tasdiqladimi. false = avtomatik taxmin, ko'rib chiqilishi kerak.
-  isConfirmed Boolean     @default(false)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  isConfirmed Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 /// 1C qabul endpointiga murojaat qilgan IP'lar jurnali.

@@ -2,23 +2,17 @@
 
 import { useTransition, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Banknote,
-  CreditCard,
-  ArrowLeftRight,
-  CircleHelp,
-  Loader2,
-  AlertTriangle,
-  Plus,
-  Trash2,
-} from "lucide-react";
+import { Loader2, AlertTriangle, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { tolovTuriBelgilaAction, tolovTuriOchirAction } from "./actions";
 
-type Kind = "CASH" | "CARD" | "TRANSFER" | "OTHER";
+type Kind = string;
+
+/** Boshqariladigan turlar ro'yxati (PaymentKindDef) — serverdan keladi. */
+export type KindOpt = { code: string; name: string; on: string };
 
 export type TolovTuriRow = {
   id: number;
@@ -30,33 +24,6 @@ export type TolovTuriRow = {
   summa: number;
 };
 
-const KINDS: { v: Kind; l: string; icon: typeof Banknote; tone: string }[] = [
-  {
-    v: "CASH",
-    l: "Naqd",
-    icon: Banknote,
-    tone: "data-[on=true]:bg-primary data-[on=true]:text-primary-foreground",
-  },
-  {
-    v: "CARD",
-    l: "Plastik",
-    icon: CreditCard,
-    tone: "data-[on=true]:bg-blue-600 data-[on=true]:text-white",
-  },
-  {
-    v: "TRANSFER",
-    l: "O'tkazma",
-    icon: ArrowLeftRight,
-    tone: "data-[on=true]:bg-violet-600 data-[on=true]:text-white",
-  },
-  {
-    v: "OTHER",
-    l: "Boshqa",
-    icon: CircleHelp,
-    tone: "data-[on=true]:bg-muted-foreground data-[on=true]:text-background",
-  },
-];
-
 const uz = (n: number) => new Intl.NumberFormat("uz-UZ").format(Math.round(n));
 
 /**
@@ -66,12 +33,18 @@ const uz = (n: number) => new Intl.NumberFormat("uz-UZ").format(Math.round(n));
  * "tekshirilmagan" bo'lib turadi — chunki noto'g'ri taxmin tushumni naqd va
  * plastikka noto'g'ri bo'lib yuboradi.
  */
-export function TolovTuriEditor({ rows }: { rows: TolovTuriRow[] }) {
+export function TolovTuriEditor({
+  rows,
+  kinds,
+}: {
+  rows: TolovTuriRow[];
+  kinds: KindOpt[];
+}) {
   const router = useRouter();
   const [isPending, start] = useTransition();
   const [savingName, setSavingName] = useState<string | null>(null);
   const [yangiNom, setYangiNom] = useState("");
-  const [yangiKind, setYangiKind] = useState<Kind>("CARD");
+  const [yangiKind, setYangiKind] = useState<Kind>(kinds[0]?.code ?? "OTHER");
 
   const belgila = (r: TolovTuriRow, kind: Kind) => {
     if (r.kind === kind && r.isConfirmed) return;
@@ -80,7 +53,9 @@ export function TolovTuriEditor({ rows }: { rows: TolovTuriRow[] }) {
       const res = await tolovTuriBelgilaAction({ name: r.name, kind });
       setSavingName(null);
       if (res.ok) {
-        toast.success(`«${r.name}» → ${KINDS.find((k) => k.v === kind)?.l}`);
+        toast.success(
+          `«${r.name}» → ${kinds.find((k) => k.code === kind)?.name}`,
+        );
         router.refresh();
       } else toast.error(res.error ?? "Xato.");
     });
@@ -156,9 +131,9 @@ export function TolovTuriEditor({ rows }: { rows: TolovTuriRow[] }) {
               disabled={isPending}
               className="h-9 rounded-md border border-input bg-background px-2 text-sm"
             >
-              {KINDS.map((k) => (
-                <option key={k.v} value={k.v}>
-                  {k.l}
+              {kinds.map((k) => (
+                <option key={k.code} value={k.code}>
+                  {k.name}
                 </option>
               ))}
             </select>
@@ -223,25 +198,23 @@ export function TolovTuriEditor({ rows }: { rows: TolovTuriRow[] }) {
             </div>
 
             <div className="flex shrink-0 items-center gap-1">
-              {KINDS.map((k) => {
-                const Icon = k.icon;
-                const on = r.kind === k.v;
+              {kinds.map((k) => {
+                const on = r.kind === k.code;
                 return (
                   <Button
-                    key={k.v}
+                    key={k.code}
                     size="sm"
                     variant="outline"
                     data-on={on}
                     disabled={isPending}
-                    onClick={() => belgila(r, k.v)}
+                    onClick={() => belgila(r, k.code)}
                     className={cn(
-                      "h-8 gap-1 px-2 text-xs",
-                      k.tone,
+                      "h-8 px-2 text-xs",
+                      k.on,
                       on && "border-transparent",
                     )}
                   >
-                    <Icon className="h-3 w-3" />
-                    {k.l}
+                    {k.name}
                   </Button>
                 );
               })}

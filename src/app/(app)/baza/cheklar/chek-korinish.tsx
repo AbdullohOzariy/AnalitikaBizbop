@@ -53,12 +53,8 @@ export type ChekView = {
   lines: ChekLine[];
 };
 
-const KIND_LABEL: Record<string, string> = {
-  CASH: "Naqd",
-  CARD: "Plastik",
-  TRANSFER: "O'tkazma",
-  OTHER: "Boshqa",
-};
+/** Kod → ko'rinadigan nom (turlar boshqariladi — nomlar serverdan keladi). */
+export type KindNom = (code: string) => string;
 
 /** Toshkent vaqti — chekda ko'rsatiladigan ko'rinish. */
 function vaqt(iso: string): { sana: string; soat: string } {
@@ -76,9 +72,11 @@ const donaNarx = (sum: number, qty: number) => (qty > 0 ? sum / qty : 0);
 export function ChekKorinish({
   chek,
   onClose,
+  turNomi,
 }: {
   chek: ChekView;
   onClose: () => void;
+  turNomi: KindNom;
 }) {
   const [texnik, setTexnik] = useState(false);
   const t = vaqt(chek.openAt);
@@ -156,7 +154,7 @@ export function ChekKorinish({
           {chek.payments.map((p) => (
             <Qator
               key={p.id}
-              chap={`  ${KIND_LABEL[p.kind] ?? p.kind}`}
+              chap={`  ${turNomi(p.kind)}`}
               ong={formatUZS(p.value)}
             />
           ))}
