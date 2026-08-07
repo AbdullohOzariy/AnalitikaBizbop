@@ -27,6 +27,23 @@ import { redactError } from "@/lib/tg-redact";
 import { getStockdayReportConfig } from "./sozlama";
 
 /**
+ * Chiqarib tashlangan kodlar uchun SQL sharti.
+ *
+ * NEGA KERAK: ba'zi qatorlar tovar emas — masalan yetkazib berish xizmati
+ * ("DOSTAVKA"), qoldig'i shartli 100 000 qilib qo'yilgan. Ular normadan
+ * o'n minglab kun oshib ko'rinadi va ro'yxatning boshini egallab, haqiqiy
+ * signalni ko'mib yuboradi.
+ *
+ * NEGA ARXIV EMAS: bunday qatorlar HAR KUNI sotiladi, arxivlangan SKU esa
+ * sotuv yuklanganda avtomatik aktivga qaytariladi — arxiv ularda turmaydi.
+ * NEGA "qoldiq > N" EMAS: kartoshka (274 t), tuxum, un ham katta qoldiqli —
+ * bunday filtr haqiqiy tovarni ham yashirib qo'yardi.
+ */
+function skipShart(codes: number[]): Prisma.Sql {
+  return codes.length > 0 ? Prisma.sql`AND sd.code <> ALL(${codes}::int[])` : Prisma.empty;
+}
+
+/**
  * Excel'ga tushadigan eng ko'p qator. Oshsa — caption'da OCHIQ aytiladi.
  * Jimgina kesish "hammasi shu" degan noto'g'ri taassurot berardi.
  */
@@ -97,7 +114,7 @@ export async function buildStockdayNormReport(): Promise<{
   periodLabel: string;
   fileTag: string;
 } | null> {
-  const limits = await getStockdayLimits();
+  const [limits, cfg] = await Promise.all([getStockdayLimits(), getStockdayReportConfig()]);
   if (limits.global == null && limits.byCategory.size === 0) return null;
 
   const categories = await prisma.category.findMany({ select: { id: true, parentId: true } });
@@ -145,6 +162,7 @@ export async function buildStockdayNormReport(): Promise<{
     JOIN norma n ON n.cat_id = sd."categoryId"
     LEFT JOIN "Category" c ON c.id = sd."categoryId"
     WHERE sd.stock_days IS NOT NULL AND sd.stock_days > n.max_days
+      ${skipShart(cfg.excludeCodes)}
     ORDER BY "ortiqchaPul" DESC, sd.stock_days DESC
     LIMIT ${MAX_ROWS + 1}
   `);

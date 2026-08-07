@@ -332,7 +332,7 @@ export async function marginReportYuborAction(): Promise<
 
 /** Bot token + guruh chat id + topic id + avto-yoqish'ni saqlash. token bo'sh — o'zgartirilmaydi. */
 export async function stockdayReportSaqlaAction(input: {
-  token: string; chatId: string; topicId: string; autoEnabled: boolean;
+  token: string; chatId: string; topicId: string; autoEnabled: boolean; excludeCodes: string;
 }): Promise<Result> {
   try {
     await requireAdmin();
@@ -352,7 +352,11 @@ export async function stockdayReportSaqlaAction(input: {
       return { ok: false, error: "Bot token noto'g'ri (123456:ABC... ko'rinishida)." };
     }
     const { setStockdayReportConfig } = await import("@/lib/stockday-report/sozlama");
-    await setStockdayReportConfig({ token, chatId, topicId, autoEnabled: !!input.autoEnabled });
+    await setStockdayReportConfig({
+      token, chatId, topicId,
+      autoEnabled: !!input.autoEnabled,
+      excludeCodes: input.excludeCodes ?? "",
+    });
     revalidatePath(RP);
     return { ok: true };
   } catch (err) { return xato(err); }

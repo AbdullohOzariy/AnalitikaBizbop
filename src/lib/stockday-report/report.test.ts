@@ -104,3 +104,29 @@ describe("excelQatorlar", () => {
     expect(excelQatorlar([])).toHaveLength(1);
   });
 });
+
+describe("parseExcludeCodes", () => {
+  it("vergul, bo'shliq va yangi qatorni ham qabul qiladi", async () => {
+    const { parseExcludeCodes } = await import("./sozlama");
+    expect(parseExcludeCodes("36919, 36920")).toEqual([36919, 36920]);
+    expect(parseExcludeCodes("36919 36920")).toEqual([36919, 36920]);
+    expect(parseExcludeCodes("36919\n36920;51325")).toEqual([36919, 36920, 51325]);
+  });
+
+  it("raqam bo'lmagan bo'laklarni tashlaydi — izoh yozilsa ham buzilmaydi", async () => {
+    const { parseExcludeCodes } = await import("./sozlama");
+    expect(parseExcludeCodes("36919 dostavka, 51325")).toEqual([36919, 51325]);
+  });
+
+  it("takrorlanish va nol/manfiy qiymat tushmaydi", async () => {
+    const { parseExcludeCodes } = await import("./sozlama");
+    expect(parseExcludeCodes("100, 100, 0, -5")).toEqual([100]);
+  });
+
+  it("bo'sh va null — bo'sh massiv", async () => {
+    const { parseExcludeCodes } = await import("./sozlama");
+    expect(parseExcludeCodes("")).toEqual([]);
+    expect(parseExcludeCodes(null)).toEqual([]);
+    expect(parseExcludeCodes("   ")).toEqual([]);
+  });
+});

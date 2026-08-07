@@ -21,19 +21,24 @@ export function StockdayReportEditor({
   chatId: initChat,
   topicId: initTopic,
   autoEnabled: initAuto,
+  excludeCodes: initSkip,
   normaSoni,
 }: {
   tokenSet: boolean;
   chatId: string;
   topicId: string;
   autoEnabled: boolean;
+  excludeCodes: string;
   normaSoni: number;
 }) {
   const [token, setToken] = useState("");
   const [chatId, setChatId] = useState(initChat);
   const [topicId, setTopicId] = useState(initTopic);
   const [autoEnabled, setAutoEnabled] = useState(initAuto);
-  const [base, setBase] = useState({ chat: initChat, topic: initTopic, auto: initAuto });
+  const [excludeCodes, setExcludeCodes] = useState(initSkip);
+  const [base, setBase] = useState({
+    chat: initChat, topic: initTopic, auto: initAuto, skip: initSkip,
+  });
   const [saving, startSave] = useTransition();
   const [sending, startSend] = useTransition();
 
@@ -41,15 +46,21 @@ export function StockdayReportEditor({
     token.trim() !== "" ||
     chatId.trim() !== base.chat.trim() ||
     topicId.trim() !== base.topic.trim() ||
+    excludeCodes.trim() !== base.skip.trim() ||
     autoEnabled !== base.auto;
 
   const onSave = () =>
     startSave(async () => {
-      const res = await stockdayReportSaqlaAction({ token, chatId, topicId, autoEnabled });
+      const res = await stockdayReportSaqlaAction({
+        token, chatId, topicId, autoEnabled, excludeCodes,
+      });
       if (res.ok) {
         toast.success("Sozlama saqlandi.");
         setToken("");
-        setBase({ chat: chatId.trim(), topic: topicId.trim(), auto: autoEnabled });
+        setBase({
+          chat: chatId.trim(), topic: topicId.trim(),
+          auto: autoEnabled, skip: excludeCodes.trim(),
+        });
       } else toast.error(res.error);
     });
 
@@ -127,6 +138,27 @@ export function StockdayReportEditor({
             inputMode="numeric"
           />
         </div>
+      </div>
+
+      <div className="space-y-1">
+        <Label className="text-xs text-muted-foreground">
+          Hisobotdan chiqariladigan tovar kodlari
+        </Label>
+        <textarea
+          value={excludeCodes}
+          onChange={(e) => setExcludeCodes(e.target.value)}
+          placeholder="36919, 36920, 51325, 51326"
+          disabled={saving}
+          rows={2}
+          className="w-full rounded-xl border border-input bg-background px-3 py-2 font-mono text-sm"
+        />
+        <p className="text-[11px] text-muted-foreground">
+          Tovar bo&apos;lmagan qatorlar uchun — masalan yetkazib berish xizmati
+          (qoldig&apos;i shartli 100 000 qilib qo&apos;yilgan). Vergul yoki bo&apos;shliq
+          bilan ajrating.{" "}
+          <b>Arxivlash bu yerda yordam bermaydi:</b> bunday qatorlar har kuni sotiladi,
+          sotuv fayli yuklanganda esa arxivdagi SKU avtomatik aktivga qaytariladi.
+        </p>
       </div>
 
       <label className="flex items-center gap-2 text-sm">

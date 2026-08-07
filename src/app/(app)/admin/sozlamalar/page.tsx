@@ -248,6 +248,7 @@ async function ZaxiraTab() {
           chatId={cfg.chatId ?? ""}
           topicId={cfg.topicId != null ? String(cfg.topicId) : ""}
           autoEnabled={cfg.autoEnabled}
+          excludeCodes={cfg.excludeCodes.join(", ")}
           normaSoni={normaSoni}
         />
       </SectionCard>
