@@ -433,3 +433,68 @@ describe("closeAt — oqilona oraliq", () => {
     expect(ol("?c=20260807220000")).not.toBeNull();
   });
 });
+
+describe("Shakl kelishuvi — 1C qo'shimcha maydon yuborsa", () => {
+  const asos = {
+    shop: 1, pos: 5, number: "888162", session: 3813,
+    openDate: "07.08.26", openTime: "23:21:12", type: 1,
+    user: { id: 1, name: "admin" },
+    payments: [{ name: "Наличные", value: 300 }],
+    positions: [{ qty: 1, sum: 300, sumWD: 300, totalSum: 300, storno: 0, item: { id: 1, name: "A" } }],
+  };
+
+  it("SARLAVHADAGI notanish maydonlar buzmaydi", () => {
+    const r = parseChek({
+      ...asos,
+      closeTime: "23:23:04",
+      operatorId: 77,
+      discountCard: { type: "VIP", pct: 5 },
+      yangiMaydon: [1, 2, 3],
+      kutilmaganNull: null,
+    });
+    expect("error" in r).toBe(false);
+    if ("error" in r) return;
+    expect(r.totalSum).toBe(300);
+  });
+
+  it("QATORDAGI notanish maydonlar buzmaydi", () => {
+    const r = parseChek({
+      ...asos,
+      positions: [
+        {
+          ...asos.positions[0],
+          discountType: "AKSIYA",
+          promoId: 42,
+          markdown: { reason: "muddat" },
+        },
+      ],
+    });
+    if ("error" in r) throw new Error("parse xato");
+    expect(r.lines[0].sum).toBe(300);
+  });
+
+  it("TO'LOVdagi notanish maydonlar buzmaydi", () => {
+    const r = parseChek({
+      ...asos,
+      payments: [{ name: "Наличные", value: 300, terminalId: "A1", rrn: "12345" }],
+    });
+    if ("error" in r) throw new Error("parse xato");
+    expect(r.payments[0].value).toBe(300);
+  });
+
+  it("item ichida yangi maydon bo'lsa ham o'qiladi", () => {
+    const r = parseChek({
+      ...asos,
+      positions: [{ ...asos.positions[0], item: { id: 7, name: "B", vendor: "X", nds: 12 } }],
+    });
+    if ("error" in r) throw new Error("parse xato");
+    expect(r.lines[0].itemCode).toBe(7);
+  });
+
+  // Buzadigan yagona narsa — KERAKLI maydonning yo'qligi
+  it("shakl BUZILSA aniq xato qaytadi (jimgina yutilmaydi)", () => {
+    expect(parseChek({ ...asos, number: undefined })).toHaveProperty("error");
+    expect(parseChek({ ...asos, openDate: "yaroqsiz" })).toHaveProperty("error");
+    expect(isChek({ ...asos, positions: undefined })).toBe(false);
+  });
+});
