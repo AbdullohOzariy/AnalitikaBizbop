@@ -256,7 +256,25 @@ export type KesimQator = {
    */
   chegirmaUlush: number;
   chegirmaPul: number;
+  /**
+   * SAMARADORLIK INDEKSI = haqiqiy vaqt ÷ kutilgan vaqt.
+   *
+   * Kutilgan vaqt davr modelidan: `sek = a + b × tovar soni` (eng kichik
+   * kvadratlar). Jonli o'lchov: a ≈ 24 sek (qotgan xarajat — salomlashish,
+   * to'lov, chek), b ≈ 6.9 sek (har tovar).
+   *
+   * NEGA "sekund/tovar" EMAS: qotgan xarajat kichik savatda ustun bo'lib
+   * qoladi — 1 tovarli chek 17 sek/tovar, 20 tovarli 9 sek/tovar chiqardi va
+   * kichik savat bilan ishlagan kassir "sekin" ko'rinardi. Indeks buni
+   * hisobga oladi: 0.87 = o'z savatlariga ketishi kerak bo'lgandan 13% tez.
+   *
+   * `null` — namuna yetarli emas (model ishonchsiz).
+   */
+  samaradorlik: number | null;
 };
+
+/** Indeks ko'rsatilishi uchun kerak bo'lgan eng kam chek soni. */
+export const SAMARA_MIN_NAMUNA = 20;
 
 /**
  * Kassir yoki kassa kesimi.
@@ -282,9 +300,20 @@ async function kesim(
       ortVaqt: number | null; vaqtli: number;
       stornoPul: number; jamiPul: number;
       chegirmaPul: number; gross: number;
+      kutilgan: number | null; olchangan: number; modelNamuna: number;
     }[]
   >(Prisma.sql`
     WITH r0 AS (SELECT r.* FROM "Receipt" r WHERE ${shart(f)}),
+    -- Xizmat vaqti modeli: sek = a + b × tovar soni (davr bo'yicha, bir marta).
+    -- Kassirlarni ADOLATLI taqqoslash uchun — savat hajmi turlicha.
+    model AS (
+      SELECT regr_intercept(t, n) AS a, regr_slope(t, n) AS b, count(*)::int AS namuna
+      FROM (
+        SELECT EXTRACT(EPOCH FROM (r0."closeAt" - r0."openAt"))::float8 AS t,
+               r0."qtyPositions"::float8 AS n
+        FROM r0 WHERE r0."closeAt" IS NOT NULL AND r0."qtyPositions" > 0
+      ) x
+    ),
     storno AS (
       SELECT l."receiptId",
              SUM(l."totalSum") FILTER (WHERE l.storno <> 0)::float8 AS bekor,
@@ -309,7 +338,12 @@ async function kesim(
       COALESCE(SUM(s.bekor), 0)::float8 AS "stornoPul",
       COALESCE(SUM(s.jami), 0)::float8 AS "jamiPul",
       COALESCE(SUM(r0.sum - r0."sumWithDiscs"), 0)::float8 AS "chegirmaPul",
-      COALESCE(SUM(r0.sum), 0)::float8 AS gross
+      COALESCE(SUM(r0.sum), 0)::float8 AS gross,
+      -- Kutilgan vaqt: shu kassirning SAVATLARIGA ketishi kerak bo'lgan payt.
+      AVG((SELECT a FROM model) + (SELECT b FROM model) * r0."qtyPositions")
+        FILTER (WHERE r0."closeAt" IS NOT NULL AND r0."qtyPositions" > 0)::float8 AS "kutilgan",
+      count(*) FILTER (WHERE r0."closeAt" IS NOT NULL AND r0."qtyPositions" > 0)::int AS "olchangan",
+      (SELECT namuna FROM model)::int AS "modelNamuna"
     FROM r0
     LEFT JOIN storno s ON s."receiptId" = r0.id
     ${kassa ? Prisma.sql`LEFT JOIN "Branch" b ON b.id = r0."branchId"` : Prisma.empty}
@@ -331,6 +365,16 @@ async function kesim(
     stornoUlush: x.jamiPul > 0 ? Number(x.stornoPul) / Number(x.jamiPul) : 0,
     chegirmaPul: Number(x.chegirmaPul),
     chegirmaUlush: x.gross > 0 ? Number(x.chegirmaPul) / Number(x.gross) : 0,
+    // Namuna kichik bo'lsa indeks ko'rsatilmaydi: R² ≈ 0.25, ya'ni bitta
+    // chekda tarqoqlik katta — faqat ko'p chekda o'rtacha ma'noli bo'ladi.
+    samaradorlik:
+      x.ortVaqt != null &&
+      x.kutilgan != null &&
+      Number(x.kutilgan) > 0 &&
+      x.olchangan >= SAMARA_MIN_NAMUNA &&
+      x.modelNamuna >= 100
+        ? Number(x.ortVaqt) / Number(x.kutilgan)
+        : null,
   }));
 }
 

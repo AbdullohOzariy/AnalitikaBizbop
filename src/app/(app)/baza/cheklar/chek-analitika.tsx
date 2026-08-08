@@ -27,6 +27,8 @@ export type KesimQator = {
   stornoUlush: number;
   chegirmaPul: number;
   chegirmaUlush: number;
+  /** Haqiqiy ÷ kutilgan vaqt. `null` — namuna yetarli emas. */
+  samaradorlik: number | null;
 };
 
 type Tab = "soat" | "kassir" | "kassa";
@@ -168,6 +170,10 @@ export function ChekAnalitika({
         )}
 
         <p className="text-[11px] text-muted-foreground">
+          <b>Samara</b> — haqiqiy vaqt ÷ shu savatlarga ketishi kerak bo&apos;lgan
+          vaqt (model: qotgan xarajat + tovar soni). 0.90 = 10% tez, 1.10 = 10%
+          sekin. Namunasi kam bo&apos;lsa &laquo;—&raquo;.
+          <br />
           Xizmat vaqti — chek ochilishidan fiskallashtirilgunicha.{" "}
           {vaqtQamrovi >= 0.999
             ? "Barcha cheklarda o'lchangan."
@@ -194,7 +200,7 @@ function Jadval({ rows }: { rows: KesimQator[] }) {
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[640px] text-xs">
+      <table className="w-full min-w-[820px] text-xs">
         <thead>
           <tr className="border-b border-border text-[11px] uppercase tracking-wide text-muted-foreground">
             <th className="px-2 py-2 text-left font-medium">Nom</th>
@@ -205,6 +211,12 @@ function Jadval({ rows }: { rows: KesimQator[] }) {
             </th>
             <th className="px-2 py-2 text-right font-medium">Tovar/chek</th>
             <th className="px-2 py-2 text-right font-medium">Xizmat</th>
+            <th
+              className="px-2 py-2 text-right font-medium"
+              title="Haqiqiy vaqt ÷ shu savatlarga ketishi kerak bo'lgan vaqt. 0.90 = 10% tez"
+            >
+              Samara
+            </th>
             <th className="px-2 py-2 text-right font-medium" title="Chegirma summasi va uning gross'dagi ulushi">
               Chegirma
             </th>
@@ -239,6 +251,23 @@ function Jadval({ rows }: { rows: KesimQator[] }) {
               </td>
               <td className="px-2 py-2 text-right tabular-nums">
                 {vaqtMatn(r.ortVaqt)}
+              </td>
+              <td className="px-2 py-2 text-right tabular-nums">
+                {r.samaradorlik == null ? (
+                  <span className="text-muted-foreground/50" title="Namuna yetarli emas">
+                    —
+                  </span>
+                ) : (
+                  <span
+                    className={cn(
+                      "font-medium",
+                      r.samaradorlik <= 0.95 && "text-primary",
+                      r.samaradorlik >= 1.05 && "text-amber-600 dark:text-amber-400",
+                    )}
+                  >
+                    {r.samaradorlik.toFixed(2)}
+                  </span>
+                )}
               </td>
               <td
                 className={cn(
