@@ -498,3 +498,52 @@ describe("Shakl kelishuvi — 1C qo'shimcha maydon yuborsa", () => {
     expect(isChek({ ...asos, positions: undefined })).toBe(false);
   });
 });
+
+describe("yopilishVaqti — 1C ning closeDate'i ustun", () => {
+  const asos = {
+    shop: 1, pos: 3, number: "888254", session: 1, type: 1,
+    openDate: "08.08.26", openTime: "14:25:17",
+    user: { id: 1, name: "a" },
+    payments: [{ name: "Наличные", value: 100 }],
+    positions: [{ qty: 1, sum: 100, sumWD: 100, totalSum: 100, storno: 0, item: { id: 1, name: "A" } }],
+    fiscal: "https://x/check?c=20260808143140",
+  };
+  const ol = (extra: Record<string, unknown>) => {
+    const r = parseChek({ ...asos, ...extra });
+    if ("error" in r) throw new Error("parse xato");
+    return r.closeAt;
+  };
+
+  // `closeDate` nomi "Date" bo'lsa ham ICHIDA VAQT keladi — 1C shunday yuboradi.
+  it("closeDate (vaqt) bo'lsa O'SHA olinadi, fiskal emas", () => {
+    // 1C: 14:31:44 · fiskal: 14:31:40 — 4 sekund farq
+    expect(ol({ closeDate: "14:31:44" })?.toISOString()).toBe("2026-08-08T09:31:44.000Z");
+  });
+
+  it("closeDate bo'sh bo'lsa fiskalga tushadi", () => {
+    expect(ol({ closeDate: "" })?.toISOString()).toBe("2026-08-08T09:31:40.000Z");
+  });
+
+  it("closeDate umuman yo'q bo'lsa ham fiskalga tushadi", () => {
+    expect(ol({})?.toISOString()).toBe("2026-08-08T09:31:40.000Z");
+  });
+
+  // Yarim tun: 23:58 da ochilib 00:01 da yopilgan chek
+  it("yarim tundan o'tgan chekda bir kun qo'shiladi", () => {
+    const r = parseChek({
+      ...asos, openTime: "23:58:00", closeDate: "00:01:30", fiscal: "",
+    });
+    if ("error" in r) throw new Error("parse xato");
+    // 08.08 23:58 → 09.08 00:01:30 Toshkent = 08.08T19:01:30Z
+    expect(r.closeAt?.toISOString()).toBe("2026-08-08T19:01:30.000Z");
+    expect((r.closeAt!.getTime() - r.openAt.getTime()) / 1000).toBe(210);
+  });
+
+  it("soniyasiz format ham o'qiladi", () => {
+    expect(ol({ closeDate: "14:31" })?.toISOString()).toBe("2026-08-08T09:31:00.000Z");
+  });
+
+  it("closeDate yaroqsiz bo'lsa fiskalga tushadi", () => {
+    expect(ol({ closeDate: "08.08.26" })?.toISOString()).toBe("2026-08-08T09:31:40.000Z");
+  });
+});

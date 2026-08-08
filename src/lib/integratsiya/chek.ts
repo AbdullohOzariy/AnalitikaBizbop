@@ -166,13 +166,12 @@ export function chekVaqti(openDate: unknown, openTime: unknown): Date | null {
  *   https://ofd.soliq.uz/check?t=...&r=...&c=20260807210536&s=...
  *                                          ^^^^^^^^^^^^^^ YYYYMMDDHHMMSS
  *
- * NEGA SHU YERDAN: 1C ning `closeDate` maydoni HAR DOIM bo'sh keladi
- * (711 payloadda bittasi ham to'ldirilmagan), `closeTime` esa umuman yo'q.
+ * ZAXIRA manba: 1C `closeDate` ni yubormagan chekda ishlatiladi.
  *
- * NEGA BU YOPILISH VAQTI DEB HISOBLAYMIZ (dalil statistik, 1C tasdiqlagani yo'q):
- *   – 397/397 chekda ochilishdan KEYIN, bitta ham istisno yo'q;
- *   – farq savat hajmiga bog'liq: 10+ qatorli chek o'rtacha 156 sek,
- *     1-2 qatorli 27 sek. Tasodifiy vaqt bunday bog'lanmasdi.
+ * TASDIQLANGAN (2026-08-08, 91 chek): 1C `closeDate` ni to'ldira boshlagach
+ * ikkala manba solishtirildi — farq 2–5 sekund (74 tasida 3 sek). Fiskal vaqt
+ * chek fiskal modulda ro'yxatdan o'tgan lahza, `closeDate` esa 1C uni yopgan
+ * lahza; orasida borib-kelish. Ya'ni faraz to'g'ri chiqdi.
  *
  * Vaqt Toshkent zonasida deb olinadi (`chekVaqti` bilan bir xil).
  */
@@ -198,6 +197,43 @@ export function fiskalVaqt(fiscal: unknown): Date | null {
   const chk = new Date(utc + TASHKENT_OFFSET_MS);
   if (chk.getUTCMonth() !== mo - 1 || chk.getUTCDate() !== d) return null;
   return dt;
+}
+
+/**
+ * Chek YOPILGAN payt — ikki manbadan, ustunlik tartibida.
+ *
+ * 1) `closeDate` — 1C ning O'Z qiymati. ⚠️ Nomi "Date" bo'lsa ham ICHIDA
+ *    VAQT keladi ("14:31:44"), sana emas. Sana `openDate` dan olinadi.
+ * 2) Fiskal havoladagi `c=` — zaxira. Uzoq vaqt yagona manba edi, chunki
+ *    `closeDate` bo'sh kelardi.
+ *
+ * IKKALASI TEKSHIRILDI (2026-08-08, 91 ta chek): farq atigi 2–5 sekund
+ * (74 tasida 3 sek). Fiskal vaqt — chek fiskal modulda ro'yxatdan o'tgan
+ * lahza, `closeDate` — 1C uni yopgan lahza; orasida borib-kelish.
+ * 1C niki aniqroq, shuning uchun u ustun.
+ *
+ * YARIM TUN: `closeDate` da sana yo'q, shuning uchun natija ochilishdan
+ * oldin chiqsa bir kun qo'shiladi (23:58 da ochilib 00:01 da yopilgan chek).
+ */
+export function yopilishVaqti(o: Record<string, unknown>, openAt: Date): Date | null {
+  const cd = txt(o.closeDate);
+  if (cd && /^\d{1,2}:\d{2}(:\d{2})?$/.test(cd)) {
+    const od = txt(o.openDate);
+    const m = od ? /^(\d{2})\.(\d{2})\.(\d{2}|\d{4})$/.exec(od) : null;
+    if (m) {
+      const [, dd, mm, yy] = m;
+      const year = yy.length === 2 ? 2000 + Number(yy) : Number(yy);
+      const tm = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(cd)!;
+      let utc =
+        Date.UTC(year, Number(mm) - 1, Number(dd), Number(tm[1]), Number(tm[2]), Number(tm[3] ?? 0)) -
+        TASHKENT_OFFSET_MS;
+      // Yarim tundan o'tgan bo'lsa — ertasi kun.
+      if (utc < openAt.getTime()) utc += 86_400_000;
+      const d = new Date(utc);
+      if (!Number.isNaN(d.getTime())) return d;
+    }
+  }
+  return fiskalVaqt(o.fiscal);
 }
 
 /** Toshkent kuni (hisobot sanasi) — openAt dan olinadi. */
@@ -291,7 +327,7 @@ export function parseChek(p: unknown): Chek | { error: string } {
     // Kuzatilgan eng uzun haqiqiy chek — 1425 sek, shuning uchun 2 soat
     // xavfsiz chegara (himoya, tuzatish emas: hozir bitta ham rad etilmaydi).
     closeAt: (() => {
-      const f = fiskalVaqt(o.fiscal);
+      const f = yopilishVaqti(o, openAt);
       if (!f) return null;
       const d = f.getTime() - openAt.getTime();
       return d >= 0 && d <= MAX_XIZMAT_MS ? f : null;
