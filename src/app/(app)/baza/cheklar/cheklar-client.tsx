@@ -9,6 +9,7 @@ import {
   AlertTriangle,
   Undo2,
   ReceiptText,
+  TicketPercent,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -73,6 +74,7 @@ export type Filtrlar = {
   q: string;
   storno: boolean;
   skuYoq: boolean;
+  chegirmali: boolean;
 };
 
 export function CheklarClient({
@@ -119,13 +121,14 @@ export function CheklarClient({
     if (n.q) p.set("q", n.q);
     if (n.storno) p.set("storno", "1");
     if (n.skuYoq) p.set("skuYoq", "1");
+    if (n.chegirmali) p.set("chegirmali", "1");
     router.push(`${pathname}?${p}`);
   };
 
   const faolFiltr =
     filters.branch != null || filters.kassa != null || filters.kassir != null ||
     filters.kind != null || filters.soatDan != null || filters.soatGacha != null ||
-    !!filters.q || filters.storno || filters.skuYoq;
+    !!filters.q || filters.storno || filters.skuYoq || filters.chegirmali;
 
   const jami = taqsimot.reduce((s, t) => s + t.summa, 0);
   // Ro'yxatda yo'q kod (turi o'chirilgan eski chek) — kodning o'zi ko'rsatiladi.
@@ -258,6 +261,10 @@ export function CheklarClient({
             <Belgi on={filters.storno} onClick={() => apply({ storno: !filters.storno })}>
               <Undo2 className="h-3 w-3" />
               Bekor qilingan qatori bor
+            </Belgi>
+            <Belgi on={filters.chegirmali} onClick={() => apply({ chegirmali: !filters.chegirmali })}>
+              <TicketPercent className="h-3 w-3" />
+              Chegirma berilgan
             </Belgi>
             <Belgi on={filters.skuYoq} onClick={() => apply({ skuYoq: !filters.skuYoq })}>
               <AlertTriangle className="h-3 w-3" />

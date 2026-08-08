@@ -31,6 +31,8 @@ export type ChekFiltr = {
   storno: boolean;
   /** Faqat SKU topilmagan qatori bor cheklar. */
   skuYoq: boolean;
+  /** Faqat chegirma berilgan cheklar. */
+  chegirmali: boolean;
 };
 
 export const BOSH_FILTR: Omit<ChekFiltr, "from" | "to"> = {
@@ -43,6 +45,7 @@ export const BOSH_FILTR: Omit<ChekFiltr, "from" | "to"> = {
   q: "",
   storno: false,
   skuYoq: false,
+  chegirmali: false,
 };
 
 /**
@@ -90,6 +93,7 @@ function shart(f: ChekFiltr): Prisma.Sql {
       Prisma.sql`EXISTS (SELECT 1 FROM "ReceiptLine" l WHERE l."receiptId" = r.id AND l.storno <> 0)`,
     );
   }
+  if (f.chegirmali) w.push(Prisma.sql`r.sum > r."sumWithDiscs"`);
   if (f.skuYoq) {
     w.push(
       Prisma.sql`EXISTS (SELECT 1 FROM "ReceiptLine" l WHERE l."receiptId" = r.id AND l."productId" IS NULL)`,
@@ -124,6 +128,12 @@ export type ChekKpi = {
   /** Vaqti o'lchangan cheklar ulushi (fiskal havolasi borlari). */
   vaqtQamrovi: number;
   naqd: number;
+  /** Chegirma summasi: chegirmagacha − chegirmadan keyin. */
+  chegirma: number;
+  /** Chegirmagacha bo'lgan yig'indi — ulushni hisoblash uchun. */
+  gross: number;
+  /** Nechta chekda chegirma berilgan. */
+  chegirmaliCheklar: number;
   stornoCheklar: number;
   /**
    * Tovari bor, lekin chegirmadan keyin summasi 0 bo'lgan cheklar.
@@ -164,7 +174,10 @@ export async function chekKpi(f: ChekFiltr): Promise<ChekKpi> {
       count(*) FILTER (WHERE EXISTS (
         SELECT 1 FROM "ReceiptLine" l WHERE l."receiptId" = r0.id AND l.storno <> 0
       ))::int                                              AS "stornoCheklar",
-      count(*) FILTER (WHERE r0."totalSum" = 0 AND r0.sum > 0)::int AS "tekinCheklar"
+      count(*) FILTER (WHERE r0."totalSum" = 0 AND r0.sum > 0)::int AS "tekinCheklar",
+      COALESCE(SUM(r0.sum - r0."sumWithDiscs"), 0)::float8  AS chegirma,
+      COALESCE(SUM(r0.sum), 0)::float8                      AS gross,
+      count(*) FILTER (WHERE r0.sum > r0."sumWithDiscs")::int AS "chegirmaliCheklar"
     FROM r0 LEFT JOIN qator q ON q."receiptId" = r0.id
   `);
   const x = r[0] ?? {};
@@ -179,6 +192,9 @@ export async function chekKpi(f: ChekFiltr): Promise<ChekKpi> {
     medVaqt: x.medVaqt == null ? null : Number(x.medVaqt),
     vaqtQamrovi: cheklar > 0 ? Number(x.vaqtli ?? 0) / cheklar : 0,
     naqd: Number(x.naqd ?? 0),
+    chegirma: Number(x.chegirma ?? 0),
+    gross: Number(x.gross ?? 0),
+    chegirmaliCheklar: Number(x.chegirmaliCheklar ?? 0),
     stornoCheklar: Number(x.stornoCheklar ?? 0),
     tekinCheklar: Number(x.tekinCheklar ?? 0),
   };
@@ -232,6 +248,14 @@ export type KesimQator = {
   stornoUlush: number;
   /** Xizmat vaqti nechta chekda o'lchangani — ustunga ishonch darajasi. */
   vaqtli: number;
+  /**
+   * Chegirmaning gross'dagi ulushi — nazorat signali.
+   *
+   * Jonli ma'lumotda tarqoqlik katta: `admin` hisobi 3.87%, eng pasti 1.47%.
+   * Kim ko'p chegirma berayotgani shu ustunda ko'rinadi.
+   */
+  chegirmaUlush: number;
+  chegirmaPul: number;
 };
 
 /**
@@ -257,6 +281,7 @@ async function kesim(
       tushum: number; ortChek: number; ortTur: number;
       ortVaqt: number | null; vaqtli: number;
       stornoPul: number; jamiPul: number;
+      chegirmaPul: number; gross: number;
     }[]
   >(Prisma.sql`
     WITH r0 AS (SELECT r.* FROM "Receipt" r WHERE ${shart(f)}),
@@ -282,7 +307,9 @@ async function kesim(
       AVG(EXTRACT(EPOCH FROM (r0."closeAt" - r0."openAt")))::float8 AS "ortVaqt",
       count(*) FILTER (WHERE r0."closeAt" IS NOT NULL)::int AS vaqtli,
       COALESCE(SUM(s.bekor), 0)::float8 AS "stornoPul",
-      COALESCE(SUM(s.jami), 0)::float8 AS "jamiPul"
+      COALESCE(SUM(s.jami), 0)::float8 AS "jamiPul",
+      COALESCE(SUM(r0.sum - r0."sumWithDiscs"), 0)::float8 AS "chegirmaPul",
+      COALESCE(SUM(r0.sum), 0)::float8 AS gross
     FROM r0
     LEFT JOIN storno s ON s."receiptId" = r0.id
     ${kassa ? Prisma.sql`LEFT JOIN "Branch" b ON b.id = r0."branchId"` : Prisma.empty}
@@ -302,6 +329,8 @@ async function kesim(
     vaqtli: x.vaqtli,
     // PUL ulushi — chek soni emas (izohga qarang).
     stornoUlush: x.jamiPul > 0 ? Number(x.stornoPul) / Number(x.jamiPul) : 0,
+    chegirmaPul: Number(x.chegirmaPul),
+    chegirmaUlush: x.gross > 0 ? Number(x.chegirmaPul) / Number(x.gross) : 0,
   }));
 }
 

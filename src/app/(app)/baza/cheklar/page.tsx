@@ -10,6 +10,7 @@ import {
   Calculator,
   ShoppingBasket,
   Timer,
+  TicketPercent,
 } from "lucide-react";
 import { PageHeader, StatCard } from "@/components/common/page";
 import { CheklarClient } from "./cheklar-client";
@@ -79,6 +80,7 @@ export default async function CheklarPage({
     q: (one(sp.q) || "").trim(),
     storno: one(sp.storno) === "1",
     skuYoq: one(sp.skuYoq) === "1",
+    chegirmali: one(sp.chegirmali) === "1",
   };
 
   const [
@@ -187,7 +189,7 @@ export default async function CheklarPage({
         description="1C dan kelgan kassa cheklari. Bu bo'lim mustaqil — boshqa hisobotlarga ta'sir qilmaydi."
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Cheklar"
           value={kpi.cheklar.toLocaleString("uz-UZ")}
@@ -222,6 +224,17 @@ export default async function CheklarPage({
             kpi.vaqtQamrovi > 0
               ? `median · o'rtacha ${vaqt(kpi.ortVaqt)}`
               : "hali o'lchanmagan"
+          }
+        />
+        <StatCard
+          label="Chegirma"
+          value={formatUZS(kpi.chegirma, { compact: true })}
+          icon={TicketPercent}
+          tone="orange"
+          hint={
+            kpi.gross > 0
+              ? `${((kpi.chegirma / kpi.gross) * 100).toFixed(2)}% · ${kpi.chegirmaliCheklar.toLocaleString("uz-UZ")} chek`
+              : undefined
           }
         />
         <StatCard
@@ -301,6 +314,7 @@ export default async function CheklarPage({
           q: f.q,
           storno: f.storno,
           skuYoq: f.skuYoq,
+          chegirmali: f.chegirmali,
         }}
         jami={idlar.jami}
         korsatilgan={rows.length}

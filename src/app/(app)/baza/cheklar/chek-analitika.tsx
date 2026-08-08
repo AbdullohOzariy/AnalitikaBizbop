@@ -25,6 +25,8 @@ export type KesimQator = {
   vaqtli: number;
   /** Bekor qilingan qatorlarning PUL ulushi. */
   stornoUlush: number;
+  chegirmaPul: number;
+  chegirmaUlush: number;
 };
 
 type Tab = "soat" | "kassir" | "kassa";
@@ -185,6 +187,10 @@ function Jadval({ rows }: { rows: KesimQator[] }) {
   const ortStorno =
     jamiPul > 0 ? rows.reduce((a, r) => a + r.stornoUlush * r.tushum, 0) / jamiPul : 0;
   const chegara = Math.max(0.02, ortStorno * 1.5);
+  // Chegirma uchun ham NISBIY chegara — kim boshqalardan ko'p berayotgani.
+  const ortChegirma =
+    jamiPul > 0 ? rows.reduce((a, r) => a + r.chegirmaUlush * r.tushum, 0) / jamiPul : 0;
+  const chegirmaChegara = Math.max(0.02, ortChegirma * 1.5);
 
   return (
     <div className="overflow-x-auto">
@@ -199,6 +205,9 @@ function Jadval({ rows }: { rows: KesimQator[] }) {
             </th>
             <th className="px-2 py-2 text-right font-medium">Tovar/chek</th>
             <th className="px-2 py-2 text-right font-medium">Xizmat</th>
+            <th className="px-2 py-2 text-right font-medium" title="Chegirma summasi va uning gross'dagi ulushi">
+              Chegirma
+            </th>
             <th className="px-2 py-2 text-right font-medium" title="Bekor qilingan qatorlarning pul ulushi">
               Storno (pul)
             </th>
@@ -230,6 +239,18 @@ function Jadval({ rows }: { rows: KesimQator[] }) {
               </td>
               <td className="px-2 py-2 text-right tabular-nums">
                 {vaqtMatn(r.ortVaqt)}
+              </td>
+              <td
+                className={cn(
+                  "px-2 py-2 text-right tabular-nums",
+                  r.chegirmaUlush >= chegirmaChegara &&
+                    "font-semibold text-orange-600 dark:text-orange-400",
+                )}
+              >
+                {formatUZS(r.chegirmaPul, { compact: true })}
+                <span className="ml-1 text-[10px] text-muted-foreground">
+                  {(r.chegirmaUlush * 100).toFixed(1)}%
+                </span>
               </td>
               <td
                 className={cn(
